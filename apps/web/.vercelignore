@@ -1,0 +1,5 @@
+apps/mobile
+apps/admin
+supabase
+*.md
+.git
