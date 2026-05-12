@@ -1,0 +1,28 @@
+{
+  "name": "cheqpay",
+  "version": "1.0.0",
+  "description": "Production-ready Nigerian fintech wallet app",
+  "private": true,
+  "workspaces": [
+    "apps/mobile",
+    "apps/admin",
+    "apps/web",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^1.12.0",
+    "prettier": "^3.1.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.2"
+  }
+}

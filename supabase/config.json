@@ -1,0 +1,37 @@
+{
+  "version": "1.8.1",
+  "project": {
+    "account_id": "your-account-id",
+    "db": {
+      "major_version": 15,
+      "seed": "seed.sql"
+    }
+  },
+  "api": {
+    "port": 54321,
+    "schemas": {
+      "realtime": "enabled",
+      "graphql_public": "disabled"
+    },
+    "max_rows": 1000
+  },
+  "auth": {
+    "site_url": "http://localhost:3000",
+    "additional_redirect_urls": [
+      "http://localhost:3001",
+      "exp://localhost:19000"
+    ],
+    "jwt_expiry": 3600,
+    "enable_signup": true,
+    "email": {
+      "enable_confirmations": false
+    }
+  },
+  "realtime": {
+    "enabled": true,
+    "max_bytes_per_second": 1000000
+  },
+  "storage": {
+    "file_size_limit": 52428800
+  }
+}
