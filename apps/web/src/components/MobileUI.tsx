@@ -138,6 +138,35 @@ function ChevronRight() {
   );
 }
 
+/** Circular crypto coin badge (BTC / ETH / USDT …). */
+export function CoinBadge({
+  symbol,
+  size = 40,
+}: {
+  symbol: string;
+  size?: number;
+}) {
+  const map: Record<string, { bg: string; glyph: string }> = {
+    BTC: { bg: "#F7931A", glyph: "₿" },
+    ETH: { bg: "#627EEA", glyph: "Ξ" },
+    USDT: { bg: "#26A17B", glyph: "₮" },
+  };
+  const c = map[symbol] ?? { bg: "#6B5B95", glyph: symbol.charAt(0) };
+  return (
+    <span
+      className="flex items-center justify-center rounded-full font-bold text-white"
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: c.bg,
+        fontSize: size * 0.45,
+      }}
+    >
+      {c.glyph}
+    </span>
+  );
+}
+
 /** White rounded card wrapper. */
 export function Card({
   children,

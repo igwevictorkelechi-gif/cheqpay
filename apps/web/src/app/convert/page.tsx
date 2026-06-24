@@ -4,32 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronDown, ArrowUpDown } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import { CoinBadge } from "@/components/MobileUI";
 
 // Mock conversion rate (1 BTC ≈ 30.47 ETH) just for the preview UI.
 const BTC_TO_ETH = 30.47;
 const BTC_BALANCE = 0.9;
 const ETH_BALANCE = 20;
-
-function CoinBadge({ symbol }: { symbol: "BTC" | "ETH" }) {
-  if (symbol === "BTC") {
-    return (
-      <span
-        className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-white"
-        style={{ backgroundColor: "#F7931A" }}
-      >
-        ₿
-      </span>
-    );
-  }
-  return (
-    <span
-      className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-white"
-      style={{ backgroundColor: "#627EEA" }}
-    >
-      Ξ
-    </span>
-  );
-}
 
 function AssetCard({
   role,
@@ -79,6 +59,17 @@ export default function ConvertPage() {
   const target = targetNum.toLocaleString("en-US", {
     maximumFractionDigits: 2,
   });
+  const targetRaw = targetNum.toFixed(2);
+
+  const previewSwap = () => {
+    const q = new URLSearchParams({
+      from: source,
+      to: targetRaw,
+      fromSym: "BTC",
+      toSym: "ETH",
+    }).toString();
+    router.push(`/convert/confirm?${q}`);
+  };
 
   const press = (key: string) => {
     setSource((prev) => {
@@ -150,6 +141,7 @@ export default function ConvertPage() {
       {/* CTA */}
       <div className="mt-6 px-5">
         <button
+          onClick={previewSwap}
           className="w-full rounded-full py-4 text-base font-bold text-white"
           style={{ backgroundColor: "#6B5B95" }}
         >

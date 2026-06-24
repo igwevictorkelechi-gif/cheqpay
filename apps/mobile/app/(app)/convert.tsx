@@ -68,9 +68,18 @@ export default function ConvertScreen() {
   const [source, setSource] = useState('0.75');
 
   const sourceNum = parseFloat(source || '0') || 0;
-  const target = (sourceNum * BTC_TO_ETH).toLocaleString('en-US', {
+  const targetNum = sourceNum * BTC_TO_ETH;
+  const target = targetNum.toLocaleString('en-US', {
     maximumFractionDigits: 2,
   });
+  const targetRaw = targetNum.toFixed(2);
+
+  const previewSwap = () => {
+    router.push({
+      pathname: '/(app)/swap-confirm',
+      params: { from: source, to: targetRaw, fromSym: 'BTC', toSym: 'ETH' },
+    });
+  };
 
   const press = (key: string) => {
     setSource((prev) => {
@@ -138,6 +147,7 @@ export default function ConvertScreen() {
             className="rounded-full py-4 items-center"
             style={{ backgroundColor: colors.brand }}
             activeOpacity={0.85}
+            onPress={previewSwap}
           >
             <Text className="text-white text-base font-bold">Preview Swap</Text>
           </TouchableOpacity>

@@ -4,6 +4,18 @@ All notable changes to the Cheqpay rebrand are documented here.
 
 ## [Unreleased] — branch `claude/cheq-pay-rebrand-kjehub`
 
+### Swap flow (Convert → Confirm → Success)
+- **Swap confirmation page** (web `/convert/confirm`, mobile
+  `(app)/swap-confirm`): pay/receive legs, rate, network fee and
+  estimated time, a "Confirm Swap" button with a processing state, and
+  Cancel. Reached from "Preview Swap".
+- **Swap success page** (web `/convert/success`, mobile
+  `(app)/swap-success`): success check, swap summary and a
+  **"View transaction history"** button (plus Done). Reached after a
+  swap is confirmed.
+- Amounts/symbols flow through the screens via route params; shared
+  `CoinBadge` added to the web UI kit.
+
 ### Convert / Swap + navigation
 - **New Convert (crypto swap) page** on web (`/convert`) and mobile
   (`(app)/convert`): SOURCE/TOKEN asset cards (BTC → ETH) with a brand
