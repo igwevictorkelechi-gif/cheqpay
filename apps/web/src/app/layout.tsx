@@ -19,7 +19,7 @@ export default function RootLayout({
         <meta charSet="utf-8" />
       </head>
       <body>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen">
           {children}
         </div>
       </body>

@@ -1,167 +1,129 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import MainLayout from "@/components/MainLayout";
+import { Search, Eye, EyeOff, Bell, ArrowDown, ArrowRight, RefreshCw } from "lucide-react";
+import AppShell from "@/components/AppShell";
+import {
+  TopBar,
+  BalanceBlock,
+  ActionRow,
+  CircleAction,
+  Card,
+  NairaFlag,
+  SectionHeader,
+} from "@/components/MobileUI";
 import { authService } from "@/services/auth";
 import { walletService } from "@/services/wallet";
 import { useAuthStore, useWalletStore, useUIStore } from "@/store";
-import { Eye, EyeOff, Copy, CheckCircle } from "lucide-react";
-import { useState } from "react";
 
-export default function WalletPage() {
+export default function HomePage() {
   const router = useRouter();
-  const { user, isAuthenticated, setUser, setLoading } = useAuthStore();
-  const { wallet, virtualAccount, setWallet, setVirtualAccount } =
-    useWalletStore();
+  const { user, setUser } = useAuthStore();
+  const { wallet, setWallet, setVirtualAccount } = useWalletStore();
   const { showBalance, toggleBalance } = useUIStore();
-  const [copied, setCopied] = useState(false);
+  const [, setReady] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const load = async () => {
       try {
         const currentUser = await authService.getCurrentUser();
-        if (!currentUser) {
-          router.push("/login");
-          return;
+        if (currentUser) {
+          setUser(currentUser);
+          const [walletData, vaData] = await Promise.all([
+            walletService.getWallet(currentUser.id),
+            walletService.getVirtualAccount(currentUser.id),
+          ]);
+          if (walletData) setWallet(walletData);
+          if (vaData) setVirtualAccount(vaData);
         }
-        setUser(currentUser);
-
-        const walletData = await walletService.getWallet(currentUser.id);
-        setWallet(walletData);
-
-        const vaData = await walletService.getVirtualAccount(currentUser.id);
-        setVirtualAccount(vaData);
       } catch (error) {
-        console.error("Auth check failed:", error);
-        router.push("/login");
+        console.error("Load failed:", error);
       } finally {
-        setLoading(false);
+        setReady(true);
       }
     };
+    load();
+  }, [setUser, setWallet, setVirtualAccount]);
 
-    checkAuth();
-  }, []);
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const balance = wallet?.balance ?? 0;
+  const formattedBalance = showBalance
+    ? "₦" +
+      balance.toLocaleString("en-NG", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : "₦••••";
 
   return (
-    <MainLayout>
-      <div className="space-y-6">
-        {/* Balance Card */}
-        <div className="card-lg bg-gradient-to-br from-primary to-primary-dark text-white">
+    <AppShell>
+      <TopBar
+        name={user?.full_name}
+        icons={[
+          { icon: Search, onClick: () => router.push("/transactions") },
+          { icon: showBalance ? Eye : EyeOff, onClick: toggleBalance },
+          { icon: Bell },
+        ]}
+      />
+
+      <BalanceBlock label="Total Cash Balance" amount={formattedBalance} />
+
+      <ActionRow>
+        <CircleAction icon={ArrowDown} label="Deposit" onClick={() => router.push("/")} />
+        <CircleAction icon={ArrowRight} label="Withdraw" onClick={() => router.push("/withdraw")} />
+        <CircleAction icon={RefreshCw} label="Convert" onClick={() => router.push("/send")} />
+      </ActionRow>
+
+      {/* Cash account */}
+      <div className="mb-4 px-5">
+        <Card>
+          <p className="mb-4 text-base font-medium text-muted">Cash</p>
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium opacity-90">Available Balance</p>
-              <div className="mt-2 flex items-center gap-3">
-                {showBalance ? (
-                  <p className="text-3xl font-bold">
-                    ₦{(wallet?.balance || 0).toLocaleString()}
-                  </p>
-                ) : (
-                  <p className="text-3xl font-bold">••••••</p>
-                )}
-                <button
-                  onClick={toggleBalance}
-                  className="rounded-full p-2 hover:bg-white/20"
-                >
-                  {showBalance ? (
-                    <Eye className="h-5 w-5" />
-                  ) : (
-                    <EyeOff className="h-5 w-5" />
-                  )}
-                </button>
+            <div className="flex items-center">
+              <NairaFlag />
+              <div className="ml-3">
+                <p className="text-lg font-bold text-ink">NGN</p>
+                <p className="text-sm text-muted">Naira</p>
               </div>
-              <p className="mt-3 text-xs opacity-75">
-                Ledger Balance: ₦{(wallet?.ledger_balance || 0).toLocaleString()}
+            </div>
+            <p className="text-lg font-bold text-ink">
+              {showBalance ? `${balance.toLocaleString("en-NG")} NGN` : "•••• NGN"}
+            </p>
+          </div>
+        </Card>
+      </div>
+
+      {/* Savings */}
+      <div className="mb-6 px-5">
+        <Card>
+          <div className="flex items-center">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-circle text-[22px]">
+              📊
+            </span>
+            <div className="ml-4 flex-1">
+              <p className="text-xl font-bold text-ink">Your money. Working daily</p>
+              <p className="mt-1 text-sm text-muted">
+                Daily returns in NGN or USD. Flexible or fixed savings
               </p>
             </div>
           </div>
-        </div>
+        </Card>
+      </div>
 
-        {/* Virtual Account Card */}
-        {virtualAccount && (
-          <div className="card-lg border-2 border-primary">
-            <h3 className="text-lg font-bold text-gray-900">
-              Your Virtual Account
-            </h3>
-            <div className="mt-4 space-y-4 rounded-lg bg-gray-50 p-4">
-              <div>
-                <p className="text-xs font-medium text-gray-600 uppercase">
-                  Account Number
-                </p>
-                <div className="mt-2 flex items-center justify-between rounded-lg bg-white p-3">
-                  <span className="font-mono text-lg font-bold">
-                    {virtualAccount.account_number}
-                  </span>
-                  <button
-                    onClick={() => copyToClipboard(virtualAccount.account_number)}
-                    className="rounded-lg p-2 transition-colors hover:bg-gray-100"
-                  >
-                    {copied ? (
-                      <CheckCircle className="h-5 w-5 text-success" />
-                    ) : (
-                      <Copy className="h-5 w-5 text-gray-600" />
-                    )}
-                  </button>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-600 uppercase">
-                  Bank
-                </p>
-                <p className="mt-2 text-lg font-bold">
-                  {virtualAccount.bank_name}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-600 uppercase">
-                  Provider
-                </p>
-                <div className="mt-2">
-                  <span className="badge badge-info">
-                    {virtualAccount.provider.toUpperCase()}
-                  </span>
-                </div>
-              </div>
+      {/* Transactions */}
+      <div className="px-5">
+        <SectionHeader title="Transactions" onClick={() => router.push("/transactions")} />
+        <div className="flex items-center justify-between py-2">
+          <div className="flex items-center">
+            <NairaFlag size={44} />
+            <div className="ml-3">
+              <p className="text-base font-bold text-ink">VICTOR IGWE</p>
+              <p className="text-sm text-muted">Jun 21, 2026</p>
             </div>
           </div>
-        )}
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <a href="/send" className="card text-center hover:shadow-md transition-shadow">
-            <div className="text-3xl">📤</div>
-            <p className="mt-2 font-medium">Send Money</p>
-          </a>
-          <a href="/withdraw" className="card text-center hover:shadow-md transition-shadow">
-            <div className="text-3xl">💳</div>
-            <p className="mt-2 font-medium">Withdraw</p>
-          </a>
-          <a href="/kyc" className="card text-center hover:shadow-md transition-shadow">
-            <div className="text-3xl">📋</div>
-            <p className="mt-2 font-medium">KYC</p>
-          </a>
-          <a href="/settings" className="card text-center hover:shadow-md transition-shadow">
-            <div className="text-3xl">⚙️</div>
-            <p className="mt-2 font-medium">Settings</p>
-          </a>
-        </div>
-
-        {/* Recent Transactions */}
-        <div className="card-lg">
-          <h3 className="text-lg font-bold text-gray-900">Recent Transactions</h3>
-          <div className="mt-4 space-y-3">
-            <p className="text-center text-sm text-gray-500 py-8">
-              No transactions yet. Start by sending money or receiving funds.
-            </p>
-          </div>
+          <p className="text-base font-bold text-ink">-60,521.3 NGN</p>
         </div>
       </div>
-    </MainLayout>
+    </AppShell>
   );
 }

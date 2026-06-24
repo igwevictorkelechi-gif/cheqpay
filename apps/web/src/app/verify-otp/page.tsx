@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthLayout from "@/components/AuthLayout";
 import { authService } from "@/services/auth";
 import { useAuthStore } from "@/store";
 
-export default function VerifyOTPPage() {
+function VerifyOTPForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setUser, setLoading: setAuthLoading } = useAuthStore();
@@ -114,7 +114,7 @@ export default function VerifyOTPPage() {
         </form>
 
         <div className="mt-6 border-t border-gray-200 pt-6 text-center">
-          <p className="text-sm text-gray-600">Didn't receive the code?</p>
+          <p className="text-sm text-gray-600">Didn&apos;t receive the code?</p>
           <button
             onClick={handleResendOTP}
             disabled={resendTimer > 0}
@@ -125,5 +125,13 @@ export default function VerifyOTPPage() {
         </div>
       </div>
     </AuthLayout>
+  );
+}
+
+export default function VerifyOTPPage() {
+  return (
+    <Suspense fallback={null}>
+      <VerifyOTPForm />
+    </Suspense>
   );
 }

@@ -92,17 +92,24 @@ export const walletService = {
   },
 
   subscribeToWallet(userId: string, callback: (wallet: Wallet) => void) {
-    const subscription = supabase
-      .from(`wallets:user_id=eq.${userId}`)
-      .on("*", (payload) => {
-        if (payload.eventType === "UPDATE") {
-          callback(payload.new);
+    const channel = supabase
+      .channel(`wallets:${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "wallets",
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          callback(payload.new as Wallet);
         }
-      })
+      )
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(channel);
     };
   },
 
@@ -110,15 +117,24 @@ export const walletService = {
     userId: string,
     callback: (transaction: Transaction) => void
   ) {
-    const subscription = supabase
-      .from(`transactions:user_id=eq.${userId}`)
-      .on("INSERT", (payload) => {
-        callback(payload.new);
-      })
+    const channel = supabase
+      .channel(`transactions:${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "transactions",
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          callback(payload.new as Transaction);
+        }
+      )
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(channel);
     };
   },
 };
