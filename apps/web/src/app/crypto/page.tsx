@@ -54,9 +54,9 @@ export default function CryptoPage() {
       <BalanceBlock label="Total Crypto Balance" amount={showBalance ? "₦0.00" : "₦••••"} />
 
       <ActionRow>
-        <CircleAction icon={TrendingUp} label="Trade" />
+        <CircleAction icon={TrendingUp} label="Trade" onClick={() => router.push("/convert")} />
         <CircleAction icon={ArrowDown} label="Receive" />
-        <CircleAction icon={ArrowRight} label="Send" />
+        <CircleAction icon={ArrowRight} label="Send" onClick={() => router.push("/send")} />
       </ActionRow>
 
       {/* Assets */}

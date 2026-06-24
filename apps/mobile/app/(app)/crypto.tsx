@@ -118,7 +118,7 @@ export default function CryptoScreen() {
         <BalanceBlock label="Total Crypto Balance" amount={showBalance ? '₦0.00' : '₦••••'} />
 
         <ActionRow>
-          <CircleAction icon="trending-up" label="Trade" />
+          <CircleAction icon="trending-up" label="Trade" onPress={() => router.push('/(app)/convert')} />
           <CircleAction icon="arrow-down" label="Receive" />
           <CircleAction icon="arrow-forward" label="Send" />
         </ActionRow>

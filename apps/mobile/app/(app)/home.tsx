@@ -104,7 +104,7 @@ export default function HomeScreen() {
           <CircleAction
             icon="sync"
             label="Convert"
-            onPress={() => router.push('/(app)/send-money')}
+            onPress={() => router.push('/(app)/convert')}
           />
         </ActionRow>
 

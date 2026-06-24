@@ -46,6 +46,7 @@ export default function AppLayout() {
       />
 
       {/* Secondary screens — reachable via navigation but hidden from the tab bar */}
+      <Tabs.Screen name="convert" options={{ href: null }} />
       <Tabs.Screen name="send-money" options={{ href: null }} />
       <Tabs.Screen name="transactions" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ href: null }} />

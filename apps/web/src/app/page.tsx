@@ -71,7 +71,7 @@ export default function HomePage() {
       <ActionRow>
         <CircleAction icon={ArrowDown} label="Deposit" onClick={() => router.push("/")} />
         <CircleAction icon={ArrowRight} label="Withdraw" onClick={() => router.push("/withdraw")} />
-        <CircleAction icon={RefreshCw} label="Convert" onClick={() => router.push("/send")} />
+        <CircleAction icon={RefreshCw} label="Convert" onClick={() => router.push("/convert")} />
       </ActionRow>
 
       {/* Cash account */}
