@@ -1,49 +1,59 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '@/components/brand';
 
 export default function AppLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#10B981',
+        tabBarActiveTintColor: colors.ink,
         tabBarInactiveTintColor: '#9CA3AF',
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
         tabBarStyle: {
           borderTopColor: '#E5E7EB',
           backgroundColor: '#FFFFFF',
+          height: 88,
+          paddingTop: 8,
         },
       }}
     >
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Wallet',
-          tabBarIcon: ({ color }) => <Ionicons name="wallet" size={24} color={color} />,
+          title: 'Home',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="send-money"
+        name="crypto"
         options={{
-          title: 'Send',
-          tabBarIcon: ({ color }) => <Ionicons name="send" size={24} color={color} />,
+          title: 'Crypto',
+          tabBarIcon: ({ color }) => <Ionicons name="logo-bitcoin" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="transactions"
+        name="pay-bill"
         options={{
-          title: 'History',
-          tabBarIcon: ({ color }) => <Ionicons name="list" size={24} color={color} />,
+          title: 'Pay Bill',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'pricetag' : 'pricetag-outline'} size={24} color={color} />
+          ),
         }}
       />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <Ionicons name="person" size={24} color={color} />,
-        }}
-      />
+
+      {/* Secondary screens — reachable via navigation but hidden from the tab bar */}
+      <Tabs.Screen name="send-money" options={{ href: null }} />
+      <Tabs.Screen name="transactions" options={{ href: null }} />
+      <Tabs.Screen name="profile" options={{ href: null }} />
+      <Tabs.Screen name="airtime" options={{ href: null }} />
+      <Tabs.Screen name="withdraw" options={{ href: null }} />
+      <Tabs.Screen name="fund-wallet" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
+      <Tabs.Screen name="kyc" options={{ href: null }} />
     </Tabs>
   );
 }

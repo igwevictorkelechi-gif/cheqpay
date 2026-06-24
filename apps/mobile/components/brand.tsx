@@ -1,0 +1,168 @@
+import React from 'react';
+import { View, Text, TouchableOpacity, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+
+/**
+ * Cheqpay shared brand UI primitives.
+ * Centralises the colours and layout pieces that repeat across the
+ * Home, Crypto and Pay Bill tabs so the look stays consistent.
+ */
+export const colors = {
+  brand: '#0A8A3C',
+  brandDark: '#067A33',
+  surface: '#E9EEE9',
+  surfaceSoft: '#DDE4DD',
+  circle: '#D7DDD7',
+  ink: '#0F1419',
+  muted: '#6B7280',
+  white: '#FFFFFF',
+};
+
+/** Small circular avatar shown top-left of each tab. */
+export function Avatar({ uri, name }: { uri?: string | null; name?: string | null }) {
+  const initial = (name || 'C').trim().charAt(0).toUpperCase();
+  return (
+    <View
+      className="w-11 h-11 rounded-full items-center justify-center overflow-hidden"
+      style={{ backgroundColor: '#D81E9B' }}
+    >
+      {uri ? (
+        <Image source={{ uri }} className="w-11 h-11" />
+      ) : (
+        <Text className="text-white font-bold text-lg">{initial}</Text>
+      )}
+    </View>
+  );
+}
+
+/** A round white icon button used in the top bar. */
+export function TopIcon({
+  name,
+  onPress,
+}: {
+  name: React.ComponentProps<typeof Ionicons>['name'];
+  onPress?: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      className="w-10 h-10 rounded-full bg-white items-center justify-center ml-3"
+      activeOpacity={0.7}
+    >
+      <Ionicons name={name} size={18} color={colors.ink} />
+    </TouchableOpacity>
+  );
+}
+
+/** Top bar: avatar on the left, a set of round icon buttons on the right. */
+export function TopBar({
+  name,
+  avatarUri,
+  icons,
+}: {
+  name?: string | null;
+  avatarUri?: string | null;
+  icons: { name: React.ComponentProps<typeof Ionicons>['name']; onPress?: () => void }[];
+}) {
+  return (
+    <View className="flex-row items-center justify-between px-5 pt-2 pb-1">
+      <Avatar name={name} uri={avatarUri} />
+      <View className="flex-row items-center">
+        {icons.map((icon) => (
+          <TopIcon key={String(icon.name)} name={icon.name} onPress={icon.onPress} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Centered "Total ... Balance" + big amount block. */
+export function BalanceBlock({ label, amount }: { label: string; amount: string }) {
+  return (
+    <View className="items-center mt-4 mb-7">
+      <Text className="text-muted text-base">{label}</Text>
+      <Text className="text-ink font-extrabold mt-2" style={{ fontSize: 40 }}>
+        {amount}
+      </Text>
+    </View>
+  );
+}
+
+/** A round grey quick-action button with a label underneath. */
+export function CircleAction({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  onPress?: () => void;
+}) {
+  return (
+    <TouchableOpacity className="items-center" onPress={onPress} activeOpacity={0.7}>
+      <View
+        className="w-16 h-16 rounded-full items-center justify-center"
+        style={{ backgroundColor: colors.circle }}
+      >
+        <Ionicons name={icon} size={24} color={colors.ink} />
+      </View>
+      <Text className="text-ink font-semibold text-sm mt-2">{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+/** Row of quick-action buttons, evenly spaced. */
+export function ActionRow({ children }: { children: React.ReactNode }) {
+  return (
+    <View className="flex-row justify-center px-10 mb-8" style={{ gap: 36 }}>
+      {children}
+    </View>
+  );
+}
+
+/** Small Nigerian flag rendered as a circle (green / white / green). */
+export function NairaFlag({ size = 44 }: { size?: number }) {
+  return (
+    <View
+      className="flex-row overflow-hidden rounded-full"
+      style={{ width: size, height: size }}
+    >
+      <View style={{ flex: 1, backgroundColor: colors.brand }} />
+      <View style={{ flex: 1, backgroundColor: colors.white }} />
+      <View style={{ flex: 1, backgroundColor: colors.brand }} />
+    </View>
+  );
+}
+
+/** Section header with a chevron, e.g. "Transactions >". */
+export function SectionHeader({
+  title,
+  onPress,
+}: {
+  title: string;
+  onPress?: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      className="flex-row items-center mb-3"
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Text className="text-brand font-bold text-base">{title}</Text>
+      <Ionicons name="chevron-forward" size={18} color={colors.brand} />
+    </TouchableOpacity>
+  );
+}
+
+/** White rounded card wrapper. */
+export function Card({
+  children,
+  className = '',
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <View className={`bg-white rounded-3xl p-5 ${className}`}>{children}</View>
+  );
+}

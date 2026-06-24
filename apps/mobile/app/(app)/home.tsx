@@ -2,22 +2,30 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   ScrollView,
   ActivityIndicator,
   RefreshControl,
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore, useWalletStore, useUIStore } from '@/store';
 import { walletService } from '@/services/wallet';
+import {
+  colors,
+  TopBar,
+  BalanceBlock,
+  ActionRow,
+  CircleAction,
+  Card,
+  NairaFlag,
+  SectionHeader,
+} from '@/components/brand';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const { wallet, virtualAccount, setWallet, setVirtualAccount } = useWalletStore();
+  const { wallet, setWallet, setVirtualAccount } = useWalletStore();
   const { showBalance, toggleBalance } = useUIStore();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -28,12 +36,10 @@ export default function HomeScreen() {
 
   const loadWalletData = async () => {
     if (!user?.id) return;
-
     try {
       setLoading(true);
       const walletData = await walletService.getWallet(user.id);
       const vaData = await walletService.getVirtualAccount(user.id);
-
       if (walletData) setWallet(walletData);
       if (vaData) setVirtualAccount(vaData);
     } catch (error) {
@@ -50,148 +56,118 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const quickActions = [
-    {
-      id: 'fund',
-      name: 'Fund Wallet',
-      icon: 'arrow-down-circle',
-      color: '#10B981',
-      route: '/(app)/fund-wallet',
-    },
-    {
-      id: 'send',
-      name: 'Send Money',
-      icon: 'send',
-      color: '#3B82F6',
-      route: '/(app)/send-money',
-    },
-    {
-      id: 'withdraw',
-      name: 'Withdraw',
-      icon: 'arrow-up-circle',
-      color: '#EF4444',
-      route: '/(app)/withdraw',
-    },
-    {
-      id: 'airtime',
-      name: 'Airtime',
-      icon: 'call',
-      color: '#F59E0B',
-      route: '/(app)/airtime',
-    },
-  ];
+  const balance = wallet?.balance ?? 0;
+  const formattedBalance = showBalance
+    ? '₦' + balance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '₦••••';
 
   if (loading) {
     return (
-      <View className="flex-1 bg-white justify-center items-center">
-        <ActivityIndicator size="large" color="#10B981" />
+      <View
+        className="flex-1 justify-center items-center"
+        style={{ backgroundColor: colors.surface }}
+      >
+        <ActivityIndicator size="large" color={colors.brand} />
       </View>
     );
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-gradient-to-b from-green-50 to-white"
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
-      {/* Header */}
-      <View className="bg-white" style={{ paddingTop: insets.top }}>
-        <View className="px-6 py-4">
-          <Text className="text-gray-500 text-sm">Welcome back,</Text>
-          <Text className="text-gray-800 text-2xl font-bold">{user?.full_name}</Text>
-        </View>
-      </View>
+    <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        <TopBar
+          name={user?.full_name}
+          icons={[
+            { name: 'search-outline', onPress: () => router.push('/(app)/transactions') },
+            { name: showBalance ? 'eye-outline' : 'eye-off-outline', onPress: toggleBalance },
+            { name: 'notifications-outline' },
+          ]}
+        />
 
-      {/* Wallet Card */}
-      <View className="px-6 mt-6 mb-8">
-        <View className="bg-gradient-to-r from-green-600 to-green-500 rounded-3xl p-8 shadow-lg">
-          {/* Balance Header */}
-          <View className="flex-row justify-between items-center mb-8">
-            <Text className="text-green-100 text-sm font-semibold">Wallet Balance</Text>
-            <TouchableOpacity onPress={toggleBalance}>
-              <Ionicons
-                name={showBalance ? 'eye' : 'eye-off'}
-                size={24}
-                color="white"
-              />
-            </TouchableOpacity>
-          </View>
+        <BalanceBlock label="Total Cash Balance" amount={formattedBalance} />
 
-          {/* Balance */}
-          <View className="mb-8">
-            <Text className="text-white text-5xl font-bold">
-              {showBalance ? '₦' + (wallet?.balance || 0).toLocaleString() : '••••'}
-            </Text>
-          </View>
+        <ActionRow>
+          <CircleAction
+            icon="arrow-down"
+            label="Deposit"
+            onPress={() => router.push('/(app)/fund-wallet')}
+          />
+          <CircleAction
+            icon="arrow-forward"
+            label="Withdraw"
+            onPress={() => router.push('/(app)/withdraw')}
+          />
+          <CircleAction
+            icon="sync"
+            label="Convert"
+            onPress={() => router.push('/(app)/send-money')}
+          />
+        </ActionRow>
 
-          {/* Virtual Account Info */}
-          <View className="border-t border-green-400 pt-4">
-            <Text className="text-green-100 text-xs font-semibold mb-2">Your Virtual Account</Text>
-            <View className="flex-row justify-between items-center">
-              <View>
-                <Text className="text-white text-sm font-semibold">
-                  {virtualAccount?.bank_name || 'Loading...'}
-                </Text>
-                <Text className="text-green-100 text-lg font-bold">
-                  {virtualAccount?.account_number || '0000000000'}
-                </Text>
+        {/* Cash account */}
+        <View className="px-5 mb-4">
+          <Card>
+            <Text className="text-muted text-base font-medium mb-4">Cash</Text>
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center">
+                <NairaFlag />
+                <View className="ml-3">
+                  <Text className="text-ink text-lg font-bold">NGN</Text>
+                  <Text className="text-muted text-sm">Naira</Text>
+                </View>
               </View>
-              {virtualAccount?.account_number && (
-                <TouchableOpacity
-                  onPress={() => {
-                    // Copy to clipboard
-                    Alert.alert('Copied', 'Account number copied to clipboard');
-                  }}
-                >
-                  <Ionicons name="copy" size={20} color="white" />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Quick Actions */}
-      <View className="px-6 mb-8">
-        <Text className="text-gray-800 font-bold text-lg mb-4">Quick Actions</Text>
-        <View className="flex-row flex-wrap gap-4">
-          {quickActions.map((action) => (
-            <TouchableOpacity
-              key={action.id}
-              className="flex-1 bg-white rounded-2xl p-4 items-center min-w-[40%] shadow"
-              onPress={() => router.push(action.route)}
-            >
-              <View
-                className="w-12 h-12 rounded-full items-center justify-center mb-2"
-                style={{ backgroundColor: action.color + '20' }}
-              >
-                <Ionicons name={action.icon as any} size={24} color={action.color} />
-              </View>
-              <Text className="text-gray-700 font-semibold text-xs text-center">
-                {action.name}
+              <Text className="text-ink text-lg font-bold">
+                {showBalance ? `${balance.toLocaleString('en-NG')} NGN` : '•••• NGN'}
               </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Recent Transactions */}
-      <View className="px-6 mb-8">
-        <View className="flex-row justify-between items-center mb-4">
-          <Text className="text-gray-800 font-bold text-lg">Recent Transactions</Text>
-          <TouchableOpacity onPress={() => router.push('/(app)/transactions')}>
-            <Text className="text-green-600 font-semibold text-sm">See All</Text>
-          </TouchableOpacity>
+            </View>
+          </Card>
         </View>
 
-        {/* Empty State */}
-        <View className="bg-white rounded-2xl p-8 items-center">
-          <Ionicons name="swap-horizontal" size={48} color="#D1D5DB" />
-          <Text className="text-gray-500 mt-4 text-center">
-            No recent transactions.{'\n'}Fund your wallet to get started!
-          </Text>
+        {/* Savings */}
+        <View className="px-5 mb-6">
+          <Card>
+            <View className="flex-row items-center">
+              <View
+                className="w-14 h-14 rounded-full items-center justify-center"
+                style={{ backgroundColor: colors.circle }}
+              >
+                <Text style={{ fontSize: 22 }}>📊</Text>
+              </View>
+              <View className="ml-4 flex-1">
+                <Text className="text-ink text-xl font-bold">Your money. Working daily</Text>
+                <Text className="text-muted text-sm mt-1">
+                  Daily returns in NGN or USD. Flexible or fixed savings
+                </Text>
+              </View>
+            </View>
+          </Card>
+        </View>
+
+        {/* Transactions */}
+        <View className="px-5">
+          <SectionHeader title="Transactions" onPress={() => router.push('/(app)/transactions')} />
+          <TransactionRow />
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function TransactionRow() {
+  return (
+    <View className="flex-row items-center justify-between py-2">
+      <View className="flex-row items-center">
+        <NairaFlag size={44} />
+        <View className="ml-3">
+          <Text className="text-ink text-base font-bold">VICTOR IGWE</Text>
+          <Text className="text-muted text-sm">Jun 21, 2026</Text>
         </View>
       </View>
-    </ScrollView>
+      <Text className="text-ink text-base font-bold">-60,521.3 NGN</Text>
+    </View>
   );
 }
