@@ -104,7 +104,7 @@ export default function CryptoPage() {
               <div className="text-right">
                 <p
                   className="text-base font-bold"
-                  style={{ color: tx.positive ? "#0A8A3C" : "#0F1419" }}
+                  style={{ color: tx.positive ? "#34C759" : "#F4F3F7" }}
                 >
                   {tx.amount}
                 </p>

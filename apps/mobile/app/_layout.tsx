@@ -39,7 +39,7 @@ export default function RootLayout() {
           }}
         />
       </Stack>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar style="light" />
     </>
   );
 }

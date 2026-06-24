@@ -8,13 +8,17 @@ import { Ionicons } from '@expo/vector-icons';
  * Home, Crypto and Pay Bill tabs so the look stays consistent.
  */
 export const colors = {
-  brand: '#0A8A3C',
-  brandDark: '#067A33',
-  surface: '#E9EEE9',
-  surfaceSoft: '#DDE4DD',
-  circle: '#D7DDD7',
-  ink: '#0F1419',
-  muted: '#6B7280',
+  brand: '#6B5B95',
+  brandDark: '#574A7A',
+  brandLight: '#8A7BB5',
+  surface: '#14121A',
+  surfaceSoft: '#1F1B29',
+  card: '#1F1B29',
+  circle: '#2C2738',
+  border: '#2A2535',
+  ink: '#F4F3F7',
+  muted: '#9A93AD',
+  positive: '#34C759',
   white: '#FFFFFF',
 };
 
@@ -46,7 +50,7 @@ export function TopIcon({
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="w-10 h-10 rounded-full bg-white items-center justify-center ml-3"
+      className="w-10 h-10 rounded-full bg-card items-center justify-center ml-3"
       activeOpacity={0.7}
     >
       <Ionicons name={name} size={18} color={colors.ink} />
@@ -127,9 +131,9 @@ export function NairaFlag({ size = 44 }: { size?: number }) {
       className="flex-row overflow-hidden rounded-full"
       style={{ width: size, height: size }}
     >
-      <View style={{ flex: 1, backgroundColor: colors.brand }} />
+      <View style={{ flex: 1, backgroundColor: '#008751' }} />
       <View style={{ flex: 1, backgroundColor: colors.white }} />
-      <View style={{ flex: 1, backgroundColor: colors.brand }} />
+      <View style={{ flex: 1, backgroundColor: '#008751' }} />
     </View>
   );
 }
@@ -163,6 +167,6 @@ export function Card({
   className?: string;
 }) {
   return (
-    <View className={`bg-white rounded-3xl p-5 ${className}`}>{children}</View>
+    <View className={`bg-card rounded-3xl p-5 ${className}`}>{children}</View>
   );
 }

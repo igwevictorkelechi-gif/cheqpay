@@ -9,22 +9,25 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Cheqpay brand palette
-        brand: "#0A8A3C",
-        "brand-dark": "#067A33",
-        surface: "#E9EEE9",
-        "surface-soft": "#DDE4DD",
-        circle: "#D7DDD7",
-        ink: "#0F1419",
-        muted: "#6B7280",
+        // Cheqpay brand palette (dark theme)
+        brand: "#6B5B95",
+        "brand-dark": "#574A7A",
+        "brand-light": "#8A7BB5",
+        surface: "#14121A",
+        "surface-soft": "#1F1B29",
+        card: "#1F1B29",
+        circle: "#2C2738",
+        border: "#2A2535",
+        ink: "#F4F3F7",
+        muted: "#9A93AD",
         // legacy aliases
-        primary: "#0A8A3C",
-        "primary-dark": "#067A33",
-        "primary-light": "#D1FAE5",
-        secondary: "#6B7280",
+        primary: "#6B5B95",
+        "primary-dark": "#574A7A",
+        "primary-light": "#8A7BB5",
+        secondary: "#9A93AD",
         danger: "#EF4444",
         warning: "#F59E0B",
-        success: "#0A8A3C",
+        success: "#34C759",
         info: "#3B82F6",
       },
       fontFamily: {

@@ -168,7 +168,7 @@ export default function CryptoScreen() {
                 <View className="items-end">
                   <Text
                     className="text-base font-bold"
-                    style={{ color: tx.positive ? colors.brand : colors.ink }}
+                    style={{ color: tx.positive ? colors.positive : colors.ink }}
                   >
                     {tx.amount}
                   </Text>

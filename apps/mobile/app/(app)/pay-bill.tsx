@@ -27,7 +27,7 @@ function ServiceTile({ service }: { service: Service }) {
       activeOpacity={0.8}
       onPress={() => service.route && router.push(service.route as never)}
       className="rounded-2xl p-4 mb-3"
-      style={{ width: '48%', height: 96, backgroundColor: '#DCEBDE' }}
+      style={{ width: '48%', height: 96, backgroundColor: '#2A2440' }}
     >
       <View className="flex-row items-start justify-between">
         <Text style={{ fontSize: 26 }}>{service.emoji}</Text>
@@ -71,7 +71,7 @@ export default function PayBillScreen() {
               <Text className="text-ink font-bold text-base">Showing services in</Text>
               <TouchableOpacity
                 className="flex-row items-center rounded-full px-3 py-1.5"
-                style={{ backgroundColor: colors.surface }}
+                style={{ backgroundColor: colors.circle }}
                 activeOpacity={0.7}
               >
                 <Text style={{ fontSize: 14 }}>🇳🇬</Text>

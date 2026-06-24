@@ -27,7 +27,7 @@ export function TopIcon({
   return (
     <button
       onClick={onClick}
-      className="ml-3 flex h-10 w-10 items-center justify-center rounded-full bg-white text-ink shadow-sm transition hover:bg-gray-50"
+      className="ml-3 flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink shadow-sm transition hover:opacity-80"
     >
       <Icon className="h-[18px] w-[18px]" />
     </button>
@@ -104,9 +104,9 @@ export function NairaFlag({ size = 44 }: { size?: number }) {
       className="flex overflow-hidden rounded-full"
       style={{ width: size, height: size }}
     >
-      <div className="h-full flex-1 bg-brand" />
+      <div className="h-full flex-1" style={{ backgroundColor: "#008751" }} />
       <div className="h-full flex-1 bg-white" />
-      <div className="h-full flex-1 bg-brand" />
+      <div className="h-full flex-1" style={{ backgroundColor: "#008751" }} />
     </div>
   );
 }
@@ -147,6 +147,6 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-3xl bg-white p-5 ${className}`}>{children}</div>
+    <div className={`rounded-3xl bg-card p-5 ${className}`}>{children}</div>
   );
 }

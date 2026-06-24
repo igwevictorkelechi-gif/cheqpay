@@ -9,11 +9,11 @@ export default function AppLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.ink,
-        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarInactiveTintColor: '#6E6880',
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
         tabBarStyle: {
-          borderTopColor: '#E5E7EB',
-          backgroundColor: '#FFFFFF',
+          borderTopColor: colors.border,
+          backgroundColor: colors.card,
           height: 88,
           paddingTop: 8,
         },

@@ -32,7 +32,7 @@ export default function PayBillPage() {
         <Card>
           <div className="mb-5 flex items-center justify-between">
             <p className="text-base font-bold text-ink">Showing services in</p>
-            <button className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5">
+            <button className="flex items-center gap-1.5 rounded-full bg-circle px-3 py-1.5">
               <span className="text-sm">🇳🇬</span>
               <span className="text-sm font-semibold text-ink">Nigeria</span>
               <ChevronDown className="h-4 w-4 text-muted" />
@@ -44,7 +44,7 @@ export default function PayBillPage() {
               <button
                 key={service.label}
                 className="mb-3 flex h-24 w-[48%] flex-col rounded-2xl p-4 text-left transition active:scale-95"
-                style={{ backgroundColor: "#DCEBDE" }}
+                style={{ backgroundColor: "#2A2440" }}
               >
                 <div className="flex items-start justify-between">
                   <span className="text-[26px]">{service.emoji}</span>

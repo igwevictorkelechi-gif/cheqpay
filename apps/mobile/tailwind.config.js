@@ -3,22 +3,26 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Cheqpay brand palette
-        brand: '#0A8A3C',
-        'brand-dark': '#067A33',
-        surface: '#E9EEE9',
-        'surface-soft': '#DDE4DD',
-        ink: '#0F1419',
-        muted: '#6B7280',
+        // Cheqpay brand palette (dark theme)
+        brand: '#6B5B95',
+        'brand-dark': '#574A7A',
+        'brand-light': '#8A7BB5',
+        surface: '#14121A',
+        'surface-soft': '#1F1B29',
+        card: '#1F1B29',
+        circle: '#2C2738',
+        border: '#2A2535',
+        ink: '#F4F3F7',
+        muted: '#9A93AD',
         // legacy aliases (kept so existing screens keep compiling)
-        primary: '#0A8A3C',
-        secondary: '#067A33',
+        primary: '#6B5B95',
+        secondary: '#574A7A',
         danger: '#EF4444',
         warning: '#F59E0B',
         info: '#3B82F6',
-        success: '#0A8A3C',
-        dark: '#0F1419',
-        light: '#F3F4F6',
+        success: '#34C759',
+        dark: '#14121A',
+        light: '#1F1B29',
       },
       fontFamily: {
         sans: ['System'],
