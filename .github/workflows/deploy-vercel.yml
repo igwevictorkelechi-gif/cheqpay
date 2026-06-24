@@ -1,0 +1,55 @@
+name: Deploy web to Vercel (production)
+
+# Deploys apps/web to the existing Vercel project "cheqpy"
+# (https://cheqpy.vercel.app).
+#
+# One-time setup (can be done from a phone browser):
+#   GitHub repo -> Settings -> Secrets and variables -> Actions ->
+#   New repository secret:
+#     Name:  VERCEL_TOKEN
+#     Value: a token from https://vercel.com/account/tokens
+#
+# The org/project IDs below are not secrets, so they are committed here.
+# After the secret is added, this runs automatically on every push to the
+# branches below, and can also be triggered manually from the Actions tab
+# (Run workflow).
+
+on:
+  push:
+    branches:
+      - main
+      - claude/cheq-pay-rebrand-kjehub
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: team_O46KPXuycwBw28agNvi9mK94
+  VERCEL_PROJECT_ID: prj_BWmR0rAverZJSF50IQVS9UxTVlzH
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel project settings
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to production
+        run: vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
