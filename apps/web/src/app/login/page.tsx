@@ -17,7 +17,8 @@ export default function LoginPage() {
   const router = useRouter();
   const { setLoading, setUser } = useAuthStore();
   const { setWallet, setVirtualAccount, setTransactions } = useWalletStore();
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLocalLoading] = useState(false);
 
@@ -30,24 +31,21 @@ export default function LoginPage() {
     router.push("/");
   };
 
-  const handleSendOTP = async (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLocalLoading(true);
-
-    // Validate phone
-    const phoneRegex = /^(\+234|0)[0-9]{10}$/;
-    if (!phoneRegex.test(phone.replace(/\s/g, ""))) {
-      setError("Please enter a valid Nigerian phone number");
-      setLocalLoading(false);
-      return;
-    }
-
     try {
-      await authService.sendOTP(phone);
-      router.push(`/verify-otp?phone=${encodeURIComponent(phone)}&type=login`);
+      const user = await authService.signInWithEmail(email.trim(), password);
+      if (!user) {
+        setError("Could not sign you in. Please check your details.");
+        return;
+      }
+      setUser(user);
+      setLoading(false);
+      router.push("/");
     } catch (err) {
-      setError("Failed to send OTP. Please try again.");
+      setError("Invalid email or password.");
       console.error(err);
     } finally {
       setLocalLoading(false);
@@ -59,23 +57,34 @@ export default function LoginPage() {
       <div className="p-8">
         <h2 className="text-2xl font-bold text-gray-900">Welcome Back</h2>
         <p className="mt-2 text-sm text-gray-600">
-          Enter your phone number to get started
+          Sign in to your Cheqpay account
         </p>
 
-        <form onSubmit={handleSendOTP} className="mt-6 space-y-4">
+        <form onSubmit={handleSignIn} className="mt-6 space-y-4">
           <div>
-            <label className="label">Phone Number</label>
+            <label className="label">Email</label>
             <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+234 81 2345 6789"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
               className="input"
               disabled={loading}
+              autoComplete="email"
             />
-            <p className="mt-1 text-xs text-gray-500">
-              Include country code (+234 or 0)
-            </p>
+          </div>
+
+          <div>
+            <label className="label">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="input"
+              disabled={loading}
+              autoComplete="current-password"
+            />
           </div>
 
           {error && (
@@ -86,10 +95,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading || !phone.trim()}
+            disabled={loading || !email.trim() || !password}
             className="btn-primary w-full"
           >
-            {loading ? "Sending OTP..." : "Send OTP"}
+            {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
 

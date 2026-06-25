@@ -2,6 +2,22 @@ import { supabase } from "./supabase";
 import type { User } from "@cheqpay/shared";
 
 export const authService = {
+  async signInWithEmail(email: string, password: string): Promise<User | null> {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+    if (!data.session) return null;
+
+    const { data: profile } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", data.session.user.id)
+      .single();
+    return profile;
+  },
+
   async sendOTP(phone: string) {
     try {
       const response = await fetch("/api/auth/send-otp", {

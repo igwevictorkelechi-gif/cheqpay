@@ -1,19 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Fall back to harmless placeholders when env vars are not configured so the
-// app still renders (e.g. a preview deploy with no backend wired up yet).
-// Real credentials should be set via NEXT_PUBLIC_SUPABASE_URL /
-// NEXT_PUBLIC_SUPABASE_ANON_KEY for live data.
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "public-anon-key-placeholder";
+// Cheqpay Supabase project. The anon key is a public client key (protected by
+// Row Level Security), so it is safe to ship in the bundle. Env vars override
+// these defaults when set.
+const DEFAULT_URL = "https://xttgnswgeffyybjfjlkp.supabase.co";
+const DEFAULT_ANON_KEY = "REPLACE_WITH_ANON_KEY";
 
-if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-  console.warn(
-    "Supabase env vars are not set; using placeholder credentials. Live data will be unavailable."
-  );
-}
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_URL;
+const supabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

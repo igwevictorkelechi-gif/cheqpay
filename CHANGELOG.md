@@ -4,6 +4,17 @@ All notable changes to the Cheqpay rebrand are documented here.
 
 ## [Unreleased] — branch `claude/cheq-pay-rebrand-kjehub`
 
+### Real backend (Supabase) + email/password login
+- Web Supabase client now points at the real `cheqpay` project by
+  default (anon key is a public client key; env vars still override).
+- Added **email + password sign-in** to the web login page and auth
+  service (`signInWithEmail`), alongside the demo button.
+- Added `supabase/seed_demo_user.sql` to seed a real demo account
+  (profile, wallet, static virtual account, sample transactions) and the
+  RLS read policies.
+- NOTE: the anon key default is a placeholder pending the real key; real
+  login activates once it is filled in `apps/web/src/services/supabase.ts`.
+
 ### Demo user
 - **"Continue as demo user"** on the login screen (web + mobile) seeds a
   sample account (Victor Igwe, ₦152,340.50 balance, a Wema virtual
