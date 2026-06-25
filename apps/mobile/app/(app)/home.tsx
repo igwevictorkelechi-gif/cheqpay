@@ -81,6 +81,7 @@ export default function HomeScreen() {
       >
         <TopBar
           name={user?.full_name}
+          onAvatarPress={() => router.push('/(app)/profile')}
           icons={[
             { name: 'search-outline', onPress: () => router.push('/(app)/transactions') },
             { name: showBalance ? 'eye-outline' : 'eye-off-outline', onPress: toggleBalance },

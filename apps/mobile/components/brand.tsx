@@ -63,14 +63,18 @@ export function TopBar({
   name,
   avatarUri,
   icons,
+  onAvatarPress,
 }: {
   name?: string | null;
   avatarUri?: string | null;
   icons: { name: React.ComponentProps<typeof Ionicons>['name']; onPress?: () => void }[];
+  onAvatarPress?: () => void;
 }) {
   return (
     <View className="flex-row items-center justify-between px-5 pt-2 pb-1">
-      <Avatar name={name} uri={avatarUri} />
+      <TouchableOpacity onPress={onAvatarPress} activeOpacity={onAvatarPress ? 0.7 : 1} disabled={!onAvatarPress}>
+        <Avatar name={name} uri={avatarUri} />
+      </TouchableOpacity>
       <View className="flex-row items-center">
         {icons.map((icon) => (
           <TopIcon key={String(icon.name)} name={icon.name} onPress={icon.onPress} />

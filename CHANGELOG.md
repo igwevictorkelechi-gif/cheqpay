@@ -4,6 +4,14 @@ All notable changes to the Cheqpay rebrand are documented here.
 
 ## [Unreleased] — branch `claude/cheq-pay-rebrand-kjehub`
 
+### Profile / Account hub
+- **Profile page** (web `/profile`, mobile `(app)/profile`) opened by
+  tapping the **avatar** in the home/crypto/pay-bill top bar: identity
+  (avatar, name, @handle), feature cards (Join Cheqpay Tribe / Need
+  help?), and a menu — Account, Recipients, Connected bank accounts,
+  Security, Preferences, About us — plus **Log out** and app version.
+- `TopBar` now accepts an avatar tap handler on both apps.
+
 ### Deposit / Add money (Flutterwave static account)
 - **Deposit flow** on web (`/deposit` → `/deposit/transfer` → `/deposit/done`)
   and mobile (`(app)/deposit` → `deposit-transfer` → `deposit-done`):

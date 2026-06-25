@@ -44,6 +44,7 @@ export default function CryptoPage() {
     <AppShell>
       <TopBar
         name={user?.full_name}
+        onAvatar={() => router.push("/profile")}
         icons={[
           { icon: Search },
           { icon: showBalance ? Eye : EyeOff, onClick: toggleBalance },

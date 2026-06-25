@@ -108,6 +108,7 @@ export default function CryptoScreen() {
       >
         <TopBar
           name={user?.full_name}
+          onAvatarPress={() => router.push('/(app)/profile')}
           icons={[
             { name: 'search-outline' },
             { name: showBalance ? 'eye-outline' : 'eye-off-outline', onPress: toggleBalance },

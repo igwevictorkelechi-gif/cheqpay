@@ -1,126 +1,152 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Alert,
-  ScrollView,
-} from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { colors, Avatar } from '@/components/brand';
 import { useAuthStore } from '@/store';
 import { authService } from '@/services/auth';
 
+type Item = { title: string; subtitle: string; route?: string };
+
+const items: Item[] = [
+  {
+    title: 'Account',
+    subtitle: 'Personal details, invite friends, account limits, statements, delete account',
+    route: '/(app)/settings',
+  },
+  { title: 'Recipients', subtitle: 'Bank accounts, Mobile money', route: '/(app)/send-money' },
+  { title: 'Connected bank accounts', subtitle: 'Manage your payment accounts', route: '/(app)/settings' },
+  { title: 'Security', subtitle: '2FA, app lock, passcode, biometrics, instant withdrawal', route: '/(app)/settings' },
+  { title: 'Preferences', subtitle: 'Notifications, display currency & app themes', route: '/(app)/settings' },
+  { title: 'About us', subtitle: 'FAQs, privacy policy, our blog, contact us', route: '/(app)/settings' },
+];
+
+function FeatureCard({
+  icon,
+  title,
+  subtitle,
+  cardBg,
+  iconBg,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  title: string;
+  subtitle: string;
+  cardBg: string;
+  iconBg: string;
+}) {
+  return (
+    <View className="flex-1 rounded-3xl p-4 justify-between" style={{ minHeight: 130, backgroundColor: cardBg }}>
+      <View className="w-9 h-9 rounded-full items-center justify-center" style={{ backgroundColor: iconBg }}>
+        <Ionicons name={icon} size={18} color="#FFFFFF" />
+      </View>
+      <View>
+        <Text className="text-ink text-base font-bold">{title}</Text>
+        <Text className="text-muted text-xs mt-0.5">{subtitle}</Text>
+      </View>
+    </View>
+  );
+}
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user, setUser, setIsAuthenticated } = useAuthStore();
+  const { user, logout } = useAuthStore();
 
-  const handleLogout = async () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
+  const name = user?.full_name || 'Cheqpay User';
+  const handle =
+    '@' + (user?.email?.split('@')[0] || name.split(' ')[0].toLowerCase() || 'cheqpay');
+
+  const handleLogout = () => {
+    Alert.alert('Log out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Cancel',
-        onPress: () => {},
-        style: 'cancel',
-      },
-      {
-        text: 'Logout',
-        onPress: async () => {
-          const result = await authService.logout();
-          if (result.success) {
-            setUser(null);
-            setIsAuthenticated(false);
-            router.replace('/(auth)/login');
-          }
-        },
+        text: 'Log out',
         style: 'destructive',
+        onPress: async () => {
+          try {
+            await authService.logout();
+          } catch {
+            // ignore — still clear local state
+          }
+          logout();
+          router.replace('/(auth)/login');
+        },
       },
     ]);
   };
 
-  const profileItems = [
-    {
-      id: 'kyc',
-      label: 'KYC Verification',
-      icon: 'checkmark-circle',
-      action: () => router.push('/(app)/kyc'),
-      badge: user?.kyc_status === 'approved' ? '✓' : 'Pending',
-    },
-    {
-      id: 'settings',
-      label: 'Settings',
-      icon: 'settings',
-      action: () => router.push('/(app)/settings'),
-    },
-    {
-      id: 'support',
-      label: 'Support & Help',
-      icon: 'help-circle',
-      action: () => Alert.alert('Support', 'Contact us at support@cheqpay.com'),
-    },
-    {
-      id: 'about',
-      label: 'About Cheqpay',
-      icon: 'information-circle',
-      action: () => Alert.alert('About', 'Cheqpay v1.0.0'),
-    },
-  ];
-
   return (
-    <ScrollView className="flex-1 bg-white" style={{ paddingTop: insets.top }}>
-      {/* Profile Header */}
-      <View className="px-6 py-8 items-center border-b border-gray-100">
-        <View className="w-24 h-24 rounded-full bg-gradient-to-br from-green-600 to-green-500 items-center justify-center mb-4">
-          <Ionicons name="person" size={48} color="white" />
-        </View>
-        <Text className="text-gray-800 text-2xl font-bold">{user?.full_name}</Text>
-        <Text className="text-gray-500 text-sm mt-1">{user?.phone}</Text>
-        <Text className="text-gray-500 text-sm">{user?.email}</Text>
-
-        {/* KYC Status Badge */}
-        <View className="mt-4 px-4 py-2 bg-amber-100 rounded-full">
-          <Text className="text-amber-700 font-semibold text-sm">
-            KYC Status: {user?.kyc_status === 'approved' ? '✓ Verified' : 'Pending'}
-          </Text>
-        </View>
-      </View>
-
-      {/* Profile Menu */}
-      <View className="mt-4">
-        {profileItems.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            className="flex-row items-center justify-between px-6 py-4 border-b border-gray-100"
-            onPress={item.action}
-          >
-            <View className="flex-row items-center flex-1">
-              <Ionicons name={item.icon as any} size={24} color="#10B981" />
-              <Text className="text-gray-800 font-medium ml-4">{item.label}</Text>
-            </View>
-            <View className="flex-row items-center">
-              {item.badge && (
-                <Text className="text-gray-500 text-sm mr-2">{item.badge}</Text>
-              )}
-              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Logout Button */}
-      <View className="px-6 py-8 mt-8">
+    <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top + 8 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}>
+        {/* Close */}
         <TouchableOpacity
-          className="bg-red-500 rounded-lg py-4 items-center"
-          onPress={handleLogout}
+          onPress={() => router.back()}
+          className="w-11 h-11 rounded-full bg-card items-center justify-center"
         >
-          <Text className="text-white font-bold text-lg">Logout</Text>
+          <Ionicons name="close" size={22} color={colors.ink} />
         </TouchableOpacity>
-      </View>
 
-      {/* Footer */}
-      <View className="items-center py-6 border-t border-gray-100">
-        <Text className="text-gray-500 text-xs">Cheqpay v1.0.0</Text>
-      </View>
-    </ScrollView>
+        {/* Identity */}
+        <View className="items-center mt-3">
+          <View style={{ transform: [{ scale: 1.5 }], marginVertical: 12 }}>
+            <Avatar name={name} />
+          </View>
+          <Text className="text-ink text-2xl font-extrabold mt-4">{name}</Text>
+          <View className="bg-card rounded-full px-3 py-1 mt-2">
+            <Text className="text-muted text-sm font-medium">{handle}</Text>
+          </View>
+        </View>
+
+        {/* Feature cards */}
+        <View className="flex-row mt-6" style={{ gap: 16 }}>
+          <FeatureCard
+            icon="people"
+            title="Join Cheqpay Tribe"
+            subtitle="For exclusive updates"
+            cardBg="#3A3055"
+            iconBg={colors.brand}
+          />
+          <FeatureCard
+            icon="chatbubbles"
+            title="Need help?"
+            subtitle="Chat with us"
+            cardBg="#161320"
+            iconBg={colors.circle}
+          />
+        </View>
+
+        {/* Menu */}
+        <View className="mt-6" style={{ gap: 12 }}>
+          {items.map((item) => (
+            <TouchableOpacity
+              key={item.title}
+              onPress={() => item.route && router.push(item.route as never)}
+              className="flex-row items-center bg-card rounded-2xl p-4"
+              activeOpacity={0.7}
+            >
+              <View className="flex-1">
+                <Text className="text-ink text-base font-bold">{item.title}</Text>
+                <Text className="text-muted text-sm mt-0.5">{item.subtitle}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+            </TouchableOpacity>
+          ))}
+
+          {/* Log out */}
+          <TouchableOpacity
+            onPress={handleLogout}
+            className="flex-row items-center justify-between bg-card rounded-2xl p-4"
+            activeOpacity={0.7}
+          >
+            <Text className="text-base font-bold" style={{ color: '#EF4444' }}>
+              Log out
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
+
+        <Text className="text-muted text-xs text-center mt-6">App v1.0.0 (1)</Text>
+      </ScrollView>
+    </View>
   );
 }

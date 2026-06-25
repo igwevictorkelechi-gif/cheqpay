@@ -59,6 +59,7 @@ export default function HomePage() {
     <AppShell>
       <TopBar
         name={user?.full_name}
+        onAvatar={() => router.push("/profile")}
         icons={[
           { icon: Search, onClick: () => router.push("/transactions") },
           { icon: showBalance ? Eye : EyeOff, onClick: toggleBalance },

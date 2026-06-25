@@ -38,13 +38,21 @@ export function TopIcon({
 export function TopBar({
   name,
   icons,
+  onAvatar,
 }: {
   name?: string | null;
   icons: { icon: LucideIcon; onClick?: () => void }[];
+  onAvatar?: () => void;
 }) {
   return (
     <div className="flex items-center justify-between px-5 pb-1 pt-3">
-      <Avatar name={name} />
+      {onAvatar ? (
+        <button onClick={onAvatar} aria-label="Open profile">
+          <Avatar name={name} />
+        </button>
+      ) : (
+        <Avatar name={name} />
+      )}
       <div className="flex items-center">
         {icons.map((it, i) => (
           <TopIcon key={i} icon={it.icon} onClick={it.onClick} />

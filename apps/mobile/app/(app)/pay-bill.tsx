@@ -57,6 +57,7 @@ export default function PayBillScreen() {
       >
         <TopBar
           name={user?.full_name}
+          onAvatarPress={() => router.push('/(app)/profile')}
           icons={[{ name: 'search-outline' }, { name: 'notifications-outline' }]}
         />
 

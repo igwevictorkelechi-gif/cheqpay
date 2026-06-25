@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Search, Bell, ChevronDown } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { TopBar, Card } from "@/components/MobileUI";
@@ -17,11 +18,16 @@ const services: Service[] = [
 ];
 
 export default function PayBillPage() {
+  const router = useRouter();
   const { user } = useAuthStore();
 
   return (
     <AppShell>
-      <TopBar name={user?.full_name} icons={[{ icon: Search }, { icon: Bell }]} />
+      <TopBar
+        name={user?.full_name}
+        onAvatar={() => router.push("/profile")}
+        icons={[{ icon: Search }, { icon: Bell }]}
+      />
 
       <h1 className="mb-5 mt-3 px-5 text-[32px] font-extrabold text-ink">
         Quick payments
