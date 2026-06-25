@@ -10,13 +10,23 @@ import {
   Alert,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useAuthStore } from '@/store';
+import { useAuthStore, useWalletStore } from '@/store';
 import { authService } from '@/services/auth';
+import { demoUser, demoWallet, demoVirtualAccount } from '@/lib/demo';
 
 export default function LoginScreen() {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const { setUser, setIsAuthenticated } = useAuthStore();
+  const { setWallet, setVirtualAccount } = useWalletStore();
+
+  const continueAsDemo = () => {
+    setUser(demoUser);
+    setIsAuthenticated(true);
+    setWallet(demoWallet);
+    setVirtualAccount(demoVirtualAccount);
+    router.replace('/(app)/home');
+  };
 
   const handleSendOTP = async () => {
     if (!phone || phone.length < 10) {
@@ -83,6 +93,15 @@ export default function LoginScreen() {
           ) : (
             <Text className="text-white font-bold text-lg">Send OTP</Text>
           )}
+        </TouchableOpacity>
+
+        {/* Demo button */}
+        <TouchableOpacity
+          className="border border-gray-300 rounded-lg py-4 items-center mb-6"
+          onPress={continueAsDemo}
+          disabled={loading}
+        >
+          <Text className="text-gray-800 font-bold text-lg">Continue as demo user</Text>
         </TouchableOpacity>
 
         {/* Sign Up Link */}

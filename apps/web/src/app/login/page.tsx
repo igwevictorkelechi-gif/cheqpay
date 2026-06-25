@@ -5,14 +5,30 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "@/components/AuthLayout";
 import { authService } from "@/services/auth";
-import { useAuthStore } from "@/store";
+import { useAuthStore, useWalletStore } from "@/store";
+import {
+  demoUser,
+  demoWallet,
+  demoVirtualAccount,
+  demoTransactions,
+} from "@/lib/demo";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setLoading } = useAuthStore();
+  const { setLoading, setUser } = useAuthStore();
+  const { setWallet, setVirtualAccount, setTransactions } = useWalletStore();
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [loading, setLocalLoading] = useState(false);
+
+  const continueAsDemo = () => {
+    setUser(demoUser);
+    setWallet(demoWallet);
+    setVirtualAccount(demoVirtualAccount);
+    setTransactions(demoTransactions);
+    setLoading(false);
+    router.push("/");
+  };
 
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +92,14 @@ export default function LoginPage() {
             {loading ? "Sending OTP..." : "Send OTP"}
           </button>
         </form>
+
+        <button
+          type="button"
+          onClick={continueAsDemo}
+          className="btn-secondary mt-3 w-full"
+        >
+          Continue as demo user
+        </button>
 
         <div className="mt-6 border-t border-gray-200 pt-6">
           <p className="text-center text-sm text-gray-600">

@@ -6,6 +6,7 @@ import { useAuthStore, useWalletStore } from "@/store";
 import { walletService } from "@/services/wallet";
 import { ArrowDownLeft, ArrowUpRight, Banknote } from "lucide-react";
 import type { Transaction } from "@cheqpay/shared";
+import { isDemoUser } from "@/lib/demo";
 
 const getTransactionIcon = (type: string) => {
   switch (type) {
@@ -43,6 +44,8 @@ export default function TransactionsPage() {
     const loadTransactions = async () => {
       try {
         if (!user) return;
+        // Demo user keeps the seeded sample transactions.
+        if (isDemoUser(user)) return;
         const txns = await walletService.getTransactions(user.id);
         setTransactions(txns);
       } catch (error) {

@@ -4,6 +4,14 @@ All notable changes to the Cheqpay rebrand are documented here.
 
 ## [Unreleased] — branch `claude/cheq-pay-rebrand-kjehub`
 
+### Demo user
+- **"Continue as demo user"** on the login screen (web + mobile) seeds a
+  sample account (Victor Igwe, ₦152,340.50 balance, a Wema virtual
+  account and sample transactions) into the stores and opens the app —
+  so the live deploy is fully explorable without a Supabase backend.
+- Web transactions page keeps the seeded demo transactions instead of
+  overwriting them with an empty backend fetch.
+
 ### Profile / Account hub
 - **Profile page** (web `/profile`, mobile `(app)/profile`) opened by
   tapping the **avatar** in the home/crypto/pay-bill top bar: identity
