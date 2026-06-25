@@ -4,6 +4,20 @@ All notable changes to the Cheqpay rebrand are documented here.
 
 ## [Unreleased] — branch `claude/cheq-pay-rebrand-kjehub`
 
+### Deposit / Add money (Flutterwave static account)
+- **Deposit flow** on web (`/deposit` → `/deposit/transfer` → `/deposit/done`)
+  and mobile (`(app)/deposit` → `deposit-transfer` → `deposit-done`):
+  enter amount + Bank Transfer option → static account transfer
+  instructions (amount to send, account number with copy, bank, account
+  name, deposit fee, you will receive, deposit terms) → "All done"
+  success with the recommended savings card.
+- **Flutterwave integration:** new server route
+  `/api/flutterwave/virtual-account` creates a *static* (permanent)
+  virtual account via Flutterwave when `FLUTTERWAVE_SECRET_KEY` is set,
+  with a deterministic mock fallback so the flow works without keys.
+  Mobile calls this route through `services/deposit.ts`.
+- Home **Deposit** action now opens this flow (was a no-op / fund-wallet).
+
 ### Swap flow (Convert → Confirm → Success)
 - **Swap confirmation page** (web `/convert/confirm`, mobile
   `(app)/swap-confirm`): pay/receive legs, rate, network fee and

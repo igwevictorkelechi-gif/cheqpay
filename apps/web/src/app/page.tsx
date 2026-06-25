@@ -69,7 +69,7 @@ export default function HomePage() {
       <BalanceBlock label="Total Cash Balance" amount={formattedBalance} />
 
       <ActionRow>
-        <CircleAction icon={ArrowDown} label="Deposit" onClick={() => router.push("/")} />
+        <CircleAction icon={ArrowDown} label="Deposit" onClick={() => router.push("/deposit")} />
         <CircleAction icon={ArrowRight} label="Withdraw" onClick={() => router.push("/withdraw")} />
         <CircleAction icon={RefreshCw} label="Convert" onClick={() => router.push("/convert")} />
       </ActionRow>

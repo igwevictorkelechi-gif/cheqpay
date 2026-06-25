@@ -46,6 +46,9 @@ export default function AppLayout() {
       />
 
       {/* Secondary screens — reachable via navigation but hidden from the tab bar */}
+      <Tabs.Screen name="deposit" options={{ href: null }} />
+      <Tabs.Screen name="deposit-transfer" options={{ href: null }} />
+      <Tabs.Screen name="deposit-done" options={{ href: null }} />
       <Tabs.Screen name="convert" options={{ href: null }} />
       <Tabs.Screen name="swap-confirm" options={{ href: null }} />
       <Tabs.Screen name="swap-success" options={{ href: null }} />

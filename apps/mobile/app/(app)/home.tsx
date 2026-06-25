@@ -94,7 +94,7 @@ export default function HomeScreen() {
           <CircleAction
             icon="arrow-down"
             label="Deposit"
-            onPress={() => router.push('/(app)/fund-wallet')}
+            onPress={() => router.push('/(app)/deposit')}
           />
           <CircleAction
             icon="arrow-forward"
