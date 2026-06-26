@@ -26,7 +26,8 @@ const envSchema = z.object({
   TATUM_API_KEY: z.string().optional(),
   TATUM_WEBHOOK_SECRET: z.string().optional(),
 
-  // Phase 3 (Naira rails — Flutterwave)
+  // Phase 3 (Naira rails)
+  PAYMENT_PROVIDER: z.enum(["mock", "flutterwave"]).default("mock"),
   FLUTTERWAVE_SECRET_KEY: z.string().optional(),
   FLUTTERWAVE_WEBHOOK_HASH: z.string().optional(),
 

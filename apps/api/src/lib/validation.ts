@@ -9,6 +9,21 @@ export const kycTier1Schema = z.object({
 });
 export type KycTier1Input = z.infer<typeof kycTier1Schema>;
 
+/** Start an NGN deposit. Amount is a decimal NGN string (validated downstream). */
+export const depositInitSchema = z.object({
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Expected an NGN amount like 5000 or 5000.50"),
+});
+export type DepositInitInput = z.infer<typeof depositInitSchema>;
+
+/** Request an NGN bank payout. */
+export const ngnWithdrawalSchema = z.object({
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Expected an NGN amount like 5000 or 5000.50"),
+  bankCode: z.string().min(3).max(10),
+  accountNumber: z.string().regex(/^\d{10}$/, "Expected a 10-digit NUBAN"),
+  narration: z.string().max(100).optional(),
+});
+export type NgnWithdrawalInput = z.infer<typeof ngnWithdrawalSchema>;
+
 /** Admin update of business-controlled platform settings. */
 export const platformSettingsUpdateSchema = z
   .object({
