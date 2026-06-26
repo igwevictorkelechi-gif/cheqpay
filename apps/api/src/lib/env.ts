@@ -22,6 +22,7 @@ const envSchema = z.object({
   ADMIN_API_SECRET: z.string().min(16).optional(),
 
   // Phase 2 (custody — Tatum)
+  CUSTODY_PROVIDER: z.enum(["mock", "tatum"]).default("mock"),
   TATUM_API_KEY: z.string().optional(),
   TATUM_WEBHOOK_SECRET: z.string().optional(),
 

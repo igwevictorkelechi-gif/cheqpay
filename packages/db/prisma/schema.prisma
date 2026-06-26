@@ -106,7 +106,8 @@ model Wallet {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, asset, network])
-  @@index([address])
+  // Deposit webhooks match an incoming (network, address) back to a wallet.
+  @@unique([network, address])
   @@map("wallets")
 }
 
