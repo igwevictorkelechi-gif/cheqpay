@@ -52,7 +52,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuthStore();
 
-  const name = user?.full_name || 'Cheqpay User';
+  const name = user?.full_name || 'CheqPay User';
   const handle =
     '@' + (user?.email?.split('@')[0] || name.split(' ')[0].toLowerCase() || 'cheqpay');
 
@@ -101,7 +101,7 @@ export default function ProfileScreen() {
         <View className="flex-row mt-6" style={{ gap: 16 }}>
           <FeatureCard
             icon="people"
-            title="Join Cheqpay Tribe"
+            title="Join CheqPay Tribe"
             subtitle="For exclusive updates"
             cardBg="#3A3055"
             iconBg={colors.brand}

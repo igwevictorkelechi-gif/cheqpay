@@ -1,4 +1,4 @@
-# Cheqpay - Production-Ready Nigerian Fintech App
+# CheqPay - Production-Ready Nigerian Fintech App
 
 A complete fintech wallet application built with React Native (Expo), Next.js, and Supabase. Features virtual accounts for wallet funding, internal p2p transfers, and seamless integration with Paystack and Flutterwave.
 
@@ -147,7 +147,7 @@ SUPABASE_PROJECT_ID=your-project-id
 1. Log in to Paystack Dashboard: https://dashboard.paystack.co
 2. Go to **Settings** → **Developers** → **API Keys**
 3. Copy your **Public Key** and **Secret Key**
-4. In Cheqpay Admin Dashboard:
+4. In CheqPay Admin Dashboard:
    - Go to **Payment Settings**
    - Select **Paystack**
    - Paste your Public and Secret keys
@@ -160,7 +160,7 @@ SUPABASE_PROJECT_ID=your-project-id
 1. Log in to Flutterwave Dashboard: https://dashboard.flutterwave.com
 2. Go to **Settings** → **API** → **API Keys**
 3. Copy your **Public Key** and **Secret Key**
-4. In Cheqpay Admin Dashboard:
+4. In CheqPay Admin Dashboard:
    - Go to **Payment Settings**
    - Select **Flutterwave**
    - Paste your Public and Secret keys

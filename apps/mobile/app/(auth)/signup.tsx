@@ -58,7 +58,7 @@ export default function SignupScreen() {
         <View className="mb-8 items-center">
           <Text className="text-3xl font-bold text-green-600 mb-2">Create Account</Text>
           <Text className="text-gray-500 text-center text-sm">
-            Join Cheqpay and start managing your finances
+            Join CheqPay and start managing your finances
           </Text>
         </View>
 

@@ -58,7 +58,7 @@ function TransferInner() {
           setAccount({
             account_number: "7002349836",
             bank_name: "Wema Bank",
-            account_name: (user?.full_name || "Cheqpay User").toUpperCase(),
+            account_name: (user?.full_name || "CheqPay User").toUpperCase(),
             fee: 150,
           });
       } finally {
@@ -134,7 +134,7 @@ function TransferInner() {
           <p className="text-sm text-muted">
             Only send money from a bank account with the same name as{" "}
             <span className="font-semibold text-ink">
-              {(user?.full_name || "Cheqpay User").toUpperCase()}
+              {(user?.full_name || "CheqPay User").toUpperCase()}
             </span>
           </p>
         </div>

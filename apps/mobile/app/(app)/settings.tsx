@@ -73,7 +73,7 @@ export default function SettingsScreen() {
       <View className="px-6 py-6 mt-4">
         <Text className="text-gray-600 text-sm">Version 1.0.0</Text>
         <Text className="text-gray-500 text-xs mt-4">
-          © 2024 Cheqpay. All rights reserved.
+          © 2024 CheqPay. All rights reserved.
         </Text>
       </View>
     </ScrollView>

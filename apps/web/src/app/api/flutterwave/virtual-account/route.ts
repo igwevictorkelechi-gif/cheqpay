@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   }
 
   const email = body.email || "customer@cheqpay.app";
-  const name = (body.name || "Cheqpay User").trim();
+  const name = (body.name || "CheqPay User").trim();
   const [firstname, ...rest] = name.split(" ");
   const lastname = rest.join(" ") || firstname;
 

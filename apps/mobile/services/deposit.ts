@@ -2,7 +2,7 @@
  * Deposit / Add money service.
  *
  * Fetches a STATIC virtual account number for bank-transfer funding. It calls
- * the Cheqpay backend route (which talks to Flutterwave) and falls back to a
+ * the CheqPay backend route (which talks to Flutterwave) and falls back to a
  * deterministic mock account if the backend is unreachable, so the flow always
  * works in development.
  */
@@ -31,7 +31,7 @@ function mockAccount(email: string, name: string): VirtualAccount {
   return {
     account_number: deterministicAccount(email || name || 'cheqpay'),
     bank_name: 'Wema Bank',
-    account_name: (name || 'Cheqpay User').toUpperCase(),
+    account_name: (name || 'CheqPay User').toUpperCase(),
     fee: DEPOSIT_FEE,
   };
 }
@@ -53,7 +53,7 @@ export const depositService = {
         return {
           account_number: data.account_number,
           bank_name: data.bank_name || 'Wema Bank',
-          account_name: data.account_name || (name || 'Cheqpay User').toUpperCase(),
+          account_name: data.account_name || (name || 'CheqPay User').toUpperCase(),
           fee: data.fee ?? DEPOSIT_FEE,
         };
       }

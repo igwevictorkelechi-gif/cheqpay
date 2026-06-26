@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Cheqpay Supabase project. The anon key is a public client key (protected by
+// CheqPay Supabase project. The anon key is a public client key (protected by
 // Row Level Security), so it is safe to ship in the bundle. Env vars override
 // these defaults when set.
 const DEFAULT_URL = "https://xttgnswgeffyybjfjlkp.supabase.co";

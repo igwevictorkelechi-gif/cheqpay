@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Cheqpay Admin Dashboard',
-  description: 'Manage your fintech operations with Cheqpay',
+  title: 'CheqPay Admin Dashboard',
+  description: 'Manage your fintech operations with CheqPay',
 };
 
 export default function RootLayout({

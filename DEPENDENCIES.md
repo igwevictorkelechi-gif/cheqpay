@@ -1,4 +1,4 @@
-# Cheqpay - Complete Dependencies & Versions Guide
+# CheqPay - Complete Dependencies & Versions Guide
 
 ## Overall Project Structure
 

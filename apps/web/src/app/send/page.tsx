@@ -106,7 +106,7 @@ export default function SendMoneyPage() {
                 disabled={loading}
               />
               <p className="mt-1 text-xs text-gray-500">
-                Recipient must be a Cheqpay user
+                Recipient must be a CheqPay user
               </p>
             </div>
 

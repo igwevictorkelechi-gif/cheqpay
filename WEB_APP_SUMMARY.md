@@ -2,7 +2,7 @@
 
 ## What's New
 
-You now have a **fully responsive web version** of Cheqpay alongside your mobile and admin apps!
+You now have a **fully responsive web version** of CheqPay alongside your mobile and admin apps!
 
 - ✅ **Modern Next.js 15 web app** with full responsiveness
 - ✅ **Same features as mobile app** (wallet, send, withdraw, transactions)

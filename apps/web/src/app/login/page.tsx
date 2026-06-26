@@ -57,7 +57,7 @@ export default function LoginPage() {
       <div className="p-8">
         <h2 className="text-2xl font-bold text-gray-900">Welcome Back</h2>
         <p className="mt-2 text-sm text-gray-600">
-          Sign in to your Cheqpay account
+          Sign in to your CheqPay account
         </p>
 
         <form onSubmit={handleSignIn} className="mt-6 space-y-4">

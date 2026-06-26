@@ -1,9 +1,9 @@
--- Seed the Cheqpay demo account (real backend).
+-- Seed the CheqPay demo account (real backend).
 --
 -- Prerequisite: create the auth user first in the Supabase dashboard
 --   Authentication → Users → Add user
 --     Email:    demo@cheqpay.app
---     Password: (your choice, e.g. Cheqpay123!)
+--     Password: (your choice, e.g. CheqPay123!)
 --     ✅ Auto Confirm User
 -- Then run this whole script in the SQL Editor.
 

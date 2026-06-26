@@ -78,7 +78,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
 
-  const name = user?.full_name || "Cheqpay User";
+  const name = user?.full_name || "CheqPay User";
   const handle =
     "@" +
     (user?.email?.split("@")[0] ||
@@ -121,7 +121,7 @@ export default function ProfilePage() {
         <div className="mt-6 flex gap-4">
           <FeatureCard
             icon={Users}
-            title="Join Cheqpay Tribe"
+            title="Join CheqPay Tribe"
             subtitle="For exclusive updates"
           />
           <FeatureCard

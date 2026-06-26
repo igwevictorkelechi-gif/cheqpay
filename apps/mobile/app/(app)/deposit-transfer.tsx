@@ -43,7 +43,7 @@ export default function DepositTransferScreen() {
 
   const fee = account?.fee ?? 150;
   const toSend = amountNum + fee;
-  const name = (user?.full_name || 'Cheqpay User').toUpperCase();
+  const name = (user?.full_name || 'CheqPay User').toUpperCase();
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top + 8 }}>

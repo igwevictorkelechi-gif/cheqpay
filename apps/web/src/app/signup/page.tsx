@@ -71,7 +71,7 @@ export default function SignupPage() {
       <div className="p-8">
         <h2 className="text-2xl font-bold text-gray-900">Create Account</h2>
         <p className="mt-2 text-sm text-gray-600">
-          Join Cheqpay and start managing your money
+          Join CheqPay and start managing your money
         </p>
 
         <form onSubmit={handleSendOTP} className="mt-6 space-y-4">

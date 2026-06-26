@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 /**
- * Cheqpay shared brand UI primitives.
+ * CheqPay shared brand UI primitives.
  * Centralises the colours and layout pieces that repeat across the
  * Home, Crypto and Pay Bill tabs so the look stays consistent.
  */

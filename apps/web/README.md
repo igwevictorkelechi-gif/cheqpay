@@ -1,4 +1,4 @@
-# 🌐 Cheqpay Web App - Complete Guide
+# 🌐 CheqPay Web App - Complete Guide
 
 **Status**: ✅ Production-Ready  
 **Framework**: Next.js 15 (App Router)  

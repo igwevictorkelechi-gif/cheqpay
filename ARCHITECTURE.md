@@ -1,4 +1,4 @@
-# Cheqpay Architecture & Wallet Flow Diagrams
+# CheqPay Architecture & Wallet Flow Diagrams
 
 ## System Architecture Diagram
 

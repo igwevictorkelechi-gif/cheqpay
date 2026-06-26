@@ -3,7 +3,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Cheqpay brand palette (dark theme)
+        // CheqPay brand palette (dark theme)
         brand: '#6B5B95',
         'brand-dark': '#574A7A',
         'brand-light': '#8A7BB5',

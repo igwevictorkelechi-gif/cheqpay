@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Cheqpay - Nigerian Fintech",
+  title: "CheqPay - Nigerian Fintech",
   description: "Send money, pay bills, and manage your wallet securely",
   keywords: ["fintech", "payments", "wallet", "nigeria"],
   viewport: "width=device-width, initial-scale=1, maximum-scale=1",

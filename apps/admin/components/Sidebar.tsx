@@ -15,7 +15,7 @@ export default function Sidebar() {
     <aside className="w-64 bg-white border-r border-gray-200 min-h-screen fixed left-0 top-0">
       {/* Logo */}
       <div className="p-6 border-b border-gray-200">
-        <h1 className="text-2xl font-bold text-green-600">Cheqpay</h1>
+        <h1 className="text-2xl font-bold text-green-600">CheqPay</h1>
         <p className="text-sm text-gray-500">Admin Panel</p>
       </div>
 

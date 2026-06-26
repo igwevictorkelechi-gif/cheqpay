@@ -1,4 +1,4 @@
-# Cheqpay - Quick Setup & Testing Guide
+# CheqPay - Quick Setup & Testing Guide
 
 ## 🚀 Quick Start (5 Minutes)
 
@@ -93,14 +93,14 @@ POST /auth/register
 ### Paystack
 - [ ] Create Paystack account
 - [ ] Get API keys from Dashboard
-- [ ] Save keys in Cheqpay Admin → Payment Settings
+- [ ] Save keys in CheqPay Admin → Payment Settings
 - [ ] Add webhook: `https://your-supabase.supabase.co/functions/v1/handle-webhook-paystack`
 - [ ] Test with test transaction
 
 ### Flutterwave
 - [ ] Create Flutterwave account
 - [ ] Get API keys from Dashboard
-- [ ] Save keys in Cheqpay Admin → Payment Settings
+- [ ] Save keys in CheqPay Admin → Payment Settings
 - [ ] Add webhook: `https://your-supabase.supabase.co/functions/v1/handle-webhook-flutterwave`
 - [ ] Test with test transaction
 

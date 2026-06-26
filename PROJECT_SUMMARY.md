@@ -1,4 +1,4 @@
-# 🎉 Cheqpay - Complete Project Setup Summary
+# 🎉 CheqPay - Complete Project Setup Summary
 
 ## ✅ Project Successfully Created!
 

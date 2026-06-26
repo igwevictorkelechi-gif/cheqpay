@@ -67,7 +67,7 @@ export default function Sidebar() {
             <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
               <span className="text-white font-bold text-lg">₦</span>
             </div>
-            <span className="font-bold text-lg">Cheqpay</span>
+            <span className="font-bold text-lg">CheqPay</span>
           </Link>
         </div>
 

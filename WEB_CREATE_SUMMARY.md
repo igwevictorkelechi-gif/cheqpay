@@ -2,7 +2,7 @@
 
 ## ✅ What Just Happened
 
-You now have a **complete responsive web version** of your Cheqpay fintech app!
+You now have a **complete responsive web version** of your CheqPay fintech app!
 
 ### Created: 20+ Files (Next.js 15)
 

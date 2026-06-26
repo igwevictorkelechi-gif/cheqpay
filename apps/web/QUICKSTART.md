@@ -2,7 +2,7 @@
 
 ## What's New
 
-You now have a **fully responsive web version** of Cheqpay that works on:
+You now have a **fully responsive web version** of CheqPay that works on:
 - Mobile (375px - great for testing on mobile browsers)
 - Tablet (768px and up)
 - Desktop (1920px+ with full sidebar)
@@ -179,7 +179,7 @@ apps/web/                           # Next.js 15 web app
 ### Mobile (< 640px)
 ```
 ┌─────────────────┐
-│☰ Cheqpay   🔔⚙️│  ← Header (fixed)
+│☰ CheqPay   🔔⚙️│  ← Header (fixed)
 ├─────────────────┤
 │                 │
 │   Wallet Card   │  ← Full width content
@@ -196,7 +196,7 @@ Buttons: Full width
 ### Tablet (640px - 1024px)
 ```
 ┌─────────────────────────────────┐
-│    Cheqpay    Search   🔔⚙️👤   │
+│    CheqPay    Search   🔔⚙️👤   │
 ├──────────────┬──────────────────┤
 │              │                  │
 │   Sidebar    │                  │
@@ -213,7 +213,7 @@ Tables: Horizontal scroll possible
 ### Desktop (1024px+)
 ```
 ┌──────────────────────────────────────────┐
-│           Cheqpay   Search   🔔⚙️👤      │
+│           CheqPay   Search   🔔⚙️👤      │
 ├─────────────────┬──────────────────────┤
 │                 │                      │
 │  Sidebar        │  Page Content        │
@@ -243,7 +243,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 ### Optional
 ```
 NEXT_PUBLIC_API_ENDPOINT     # Custom API endpoint
-NEXT_PUBLIC_APP_NAME         # App title (default: Cheqpay)
+NEXT_PUBLIC_APP_NAME         # App title (default: CheqPay)
 NEXT_PUBLIC_APP_VERSION      # Version string
 ```
 
