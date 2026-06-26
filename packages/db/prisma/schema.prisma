@@ -73,8 +73,9 @@ enum KycStatus {
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique
-  phone        String     @unique
-  passwordHash String     @map("password_hash")
+  // Credentials are managed by Supabase Auth; these are optional here.
+  phone        String?    @unique
+  passwordHash String?    @map("password_hash")
   kycTier      Int        @default(0) @map("kyc_tier")
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime   @default(now()) @map("created_at")
@@ -202,6 +203,20 @@ model WebhookEvent {
   @@unique([source, eventId])
   @@index([processedAt])
   @@map("webhook_events")
+}
+
+// Business-controlled platform settings, editable from the admin dashboard.
+// The swap spread/margin and the USDT->NGN rate live here so the business can
+// change them without a deploy. Values are stored as strings and parsed/typed
+// on read (see apps/api settings service). This is the server-side source of
+// truth; env vars only seed initial defaults.
+model PlatformSetting {
+  key       String   @id // e.g. "swap_spread_bps", "usdt_ngn_rate"
+  value     String
+  updatedBy String?  @map("updated_by") // admin id/email for the audit trail
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
 }
 
 // Append-only audit trail for every financial action (brief §8).

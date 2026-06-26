@@ -16,8 +16,10 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url().optional(),
   DIRECT_URL: z.string().url().optional(),
 
-  // Phase 1 (auth)
-  JWT_SECRET: z.string().min(32).optional(),
+  // Phase 1 (auth) — Supabase Auth issues the JWTs; we verify them here.
+  SUPABASE_JWT_SECRET: z.string().min(16).optional(),
+  // Interim guard for admin-only endpoints until full admin auth lands.
+  ADMIN_API_SECRET: z.string().min(16).optional(),
 
   // Phase 2 (custody — Tatum)
   TATUM_API_KEY: z.string().optional(),

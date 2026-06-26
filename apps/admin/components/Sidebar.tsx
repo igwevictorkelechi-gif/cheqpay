@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { LayoutGrid, Users, CreditCard, Settings, LogOut, Activity } from 'lucide-react';
+import { LayoutGrid, Users, CreditCard, Settings, LogOut, Activity, TrendingUp } from 'lucide-react';
 
 export default function Sidebar() {
   const menuItems = [
@@ -9,6 +9,7 @@ export default function Sidebar() {
     { icon: Users, label: 'Users', href: '/users' },
     { icon: CreditCard, label: 'Virtual Accounts', href: '/virtual-accounts' },
     { icon: Activity, label: 'Transactions', href: '/transactions' },
+    { icon: TrendingUp, label: 'Trading Settings', href: '/trading-settings' },
     { icon: Settings, label: 'Payment Settings', href: '/payment-settings' },
   ];
 
