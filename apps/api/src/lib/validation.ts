@@ -24,6 +24,20 @@ export const ngnWithdrawalSchema = z.object({
 });
 export type NgnWithdrawalInput = z.infer<typeof ngnWithdrawalSchema>;
 
+/** Create a swap quote. `amount` is a decimal string in the FROM asset. */
+export const quoteCreateSchema = z.object({
+  side: z.enum(["buy", "sell"]),
+  asset: z.enum(["BTC", "USDT"]), // the crypto leg
+  amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount"),
+});
+export type QuoteCreateInput = z.infer<typeof quoteCreateSchema>;
+
+/** Execute a previously issued quote. */
+export const swapExecuteSchema = z.object({
+  quoteId: z.string().uuid(),
+});
+export type SwapExecuteInput = z.infer<typeof swapExecuteSchema>;
+
 /** Admin update of business-controlled platform settings. */
 export const platformSettingsUpdateSchema = z
   .object({

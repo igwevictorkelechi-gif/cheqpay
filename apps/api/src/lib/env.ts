@@ -31,7 +31,8 @@ const envSchema = z.object({
   FLUTTERWAVE_SECRET_KEY: z.string().optional(),
   FLUTTERWAVE_WEBHOOK_HASH: z.string().optional(),
 
-  // Phase 4 (rates)
+  // Phase 4 (rates / market data)
+  PRICE_FEED: z.enum(["live", "mock"]).default("live"),
   BINANCE_API_BASE: z.string().url().default("https://api.binance.com"),
   // Business-controlled USDT->NGN rate + spread (basis points). The spread is
   // where the business margin lives; both are server-side only.
