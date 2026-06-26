@@ -99,31 +99,49 @@ export const walletService = {
     }
   },
 
-  // Listen to wallet real-time updates
+  // Listen to wallet real-time updates (supabase-js v2 channel API)
   subscribeToWallet(userId: string, callback: (wallet: Wallet) => void) {
-    const subscription = supabase
-      .from(`wallets:user_id=eq.${userId}`)
-      .on('*', (payload) => {
-        if (payload.new) {
+    const channel = supabase
+      .channel(`wallets:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'wallets',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
           callback(payload.new as Wallet);
         }
-      })
+      )
       .subscribe();
 
-    return subscription;
+    return () => {
+      supabase.removeChannel(channel);
+    };
   },
 
-  // Listen to transaction real-time updates
+  // Listen to transaction real-time updates (supabase-js v2 channel API)
   subscribeToTransactions(userId: string, callback: (tx: Transaction) => void) {
-    const subscription = supabase
-      .from(`transactions:user_id=eq.${userId}`)
-      .on('INSERT', (payload) => {
-        if (payload.new) {
+    const channel = supabase
+      .channel(`transactions:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'transactions',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
           callback(payload.new as Transaction);
         }
-      })
+      )
       .subscribe();
 
-    return subscription;
+    return () => {
+      supabase.removeChannel(channel);
+    };
   },
 };

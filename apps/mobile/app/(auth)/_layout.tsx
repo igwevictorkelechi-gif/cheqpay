@@ -1,4 +1,3 @@
-import React from 'react';
 import { Stack } from 'expo-router';
 import { useAuthStore } from '@/store';
 
@@ -17,11 +16,11 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        cardStyle: { backgroundColor: 'white' },
-        animationEnabled: true,
+        contentStyle: { backgroundColor: 'white' },
+        animation: 'default',
       }}
     >
-      <Stack.Screen name="login" options={{ animationEnabled: false }} />
+      <Stack.Screen name="login" options={{ animation: 'none' }} />
       <Stack.Screen name="signup" />
       <Stack.Screen name="verify-otp" />
     </Stack>

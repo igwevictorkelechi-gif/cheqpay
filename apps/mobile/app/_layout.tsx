@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '@/store';
@@ -28,14 +28,12 @@ export default function RootLayout() {
           name="(auth)"
           options={{
             headerShown: false,
-            animationEnabled: true,
           }}
         />
         <Stack.Screen
           name="(app)"
           options={{
             headerShown: false,
-            animationEnabled: true,
           }}
         />
       </Stack>
