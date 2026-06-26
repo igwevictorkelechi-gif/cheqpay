@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 interface AuthLayoutProps {
   children: React.ReactNode;
 }
@@ -8,13 +10,14 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="mb-8 text-center">
-          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary">
-            <span className="text-white font-bold text-2xl">₦</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">CheqPay</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Your trusted Nigerian fintech platform
-          </p>
+          <Image
+            src="/cheqpay-logo.png"
+            alt="CheqPay — Beyond Finance"
+            width={280}
+            height={117}
+            priority
+            className="mx-auto h-auto w-[240px]"
+          />
         </div>
 
         {/* Content */}
@@ -22,7 +25,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
 
         {/* Footer */}
         <p className="mt-6 text-center text-sm text-gray-500">
-          © 2024 CheqPay. All rights reserved.
+          © 2026 CheqPay. All rights reserved.
         </p>
       </div>
     </div>
