@@ -35,7 +35,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-green-50 hover:text-green-600 transition-colors"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-brand-50 hover:text-brand-600 transition-colors"
             >
               <Icon size={20} />
               <span className="font-medium">{item.label}</span>

@@ -18,7 +18,7 @@ export default function Dashboard() {
       title: 'Active Users',
       value: '1,892',
       icon: Users,
-      color: 'bg-green-100 text-green-600',
+      color: 'bg-brand-100 text-brand-600',
       trend: '+8% from last month',
     },
     {
@@ -41,7 +41,7 @@ export default function Dashboard() {
     <DashboardLayout>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">Welcome back! Here's what's happening with your business today.</p>
+        <p className="text-gray-600 mt-2">Welcome back! Here&apos;s what&apos;s happening with your business today.</p>
       </div>
 
       {/* Stats Grid */}
@@ -69,7 +69,7 @@ export default function Dashboard() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold text-gray-900">Recent Users</h2>
-            <Link href="/users" className="text-green-600 text-sm font-semibold hover:underline">
+            <Link href="/users" className="text-brand-600 text-sm font-semibold hover:underline">
               View All
             </Link>
           </div>
@@ -92,9 +92,9 @@ export default function Dashboard() {
           <h2 className="text-lg font-bold text-gray-900 mb-6">Quick Actions</h2>
 
           <div className="space-y-3">
-            <Link href="/payment-settings" className="block p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
-              <p className="font-semibold text-green-900">⚙️ Configure Payment Gateways</p>
-              <p className="text-sm text-green-700 mt-1">Set up Paystack & Flutterwave API keys</p>
+            <Link href="/payment-settings" className="block p-4 bg-brand-50 hover:bg-brand-100 rounded-lg transition-colors">
+              <p className="font-semibold text-brand-900">⚙️ Configure Payment Gateways</p>
+              <p className="text-sm text-brand-700 mt-1">Set up Paystack & Flutterwave API keys</p>
             </Link>
 
             <Link href="/virtual-accounts" className="block p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">

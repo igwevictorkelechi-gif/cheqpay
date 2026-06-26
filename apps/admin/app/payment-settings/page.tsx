@@ -62,7 +62,7 @@ export default function PaymentSettingsPage() {
           onClick={() => setActiveProvider('paystack')}
           className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
             activeProvider === 'paystack'
-              ? 'bg-green-600 text-white'
+              ? 'bg-brand-600 text-white'
               : 'bg-white border border-gray-200 text-gray-700 hover:border-gray-300'
           }`}
         >
@@ -72,7 +72,7 @@ export default function PaymentSettingsPage() {
           onClick={() => setActiveProvider('flutterwave')}
           className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
             activeProvider === 'flutterwave'
-              ? 'bg-green-600 text-white'
+              ? 'bg-brand-600 text-white'
               : 'bg-white border border-gray-200 text-gray-700 hover:border-gray-300'
           }`}
         >
@@ -93,7 +93,7 @@ export default function PaymentSettingsPage() {
                 <p className="text-sm text-blue-800">Virtual account creation and funding</p>
               </div>
               <label className="flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked className="w-5 h-5 accent-green-600" />
+                <input type="checkbox" defaultChecked className="w-5 h-5 accent-brand-600" />
                 <span className="ml-2 text-sm font-semibold text-gray-700">Active</span>
               </label>
             </div>
@@ -109,7 +109,7 @@ export default function PaymentSettingsPage() {
                 className="input"
               />
               <p className="text-xs text-gray-500 mt-2">
-                Find your public key in your Paystack <a href="https://dashboard.paystack.co/settings/developers" target="_blank" rel="noopener noreferrer" className="text-green-600 underline">Dashboard</a>
+                Find your public key in your Paystack <a href="https://dashboard.paystack.co/settings/developers" target="_blank" rel="noopener noreferrer" className="text-brand-600 underline">Dashboard</a>
               </p>
             </div>
 
@@ -163,7 +163,7 @@ export default function PaymentSettingsPage() {
                 <p className="text-sm text-blue-800">Virtual account creation and funding</p>
               </div>
               <label className="flex items-center cursor-pointer">
-                <input type="checkbox" className="w-5 h-5 accent-green-600" />
+                <input type="checkbox" className="w-5 h-5 accent-brand-600" />
                 <span className="ml-2 text-sm font-semibold text-gray-700">Active</span>
               </label>
             </div>
@@ -179,7 +179,7 @@ export default function PaymentSettingsPage() {
                 className="input"
               />
               <p className="text-xs text-gray-500 mt-2">
-                Find your public key in your Flutterwave <a href="https://dashboard.flutterwave.com/settings/apis" target="_blank" rel="noopener noreferrer" className="text-green-600 underline">Dashboard</a>
+                Find your public key in your Flutterwave <a href="https://dashboard.flutterwave.com/settings/apis" target="_blank" rel="noopener noreferrer" className="text-brand-600 underline">Dashboard</a>
               </p>
             </div>
 

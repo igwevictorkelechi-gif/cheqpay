@@ -49,3 +49,6 @@ android/
 # Supabase
 .supabase/
 *.tsbuildinfo
+
+# Next.js generated
+next-env.d.ts

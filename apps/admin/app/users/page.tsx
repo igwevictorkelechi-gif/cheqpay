@@ -62,7 +62,7 @@ export default function UsersPage() {
             placeholder="Search by name, email, or phone..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
         <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
@@ -104,7 +104,7 @@ export default function UsersPage() {
                   <td className="px-6 py-4 font-semibold text-gray-900">{user.walletBalance}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{user.createdAt}</td>
                   <td className="px-6 py-4 text-right">
-                    <button className="text-green-600 hover:text-green-700 font-semibold flex items-center gap-1 ml-auto">
+                    <button className="text-brand-600 hover:text-brand-700 font-semibold flex items-center gap-1 ml-auto">
                       View
                       <ChevronRight size={16} />
                     </button>
