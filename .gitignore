@@ -48,3 +48,4 @@ android/
 
 # Supabase
 .supabase/
+*.tsbuildinfo

@@ -13,6 +13,7 @@ import { router } from 'expo-router';
 import { useAuthStore, useWalletStore } from '@/store';
 import { authService } from '@/services/auth';
 import { demoUser, demoWallet, demoVirtualAccount } from '@/lib/demo';
+import { Logo } from '@/components/brand';
 
 export default function LoginScreen() {
   const [phone, setPhone] = useState('');
@@ -58,8 +59,8 @@ export default function LoginScreen() {
       <View className="flex-1 bg-white px-6 justify-center">
         {/* Logo/Header */}
         <View className="mb-12 items-center">
-          <Text className="text-4xl font-bold text-green-600 mb-2">CheqPay</Text>
-          <Text className="text-gray-500 text-center text-base">
+          <Logo width={230} />
+          <Text className="text-gray-500 text-center text-base mt-3">
             Fast, secure money transfer and wallet management
           </Text>
         </View>

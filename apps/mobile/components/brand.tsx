@@ -22,6 +22,19 @@ export const colors = {
   white: '#FFFFFF',
 };
 
+/** Horizontal CheqPay wordmark logo. */
+export function Logo({ width = 200 }: { width?: number }) {
+  // Source logo is 1942 x 809 — keep that aspect ratio.
+  const height = Math.round(width * (809 / 1942));
+  return (
+    <Image
+      source={require('../assets/logo.png')}
+      style={{ width, height }}
+      resizeMode="contain"
+    />
+  );
+}
+
 /** Small circular avatar shown top-left of each tab. */
 export function Avatar({ uri, name }: { uri?: string | null; name?: string | null }) {
   const initial = (name || 'C').trim().charAt(0).toUpperCase();

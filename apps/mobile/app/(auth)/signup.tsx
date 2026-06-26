@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { authService } from '@/services/auth';
+import { Logo } from '@/components/brand';
 
 export default function SignupScreen() {
   const [phone, setPhone] = useState('');
@@ -56,7 +57,8 @@ export default function SignupScreen() {
       <ScrollView className="flex-1 bg-white px-6" contentContainerStyle={{ justifyContent: 'center' }}>
         {/* Header */}
         <View className="mb-8 items-center">
-          <Text className="text-3xl font-bold text-green-600 mb-2">Create Account</Text>
+          <Logo width={180} />
+          <Text className="text-2xl font-bold text-gray-900 mt-4 mb-1">Create Account</Text>
           <Text className="text-gray-500 text-center text-sm">
             Join CheqPay and start managing your finances
           </Text>
