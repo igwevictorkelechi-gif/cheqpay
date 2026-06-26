@@ -7,7 +7,9 @@
     "apps/mobile",
     "apps/admin",
     "apps/web",
-    "packages/shared"
+    "apps/api",
+    "packages/shared",
+    "packages/db"
   ],
   "scripts": {
     "dev": "turbo run dev --parallel",

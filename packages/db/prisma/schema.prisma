@@ -1,0 +1,223 @@
+// CheqPay custodial wallet — Prisma schema (Phase 0).
+//
+// MONEY RULE: every monetary amount is stored as an INTEGER in minor units
+// using BigInt — kobo for NGN, satoshis for BTC, 6-decimal base units for
+// USDT. No floating point anywhere in financial state. Rates (ratios, not
+// money) use Decimal for precision.
+//
+// Asset/Network are enums for compile-time safety in financial logic
+// (the brief forbids `any` in money paths). Adding a new network later is a
+// single additive enum value + migration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (PgBouncer) for the app runtime.
+  url       = env("DATABASE_URL")
+  // Direct connection for migrations / introspection.
+  directUrl = env("DIRECT_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+
+enum Asset {
+  NGN
+  BTC
+  USDT
+}
+
+enum Network {
+  FIAT // NGN
+  BITCOIN // BTC
+  TRON // USDT TRC-20 (launch default)
+  BSC // USDT BEP-20 (future)
+  ETHEREUM // USDT ERC-20 (future)
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+}
+
+enum TransactionType {
+  DEPOSIT // crypto or NGN inbound
+  WITHDRAWAL // crypto or NGN outbound
+  BUY // NGN -> crypto
+  SELL // crypto -> NGN
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REVERSED
+}
+
+enum KycStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ----------------------------------------------------------------------------
+// Core models (brief §7)
+// ----------------------------------------------------------------------------
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  phone        String     @unique
+  passwordHash String     @map("password_hash")
+  kycTier      Int        @default(0) @map("kyc_tier")
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  wallets      Wallet[]
+  balances     Balance[]
+  quotes       Quote[]
+  transactions Transaction[]
+  kycRecords   KycRecord[]
+  auditLogs    AuditLog[]
+
+  @@map("app_users")
+}
+
+// One immutable on-chain deposit address per asset/network, backed by a
+// custody-provider virtual account. We store only the provider reference —
+// never a private key.
+model Wallet {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  asset      Asset
+  network    Network
+  address    String
+  custodyRef String   @map("custody_ref") // provider virtual-account id
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, asset, network])
+  @@index([address])
+  @@map("wallets")
+}
+
+// Internal ledger balance per user per asset, in minor units.
+model Balance {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  asset     Asset
+  available BigInt   @default(0) // spendable, minor units
+  locked    BigInt   @default(0) // reserved by open quotes / pending withdrawals
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, asset])
+  @@map("balances")
+}
+
+// Server-issued swap quote with a short TTL. The client never sets the rate.
+model Quote {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  fromAsset Asset    @map("from_asset")
+  toAsset   Asset    @map("to_asset")
+  rate      Decimal  @db.Decimal(38, 18) // toAsset per 1 fromAsset (incl. spread)
+  amountIn  BigInt   @map("amount_in") // minor units of fromAsset
+  amountOut BigInt   @map("amount_out") // minor units of toAsset
+  consumed  Boolean  @default(false)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("quotes")
+}
+
+model Transaction {
+  id             String            @id @default(uuid()) @db.Uuid
+  userId         String            @map("user_id") @db.Uuid
+  type           TransactionType
+  asset          Asset
+  network        Network?
+  amount         BigInt // minor units
+  fee            BigInt            @default(0) // minor units
+  status         TransactionStatus @default(PENDING)
+  txHash         String?           @map("tx_hash") // on-chain hash (crypto)
+  externalRef    String?           @map("external_ref") // provider/PSP reference
+  idempotencyKey String            @unique @map("idempotency_key")
+  quoteId        String?           @map("quote_id") @db.Uuid
+  metadata       Json              @default("{}")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quote Quote? @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@map("ledger_transactions")
+}
+
+model KycRecord {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  tier         Int
+  documentRefs String[]  @map("document_refs")
+  status       KycStatus @default(PENDING)
+  reviewedAt   DateTime? @map("reviewed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("kyc_records")
+}
+
+// Idempotency + audit store for inbound provider/PSP webhooks. Signature is
+// verified before any state change; the unique eventId prevents replay.
+model WebhookEvent {
+  id             String    @id @default(uuid()) @db.Uuid
+  source         String // "flutterwave" | "tatum" | ...
+  eventId        String    @map("event_id") // provider-supplied unique id
+  payload        Json
+  signatureValid Boolean   @map("signature_valid")
+  processedAt    DateTime? @map("processed_at")
+  receivedAt     DateTime  @default(now()) @map("received_at")
+
+  @@unique([source, eventId])
+  @@index([processedAt])
+  @@map("webhook_events")
+}
+
+// Append-only audit trail for every financial action (brief §8).
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  action       String
+  resourceType String?  @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  details      Json     @default("{}")
+  ipAddress    String?  @map("ip_address")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs_v2")
+}
