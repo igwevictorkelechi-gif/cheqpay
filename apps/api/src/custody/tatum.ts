@@ -4,6 +4,7 @@ import type {
   CustodyProvider,
   DepositAddress,
   IncomingDeposit,
+  WithdrawalEvent,
   WithdrawalResult,
 } from "./types";
 
@@ -119,6 +120,26 @@ export class TatumCustodyProvider implements CustodyProvider {
           : typeof p.confirmations === "string"
             ? Number(p.confirmations)
             : undefined,
+    };
+  }
+
+  parseWithdrawalEvent(payload: unknown): WithdrawalEvent | null {
+    if (!payload || typeof payload !== "object") return null;
+    const p = payload as Record<string, unknown>;
+    // Tatum withdrawal/outgoing notifications carry a txId + a status/type.
+    const type = typeof p.type === "string" ? p.type.toLowerCase() : "";
+    if (!type.includes("withdrawal") && p.subscriptionType !== "OUTGOING_PAYMENT") {
+      return null;
+    }
+    const txHash = p.txId ?? p.txHash;
+    if (typeof txHash !== "string") return null;
+    const ok = p.status === "COMPLETED" || p.completed === true;
+    const failed = p.status === "FAILED" || p.failed === true;
+    if (!ok && !failed) return null;
+    return {
+      eventId: `withdrawal:${txHash}`,
+      txHash,
+      status: ok ? "completed" : "failed",
     };
   }
 

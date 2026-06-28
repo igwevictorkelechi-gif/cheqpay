@@ -52,3 +52,35 @@ export async function sumTodayWithdrawalsNgnKobo(userId: string): Promise<bigint
     return sum + BigInt(meta.ngnValueKobo ?? "0");
   }, 0n);
 }
+
+/** Count + NGN-valued sum of today's withdrawals, for AML velocity checks. */
+export async function todayWithdrawalStats(
+  userId: string
+): Promise<{ count: number; sumKobo: bigint }> {
+  const start = new Date();
+  start.setUTCHours(0, 0, 0, 0);
+  const rows = await prisma.transaction.findMany({
+    where: {
+      userId,
+      type: TransactionType.WITHDRAWAL,
+      status: {
+        in: [
+          TransactionStatus.PENDING,
+          TransactionStatus.PROCESSING,
+          TransactionStatus.COMPLETED,
+        ],
+      },
+      createdAt: { gte: start },
+    },
+    select: { asset: true, amount: true, metadata: true },
+  });
+  let sumKobo = 0n;
+  for (const r of rows) {
+    if (r.asset === Asset.NGN) sumKobo += r.amount;
+    else {
+      const meta = (r.metadata ?? {}) as { ngnValueKobo?: string };
+      sumKobo += BigInt(meta.ngnValueKobo ?? "0");
+    }
+  }
+  return { count: rows.length, sumKobo };
+}

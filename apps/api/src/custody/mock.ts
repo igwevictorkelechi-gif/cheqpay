@@ -4,6 +4,7 @@ import type {
   CustodyProvider,
   DepositAddress,
   IncomingDeposit,
+  WithdrawalEvent,
   WithdrawalResult,
 } from "./types";
 
@@ -66,6 +67,20 @@ export class MockCustodyProvider implements CustodyProvider {
       confirmations:
         typeof p.confirmations === "number" ? p.confirmations : undefined,
     };
+  }
+
+  parseWithdrawalEvent(payload: unknown): WithdrawalEvent | null {
+    if (!payload || typeof payload !== "object") return null;
+    const p = payload as Record<string, unknown>;
+    if (p.type !== "withdrawal") return null;
+    if (
+      typeof p.eventId !== "string" ||
+      typeof p.txHash !== "string" ||
+      (p.status !== "completed" && p.status !== "failed")
+    ) {
+      return null;
+    }
+    return { eventId: p.eventId, txHash: p.txHash, status: p.status };
   }
 
   async createWithdrawal(input: {

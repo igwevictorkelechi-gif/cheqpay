@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { isWithinSingleTxLimit } from "@/lib/kyc";
 import { toMinorUnits } from "@/lib/money";
+import { enforceRateLimit } from "@/lib/ratelimit";
 import { depositInitSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,8 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
+    enforceRateLimit(`dep:${auth.id}`, 10, 60_000);
+
     const idempotencyKey = req.headers.get("idempotency-key");
     if (!idempotencyKey) {
       throw new ApiError(400, "Missing Idempotency-Key header", "no_idempotency_key");

@@ -18,8 +18,17 @@ const envSchema = z.object({
 
   // Phase 1 (auth) — Supabase Auth issues the JWTs; we verify them here.
   SUPABASE_JWT_SECRET: z.string().min(16).optional(),
-  // Interim guard for admin-only endpoints until full admin auth lands.
+  // Admin auth: a trusted service secret (backend-to-backend, e.g. the admin
+  // dashboard proxy) AND/OR an email allowlist for admin Supabase users.
   ADMIN_API_SECRET: z.string().min(16).optional(),
+  ADMIN_EMAILS: z.string().optional(), // comma-separated
+
+  // AML thresholds (NGN, whole naira). Converted to kobo at use.
+  AML_LARGE_AMOUNT_NGN: z.coerce.number().positive().default(1_000_000),
+  AML_REVIEW_THRESHOLD_NGN: z.coerce.number().positive().default(5_000_000),
+  AML_VELOCITY_COUNT: z.coerce.number().int().positive().default(10),
+  AML_VELOCITY_SUM_NGN: z.coerce.number().positive().default(10_000_000),
+  SANCTIONED_ADDRESSES: z.string().optional(), // comma-separated
 
   // Phase 2 (custody — Tatum)
   CUSTODY_PROVIDER: z.enum(["mock", "tatum"]).default("mock"),

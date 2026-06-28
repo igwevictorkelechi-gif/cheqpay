@@ -15,23 +15,30 @@ import { getTierLimits } from "@/lib/kyc";
 import { toMinorUnits } from "@/lib/money";
 import { cryptoToNgnKobo } from "@/lib/rates";
 import { getUsdtNgnRate } from "@/lib/settings";
-import { assertWithdrawalAllowed, sumTodayWithdrawalsNgnKobo } from "@/lib/limits";
+import {
+  assertWithdrawalAllowed,
+  sumTodayWithdrawalsNgnKobo,
+  todayWithdrawalStats,
+} from "@/lib/limits";
+import { amlConfigFromEnv, assessWithdrawal } from "@/lib/aml";
+import { enforceRateLimit } from "@/lib/ratelimit";
 import { cryptoWithdrawalSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Crypto withdrawal to an external address. Requirements (money-safe):
- *   - MFA (Supabase AAL2)
- *   - tier permits crypto withdrawals (tier ≥ 2)
+ * Crypto withdrawal to an external address. Money-safe + hardened:
+ *   - MFA (AAL2) + rate limit + tier gate (tier ≥ 2)
  *   - NGN-valued single-tx + daily limits
- *   - atomic debit (refuses overdraw) + PROCESSING record
+ *   - AML: sanctioned address blocks; large/velocity holds for manual review
+ *   - atomic debit (refuses overdraw); held funds are reserved (PENDING)
  *   - provider signs/broadcasts; refund + FAILED on provider error
  */
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
     requireMfa(auth);
+    enforceRateLimit(`wd:crypto:${auth.id}`, 5, 60_000);
 
     const idempotencyKey = req.headers.get("idempotency-key");
     if (!idempotencyKey) {
@@ -55,7 +62,6 @@ export async function POST(req: Request) {
 
     const amountMinor = toMinorUnits(body.amount, asset);
 
-    // Value the withdrawal in NGN to enforce NGN-denominated limits.
     const rate = await getUsdtNgnRate();
     if (rate === null) {
       throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
@@ -66,13 +72,41 @@ export async function POST(req: Request) {
     const usedToday = await sumTodayWithdrawalsNgnKobo(auth.id);
     assertWithdrawalAllowed(user.kycTier, ngnValueKobo, usedToday);
 
+    // AML screening.
+    const stats = await todayWithdrawalStats(auth.id);
+    const aml = assessWithdrawal(
+      {
+        ngnValueKobo,
+        toAddress: body.toAddress,
+        recentCount: stats.count,
+        recentSumKobo: stats.sumKobo,
+      },
+      amlConfigFromEnv()
+    );
+    if (aml.blocked) {
+      await prisma.auditLog.create({
+        data: {
+          userId: auth.id,
+          action: "aml.withdrawal.blocked",
+          resourceType: "User",
+          resourceId: auth.id,
+          details: { reasons: aml.reasons, toAddress: body.toAddress },
+        },
+      });
+      throw new ApiError(403, "Withdrawal blocked by compliance screening", "aml_blocked");
+    }
+
     // Idempotent replay.
     const existing = await prisma.transaction.findUnique({ where: { idempotencyKey } });
     if (existing) {
       return jsonOk({ transactionId: existing.id, status: existing.status });
     }
 
-    // Atomic debit + PROCESSING record.
+    // Atomic debit + record. Held-for-review withdrawals are PENDING (funds
+    // reserved) and not broadcast until an admin approves.
+    const initialStatus = aml.holdForReview
+      ? TransactionStatus.PENDING
+      : TransactionStatus.PROCESSING;
     const tx = await prisma.$transaction(async (db) => {
       const debit = await db.balance.updateMany({
         where: { userId: auth.id, asset, available: { gte: amountMinor } },
@@ -88,15 +122,30 @@ export async function POST(req: Request) {
           asset,
           network,
           amount: amountMinor,
-          status: TransactionStatus.PROCESSING,
+          status: initialStatus,
           idempotencyKey,
           metadata: {
             toAddress: body.toAddress,
             ngnValueKobo: ngnValueKobo.toString(),
+            amlReview: aml.holdForReview,
+            amlReasons: aml.reasons,
           },
         },
       });
     });
+
+    if (aml.holdForReview) {
+      await prisma.auditLog.create({
+        data: {
+          userId: auth.id,
+          action: "aml.withdrawal.held",
+          resourceType: "Transaction",
+          resourceId: tx.id,
+          details: { reasons: aml.reasons, ngnValueKobo: ngnValueKobo.toString() },
+        },
+      });
+      return jsonOk({ transactionId: tx.id, status: "under_review", reasons: aml.reasons });
+    }
 
     // Provider signs + broadcasts; refund on failure.
     try {
@@ -118,13 +167,7 @@ export async function POST(req: Request) {
           action: "crypto.withdrawal.broadcast",
           resourceType: "Transaction",
           resourceId: tx.id,
-          details: {
-            asset,
-            network,
-            amountMinor: amountMinor.toString(),
-            ngnValueKobo: ngnValueKobo.toString(),
-            txHash: result.txHash,
-          },
+          details: { asset, network, amountMinor: amountMinor.toString(), txHash: result.txHash },
         },
       });
       return jsonOk({ transactionId: tx.id, status: "processing", txHash: result.txHash });

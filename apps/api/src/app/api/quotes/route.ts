@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { toMinorUnits } from "@/lib/money";
 import { createQuote } from "@/lib/swap";
+import { enforceRateLimit } from "@/lib/ratelimit";
 import { quoteCreateSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
+    enforceRateLimit(`quote:${auth.id}`, 30, 60_000);
     const user = await prisma.user.findUnique({ where: { id: auth.id } });
     if (!user) {
       throw new ApiError(404, "Profile not provisioned; POST /api/me first", "no_profile");

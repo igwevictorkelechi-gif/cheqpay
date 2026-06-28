@@ -62,6 +62,20 @@ describe("MockCustodyProvider", () => {
     expect(r.status).toBe("broadcasting");
   });
 
+  it("parses a withdrawal status event", () => {
+    const ok = provider.parseWithdrawalEvent({
+      type: "withdrawal",
+      eventId: "w1",
+      txHash: "0xabc",
+      status: "completed",
+    });
+    expect(ok).toEqual({ eventId: "w1", txHash: "0xabc", status: "completed" });
+    expect(provider.parseWithdrawalEvent({ type: "charge" })).toBeNull();
+    expect(
+      provider.parseWithdrawalEvent({ type: "withdrawal", eventId: "w", txHash: "t", status: "weird" })
+    ).toBeNull();
+  });
+
   it("parses confirmations when present", () => {
     const e = provider.parseDepositEvent({
       eventId: "e",

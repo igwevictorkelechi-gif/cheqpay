@@ -4,6 +4,7 @@ import { getPaymentProvider } from "@/payments";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { toMinorUnits } from "@/lib/money";
 import { assertWithdrawalAllowed, sumTodayWithdrawalsNgnKobo } from "@/lib/limits";
+import { enforceRateLimit } from "@/lib/ratelimit";
 import { ngnWithdrawalSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,8 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
+    enforceRateLimit(`wd:ngn:${auth.id}`, 5, 60_000);
+
     const idempotencyKey = req.headers.get("idempotency-key");
     if (!idempotencyKey) {
       throw new ApiError(400, "Missing Idempotency-Key header", "no_idempotency_key");

@@ -24,6 +24,13 @@ export const ngnWithdrawalSchema = z.object({
 });
 export type NgnWithdrawalInput = z.infer<typeof ngnWithdrawalSchema>;
 
+/** Admin review action on a held withdrawal. */
+export const reviewActionSchema = z.object({
+  transactionId: z.string().uuid(),
+  action: z.enum(["approve", "reject"]),
+});
+export type ReviewActionInput = z.infer<typeof reviewActionSchema>;
+
 /** Request a crypto withdrawal to an external address. */
 export const cryptoWithdrawalSchema = z.object({
   asset: z.enum(["BTC", "USDT"]),

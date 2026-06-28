@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SignJWT } from "jose";
-import { requireMfa, verifySupabaseJwt } from "./auth";
+import { isAdminUser, requireMfa, verifySupabaseJwt } from "./auth";
 import { AuthError, ForbiddenError } from "./http";
 
 const SECRET = "test-supabase-jwt-secret-0123456789";
@@ -26,12 +26,13 @@ describe("verifySupabaseJwt", () => {
       role: "authenticated",
     });
     const user = await verifySupabaseJwt(token, SECRET);
-    expect(user).toEqual({
+    expect(user).toMatchObject({
       id: "user-123",
       email: "a@b.com",
       phone: "+2348012345678",
       role: "authenticated",
     });
+    expect(user.isAdmin).toBe(false);
   });
 
   it("rejects a token signed with the wrong secret", async () => {
@@ -75,5 +76,22 @@ describe("requireMfa", () => {
   it("rejects aal1 / missing aal", () => {
     expect(() => requireMfa({ id: "u", aal: "aal1" })).toThrow(ForbiddenError);
     expect(() => requireMfa({ id: "u" })).toThrow(ForbiddenError);
+  });
+});
+
+describe("isAdminUser", () => {
+  it("recognizes the admin role claim", () => {
+    expect(isAdminUser({ id: "u", isAdmin: true })).toBe(true);
+  });
+  it("denies a normal user (no role, not in allowlist)", () => {
+    expect(isAdminUser({ id: "u", email: "user@example.com" })).toBe(false);
+  });
+});
+
+describe("verifySupabaseJwt admin role", () => {
+  it("derives isAdmin from app_metadata.role", async () => {
+    const token = await makeToken({ sub: "u", app_metadata: { role: "admin" } });
+    const user = await verifySupabaseJwt(token, SECRET);
+    expect(user.isAdmin).toBe(true);
   });
 });

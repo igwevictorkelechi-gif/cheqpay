@@ -9,6 +9,8 @@ export interface AuthUser {
   role?: string;
   /** Supabase assurance level: "aal1" (password/OTP) or "aal2" (MFA verified). */
   aal?: string;
+  /** True when app_metadata.role === "admin". */
+  isAdmin?: boolean;
 }
 
 /**
@@ -39,13 +41,26 @@ export async function verifySupabaseJwt(
     throw new AuthError("Invalid token: missing subject");
   }
 
+  const appMeta = (payload.app_metadata ?? {}) as { role?: unknown };
+
   return {
     id: String(payload.sub),
     email: typeof payload.email === "string" ? payload.email : undefined,
     phone: typeof payload.phone === "string" ? payload.phone : undefined,
     role: typeof payload.role === "string" ? payload.role : undefined,
     aal: typeof payload.aal === "string" ? payload.aal : undefined,
+    isAdmin: appMeta.role === "admin",
   };
+}
+
+/** True if the authenticated user is an admin (role claim or email allowlist). */
+export function isAdminUser(user: AuthUser): boolean {
+  if (user.isAdmin) return true;
+  const allow = (getEnv().ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return !!user.email && allow.includes(user.email.toLowerCase());
 }
 
 /**
@@ -69,18 +84,24 @@ export async function requireUser(req: Request): Promise<AuthUser> {
 }
 
 /**
- * Interim admin guard: a shared secret in the `x-admin-secret` header, until
- * full admin auth lands. Compared in constant time.
+ * Admin guard. Accepts either:
+ *   1. a trusted service secret in `x-admin-secret` (backend-to-backend, e.g.
+ *      the admin dashboard proxy), or
+ *   2. an authenticated admin user (Supabase role "admin" or email allowlist).
  */
-export function requireAdmin(req: Request): void {
+export async function requireAdmin(req: Request): Promise<void> {
+  // Path 1: service secret.
   const expected = getEnv().ADMIN_API_SECRET;
-  if (!expected) {
-    throw new ForbiddenError("Admin API is not configured");
+  const provided = req.headers.get("x-admin-secret");
+  if (expected && provided && constantTimeEqual(provided, expected)) {
+    return;
   }
-  const provided = req.headers.get("x-admin-secret") ?? "";
-  if (!constantTimeEqual(provided, expected)) {
-    throw new ForbiddenError("Invalid admin credentials");
+  // Path 2: admin user JWT.
+  const auth = await requireUser(req);
+  if (isAdminUser(auth)) {
+    return;
   }
+  throw new ForbiddenError("Admin privileges required");
 }
 
 function constantTimeEqual(a: string, b: string): boolean {

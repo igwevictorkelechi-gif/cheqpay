@@ -26,6 +26,14 @@ export interface WithdrawalResult {
   status: "broadcasting" | "completed" | "failed";
 }
 
+/** A withdrawal status update parsed from a provider webhook. */
+export interface WithdrawalEvent {
+  eventId: string;
+  /** Matches the txHash/externalRef we stored when broadcasting. */
+  txHash: string;
+  status: "completed" | "failed";
+}
+
 /**
  * Custody abstraction. The provider holds keys (HSM) and signs; our backend
  * never touches private keys — we store only the returned `custodyRef` and
@@ -46,6 +54,9 @@ export interface CustodyProvider {
 
   /** Parse a verified webhook body into a normalized deposit, or null if N/A. */
   parseDepositEvent(payload: unknown): IncomingDeposit | null;
+
+  /** Parse a withdrawal status update, or null if the event isn't one. */
+  parseWithdrawalEvent(payload: unknown): WithdrawalEvent | null;
 
   /**
    * Request a provider-signed withdrawal to an external address. The provider

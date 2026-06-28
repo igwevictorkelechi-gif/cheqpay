@@ -1,4 +1,4 @@
-import { Prisma, TransactionType, prisma } from "@cheqpay/db";
+import { Prisma, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { getCustodyProvider } from "@/custody";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { creditBalance } from "@/lib/ledger";
@@ -37,6 +37,12 @@ export async function POST(req: Request) {
 
     const deposit = custody.parseDepositEvent(payload);
     if (!deposit) {
+      // Not a deposit — maybe a withdrawal status update.
+      const wd = custody.parseWithdrawalEvent(payload);
+      if (wd) {
+        const result = await finalizeCryptoWithdrawal(wd.txHash, wd.status);
+        return jsonOk({ ...result, eventId: wd.eventId });
+      }
       return jsonOk({ error: "Unrecognized event", code: "unrecognized" }, 400);
     }
 
@@ -118,5 +124,52 @@ function markProcessed(source: string, eventId: string) {
   return prisma.webhookEvent.update({
     where: { source_eventId: { source, eventId } },
     data: { processedAt: new Date() },
+  });
+}
+
+/** Flip a PROCESSING crypto withdrawal to COMPLETED, or refund + REVERSE it. */
+async function finalizeCryptoWithdrawal(
+  txHash: string,
+  status: "completed" | "failed"
+) {
+  return prisma.$transaction(async (db) => {
+    const wd = await db.transaction.findFirst({
+      where: { txHash, type: TransactionType.WITHDRAWAL },
+    });
+    if (!wd) return { status: "unmatched" as const };
+    if (
+      wd.status === TransactionStatus.COMPLETED ||
+      wd.status === TransactionStatus.REVERSED
+    ) {
+      return { status: "already_final" as const, transactionId: wd.id };
+    }
+
+    if (status === "completed") {
+      await db.transaction.update({
+        where: { id: wd.id },
+        data: { status: TransactionStatus.COMPLETED },
+      });
+      return { status: "completed" as const, transactionId: wd.id };
+    }
+
+    // Chain failure — refund the reserved funds and reverse.
+    await db.balance.update({
+      where: { userId_asset: { userId: wd.userId, asset: wd.asset } },
+      data: { available: { increment: wd.amount } },
+    });
+    await db.transaction.update({
+      where: { id: wd.id },
+      data: { status: TransactionStatus.REVERSED },
+    });
+    await db.auditLog.create({
+      data: {
+        userId: wd.userId,
+        action: "crypto.withdrawal.reversed",
+        resourceType: "Transaction",
+        resourceId: wd.id,
+        details: { reason: "chain_failed", txHash },
+      },
+    });
+    return { status: "reversed" as const, transactionId: wd.id };
   });
 }
