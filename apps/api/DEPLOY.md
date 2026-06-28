@@ -11,8 +11,9 @@ Vercel project from the web app, pointed at the same Supabase Postgres.
 - A strong **ADMIN_API_SECRET** you choose (16+ chars).
 
 ## Step 1 — Apply the database migration (creates the new tables)
-The new tables are distinctly named (`app_users`, `crypto_wallets`, `balances`,
+The new tables are distinctly named (`app_users`, `custody_wallets`, `balances`,
 `quotes`, `ledger_transactions`, …) and **do not touch your existing tables**.
+(Already applied to the live `cheqpay` Supabase project.)
 
 ```bash
 cd packages/db

@@ -108,8 +108,9 @@ model Wallet {
   @@unique([userId, asset, network])
   // Deposit webhooks match an incoming (network, address) back to a wallet.
   @@unique([network, address])
-  // Named distinctly to avoid colliding with the legacy NGN `wallets` table.
-  @@map("crypto_wallets")
+  // Named distinctly to avoid colliding with the legacy `wallets` table and the
+  // existing HollaEx `crypto_wallets` table.
+  @@map("custody_wallets")
 }
 
 // Internal ledger balance per user per asset, in minor units.

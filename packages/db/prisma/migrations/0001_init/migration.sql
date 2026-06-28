@@ -31,7 +31,7 @@ CREATE TABLE "app_users" (
 );
 
 -- CreateTable
-CREATE TABLE "crypto_wallets" (
+CREATE TABLE "custody_wallets" (
     "id" UUID NOT NULL,
     "user_id" UUID NOT NULL,
     "asset" "Asset" NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE "crypto_wallets" (
     "custody_ref" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "crypto_wallets_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "custody_wallets_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -149,10 +149,10 @@ CREATE UNIQUE INDEX "app_users_email_key" ON "app_users"("email");
 CREATE UNIQUE INDEX "app_users_phone_key" ON "app_users"("phone");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "crypto_wallets_user_id_asset_network_key" ON "crypto_wallets"("user_id", "asset", "network");
+CREATE UNIQUE INDEX "custody_wallets_user_id_asset_network_key" ON "custody_wallets"("user_id", "asset", "network");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "crypto_wallets_network_address_key" ON "crypto_wallets"("network", "address");
+CREATE UNIQUE INDEX "custody_wallets_network_address_key" ON "custody_wallets"("network", "address");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "balances_user_id_asset_key" ON "balances"("user_id", "asset");
@@ -197,7 +197,7 @@ CREATE INDEX "audit_logs_v2_user_id_idx" ON "audit_logs_v2"("user_id");
 CREATE INDEX "audit_logs_v2_created_at_idx" ON "audit_logs_v2"("created_at");
 
 -- AddForeignKey
-ALTER TABLE "crypto_wallets" ADD CONSTRAINT "crypto_wallets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "app_users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "custody_wallets" ADD CONSTRAINT "custody_wallets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "app_users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "balances" ADD CONSTRAINT "balances_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "app_users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
