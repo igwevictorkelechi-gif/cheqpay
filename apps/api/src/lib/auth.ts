@@ -7,6 +7,8 @@ export interface AuthUser {
   email?: string;
   phone?: string;
   role?: string;
+  /** Supabase assurance level: "aal1" (password/OTP) or "aal2" (MFA verified). */
+  aal?: string;
 }
 
 /**
@@ -42,7 +44,18 @@ export async function verifySupabaseJwt(
     email: typeof payload.email === "string" ? payload.email : undefined,
     phone: typeof payload.phone === "string" ? payload.phone : undefined,
     role: typeof payload.role === "string" ? payload.role : undefined,
+    aal: typeof payload.aal === "string" ? payload.aal : undefined,
   };
+}
+
+/**
+ * Require that the caller has completed MFA (Supabase AAL2). Used to gate
+ * sensitive actions like crypto withdrawals.
+ */
+export function requireMfa(user: AuthUser): void {
+  if (user.aal !== "aal2") {
+    throw new ForbiddenError("Two-factor authentication required");
+  }
 }
 
 /** Extract + verify the Bearer token from a request. Throws on failure. */

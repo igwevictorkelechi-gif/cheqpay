@@ -24,6 +24,15 @@ export const ngnWithdrawalSchema = z.object({
 });
 export type NgnWithdrawalInput = z.infer<typeof ngnWithdrawalSchema>;
 
+/** Request a crypto withdrawal to an external address. */
+export const cryptoWithdrawalSchema = z.object({
+  asset: z.enum(["BTC", "USDT"]),
+  network: z.enum(["BITCOIN", "TRON"]),
+  toAddress: z.string().min(20).max(120),
+  amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount"),
+});
+export type CryptoWithdrawalInput = z.infer<typeof cryptoWithdrawalSchema>;
+
 /** Create a swap quote. `amount` is a decimal string in the FROM asset. */
 export const quoteCreateSchema = z.object({
   side: z.enum(["buy", "sell"]),

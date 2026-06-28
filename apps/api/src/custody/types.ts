@@ -16,6 +16,14 @@ export interface IncomingDeposit {
   /** Human decimal string (e.g. "0.0125"); converted to minor units downstream. */
   amount: string;
   txHash: string;
+  /** On-chain confirmations, if the provider includes it (for thresholds). */
+  confirmations?: number;
+}
+
+/** Result of requesting a provider-signed withdrawal. */
+export interface WithdrawalResult {
+  txHash: string;
+  status: "broadcasting" | "completed" | "failed";
 }
 
 /**
@@ -38,4 +46,16 @@ export interface CustodyProvider {
 
   /** Parse a verified webhook body into a normalized deposit, or null if N/A. */
   parseDepositEvent(payload: unknown): IncomingDeposit | null;
+
+  /**
+   * Request a provider-signed withdrawal to an external address. The provider
+   * holds the keys and signs/broadcasts; we never touch a private key.
+   */
+  createWithdrawal(input: {
+    userId: string;
+    asset: Asset;
+    network: Network;
+    toAddress: string;
+    amount: string; // human decimal string
+  }): Promise<WithdrawalResult>;
 }

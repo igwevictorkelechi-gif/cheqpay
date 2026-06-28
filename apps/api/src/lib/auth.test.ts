@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SignJWT } from "jose";
-import { verifySupabaseJwt } from "./auth";
-import { AuthError } from "./http";
+import { requireMfa, verifySupabaseJwt } from "./auth";
+import { AuthError, ForbiddenError } from "./http";
 
 const SECRET = "test-supabase-jwt-secret-0123456789";
 const key = new TextEncoder().encode(SECRET);
@@ -59,5 +59,21 @@ describe("verifySupabaseJwt", () => {
   it("throws when no secret is configured", async () => {
     const token = await makeToken({ sub: "x" });
     await expect(verifySupabaseJwt(token, "")).rejects.toBeInstanceOf(AuthError);
+  });
+
+  it("captures the aal (MFA) claim", async () => {
+    const token = await makeToken({ sub: "u", email: "a@b.com", aal: "aal2" });
+    const user = await verifySupabaseJwt(token, SECRET);
+    expect(user.aal).toBe("aal2");
+  });
+});
+
+describe("requireMfa", () => {
+  it("passes for aal2", () => {
+    expect(() => requireMfa({ id: "u", aal: "aal2" })).not.toThrow();
+  });
+  it("rejects aal1 / missing aal", () => {
+    expect(() => requireMfa({ id: "u", aal: "aal1" })).toThrow(ForbiddenError);
+    expect(() => requireMfa({ id: "u" })).toThrow(ForbiddenError);
   });
 });

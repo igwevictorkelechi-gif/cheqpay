@@ -50,6 +50,31 @@ describe("MockCustodyProvider", () => {
     expect(provider.verifyWebhookSignature(body + "tampered", sig)).toBe(false);
   });
 
+  it("signs a withdrawal and returns a tx hash", async () => {
+    const r = await provider.createWithdrawal({
+      userId: "u1",
+      asset: Asset.BTC,
+      network: Network.BITCOIN,
+      toAddress: "bc1qexternaladdr",
+      amount: "0.01",
+    });
+    expect(r.txHash.startsWith("0xmock")).toBe(true);
+    expect(r.status).toBe("broadcasting");
+  });
+
+  it("parses confirmations when present", () => {
+    const e = provider.parseDepositEvent({
+      eventId: "e",
+      address: "Tmock",
+      amount: "1",
+      txHash: "0x",
+      asset: "USDT",
+      network: "TRON",
+      confirmations: 25,
+    });
+    expect(e?.confirmations).toBe(25);
+  });
+
   it("parses a valid deposit event and rejects junk", () => {
     const ok = provider.parseDepositEvent({
       eventId: "evt-1",

@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { getPaymentProvider } from "@/payments";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { toMinorUnits } from "@/lib/money";
-import { assertWithdrawalAllowed, sumTodayNgnWithdrawalsKobo } from "@/lib/limits";
+import { assertWithdrawalAllowed, sumTodayWithdrawalsNgnKobo } from "@/lib/limits";
 import { ngnWithdrawalSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       return jsonOk({ transactionId: existing.id, status: existing.status });
     }
 
-    const usedToday = await sumTodayNgnWithdrawalsKobo(auth.id);
+    const usedToday = await sumTodayWithdrawalsNgnKobo(auth.id);
     assertWithdrawalAllowed(user.kycTier, amountMinor, usedToday);
 
     // Atomic debit + record. Throws (rolls back) on insufficient funds.

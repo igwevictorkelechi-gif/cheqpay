@@ -1,6 +1,11 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { Asset, Network } from "@cheqpay/db";
-import type { CustodyProvider, DepositAddress, IncomingDeposit } from "./types";
+import type {
+  CustodyProvider,
+  DepositAddress,
+  IncomingDeposit,
+  WithdrawalResult,
+} from "./types";
 
 /**
  * Deterministic in-memory custody provider for development and tests.
@@ -58,7 +63,25 @@ export class MockCustodyProvider implements CustodyProvider {
       txHash: p.txHash,
       asset: p.asset as Asset,
       network: p.network as Network,
+      confirmations:
+        typeof p.confirmations === "number" ? p.confirmations : undefined,
     };
+  }
+
+  async createWithdrawal(input: {
+    userId: string;
+    asset: Asset;
+    network: Network;
+    toAddress: string;
+    amount: string;
+  }): Promise<WithdrawalResult> {
+    const txHash =
+      "0xmock" +
+      createHash("sha256")
+        .update(`${input.userId}:${input.toAddress}:${input.amount}:${Date.now()}`)
+        .digest("hex")
+        .slice(0, 56);
+    return { txHash, status: "broadcasting" };
   }
 
   /** Test helper: sign a body the way the provider would. */

@@ -1,6 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Asset, Network } from "@cheqpay/db";
-import type { CustodyProvider, DepositAddress, IncomingDeposit } from "./types";
+import type {
+  CustodyProvider,
+  DepositAddress,
+  IncomingDeposit,
+  WithdrawalResult,
+} from "./types";
 
 const TATUM_BASE = "https://api.tatum.io/v3";
 
@@ -108,7 +113,34 @@ export class TatumCustodyProvider implements CustodyProvider {
       txHash,
       asset: currency as Asset,
       network,
+      confirmations:
+        typeof p.confirmations === "number"
+          ? p.confirmations
+          : typeof p.confirmations === "string"
+            ? Number(p.confirmations)
+            : undefined,
     };
+  }
+
+  async createWithdrawal(input: {
+    userId: string;
+    asset: Asset;
+    network: Network;
+    toAddress: string;
+    amount: string;
+  }): Promise<WithdrawalResult> {
+    const currency = CHAIN[input.network];
+    if (!currency) throw new Error(`Unsupported network for Tatum: ${input.network}`);
+    // Tatum withdrawal off a virtual account (provider signs + broadcasts).
+    const res = await this.call<{ txId?: string; id?: string }>("/offchain/withdrawal", {
+      method: "POST",
+      body: JSON.stringify({
+        senderAccountId: `${input.userId}:${input.asset}:${input.network}`,
+        address: input.toAddress,
+        amount: input.amount,
+      }),
+    });
+    return { txHash: res.txId ?? res.id ?? "", status: "broadcasting" };
   }
 }
 

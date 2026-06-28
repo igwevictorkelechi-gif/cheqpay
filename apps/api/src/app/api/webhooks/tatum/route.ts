@@ -2,6 +2,7 @@ import { Prisma, TransactionType, prisma } from "@cheqpay/db";
 import { getCustodyProvider } from "@/custody";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { creditBalance } from "@/lib/ledger";
+import { isConfirmed } from "@/lib/confirmations";
 import { toMinorUnits } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -10,8 +11,10 @@ export const dynamic = "force-dynamic";
  * Custody deposit webhook. Order matters:
  *   1. verify signature on the RAW body (reject before any state change)
  *   2. parse + normalize the event
- *   3. idempotency gate via WebhookEvent(source, eventId) unique
- *   4. match address -> wallet -> user, credit the ledger atomically
+ *   3. record the event (idempotent upsert — repeated confirmation events are
+ *      expected, so we don't hard-reject duplicates here)
+ *   4. credit only once the deposit meets the confirmation threshold; the
+ *      credit itself is idempotent so it happens at most once
  */
 export async function POST(req: Request) {
   try {
@@ -37,24 +40,25 @@ export async function POST(req: Request) {
       return jsonOk({ error: "Unrecognized event", code: "unrecognized" }, 400);
     }
 
-    // Idempotency gate: first writer wins; replays short-circuit.
-    try {
-      await prisma.webhookEvent.create({
-        data: {
-          source: custody.name,
-          eventId: deposit.eventId,
-          payload: payload as Prisma.InputJsonValue,
-          signatureValid: true,
-        },
+    // Record the event (upsert — confirmation re-deliveries share an eventId).
+    await prisma.webhookEvent.upsert({
+      where: { source_eventId: { source: custody.name, eventId: deposit.eventId } },
+      update: { payload: payload as Prisma.InputJsonValue, signatureValid: true },
+      create: {
+        source: custody.name,
+        eventId: deposit.eventId,
+        payload: payload as Prisma.InputJsonValue,
+        signatureValid: true,
+      },
+    });
+
+    // Hold until the deposit reaches the confirmation threshold.
+    if (!isConfirmed(deposit.network, deposit.confirmations)) {
+      return jsonOk({
+        status: "pending_confirmations",
+        eventId: deposit.eventId,
+        confirmations: deposit.confirmations,
       });
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
-        return jsonOk({ status: "duplicate", eventId: deposit.eventId });
-      }
-      throw err;
     }
 
     // Match the incoming (network, address) to a wallet.

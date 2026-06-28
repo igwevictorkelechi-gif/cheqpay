@@ -77,3 +77,20 @@ export function computeSwap(params: {
 function floorToBigInt(d: Decimal): bigint {
   return BigInt(d.floor().toFixed(0));
 }
+
+/**
+ * Value a crypto amount (minor units) in NGN kobo at the given price + business
+ * rate. Used to enforce NGN-denominated limits on crypto withdrawals. No spread
+ * (this is a valuation, not a trade).
+ */
+export function cryptoToNgnKobo(
+  amountMinor: bigint,
+  cryptoAsset: Asset,
+  cryptoUsdtPrice: Decimal,
+  usdtNgnRate: Decimal
+): bigint {
+  const cryptoWhole = new D(amountMinor.toString()).div(
+    new D(10).pow(ASSET_DECIMALS[cryptoAsset])
+  );
+  return floorToBigInt(cryptoWhole.mul(cryptoUsdtPrice).mul(usdtNgnRate).mul(100));
+}

@@ -23,14 +23,17 @@ export function assertWithdrawalAllowed(
   }
 }
 
-/** Sum of today's NGN withdrawals that still count against the daily cap. */
-export async function sumTodayNgnWithdrawalsKobo(userId: string): Promise<bigint> {
+/**
+ * Sum of today's withdrawals counted against the daily cap, valued in NGN kobo.
+ * NGN withdrawals use their amount directly; crypto withdrawals use the NGN
+ * value recorded at request time (metadata.ngnValueKobo).
+ */
+export async function sumTodayWithdrawalsNgnKobo(userId: string): Promise<bigint> {
   const start = new Date();
   start.setUTCHours(0, 0, 0, 0);
   const rows = await prisma.transaction.findMany({
     where: {
       userId,
-      asset: Asset.NGN,
       type: TransactionType.WITHDRAWAL,
       status: {
         in: [
@@ -41,7 +44,11 @@ export async function sumTodayNgnWithdrawalsKobo(userId: string): Promise<bigint
       },
       createdAt: { gte: start },
     },
-    select: { amount: true },
+    select: { asset: true, amount: true, metadata: true },
   });
-  return rows.reduce((sum, r) => sum + r.amount, 0n);
+  return rows.reduce((sum, r) => {
+    if (r.asset === Asset.NGN) return sum + r.amount;
+    const meta = (r.metadata ?? {}) as { ngnValueKobo?: string };
+    return sum + BigInt(meta.ngnValueKobo ?? "0");
+  }, 0n);
 }
