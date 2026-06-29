@@ -17,13 +17,14 @@ function CoinIcon({ bg, glyph, size = 48 }: { bg: string; glyph: string; size?: 
   );
 }
 
-export default function ReceivePickerPage() {
+export default function SendCryptoPickerPage() {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [bal, setBal] = useState<Record<string, string>>({});
   const [ngn, setNgn] = useState<Record<string, number>>({});
 
   useEffect(() => {
+    let active = true;
     (async () => {
       try {
         await api.ensureProvisioned();
@@ -32,6 +33,7 @@ export default function ReceivePickerPage() {
           api.getPrice("BTC").catch(() => null),
           api.getPrice("USDT").catch(() => null),
         ]);
+        if (!active) return;
         const b: Record<string, string> = {};
         for (const x of balances) b[x.asset] = x.availableFormatted;
         setBal(b);
@@ -47,6 +49,9 @@ export default function ReceivePickerPage() {
         /* not logged in — show zeros */
       }
     })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const list = useMemo(
@@ -69,7 +74,8 @@ export default function ReceivePickerPage() {
           <ChevronLeft className="h-5 w-5" />
         </button>
 
-        <h1 className="mt-5 text-4xl font-extrabold text-ink">Receive crypto</h1>
+        <h1 className="mt-5 text-4xl font-extrabold text-ink">Send crypto</h1>
+        <p className="mt-2 text-sm text-muted">Choose the crypto you want to send.</p>
 
         {/* Search */}
         <div className="mt-6 flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3.5">
@@ -82,49 +88,39 @@ export default function ReceivePickerPage() {
           />
         </div>
 
-        {/* Recently used */}
-        <p className="mb-3 mt-7 text-sm font-semibold text-muted">Recently used</p>
-        <div className="flex gap-3">
-          {CRYPTO_ASSETS.map((a) => (
-            <button
-              key={a.symbol}
-              onClick={() => router.push(`/receive/${a.symbol}`)}
-              className="flex items-center gap-2 rounded-full bg-card py-2 pl-2 pr-4 active:scale-95"
-            >
-              <CoinIcon bg={a.color} glyph={a.glyph} size={34} />
-              <span className="text-sm font-bold text-ink">{a.symbol}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* All assets */}
-        <p className="mb-2 mt-7 text-sm font-semibold text-muted">All assets</p>
+        {/* Your assets */}
+        <p className="mb-2 mt-7 text-sm font-semibold text-muted">Your assets</p>
         <div className="overflow-hidden rounded-3xl bg-card">
-          {list.map((a, i) => (
-            <button
-              key={a.symbol}
-              onClick={() => router.push(`/receive/${a.symbol}`)}
-              className={`flex w-full items-center justify-between px-4 py-4 active:bg-surface ${
-                i > 0 ? "border-t border-border" : ""
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <CoinIcon bg={a.color} glyph={a.glyph} />
-                <div className="text-left">
-                  <p className="text-lg font-bold text-ink">{a.symbol}</p>
-                  <p className="text-sm text-muted">{a.name}</p>
+          {list.map((a, i) => {
+            const amount = Number(bal[a.symbol] ?? 0);
+            const has = amount > 0;
+            return (
+              <button
+                key={a.symbol}
+                onClick={() => router.push(`/send-crypto/${a.symbol}`)}
+                disabled={!has}
+                className={`flex w-full items-center justify-between px-4 py-4 active:bg-surface disabled:opacity-40 ${
+                  i > 0 ? "border-t border-border" : ""
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <CoinIcon bg={a.color} glyph={a.glyph} />
+                  <div className="text-left">
+                    <p className="text-lg font-bold text-ink">{a.symbol}</p>
+                    <p className="text-sm text-muted">{a.name}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-ink">
-                  {bal[a.symbol] ?? "0"} {a.symbol}
-                </p>
-                <p className="text-sm text-muted">
-                  ₦{(ngn[a.symbol] ?? 0).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
-                </p>
-              </div>
-            </button>
-          ))}
+                <div className="text-right">
+                  <p className="text-lg font-bold text-ink">
+                    {bal[a.symbol] ?? "0"} {a.symbol}
+                  </p>
+                  <p className="text-sm text-muted">
+                    ₦{(ngn[a.symbol] ?? 0).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
           {list.length === 0 && (
             <p className="px-4 py-6 text-center text-sm text-muted">No assets found.</p>
           )}

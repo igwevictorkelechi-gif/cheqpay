@@ -94,7 +94,7 @@ export default function CryptoPage() {
       <ActionRow>
         <CircleAction icon={TrendingUp} label="Trade" onClick={() => router.push("/asset/BTC")} />
         <CircleAction icon={ArrowDown} label="Receive" onClick={() => router.push("/receive")} />
-        <CircleAction icon={ArrowRight} label="Send" onClick={() => router.push("/send")} />
+        <CircleAction icon={ArrowRight} label="Send" onClick={() => router.push("/send-crypto")} />
       </ActionRow>
 
       {/* Assets — tap to open the asset page */}

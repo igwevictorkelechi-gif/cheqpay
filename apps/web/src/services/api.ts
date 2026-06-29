@@ -112,4 +112,17 @@ export const api = {
       body: JSON.stringify({ quoteId }),
     });
   },
+
+  createCryptoWithdrawal(input: {
+    asset: AssetSymbol;
+    network: "BITCOIN" | "TRON";
+    toAddress: string;
+    amount: string;
+  }): Promise<{ transactionId: string; status: string; txHash?: string }> {
+    return apiFetch("/api/withdrawals/crypto", {
+      method: "POST",
+      headers: { "idempotency-key": idemKey() },
+      body: JSON.stringify(input),
+    });
+  },
 };
