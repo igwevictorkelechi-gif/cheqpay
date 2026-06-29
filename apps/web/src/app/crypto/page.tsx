@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Eye, EyeOff, Bell, TrendingUp, ArrowDown, ArrowRight } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -12,16 +13,11 @@ import {
   SectionHeader,
 } from "@/components/MobileUI";
 import { useAuthStore, useUIStore } from "@/store";
+import { api } from "@/services/api";
 
-const assets = [
-  { symbol: "BTC", name: "Bitcoin", amount: "0 BTC", fiat: "0 NGN", bg: "#F7931A", glyph: "₿" },
-  { symbol: "USDT", name: "Tether", amount: "0 USDT", fiat: "0 NGN", bg: "#26A17B", glyph: "₮" },
-];
-
-const transactions = [
-  { title: "Sold BTC", date: "Jun 21, 2026", amount: "-0.00069782 BTC", fiat: "60,678.8 NGN", positive: false, bg: "#F7931A", glyph: "₿" },
-  { title: "Received BTC", date: "Jun 21, 2026", amount: "0.00069782 BTC", fiat: "60,655.17 NGN", positive: true, bg: "#F7931A", glyph: "₿" },
-  { title: "Sold USDT", date: "Jun 21, 2026", amount: "-2,000 USDT", fiat: "2,000 NGN", positive: false, bg: "#26A17B", glyph: "₮" },
+const assetMeta = [
+  { symbol: "BTC" as const, name: "Bitcoin", bg: "#F7931A", glyph: "₿" },
+  { symbol: "USDT" as const, name: "Tether", bg: "#26A17B", glyph: "₮" },
 ];
 
 function CoinIcon({ bg, glyph }: { bg: string; glyph: string }) {
@@ -39,6 +35,26 @@ export default function CryptoPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { showBalance, toggleBalance } = useUIStore();
+  const [bal, setBal] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        await api.ensureProvisioned();
+        const { balances } = await api.getBalances();
+        if (!active) return;
+        const map: Record<string, string> = {};
+        for (const b of balances) map[b.asset] = b.availableFormatted;
+        setBal(map);
+      } catch {
+        /* not logged in / API unavailable — show zeros */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <AppShell>
@@ -55,33 +71,34 @@ export default function CryptoPage() {
       <BalanceBlock label="Total Crypto Balance" amount={showBalance ? "₦0.00" : "₦••••"} />
 
       <ActionRow>
-        <CircleAction icon={TrendingUp} label="Trade" onClick={() => router.push("/convert")} />
+        <CircleAction icon={TrendingUp} label="Trade" onClick={() => router.push("/asset/BTC")} />
         <CircleAction icon={ArrowDown} label="Receive" />
         <CircleAction icon={ArrowRight} label="Send" onClick={() => router.push("/send")} />
       </ActionRow>
 
-      {/* Assets */}
+      {/* Assets — tap to open the asset page */}
       <div className="mb-6 px-5">
         <Card>
-          {assets.map((asset, i) => (
-            <div
+          {assetMeta.map((asset, i) => (
+            <button
               key={asset.symbol}
-              className={`flex items-center justify-between ${i > 0 ? "mt-5" : ""}`}
+              onClick={() => router.push(`/asset/${asset.symbol}`)}
+              className={`flex w-full items-center justify-between ${i > 0 ? "mt-5" : ""}`}
             >
               <div className="flex items-center">
                 <CoinIcon bg={asset.bg} glyph={asset.glyph} />
-                <div className="ml-3">
+                <div className="ml-3 text-left">
                   <p className="text-lg font-bold text-ink">{asset.symbol}</p>
                   <p className="text-sm text-muted">{asset.name}</p>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-lg font-bold text-ink">
-                  {showBalance ? asset.amount : "••••"}
+                  {showBalance ? `${bal[asset.symbol] ?? "0"} ${asset.symbol}` : "••••"}
                 </p>
-                <p className="text-sm text-muted">{asset.fiat}</p>
+                <p className="text-sm text-muted">Tap to trade</p>
               </div>
-            </div>
+            </button>
           ))}
         </Card>
       </div>
@@ -90,29 +107,9 @@ export default function CryptoPage() {
       <div className="px-5">
         <SectionHeader title="Transactions" onClick={() => router.push("/transactions")} />
         <Card>
-          {transactions.map((tx, i) => (
-            <div
-              key={`${tx.title}-${i}`}
-              className={`flex items-center justify-between ${i > 0 ? "mt-5" : ""}`}
-            >
-              <div className="flex flex-1 items-center">
-                <CoinIcon bg={tx.bg} glyph={tx.glyph} />
-                <div className="ml-3">
-                  <p className="text-base font-bold text-ink">{tx.title}</p>
-                  <p className="text-sm text-muted">{tx.date}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p
-                  className="text-base font-bold"
-                  style={{ color: tx.positive ? "#34C759" : "#F4F3F7" }}
-                >
-                  {tx.amount}
-                </p>
-                <p className="text-sm text-muted">{tx.fiat}</p>
-              </div>
-            </div>
-          ))}
+          <p className="py-2 text-center text-sm text-muted">
+            Your crypto transactions will appear here.
+          </p>
         </Card>
       </div>
     </AppShell>
