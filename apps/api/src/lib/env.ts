@@ -47,6 +47,14 @@ const envSchema = z.object({
   // where the business margin lives; both are server-side only.
   BUSINESS_USDT_NGN_RATE: z.coerce.number().positive().optional(),
   SWAP_SPREAD_BPS: z.coerce.number().min(0).max(10_000).default(150), // 1.5%
+
+  // Testing escape hatch. When "true", crypto withdrawals skip the MFA (AAL2)
+  // requirement and the KYC tier-2 gate so test accounts can move funds.
+  // MUST be off (default) in production — it removes real money safeguards.
+  RELAX_WITHDRAWAL_GUARDS: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
 });
 
 export type Env = z.infer<typeof envSchema>;
