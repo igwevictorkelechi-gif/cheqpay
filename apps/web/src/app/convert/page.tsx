@@ -1,15 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronDown, ArrowUpDown } from "lucide-react";
+import { ChevronLeft, ChevronDown, ArrowUpDown, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { CoinBadge } from "@/components/MobileUI";
+import { api } from "@/services/api";
+import {
+  CONVERT_ASSETS,
+  ASSET_NAMES,
+  formatMinor,
+  type ConvertSymbol,
+} from "@/lib/cryptoAssets";
 
-// Mock conversion rate (1 BTC ≈ 30.47 ETH) just for the preview UI.
-const BTC_TO_ETH = 30.47;
-const BTC_BALANCE = 0.9;
-const ETH_BALANCE = 20;
+type Side = "from" | "to";
 
 function AssetCard({
   role,
@@ -17,27 +21,27 @@ function AssetCard({
   amount,
   balance,
   emphasize,
+  onPick,
 }: {
   role: string;
-  symbol: "BTC" | "ETH";
+  symbol: ConvertSymbol;
   amount: string;
   balance: string;
   emphasize?: boolean;
+  onPick: () => void;
 }) {
   return (
     <div className="rounded-3xl bg-card p-5">
       <div className="flex items-center justify-between">
-        <button className="flex items-center gap-2">
+        <button onClick={onPick} className="flex items-center gap-2 active:scale-95">
           <CoinBadge symbol={symbol} />
           <span className="text-lg font-bold text-ink">{symbol}</span>
           <ChevronDown className="h-4 w-4 text-muted" />
         </button>
-        <span className="text-xs font-semibold tracking-widest text-muted">
-          {role}
-        </span>
+        <span className="text-xs font-semibold tracking-widest text-muted">{role}</span>
       </div>
       <p
-        className={`mt-3 text-center font-extrabold text-ink ${
+        className={`mt-3 truncate text-center font-extrabold text-ink ${
           emphasize ? "text-[40px]" : "text-[34px]"
         } leading-none`}
       >
@@ -52,39 +56,122 @@ function AssetCard({
 
 export default function ConvertPage() {
   const router = useRouter();
-  const [source, setSource] = useState("0.75");
+  const [fromSym, setFromSym] = useState<ConvertSymbol>("NGN");
+  const [toSym, setToSym] = useState<ConvertSymbol>("BTC");
+  const [amount, setAmount] = useState("0");
+  const [balances, setBalances] = useState<Record<string, string>>({});
+  const [out, setOut] = useState("0");
+  const [rate, setRate] = useState<string | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [picker, setPicker] = useState<Side | null>(null);
 
-  const sourceNum = parseFloat(source || "0") || 0;
-  const targetNum = sourceNum * BTC_TO_ETH;
-  const target = targetNum.toLocaleString("en-US", {
-    maximumFractionDigits: 2,
-  });
-  const targetRaw = targetNum.toFixed(2);
+  useEffect(() => {
+    (async () => {
+      try {
+        await api.ensureProvisioned();
+        const { balances } = await api.getBalances();
+        const b: Record<string, string> = {};
+        for (const x of balances) b[x.asset] = x.availableFormatted;
+        setBalances(b);
+      } catch {
+        /* not logged in */
+      }
+    })();
+  }, []);
+
+  // The backend swaps NGN <-> crypto only. Keep exactly one side as NGN.
+  function choose(side: Side, sym: ConvertSymbol) {
+    setPicker(null);
+    if (side === "from") {
+      if (sym === fromSym) return;
+      setFromSym(sym);
+      if (sym !== "NGN" && toSym !== "NGN") setToSym("NGN");
+      if (sym === "NGN" && toSym === "NGN") setToSym("BTC");
+    } else {
+      if (sym === toSym) return;
+      setToSym(sym);
+      if (sym !== "NGN" && fromSym !== "NGN") setFromSym("NGN");
+      if (sym === "NGN" && fromSym === "NGN") setFromSym("BTC");
+    }
+    setAmount("0");
+    setOut("0");
+    setRate(null);
+    setError(null);
+  }
+
+  function flip() {
+    setFromSym(toSym);
+    setToSym(fromSym);
+    setAmount("0");
+    setOut("0");
+    setRate(null);
+    setError(null);
+  }
+
+  const side: "buy" | "sell" = fromSym === "NGN" ? "buy" : "sell";
+  const cryptoAsset = (fromSym === "NGN" ? toSym : fromSym) as "BTC" | "USDT";
+
+  // Debounced live quote whenever the amount/assets change.
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requote = useCallback(
+    (amt: string, sd: "buy" | "sell", crypto: "BTC" | "USDT", toS: ConvertSymbol) => {
+      if (debounce.current) clearTimeout(debounce.current);
+      const n = parseFloat(amt || "0") || 0;
+      if (n <= 0) {
+        setOut("0");
+        setRate(null);
+        setError(null);
+        return;
+      }
+      debounce.current = setTimeout(async () => {
+        setQuoting(true);
+        setError(null);
+        try {
+          const q = await api.createQuote(sd, crypto, amt);
+          setOut(formatMinor(q.amountOut, toS));
+          setRate(q.rate);
+        } catch (e) {
+          setOut("0");
+          setRate(null);
+          setError(e instanceof Error ? e.message : "Could not get a rate");
+        } finally {
+          setQuoting(false);
+        }
+      }, 400);
+    },
+    []
+  );
+
+  useEffect(() => {
+    requote(amount, side, cryptoAsset, toSym);
+  }, [amount, side, cryptoAsset, toSym, requote]);
+
+  const press = (key: string) => {
+    setAmount((prev) => {
+      if (key === "del") return prev.length <= 1 ? "0" : prev.slice(0, -1);
+      if (key === ".") return prev.includes(".") ? prev : prev + ".";
+      const next = prev === "0" ? key : prev + key;
+      return next.replace(/^0+(\d)/, "$1").length > 14 ? prev : next.replace(/^0+(\d)/, "$1");
+    });
+  };
+
+  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "del"];
+
+  const canPreview = (parseFloat(amount) || 0) > 0 && !!rate && !error;
 
   const previewSwap = () => {
+    if (!canPreview) return;
     const q = new URLSearchParams({
-      from: source,
-      to: targetRaw,
-      fromSym: "BTC",
-      toSym: "ETH",
+      amount,
+      fromSym,
+      toSym,
     }).toString();
     router.push(`/convert/confirm?${q}`);
   };
 
-  const press = (key: string) => {
-    setSource((prev) => {
-      if (key === "del") return prev.length <= 1 ? "0" : prev.slice(0, -1);
-      const next = prev === "0" && key !== "." ? key : prev + key;
-      // guard against silly lengths
-      return next.length > 12 ? prev : next;
-    });
-  };
-
-  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "00", "0", "del"];
-
   return (
     <AppShell>
-      {/* Header */}
       <div className="flex items-center px-5 pb-2 pt-3">
         <button
           onClick={() => router.back()}
@@ -92,25 +179,23 @@ export default function ConvertPage() {
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
-        <h1 className="flex-1 pr-10 text-center text-lg font-bold text-ink">
-          Convert
-        </h1>
+        <h1 className="flex-1 pr-10 text-center text-lg font-bold text-ink">Convert</h1>
       </div>
 
-      {/* Swap cards */}
       <div className="relative px-5">
         <AssetCard
-          role="SOURCE"
-          symbol="BTC"
-          amount={source}
-          balance={`${BTC_BALANCE} BTC`}
+          role="FROM"
+          symbol={fromSym}
+          amount={amount}
+          balance={`${balances[fromSym] ?? "0"} ${fromSym}`}
           emphasize
+          onPick={() => setPicker("from")}
         />
 
-        {/* Swap toggle */}
         <div className="relative z-10 -my-4 flex justify-center">
           <button
-            className="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg"
+            onClick={flip}
+            className="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg active:scale-95"
             style={{ backgroundColor: "#6B5B95" }}
           >
             <ArrowUpDown className="h-5 w-5" />
@@ -118,15 +203,28 @@ export default function ConvertPage() {
         </div>
 
         <AssetCard
-          role="TOKEN"
-          symbol="ETH"
-          amount={target}
-          balance={`${ETH_BALANCE} ETH`}
+          role="TO"
+          symbol={toSym}
+          amount={quoting ? "…" : out}
+          balance={`${balances[toSym] ?? "0"} ${toSym}`}
+          onPick={() => setPicker("to")}
         />
       </div>
 
-      {/* Keypad */}
-      <div className="mt-6 grid grid-cols-3 gap-3 px-5">
+      {/* Rate / error line */}
+      <div className="px-5 pt-3 text-center text-sm">
+        {error ? (
+          <span className="text-red-400">{error}</span>
+        ) : rate ? (
+          <span className="text-muted">
+            1 {cryptoAsset} ≈ ₦{Number(rate).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
+          </span>
+        ) : (
+          <span className="text-muted">Enter an amount to see the rate</span>
+        )}
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-3 px-5">
         {keys.map((key) => (
           <button
             key={key}
@@ -138,16 +236,64 @@ export default function ConvertPage() {
         ))}
       </div>
 
-      {/* CTA */}
       <div className="mt-6 px-5">
         <button
           onClick={previewSwap}
-          className="w-full rounded-full py-4 text-base font-bold text-white"
+          disabled={!canPreview}
+          className="w-full rounded-full py-4 text-base font-bold text-white disabled:opacity-50"
           style={{ backgroundColor: "#6B5B95" }}
         >
           Preview Swap
         </button>
       </div>
+
+      {/* Asset picker sheet */}
+      {picker && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
+          onClick={() => setPicker(null)}
+        >
+          <div
+            className="w-full max-w-[480px] rounded-t-3xl bg-surface p-5 pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-ink">Select asset</h2>
+              <button
+                onClick={() => setPicker(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-card text-muted"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {CONVERT_ASSETS.map((sym) => {
+                const selected = picker === "from" ? sym === fromSym : sym === toSym;
+                return (
+                  <button
+                    key={sym}
+                    onClick={() => choose(picker, sym)}
+                    className={`flex w-full items-center justify-between rounded-2xl border p-3 active:scale-[0.99] ${
+                      selected ? "border-brand bg-card" : "border-border bg-card"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <CoinBadge symbol={sym} />
+                      <div className="text-left">
+                        <p className="font-bold text-ink">{sym}</p>
+                        <p className="text-xs text-muted">{ASSET_NAMES[sym]}</p>
+                      </div>
+                    </div>
+                    <span className="text-sm text-muted">
+                      {balances[sym] ?? "0"} {sym}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

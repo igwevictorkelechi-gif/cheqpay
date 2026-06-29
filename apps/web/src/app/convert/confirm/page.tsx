@@ -1,12 +1,12 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ArrowDown } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { CoinBadge } from "@/components/MobileUI";
-
-const RATE = 30.47;
+import { api } from "@/services/api";
+import { formatMinor, type ConvertSymbol } from "@/lib/cryptoAssets";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -17,20 +17,12 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Leg({
-  caption,
-  amount,
-  symbol,
-}: {
-  caption: string;
-  amount: string;
-  symbol: string;
-}) {
+function Leg({ caption, amount, symbol }: { caption: string; amount: string; symbol: string }) {
   return (
     <div className="flex items-center justify-between">
-      <div>
+      <div className="min-w-0">
         <p className="text-sm text-muted">{caption}</p>
-        <p className="mt-1 text-2xl font-extrabold text-ink">
+        <p className="mt-1 truncate text-2xl font-extrabold text-ink">
           {amount} <span className="text-lg">{symbol}</span>
         </p>
       </div>
@@ -42,24 +34,69 @@ function Leg({
 function ConfirmInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const from = params.get("from") || "0.75";
-  const to = params.get("to") || "22.85";
-  const fromSym = params.get("fromSym") || "BTC";
-  const toSym = params.get("toSym") || "ETH";
-  const [processing, setProcessing] = useState(false);
+  const amount = params.get("amount") || "0";
+  const fromSym = (params.get("fromSym") || "NGN") as ConvertSymbol;
+  const toSym = (params.get("toSym") || "BTC") as ConvertSymbol;
 
-  const confirm = () => {
+  const side: "buy" | "sell" = fromSym === "NGN" ? "buy" : "sell";
+  const cryptoAsset = (fromSym === "NGN" ? toSym : fromSym) as "BTC" | "USDT";
+
+  const [quoteId, setQuoteId] = useState<string | null>(null);
+  const [out, setOut] = useState("0");
+  const [rate, setRate] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchQuote = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await api.ensureProvisioned();
+      const q = await api.createQuote(side, cryptoAsset, amount);
+      setQuoteId(q.quoteId);
+      setOut(formatMinor(q.amountOut, toSym));
+      setRate(q.rate);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not get a quote");
+    } finally {
+      setLoading(false);
+    }
+  }, [side, cryptoAsset, amount, toSym]);
+
+  useEffect(() => {
+    fetchQuote();
+  }, [fetchQuote]);
+
+  const confirm = async () => {
+    if (!quoteId) return;
     setProcessing(true);
-    // Simulate the swap settling, then move to the success screen.
-    setTimeout(() => {
-      const q = new URLSearchParams({ from, to, fromSym, toSym }).toString();
+    setError(null);
+    try {
+      await api.executeSwap(quoteId);
+      const q = new URLSearchParams({
+        from: amount,
+        to: out,
+        fromSym,
+        toSym,
+      }).toString();
       router.replace(`/convert/success?${q}`);
-    }, 1200);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Swap failed";
+      // Expired/used quote → refresh and let the user retry.
+      if (/expired|used|consumed/i.test(msg)) {
+        setError("Rate expired. Refreshing…");
+        setProcessing(false);
+        fetchQuote();
+        return;
+      }
+      setError(msg);
+      setProcessing(false);
+    }
   };
 
   return (
     <AppShell>
-      {/* Header */}
       <div className="flex items-center px-5 pb-2 pt-3">
         <button
           onClick={() => router.back()}
@@ -67,15 +104,12 @@ function ConfirmInner() {
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
-        <h1 className="flex-1 pr-10 text-center text-lg font-bold text-ink">
-          Confirm Swap
-        </h1>
+        <h1 className="flex-1 pr-10 text-center text-lg font-bold text-ink">Confirm Swap</h1>
       </div>
 
-      {/* Pay / receive */}
       <div className="px-5">
         <div className="relative rounded-3xl bg-card p-5">
-          <Leg caption="You pay" amount={from} symbol={fromSym} />
+          <Leg caption="You pay" amount={amount} symbol={fromSym} />
           <div className="my-4 flex justify-center">
             <span
               className="flex h-9 w-9 items-center justify-center rounded-full text-white"
@@ -84,30 +118,38 @@ function ConfirmInner() {
               <ArrowDown className="h-4 w-4" />
             </span>
           </div>
-          <Leg caption="You receive" amount={to} symbol={toSym} />
+          <Leg caption="You receive" amount={loading ? "…" : out} symbol={toSym} />
         </div>
       </div>
 
-      {/* Details */}
       <div className="mt-4 px-5">
         <div className="rounded-3xl bg-card p-5">
-          <Row label="Rate" value={`1 ${fromSym} = ${RATE} ${toSym}`} />
-          <Row label="Network fee" value="≈ ₦250" />
-          <Row label="Estimated time" value="~2 mins" />
+          <Row
+            label="Rate"
+            value={
+              rate
+                ? `1 ${cryptoAsset} = ₦${Number(rate).toLocaleString("en-NG", {
+                    maximumFractionDigits: 2,
+                  })}`
+                : "—"
+            }
+          />
+          <Row label="Estimated time" value="~ instant" />
           <div className="my-1 border-t border-border" />
-          <Row label="You receive" value={`${to} ${toSym}`} />
+          <Row label="You receive" value={loading ? "…" : `${out} ${toSym}`} />
         </div>
       </div>
 
-      {/* CTA */}
+      {error && <p className="mt-4 px-5 text-center text-sm text-red-400">{error}</p>}
+
       <div className="mt-6 space-y-3 px-5">
         <button
           onClick={confirm}
-          disabled={processing}
+          disabled={processing || loading || !quoteId}
           className="w-full rounded-full py-4 text-base font-bold text-white disabled:opacity-60"
           style={{ backgroundColor: "#6B5B95" }}
         >
-          {processing ? "Swapping…" : "Confirm Swap"}
+          {processing ? "Swapping…" : loading ? "Getting rate…" : "Confirm Swap"}
         </button>
         <button
           onClick={() => router.back()}
