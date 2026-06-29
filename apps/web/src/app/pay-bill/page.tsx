@@ -6,14 +6,14 @@ import AppShell from "@/components/AppShell";
 import { TopBar, Card, useToast } from "@/components/MobileUI";
 import { useAuthStore } from "@/store";
 
-type Service = { label: string; emoji: string; badge?: string };
+type Service = { label: string; emoji: string; route?: string; badge?: string };
 
 const services: Service[] = [
-  { label: "Airtime", emoji: "📲" },
-  { label: "Data", emoji: "📶" },
-  { label: "Betting", emoji: "🎰" },
-  { label: "Electricity", emoji: "💡", badge: "New" },
-  { label: "Cable TV", emoji: "📺", badge: "New" },
+  { label: "Airtime", emoji: "📲", route: "/pay-bill/airtime" },
+  { label: "Data", emoji: "📶", route: "/pay-bill/data" },
+  { label: "Betting", emoji: "🎰", route: "/pay-bill/betting" },
+  { label: "Electricity", emoji: "💡", route: "/pay-bill/electricity", badge: "New" },
+  { label: "Cable TV", emoji: "📺", route: "/pay-bill/cabletv", badge: "New" },
   { label: "Vouchers", emoji: "🎟️" },
 ];
 
@@ -56,7 +56,11 @@ export default function PayBillPage() {
             {services.map((service) => (
               <button
                 key={service.label}
-                onClick={() => toast.show(`${service.label} — coming soon`)}
+                onClick={() =>
+                  service.route
+                    ? router.push(service.route)
+                    : toast.show(`${service.label} — coming soon`)
+                }
                 className="mb-3 flex h-24 w-[48%] flex-col rounded-2xl p-4 text-left transition active:scale-95"
                 style={{ backgroundColor: "#2A2440" }}
               >
@@ -77,18 +81,22 @@ export default function PayBillPage() {
         </Card>
       </div>
 
-      {/* Empty transactions */}
+      {/* Payment history shortcut */}
       <div className="px-5">
         <Card>
-          <div className="flex items-center">
+          <button
+            onClick={() => router.push("/transactions")}
+            className="flex w-full items-center"
+          >
             <span className="text-[26px]">🧾</span>
-            <div className="ml-4 flex-1">
-              <p className="text-lg font-bold text-ink">No transactions yet</p>
+            <div className="ml-4 flex-1 text-left">
+              <p className="text-lg font-bold text-ink">Payment history</p>
               <p className="mt-1 text-sm text-muted">
-                Your first transaction will show up here, make it count!
+                View your airtime, data and bill payments.
               </p>
             </div>
-          </div>
+            <ChevronDown className="h-5 w-5 -rotate-90 text-muted" />
+          </button>
         </Card>
       </div>
       {toast.node}

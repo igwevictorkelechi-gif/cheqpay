@@ -71,6 +71,26 @@ export const swapExecuteSchema = z.object({
 });
 export type SwapExecuteInput = z.infer<typeof swapExecuteSchema>;
 
+const billService = z.enum(["airtime", "data", "electricity", "cabletv", "betting"]);
+
+/** Validate a bill customer (meter/smartcard) before paying. */
+export const billValidateSchema = z.object({
+  service: billService,
+  billerId: z.string().min(1),
+  customer: z.string().min(3).max(64),
+});
+export type BillValidateInput = z.infer<typeof billValidateSchema>;
+
+/** Pay a bill. `amount` required for variable-amount services; `planId` for fixed. */
+export const billPaySchema = z.object({
+  service: billService,
+  billerId: z.string().min(1),
+  customer: z.string().min(3).max(64),
+  planId: z.string().min(1).optional(),
+  amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount").optional(),
+});
+export type BillPayInput = z.infer<typeof billPaySchema>;
+
 /** Admin update of business-controlled platform settings. */
 export const platformSettingsUpdateSchema = z
   .object({

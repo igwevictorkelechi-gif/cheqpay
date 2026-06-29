@@ -9,6 +9,7 @@ import {
   ArrowDownUp,
   RefreshCw,
   Receipt,
+  Zap,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { api, getAccessToken, type LedgerTransaction } from "@/services/api";
@@ -21,6 +22,8 @@ function iconFor(type: LedgerTransaction["type"]) {
       return { Icon: ArrowUpRight, color: "#FF6B6B", bg: "rgba(255,107,107,0.15)" };
     case "CONVERT":
       return { Icon: RefreshCw, color: "#A78BFA", bg: "rgba(167,139,250,0.15)" };
+    case "BILL":
+      return { Icon: Zap, color: "#FBBF24", bg: "rgba(251,191,36,0.15)" };
     case "BUY":
     case "SELL":
     default:
@@ -40,6 +43,10 @@ function titleFor(t: LedgerTransaction): string {
       return `Sold ${t.fromAsset ?? t.asset}`;
     case "CONVERT":
       return `Convert ${t.fromAsset ?? "?"} → ${t.toAsset ?? "?"}`;
+    case "BILL": {
+      const svc = t.billerName ?? t.service ?? "Bill";
+      return t.planName ? `${svc} · ${t.planName}` : svc;
+    }
     default:
       return t.type;
   }
@@ -50,6 +57,8 @@ function amountLine(t: LedgerTransaction): { text: string; positive: boolean } {
   if (t.type === "DEPOSIT") return { text: `+${t.amountFormatted} ${t.asset}`, positive: true };
   if (t.type === "WITHDRAWAL")
     return { text: `-${t.amountFormatted} ${t.asset}`, positive: false };
+  if (t.type === "BILL")
+    return { text: `-₦${Number(t.amountFormatted).toLocaleString()}`, positive: false };
   // BUY / SELL / CONVERT show the received leg as the headline.
   if (t.toAsset && t.toFormatted)
     return { text: `+${t.toFormatted} ${t.toAsset}`, positive: true };

@@ -73,7 +73,13 @@ export interface Quote {
   rate: string;
   expiresAt: string;
 }
-export type LedgerTxType = "DEPOSIT" | "WITHDRAWAL" | "BUY" | "SELL" | "CONVERT";
+export type LedgerTxType =
+  | "DEPOSIT"
+  | "WITHDRAWAL"
+  | "BUY"
+  | "SELL"
+  | "CONVERT"
+  | "BILL";
 export type LedgerTxStatus =
   | "PENDING"
   | "PROCESSING"
@@ -95,6 +101,33 @@ export interface LedgerTransaction {
   toAsset: string | null;
   fromFormatted: string | null;
   toFormatted: string | null;
+  service: string | null;
+  billerName: string | null;
+  planName: string | null;
+  customer: string | null;
+}
+
+export interface BillBiller {
+  id: string;
+  name: string;
+  emoji: string;
+}
+export interface BillPlan {
+  id: string;
+  billerId: string;
+  name: string;
+  amount: string;
+}
+export interface BillServiceConfig {
+  service: "airtime" | "data" | "electricity" | "cabletv" | "betting";
+  label: string;
+  emoji: string;
+  customerLabel: string;
+  customerPlaceholder: string;
+  variableAmount: boolean;
+  requiresValidation: boolean;
+  billers: BillBiller[];
+  plans: BillPlan[];
 }
 
 // ---- Endpoints ----
@@ -141,6 +174,35 @@ export const api = {
     return apiFetch("/api/quotes/convert", {
       method: "POST",
       body: JSON.stringify({ fromAsset, toAsset, amount }),
+    });
+  },
+
+  getBillCatalog(): Promise<{ services: BillServiceConfig[] }> {
+    return apiFetch("/api/bills/catalog");
+  },
+
+  validateBillCustomer(input: {
+    service: string;
+    billerId: string;
+    customer: string;
+  }): Promise<{ valid: boolean; customerName: string | null }> {
+    return apiFetch("/api/bills/validate", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  payBill(input: {
+    service: string;
+    billerId: string;
+    customer: string;
+    planId?: string;
+    amount?: string;
+  }): Promise<{ transactionId: string; status: string; providerRef?: string }> {
+    return apiFetch("/api/bills/pay", {
+      method: "POST",
+      headers: { "idempotency-key": idemKey() },
+      body: JSON.stringify(input),
     });
   },
 

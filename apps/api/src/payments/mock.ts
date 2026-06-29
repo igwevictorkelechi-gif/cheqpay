@@ -1,5 +1,9 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type {
+  BillPayInput,
+  BillPayResult,
+  BillValidateInput,
+  BillValidateResult,
   NgnChargeEvent,
   NgnTransferEvent,
   PaymentProvider,
@@ -69,6 +73,22 @@ export class MockPaymentProvider implements PaymentProvider {
       "mock-tr-" +
       createHash("sha256").update(input.reference).digest("hex").slice(0, 16);
     return { providerRef, status: "new" };
+  }
+
+  async validateBillCustomer(input: BillValidateInput): Promise<BillValidateResult> {
+    // Deterministic fake customer name derived from the identifier.
+    const NAMES = ["Chinedu Okafor", "Aisha Bello", "Tunde Adeyemi", "Ngozi Eze"];
+    const idx =
+      parseInt(createHash("sha256").update(input.customer).digest("hex").slice(0, 8), 16) %
+      NAMES.length;
+    return { valid: true, customerName: NAMES[idx] };
+  }
+
+  async payBill(input: BillPayInput): Promise<BillPayResult> {
+    const providerRef =
+      "mock-bill-" +
+      createHash("sha256").update(input.reference).digest("hex").slice(0, 16);
+    return { providerRef, status: "successful" };
   }
 }
 

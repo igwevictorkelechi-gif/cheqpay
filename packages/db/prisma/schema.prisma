@@ -51,6 +51,7 @@ enum TransactionType {
   BUY // NGN -> crypto
   SELL // crypto -> NGN
   CONVERT // crypto -> crypto
+  BILL // NGN -> bill payment (airtime, data, electricity, cable TV, betting)
 }
 
 enum TransactionStatus {

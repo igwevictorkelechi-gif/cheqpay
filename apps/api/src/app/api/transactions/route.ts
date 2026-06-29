@@ -29,12 +29,16 @@ export async function GET(req: Request) {
         amountIn?: string;
         amountOut?: string;
         kind?: string;
+        service?: string;
+        billerName?: string;
+        planName?: string | null;
+        customer?: string;
       };
       const fromAsset = meta.fromAsset as Asset | undefined;
       const toAsset = meta.toAsset as Asset | undefined;
       return {
         id: t.id,
-        type: t.type, // DEPOSIT | WITHDRAWAL | BUY | SELL | CONVERT
+        type: t.type, // DEPOSIT | WITHDRAWAL | BUY | SELL | CONVERT | BILL
         asset: t.asset,
         network: t.network,
         amount: t.amount.toString(),
@@ -50,6 +54,11 @@ export async function GET(req: Request) {
           fromAsset && meta.amountIn ? fromMinorUnits(BigInt(meta.amountIn), fromAsset) : null,
         toFormatted:
           toAsset && meta.amountOut ? fromMinorUnits(BigInt(meta.amountOut), toAsset) : null,
+        // Bill details (present for BILL).
+        service: meta.service ?? null,
+        billerName: meta.billerName ?? null,
+        planName: meta.planName ?? null,
+        customer: meta.customer ?? null,
       };
     });
 

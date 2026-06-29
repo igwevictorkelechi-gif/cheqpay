@@ -1,5 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import type {
+  BillPayInput,
+  BillPayResult,
+  BillValidateInput,
+  BillValidateResult,
   NgnChargeEvent,
   NgnTransferEvent,
   PaymentProvider,
@@ -113,6 +117,63 @@ export class FlutterwaveProvider implements PaymentProvider {
       status: (["new", "pending", "successful", "failed"].includes(status)
         ? status
         : "new") as TransferResult["status"],
+    };
+  }
+
+  async validateBillCustomer(input: BillValidateInput): Promise<BillValidateResult> {
+    // No codes to validate against → treat as a non-validated service.
+    if (!input.flwItemCode || !input.flwBillerCode) return { valid: true };
+    const url =
+      `${FLW_BASE}/bill-items/${encodeURIComponent(input.flwItemCode)}/validate` +
+      `?code=${encodeURIComponent(input.flwBillerCode)}` +
+      `&customer=${encodeURIComponent(input.customer)}`;
+    const res = await fetch(url, {
+      headers: { authorization: `Bearer ${this.secretKey}` },
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      status?: string;
+      data?: { name?: string; customer?: string };
+    };
+    if (!res.ok || json.status !== "success" || !json.data) {
+      return { valid: false };
+    }
+    return { valid: true, customerName: json.data.name };
+  }
+
+  async payBill(input: BillPayInput): Promise<BillPayResult> {
+    const res = await fetch(`${FLW_BASE}/bills`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.secretKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        country: "NG",
+        customer: input.customer,
+        amount: Number(input.amount),
+        type: input.flwType,
+        reference: input.reference,
+        recurrence: "ONCE",
+        biller_name: input.flwBillerCode,
+      }),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      status?: string;
+      data?: { reference?: string; tx_ref?: string; status?: string };
+    };
+    if (!res.ok || json.status !== "success" || !json.data) {
+      throw new Error(`Flutterwave bill payment failed: ${res.status}`);
+    }
+    const raw = (json.data.status ?? "pending").toLowerCase();
+    const status: BillPayResult["status"] =
+      raw.includes("success") || raw.includes("completed")
+        ? "successful"
+        : raw.includes("fail")
+          ? "failed"
+          : "pending";
+    return {
+      providerRef: String(json.data.reference ?? json.data.tx_ref ?? input.reference),
+      status,
     };
   }
 }

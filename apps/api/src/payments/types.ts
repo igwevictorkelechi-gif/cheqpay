@@ -28,6 +28,30 @@ export interface TransferResult {
   status: "new" | "pending" | "successful" | "failed";
 }
 
+export interface BillValidateInput {
+  flwBillerCode?: string;
+  flwItemCode?: string;
+  customer: string;
+}
+export interface BillValidateResult {
+  valid: boolean;
+  customerName?: string;
+}
+
+export interface BillPayInput {
+  service: string; // airtime | data | electricity | cabletv | betting
+  flwType: string; // Flutterwave bill `type`
+  flwBillerCode?: string;
+  flwItemCode?: string;
+  customer: string;
+  amount: string; // NGN decimal string
+  reference: string;
+}
+export interface BillPayResult {
+  providerRef: string;
+  status: "successful" | "pending" | "failed";
+}
+
 export interface PaymentProvider {
   readonly name: string;
 
@@ -48,4 +72,10 @@ export interface PaymentProvider {
     reference: string;
     narration?: string;
   }): Promise<TransferResult>;
+
+  /** Validate a bill customer (e.g. meter/smartcard), returning the name. */
+  validateBillCustomer(input: BillValidateInput): Promise<BillValidateResult>;
+
+  /** Pay a bill (airtime, data, electricity, cable TV, betting). */
+  payBill(input: BillPayInput): Promise<BillPayResult>;
 }
