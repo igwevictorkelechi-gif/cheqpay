@@ -5,64 +5,59 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "@/components/AuthLayout";
 import { authService } from "@/services/auth";
+import { useAuthStore } from "@/store";
 
 export default function SignupPage() {
   const router = useRouter();
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-  });
+  const { setUser, setLoading } = useAuthStore();
+  const [form, setForm] = useState({ fullName: "", email: "", password: "" });
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [loading, setLocalLoading] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
 
-  const handleSendOTP = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setNotice("");
 
-    // Validate fields
-    if (formData.fullName.length < 2) {
+    if (form.fullName.trim().length < 2) {
       setError("Full name must be at least 2 characters");
-      setLoading(false);
       return;
     }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
       setError("Please enter a valid email address");
-      setLoading(false);
+      return;
+    }
+    if (form.password.length < 6) {
+      setError("Password must be at least 6 characters");
       return;
     }
 
-    const phoneRegex = /^(\+234|0)[0-9]{10}$/;
-    if (!phoneRegex.test(formData.phone.replace(/\s/g, ""))) {
-      setError("Please enter a valid Nigerian phone number");
-      setLoading(false);
-      return;
-    }
-
+    setLocalLoading(true);
     try {
-      await authService.sendOTP(formData.phone);
-      const params = new URLSearchParams({
-        phone: formData.phone,
-        fullName: formData.fullName,
-        email: formData.email,
-        type: "signup",
-      });
-      router.push(`/verify-otp?${params}`);
+      const { user, needsConfirmation } = await authService.signUpWithEmail(
+        form.email.trim(),
+        form.password,
+        form.fullName.trim()
+      );
+      if (user) {
+        setUser(user);
+        setLoading(false);
+        router.push("/");
+      } else if (needsConfirmation) {
+        setNotice(
+          "Account created. Please check your email to confirm, then log in."
+        );
+      }
     } catch (err) {
-      setError("Failed to send OTP. Please try again.");
+      const message = err instanceof Error ? err.message : "Sign up failed";
+      setError(message);
       console.error(err);
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
 
@@ -74,13 +69,13 @@ export default function SignupPage() {
           Join CheqPay and start managing your money
         </p>
 
-        <form onSubmit={handleSendOTP} className="mt-6 space-y-4">
+        <form onSubmit={handleSignup} className="mt-6 space-y-4">
           <div>
             <label className="label">Full Name</label>
             <input
               type="text"
               name="fullName"
-              value={formData.fullName}
+              value={form.fullName}
               onChange={handleChange}
               placeholder="John Doe"
               className="input"
@@ -93,42 +88,42 @@ export default function SignupPage() {
             <input
               type="email"
               name="email"
-              value={formData.email}
+              value={form.email}
               onChange={handleChange}
               placeholder="john@example.com"
               className="input"
               disabled={loading}
+              autoComplete="email"
             />
           </div>
 
           <div>
-            <label className="label">Phone Number</label>
+            <label className="label">Password</label>
             <input
-              type="tel"
-              name="phone"
-              value={formData.phone}
+              type="password"
+              name="password"
+              value={form.password}
               onChange={handleChange}
-              placeholder="+234 81 2345 6789"
+              placeholder="At least 6 characters"
               className="input"
               disabled={loading}
+              autoComplete="new-password"
             />
-            <p className="mt-1 text-xs text-gray-500">
-              Include country code (+234 or 0)
-            </p>
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
-              {error}
-            </div>
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</div>
+          )}
+          {notice && (
+            <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</div>
           )}
 
           <button
             type="submit"
-            disabled={loading || !formData.fullName || !formData.email || !formData.phone}
+            disabled={loading || !form.fullName || !form.email || !form.password}
             className="btn-primary w-full"
           >
-            {loading ? "Sending OTP..." : "Continue"}
+            {loading ? "Creating account..." : "Create Account"}
           </button>
         </form>
 

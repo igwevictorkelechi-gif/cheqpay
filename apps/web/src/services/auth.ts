@@ -1,5 +1,21 @@
 import { supabase } from "./supabase";
 import type { User } from "@cheqpay/shared";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
+
+/** Build an app User from a Supabase auth user (when no legacy profile row exists). */
+function toUser(su: SupabaseUser, fullName?: string): User {
+  const meta = (su.user_metadata ?? {}) as { full_name?: string };
+  return {
+    id: su.id,
+    email: su.email ?? "",
+    phone: su.phone ?? "",
+    full_name: fullName ?? meta.full_name ?? su.email?.split("@")[0] ?? "",
+    kyc_status: "pending",
+    referral_code: "",
+    created_at: su.created_at ?? new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
 
 export const authService = {
   async signInWithEmail(email: string, password: string): Promise<User | null> {
@@ -8,14 +24,33 @@ export const authService = {
       password,
     });
     if (error) throw error;
-    if (!data.session) return null;
+    if (!data.session || !data.user) return null;
 
+    // Prefer the legacy profile row if present; otherwise derive from session.
     const { data: profile } = await supabase
       .from("users")
       .select("*")
-      .eq("id", data.session.user.id)
+      .eq("id", data.user.id)
       .single();
-    return profile;
+    return profile ?? toUser(data.user);
+  },
+
+  /** Create an account with email + password (no SMS needed). */
+  async signUpWithEmail(
+    email: string,
+    password: string,
+    fullName: string
+  ): Promise<{ user: User | null; needsConfirmation: boolean }> {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName } },
+    });
+    if (error) throw error;
+    if (data.session && data.user) {
+      return { user: toUser(data.user, fullName), needsConfirmation: false };
+    }
+    return { user: null, needsConfirmation: true };
   },
 
   async sendOTP(phone: string) {
@@ -91,7 +126,7 @@ export const authService = {
         .eq("id", session.user.id)
         .single();
 
-      return data;
+      return data ?? toUser(session.user);
     } catch (error) {
       console.error("getCurrentUser error:", error);
       return null;
