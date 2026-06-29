@@ -135,7 +135,7 @@ export default function WithdrawPage() {
                 className="input font-mono"
                 disabled={loading}
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-muted">
                 Must be 10 digits
               </p>
             </div>
@@ -151,7 +151,7 @@ export default function WithdrawPage() {
                 className="input"
                 disabled={loading}
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-muted">
                 Min: ₦100 | Max: ₦5,000,000
               </p>
             </div>
@@ -170,22 +170,19 @@ export default function WithdrawPage() {
             </div>
 
             {/* Balance Info */}
-            <div className="rounded-lg bg-blue-50 p-4 border border-blue-200">
-              <p className="text-sm text-blue-900">
-                Available Balance: <strong>₦{(wallet?.balance || 0).toLocaleString()}</strong>
+            <div className="rounded-xl border border-border bg-surface p-4">
+              <p className="text-sm text-muted">
+                Available Balance:{" "}
+                <strong className="text-ink">₦{(wallet?.balance || 0).toLocaleString()}</strong>
               </p>
             </div>
 
             {error && (
-              <div className="rounded-lg bg-red-50 p-4 text-sm text-red-800 border border-red-200">
-                {error}
-              </div>
+              <div className="rounded-xl bg-red-500/10 p-4 text-sm text-red-400">{error}</div>
             )}
 
             {success && (
-              <div className="rounded-lg bg-green-50 p-4 text-sm text-green-800 border border-green-200">
-                {success}
-              </div>
+              <div className="rounded-xl bg-green-500/10 p-4 text-sm text-green-400">{success}</div>
             )}
 
             <button

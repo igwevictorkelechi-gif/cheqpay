@@ -36,17 +36,29 @@ export default function CryptoPage() {
   const { user } = useAuthStore();
   const { showBalance, toggleBalance } = useUIStore();
   const [bal, setBal] = useState<Record<string, string>>({});
+  const [ngn, setNgn] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let active = true;
     (async () => {
       try {
         await api.ensureProvisioned();
-        const { balances } = await api.getBalances();
+        const [{ balances }, btc, usdt] = await Promise.all([
+          api.getBalances(),
+          api.getPrice("BTC").catch(() => null),
+          api.getPrice("USDT").catch(() => null),
+        ]);
         if (!active) return;
         const map: Record<string, string> = {};
         for (const b of balances) map[b.asset] = b.availableFormatted;
         setBal(map);
+        const prices: Record<string, number> = {
+          BTC: btc?.priceNgn ? Number(btc.priceNgn) : 0,
+          USDT: usdt?.priceNgn ? Number(usdt.priceNgn) : 0,
+        };
+        const value: Record<string, number> = {};
+        for (const a of ["BTC", "USDT"]) value[a] = Number(map[a] ?? 0) * prices[a];
+        setNgn(value);
       } catch {
         /* not logged in / API unavailable — show zeros */
       }
@@ -55,6 +67,10 @@ export default function CryptoPage() {
       active = false;
     };
   }, []);
+
+  const totalNgn = (ngn.BTC ?? 0) + (ngn.USDT ?? 0);
+  const fmtNgn = (n: number) =>
+    "₦" + n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <AppShell>
@@ -68,7 +84,10 @@ export default function CryptoPage() {
         ]}
       />
 
-      <BalanceBlock label="Total Crypto Balance" amount={showBalance ? "₦0.00" : "₦••••"} />
+      <BalanceBlock
+        label="Total Crypto Balance"
+        amount={showBalance ? fmtNgn(totalNgn) : "₦••••"}
+      />
 
       <ActionRow>
         <CircleAction icon={TrendingUp} label="Trade" onClick={() => router.push("/asset/BTC")} />
@@ -96,7 +115,9 @@ export default function CryptoPage() {
                 <p className="text-lg font-bold text-ink">
                   {showBalance ? `${bal[asset.symbol] ?? "0"} ${asset.symbol}` : "••••"}
                 </p>
-                <p className="text-sm text-muted">Tap to trade</p>
+                <p className="text-sm text-muted">
+                  {showBalance ? fmtNgn(ngn[asset.symbol] ?? 0) : "••••"}
+                </p>
               </div>
             </button>
           ))}

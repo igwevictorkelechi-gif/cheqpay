@@ -68,8 +68,7 @@ export default function AddMoneyPage() {
           <button
             disabled={!valid}
             onClick={() => router.push(`/deposit/transfer?amount=${digits}`)}
-            className="w-full rounded-full py-4 text-base font-bold text-white disabled:opacity-50"
-            style={{ backgroundColor: "#6B5B95" }}
+            className="w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white shadow-lg shadow-brand/30 active:scale-[0.98] disabled:opacity-50"
           >
             Continue
           </button>

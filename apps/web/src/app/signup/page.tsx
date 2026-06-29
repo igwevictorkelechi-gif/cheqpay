@@ -64,8 +64,8 @@ export default function SignupPage() {
   return (
     <AuthLayout>
       <div className="p-8">
-        <h2 className="text-2xl font-bold text-gray-900">Create Account</h2>
-        <p className="mt-2 text-sm text-gray-600">
+        <h2 className="text-2xl font-bold text-ink">Create Account</h2>
+        <p className="mt-2 text-sm text-muted">
           Join CheqPay and start managing your money
         </p>
 
@@ -112,10 +112,10 @@ export default function SignupPage() {
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</div>
+            <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
           )}
           {notice && (
-            <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</div>
+            <div className="rounded-lg bg-green-500/10 p-3 text-sm text-green-400">{notice}</div>
           )}
 
           <button
@@ -127,10 +127,10 @@ export default function SignupPage() {
           </button>
         </form>
 
-        <div className="mt-6 border-t border-gray-200 pt-6">
-          <p className="text-center text-sm text-gray-600">
+        <div className="mt-6 border-t border-border pt-6">
+          <p className="text-center text-sm text-muted">
             Already have an account?{" "}
-            <Link href="/login" className="font-medium text-primary hover:underline">
+            <Link href="/login" className="font-semibold text-brand-light hover:underline">
               Login
             </Link>
           </p>
