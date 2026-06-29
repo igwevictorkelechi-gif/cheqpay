@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Search, Bell, ChevronDown } from "lucide-react";
 import AppShell from "@/components/AppShell";
-import { TopBar, Card } from "@/components/MobileUI";
+import { TopBar, Card, useToast } from "@/components/MobileUI";
 import { useAuthStore } from "@/store";
 
 type Service = { label: string; emoji: string; badge?: string };
@@ -20,13 +20,17 @@ const services: Service[] = [
 export default function PayBillPage() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const toast = useToast();
 
   return (
     <AppShell>
       <TopBar
         name={user?.full_name}
         onAvatar={() => router.push("/profile")}
-        icons={[{ icon: Search }, { icon: Bell }]}
+        icons={[
+          { icon: Search, onClick: () => router.push("/transactions") },
+          { icon: Bell, onClick: () => toast.show("No new notifications") },
+        ]}
       />
 
       <h1 className="mb-5 mt-3 px-5 text-[32px] font-extrabold text-ink">
@@ -38,7 +42,10 @@ export default function PayBillPage() {
         <Card>
           <div className="mb-5 flex items-center justify-between">
             <p className="text-base font-bold text-ink">Showing services in</p>
-            <button className="flex items-center gap-1.5 rounded-full bg-circle px-3 py-1.5">
+            <button
+              onClick={() => toast.show("More countries coming soon")}
+              className="flex items-center gap-1.5 rounded-full bg-circle px-3 py-1.5"
+            >
               <span className="text-sm">🇳🇬</span>
               <span className="text-sm font-semibold text-ink">Nigeria</span>
               <ChevronDown className="h-4 w-4 text-muted" />
@@ -49,6 +56,7 @@ export default function PayBillPage() {
             {services.map((service) => (
               <button
                 key={service.label}
+                onClick={() => toast.show(`${service.label} — coming soon`)}
                 className="mb-3 flex h-24 w-[48%] flex-col rounded-2xl p-4 text-left transition active:scale-95"
                 style={{ backgroundColor: "#2A2440" }}
               >
@@ -83,6 +91,7 @@ export default function PayBillPage() {
           </div>
         </Card>
       </div>
+      {toast.node}
     </AppShell>
   );
 }

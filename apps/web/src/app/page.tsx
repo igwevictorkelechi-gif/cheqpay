@@ -12,6 +12,7 @@ import {
   Card,
   NairaFlag,
   SectionHeader,
+  useToast,
 } from "@/components/MobileUI";
 import { authService } from "@/services/auth";
 import { walletService } from "@/services/wallet";
@@ -23,6 +24,7 @@ export default function HomePage() {
   const { wallet, setWallet, setVirtualAccount } = useWalletStore();
   const { showBalance, toggleBalance } = useUIStore();
   const [, setReady] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     const load = async () => {
@@ -63,7 +65,7 @@ export default function HomePage() {
         icons={[
           { icon: Search, onClick: () => router.push("/transactions") },
           { icon: showBalance ? Eye : EyeOff, onClick: toggleBalance },
-          { icon: Bell },
+          { icon: Bell, onClick: () => toast.show("No new notifications") },
         ]}
       />
 
@@ -125,6 +127,7 @@ export default function HomePage() {
           <p className="text-base font-bold text-ink">-60,521.3 NGN</p>
         </div>
       </div>
+      {toast.node}
     </AppShell>
   );
 }

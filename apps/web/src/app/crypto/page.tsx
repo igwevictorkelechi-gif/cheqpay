@@ -11,6 +11,7 @@ import {
   CircleAction,
   Card,
   SectionHeader,
+  useToast,
 } from "@/components/MobileUI";
 import { useAuthStore, useUIStore } from "@/store";
 import { api } from "@/services/api";
@@ -71,6 +72,7 @@ export default function CryptoPage() {
   const totalNgn = (ngn.BTC ?? 0) + (ngn.USDT ?? 0);
   const fmtNgn = (n: number) =>
     "₦" + n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const toast = useToast();
 
   return (
     <AppShell>
@@ -78,9 +80,9 @@ export default function CryptoPage() {
         name={user?.full_name}
         onAvatar={() => router.push("/profile")}
         icons={[
-          { icon: Search },
+          { icon: Search, onClick: () => router.push("/transactions") },
           { icon: showBalance ? Eye : EyeOff, onClick: toggleBalance },
-          { icon: Bell },
+          { icon: Bell, onClick: () => toast.show("No new notifications") },
         ]}
       />
 
@@ -91,7 +93,7 @@ export default function CryptoPage() {
 
       <ActionRow>
         <CircleAction icon={TrendingUp} label="Trade" onClick={() => router.push("/asset/BTC")} />
-        <CircleAction icon={ArrowDown} label="Receive" />
+        <CircleAction icon={ArrowDown} label="Receive" onClick={() => router.push("/receive")} />
         <CircleAction icon={ArrowRight} label="Send" onClick={() => router.push("/send")} />
       </ActionRow>
 
@@ -133,6 +135,7 @@ export default function CryptoPage() {
           </p>
         </Card>
       </div>
+      {toast.node}
     </AppShell>
   );
 }

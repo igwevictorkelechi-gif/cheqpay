@@ -86,6 +86,10 @@ export const api = {
     return apiFetch("/api/balances");
   },
 
+  getWallets(): Promise<{ wallets: { asset: string; network: string; address: string }[] }> {
+    return apiFetch("/api/wallets");
+  },
+
   getPrice(asset: AssetSymbol): Promise<MarketPrice> {
     return apiFetch(`/api/market/${asset}/price`);
   },

@@ -1,7 +1,24 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useCallback, useState } from "react";
 import { LucideIcon } from "lucide-react";
+
+/** Lightweight transient toast for "coming soon" / small feedback. */
+export function useToast() {
+  const [msg, setMsg] = useState<string | null>(null);
+  const show = useCallback((m: string) => {
+    setMsg(m);
+    setTimeout(() => setMsg(null), 1800);
+  }, []);
+  const node = msg ? (
+    <div className="fixed inset-x-0 bottom-28 z-50 flex justify-center px-6">
+      <div className="rounded-full bg-card px-5 py-3 text-sm font-semibold text-ink shadow-xl ring-1 ring-border">
+        {msg}
+      </div>
+    </div>
+  ) : null;
+  return { show, node };
+}
 
 /** Small circular avatar shown top-left of each screen. */
 export function Avatar({ name }: { name?: string | null }) {
