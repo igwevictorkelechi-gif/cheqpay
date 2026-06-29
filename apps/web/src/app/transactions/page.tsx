@@ -1,138 +1,181 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import MainLayout from "@/components/MainLayout";
-import { useAuthStore, useWalletStore } from "@/store";
-import { walletService } from "@/services/wallet";
-import { ArrowDownLeft, ArrowUpRight, Banknote } from "lucide-react";
-import type { Transaction } from "@cheqpay/shared";
-import { isDemoUser } from "@/lib/demo";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  ChevronLeft,
+  ArrowDownLeft,
+  ArrowUpRight,
+  ArrowDownUp,
+  RefreshCw,
+  Receipt,
+} from "lucide-react";
+import AppShell from "@/components/AppShell";
+import { api, getAccessToken, type LedgerTransaction } from "@/services/api";
 
-const getTransactionIcon = (type: string) => {
+function iconFor(type: LedgerTransaction["type"]) {
   switch (type) {
-    case "credit":
-      return <ArrowDownLeft className="h-5 w-5 text-success" />;
-    case "debit":
-    case "transfer":
-      return <ArrowUpRight className="h-5 w-5 text-danger" />;
-    case "withdrawal":
-      return <Banknote className="h-5 w-5 text-warning" />;
+    case "DEPOSIT":
+      return { Icon: ArrowDownLeft, color: "#34C759", bg: "rgba(52,199,89,0.15)" };
+    case "WITHDRAWAL":
+      return { Icon: ArrowUpRight, color: "#FF6B6B", bg: "rgba(255,107,107,0.15)" };
+    case "CONVERT":
+      return { Icon: RefreshCw, color: "#A78BFA", bg: "rgba(167,139,250,0.15)" };
+    case "BUY":
+    case "SELL":
     default:
-      return <Banknote className="h-5 w-5 text-gray-400" />;
+      return { Icon: ArrowDownUp, color: "#A78BFA", bg: "rgba(167,139,250,0.15)" };
   }
-};
+}
 
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "completed":
-      return <span className="badge badge-success">Completed</span>;
-    case "pending":
-      return <span className="badge badge-warning">Pending</span>;
-    case "failed":
-      return <span className="badge badge-danger">Failed</span>;
+function titleFor(t: LedgerTransaction): string {
+  switch (t.type) {
+    case "DEPOSIT":
+      return `Received ${t.asset}`;
+    case "WITHDRAWAL":
+      return `Sent ${t.asset}`;
+    case "BUY":
+      return `Bought ${t.toAsset ?? t.asset}`;
+    case "SELL":
+      return `Sold ${t.fromAsset ?? t.asset}`;
+    case "CONVERT":
+      return `Convert ${t.fromAsset ?? "?"} → ${t.toAsset ?? "?"}`;
     default:
-      return <span className="badge">{status}</span>;
+      return t.type;
   }
-};
+}
+
+/** Primary signed amount line (what the balance net is, best-effort). */
+function amountLine(t: LedgerTransaction): { text: string; positive: boolean } {
+  if (t.type === "DEPOSIT") return { text: `+${t.amountFormatted} ${t.asset}`, positive: true };
+  if (t.type === "WITHDRAWAL")
+    return { text: `-${t.amountFormatted} ${t.asset}`, positive: false };
+  // BUY / SELL / CONVERT show the received leg as the headline.
+  if (t.toAsset && t.toFormatted)
+    return { text: `+${t.toFormatted} ${t.toAsset}`, positive: true };
+  return { text: `${t.amountFormatted} ${t.asset}`, positive: true };
+}
+
+function statusBadge(status: LedgerTransaction["status"]) {
+  const map: Record<string, { label: string; cls: string }> = {
+    COMPLETED: { label: "Completed", cls: "bg-green-500/15 text-green-400" },
+    PROCESSING: { label: "Processing", cls: "bg-amber-500/15 text-amber-400" },
+    PENDING: { label: "Pending", cls: "bg-amber-500/15 text-amber-400" },
+    FAILED: { label: "Failed", cls: "bg-red-500/15 text-red-400" },
+    REVERSED: { label: "Reversed", cls: "bg-red-500/15 text-red-400" },
+  };
+  const s = map[status] ?? { label: status, cls: "bg-white/10 text-muted" };
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${s.cls}`}>
+      {s.label}
+    </span>
+  );
+}
 
 export default function TransactionsPage() {
-  const { user } = useAuthStore();
-  const { transactions, setTransactions } = useWalletStore();
+  const router = useRouter();
+  const [txns, setTxns] = useState<LedgerTransaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [needsLogin, setNeedsLogin] = useState(false);
 
   useEffect(() => {
-    const loadTransactions = async () => {
+    (async () => {
       try {
-        if (!user) return;
-        // Demo user keeps the seeded sample transactions.
-        if (isDemoUser(user)) return;
-        const txns = await walletService.getTransactions(user.id);
-        setTransactions(txns);
-      } catch (error) {
-        console.error("Failed to load transactions:", error);
+        const token = await getAccessToken();
+        if (!token) {
+          setNeedsLogin(true);
+          return;
+        }
+        await api.ensureProvisioned();
+        const { transactions } = await api.getTransactions(100);
+        setTxns(transactions);
+      } catch {
+        setNeedsLogin(true);
       } finally {
         setLoading(false);
       }
-    };
-
-    loadTransactions();
-  }, [user, setTransactions]);
+    })();
+  }, []);
 
   return (
-    <MainLayout>
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Transaction History</h1>
+    <AppShell>
+      <div className="px-5 pb-4 pt-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <h1 className="text-xl font-bold text-ink">Transactions</h1>
+        </div>
 
-        <div className="card-lg">
+        <div className="mt-6">
           {loading ? (
-            <div className="space-y-4">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="skeleton h-16" />
+            <div className="space-y-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-16 animate-pulse rounded-2xl bg-card" />
               ))}
             </div>
-          ) : transactions.length === 0 ? (
-            <div className="py-12 text-center">
-              <Banknote className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-              <p className="text-gray-500">No transactions yet</p>
+          ) : needsLogin ? (
+            <div className="py-16 text-center">
+              <Receipt className="mx-auto mb-4 h-12 w-12 text-muted" />
+              <p className="text-muted">Sign in to see your transactions.</p>
+            </div>
+          ) : txns.length === 0 ? (
+            <div className="py-16 text-center">
+              <Receipt className="mx-auto mb-4 h-12 w-12 text-muted" />
+              <p className="text-muted">No transactions yet.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                      Type
-                    </th>
-                    <th className="hidden sm:table-cell px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                      Reference
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">
-                      Amount
-                    </th>
-                    <th className="hidden md:table-cell px-4 py-3 text-center text-sm font-semibold text-gray-700">
-                      Status
-                    </th>
-                    <th className="hidden lg:table-cell px-4 py-3 text-right text-sm font-semibold text-gray-700">
-                      Date
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map((txn: Transaction) => (
-                    <tr
-                      key={txn.id}
-                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+            <div className="overflow-hidden rounded-3xl bg-card">
+              {txns.map((t, i) => {
+                const { Icon, color, bg } = iconFor(t.type);
+                const amt = amountLine(t);
+                return (
+                  <div
+                    key={t.id}
+                    className={`flex items-center gap-3 px-4 py-4 ${
+                      i > 0 ? "border-t border-border" : ""
+                    }`}
+                  >
+                    <span
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: bg }}
                     >
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="rounded-full p-2 bg-gray-100">
-                            {getTransactionIcon(txn.type)}
-                          </div>
-                          <span className="font-medium text-gray-900 capitalize">
-                            {txn.type}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="hidden sm:table-cell px-4 py-4 text-sm text-gray-600">
-                        {txn.reference}
-                      </td>
-                      <td className="px-4 py-4 text-right font-bold text-gray-900">
-                        ₦{txn.amount.toLocaleString()}
-                      </td>
-                      <td className="hidden md:table-cell px-4 py-4 text-center">
-                        {getStatusBadge(txn.status)}
-                      </td>
-                      <td className="hidden lg:table-cell px-4 py-4 text-right text-sm text-gray-600">
-                        {new Date(txn.created_at).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      <Icon className="h-5 w-5" style={{ color }} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-bold text-ink">{titleFor(t)}</p>
+                      <div className="mt-0.5 flex items-center gap-2">
+                        <span className="text-xs text-muted">
+                          {new Date(t.createdAt).toLocaleDateString("en-NG", {
+                            day: "numeric",
+                            month: "short",
+                          })}
+                        </span>
+                        {statusBadge(t.status)}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p
+                        className={`font-bold ${amt.positive ? "text-green-400" : "text-ink"}`}
+                      >
+                        {amt.text}
+                      </p>
+                      {t.type === "CONVERT" && t.fromFormatted && (
+                        <p className="text-xs text-muted">
+                          -{t.fromFormatted} {t.fromAsset}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
       </div>
-    </MainLayout>
+    </AppShell>
   );
 }

@@ -73,6 +73,29 @@ export interface Quote {
   rate: string;
   expiresAt: string;
 }
+export type LedgerTxType = "DEPOSIT" | "WITHDRAWAL" | "BUY" | "SELL" | "CONVERT";
+export type LedgerTxStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "COMPLETED"
+  | "FAILED"
+  | "REVERSED";
+export interface LedgerTransaction {
+  id: string;
+  type: LedgerTxType;
+  asset: string;
+  network: string | null;
+  amount: string;
+  amountFormatted: string;
+  fee: string;
+  status: LedgerTxStatus;
+  txHash: string | null;
+  createdAt: string;
+  fromAsset: string | null;
+  toAsset: string | null;
+  fromFormatted: string | null;
+  toFormatted: string | null;
+}
 
 // ---- Endpoints ----
 export const api = {
@@ -88,6 +111,10 @@ export const api = {
 
   getWallets(): Promise<{ wallets: { asset: string; network: string; address: string }[] }> {
     return apiFetch("/api/wallets");
+  },
+
+  getTransactions(limit = 50): Promise<{ transactions: LedgerTransaction[] }> {
+    return apiFetch(`/api/transactions?limit=${limit}`);
   },
 
   getPrice(asset: AssetSymbol): Promise<MarketPrice> {
