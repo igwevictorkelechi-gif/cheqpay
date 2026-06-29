@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import InstallPrompt from "@/components/InstallPrompt";
 
 export const metadata: Metadata = {
   title: "CheqPay - Beyond Finance",
@@ -34,6 +35,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <div className="min-h-screen">{children}</div>
+        <InstallPrompt />
         <ServiceWorkerRegister />
       </body>
     </html>
