@@ -1,11 +1,28 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 export const metadata: Metadata = {
-  title: "CheqPay - Nigerian Fintech",
-  description: "Send money, pay bills, and manage your wallet securely",
-  keywords: ["fintech", "payments", "wallet", "nigeria"],
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
+  title: "CheqPay - Beyond Finance",
+  description: "Send money, buy & sell crypto, and pay bills.",
+  keywords: ["fintech", "payments", "wallet", "crypto", "nigeria"],
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "CheqPay",
+  },
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#14121A",
 };
 
 export default function RootLayout({
@@ -15,13 +32,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <meta charSet="utf-8" />
-      </head>
       <body>
-        <div className="min-h-screen">
-          {children}
-        </div>
+        <div className="min-h-screen">{children}</div>
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
