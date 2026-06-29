@@ -50,6 +50,7 @@ enum TransactionType {
   WITHDRAWAL // crypto or NGN outbound
   BUY // NGN -> crypto
   SELL // crypto -> NGN
+  CONVERT // crypto -> crypto
 }
 
 enum TransactionStatus {

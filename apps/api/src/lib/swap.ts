@@ -194,7 +194,11 @@ export async function executeSwap(params: {
     const record = await db.transaction.create({
       data: {
         userId: params.userId,
-        type: side === "buy" ? TransactionType.BUY : TransactionType.SELL,
+        type: isConvert
+          ? TransactionType.CONVERT
+          : side === "buy"
+          ? TransactionType.BUY
+          : TransactionType.SELL,
         asset: cryptoAsset,
         amount: cryptoAmountMinor,
         status: TransactionStatus.COMPLETED,
