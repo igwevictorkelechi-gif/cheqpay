@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, TrendingUp, TrendingDown } from "lucide-react";
 import {
   api,
   ApiError,
@@ -19,17 +19,16 @@ const META: Record<AssetSymbol, { name: string; color: string; glyph: string }> 
 
 const RANGES: ChartRange[] = ["day", "week", "month", "year", "all"];
 const RANGE_LABEL: Record<ChartRange, string> = {
-  day: "Day",
-  week: "Week",
-  month: "Month",
-  year: "Year",
+  day: "1D",
+  week: "1W",
+  month: "1M",
+  year: "1Y",
   all: "All",
 };
 
 function fmtNgn(v: string | null): string {
   if (v === null) return "—";
-  const n = Number(v);
-  return "₦" + n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "₦" + Number(v).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export default function AssetPage() {
@@ -52,7 +51,6 @@ export default function AssetPage() {
     setError(null);
     setNeedsLogin(false);
     try {
-      // Distinguish "not signed in" from "signed in but the API rejected the token".
       const token = await getAccessToken();
       if (!token) {
         setNeedsLogin(true);
@@ -67,8 +65,6 @@ export default function AssetPage() {
       setBalance(b?.availableFormatted ?? "0");
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        // We had a token but the API rejected it — surface the real reason
-        // (e.g. SUPABASE_JWT_SECRET misconfigured) instead of a generic prompt.
         const detail = (e.body as { error?: string } | undefined)?.error;
         setError(`Sign-in not accepted by the server: ${detail ?? "unauthorized"}`);
       } else {
@@ -96,32 +92,40 @@ export default function AssetPage() {
       .catch(() => setCandles([]));
   }, [symbol, range, meta]);
 
-  const chartData = useMemo(
-    () => candles.map((c) => ({ t: c.time, v: Number(c.close) })),
-    [candles]
-  );
+  const values = useMemo(() => candles.map((c) => Number(c.close)), [candles]);
   const changePct = useMemo(() => {
-    if (chartData.length < 2) return null;
-    const first = chartData[0].v;
-    const last = chartData[chartData.length - 1].v;
+    if (values.length < 2) return null;
+    const first = values[0];
+    const last = values[values.length - 1];
     if (!first) return null;
     return ((last - first) / first) * 100;
-  }, [chartData]);
+  }, [values]);
+
+  const balanceNgn = useMemo(() => {
+    if (!priceNgn) return null;
+    return Number(balance) * Number(priceNgn);
+  }, [balance, priceNgn]);
 
   if (!meta) {
     return (
       <Shell>
-        <p className="px-5 text-muted">Unsupported asset.</p>
+        <p className="px-5 pt-10 text-center text-muted">Unsupported asset.</p>
       </Shell>
     );
   }
 
+  const up = (changePct ?? 0) >= 0;
+
   return (
     <Shell>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-3">
-        <button onClick={() => router.back()} aria-label="Back" className="p-1 text-ink">
-          <ChevronLeft className="h-6 w-6" />
+      <div className="flex items-center justify-between px-4 pt-4">
+        <button
+          onClick={() => router.back()}
+          aria-label="Back"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+        >
+          <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="flex items-center gap-2">
           <span
@@ -132,26 +136,23 @@ export default function AssetPage() {
           </span>
           <span className="font-semibold text-ink">{meta.name}</span>
         </div>
-        <div className="w-8" />
+        <div className="h-9 w-9" />
       </div>
-      <p className="mb-4 text-center text-sm text-muted">
-        {balance} {symbol} · ${priceUsd}
-      </p>
 
       {error ? (
-        <div className="px-5 py-10 text-center">
+        <div className="px-5 py-16 text-center">
           <p className="text-muted">{error}</p>
           {needsLogin ? (
             <button
               onClick={() => router.push("/login")}
-              className="mt-4 rounded-full bg-brand px-6 py-2 font-semibold text-white"
+              className="mt-5 rounded-full bg-gradient-to-r from-brand to-brand-light px-7 py-3 font-semibold text-white shadow-lg shadow-brand/30"
             >
               Go to login
             </button>
           ) : (
             <button
               onClick={loadCore}
-              className="mt-4 rounded-full bg-card px-6 py-2 font-semibold text-ink"
+              className="mt-5 rounded-full bg-card px-7 py-3 font-semibold text-ink"
             >
               Retry
             </button>
@@ -159,26 +160,43 @@ export default function AssetPage() {
         </div>
       ) : (
         <>
-          {/* Price */}
-          <div className="flex items-end justify-between px-5">
-            <div>
-              <p className="text-3xl font-extrabold text-ink">{fmtNgn(priceNgn)}</p>
-              <p className="text-sm text-muted">Market Price</p>
+          {/* Your holding */}
+          <div className="mt-5 flex flex-col items-center">
+            <span className="text-sm text-muted">Your {symbol} balance</span>
+            <span className="mt-1 text-lg font-semibold text-ink">
+              {balance} {symbol}
+              {balanceNgn !== null && (
+                <span className="text-muted">
+                  {" "}· {fmtNgn(String(balanceNgn))}
+                </span>
+              )}
+            </span>
+          </div>
+
+          {/* Price + change */}
+          <div className="mt-6 px-5">
+            <p className="text-[40px] font-extrabold leading-none text-ink">{fmtNgn(priceNgn)}</p>
+            <div className="mt-2 flex items-center gap-3">
+              <span className="text-sm text-muted">${Number(priceUsd).toLocaleString()} · Market price</span>
+              {changePct !== null && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold"
+                  style={{
+                    color: up ? "#34C759" : "#EF4444",
+                    backgroundColor: up ? "rgba(52,199,89,0.12)" : "rgba(239,68,68,0.12)",
+                  }}
+                >
+                  {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                  {Math.abs(changePct).toFixed(2)}%
+                </span>
+              )}
             </div>
-            {changePct !== null && (
-              <p
-                className="text-sm font-semibold"
-                style={{ color: changePct >= 0 ? "#34C759" : "#EF4444" }}
-              >
-                {changePct >= 0 ? "▲" : "▼"} {Math.abs(changePct).toFixed(2)}%
-              </p>
-            )}
           </div>
 
           {/* Chart */}
-          <div className="mt-4 h-56 px-3">
-            {chartData.length > 1 ? (
-              <Sparkline values={chartData.map((d) => d.v)} up={(changePct ?? 0) >= 0} />
+          <div className="mt-6 h-60 px-1">
+            {values.length > 1 ? (
+              <Sparkline values={values} up={up} />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-muted">
                 {loading ? "Loading chart…" : "Chart unavailable"}
@@ -186,14 +204,14 @@ export default function AssetPage() {
             )}
           </div>
 
-          {/* Range tabs */}
-          <div className="mt-3 flex justify-around px-4">
+          {/* Range segmented control */}
+          <div className="mx-5 mt-4 flex items-center justify-between rounded-full bg-card p-1">
             {RANGES.map((r) => (
               <button
                 key={r}
                 onClick={() => setRange(r)}
-                className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                  range === r ? "bg-white text-black" : "text-muted"
+                className={`flex-1 rounded-full py-2 text-xs font-bold transition-colors ${
+                  range === r ? "bg-brand text-white" : "text-muted"
                 }`}
               >
                 {RANGE_LABEL[r]}
@@ -203,18 +221,18 @@ export default function AssetPage() {
         </>
       )}
 
-      {/* Buy / Sell */}
+      {/* Buy / Sell action bar */}
       {!error && (
-        <div className="fixed inset-x-0 bottom-6 mx-auto flex max-w-[480px] gap-3 px-5">
+        <div className="fixed inset-x-0 bottom-5 z-30 mx-auto flex max-w-[480px] gap-3 px-5">
           <button
             onClick={() => setShowTrade("sell")}
-            className="flex-1 rounded-full bg-card py-4 font-bold text-ink"
+            className="flex-1 rounded-full border border-border bg-card py-4 font-bold text-ink active:scale-[0.98]"
           >
             Sell
           </button>
           <button
             onClick={() => setShowTrade("buy")}
-            className="flex-1 rounded-full bg-brand py-4 font-bold text-white"
+            className="flex-1 rounded-full bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white shadow-lg shadow-brand/30 active:scale-[0.98]"
           >
             Buy
           </button>
@@ -223,8 +241,9 @@ export default function AssetPage() {
 
       {showTrade && (
         <TradeSheet
-          side={showTrade}
+          initialSide={showTrade}
           symbol={symbol}
+          balance={balance}
           onClose={() => setShowTrade(null)}
           onDone={() => {
             setShowTrade(null);
@@ -238,8 +257,8 @@ export default function AssetPage() {
 
 function Sparkline({ values, up }: { values: number[]; up: boolean }) {
   const w = 320;
-  const h = 200;
-  const pad = 6;
+  const h = 220;
+  const pad = 8;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
@@ -251,11 +270,12 @@ function Sparkline({ values, up }: { values: number[]; up: boolean }) {
   const line = pts.map(([x, y], i) => (i === 0 ? `M${x},${y}` : `L${x},${y}`)).join(" ");
   const area = `${line} L${pts[pts.length - 1][0]},${h} L${pts[0][0]},${h} Z`;
   const color = up ? "#34C759" : "#EF4444";
+  const last = pts[pts.length - 1];
   return (
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-full w-full">
       <defs>
         <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -269,6 +289,7 @@ function Sparkline({ values, up }: { values: number[]; up: boolean }) {
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
+      <circle cx={last[0]} cy={last[1]} r="3.5" fill={color} vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
@@ -282,30 +303,38 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function TradeSheet({
-  side,
+  initialSide,
   symbol,
+  balance,
   onClose,
   onDone,
 }: {
-  side: "buy" | "sell";
+  initialSide: "buy" | "sell";
   symbol: AssetSymbol;
+  balance: string;
   onClose: () => void;
   onDone: () => void;
 }) {
+  const [side, setSide] = useState<"buy" | "sell">(initialSide);
   const [amount, setAmount] = useState("");
   const [quote, setQuote] = useState<Awaited<ReturnType<typeof api.createQuote>> | null>(null);
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const inAsset = side === "buy" ? "NGN" : symbol;
-  const outAsset = side === "buy" ? symbol : "NGN";
+  const buyChips = ["5000", "10000", "50000", "100000"];
+
+  function reset() {
+    setQuote(null);
+    setMsg(null);
+  }
 
   async function getQuote() {
     setBusy(true);
     setMsg(null);
     try {
-      const q = await api.createQuote(side, symbol, amount);
-      setQuote(q);
+      setQuote(await api.createQuote(side, symbol, amount));
     } catch (e) {
       setMsg(e instanceof ApiError ? e.message : "Could not get a quote");
     } finally {
@@ -319,8 +348,8 @@ function TradeSheet({
     setMsg(null);
     try {
       await api.executeSwap(quote.quoteId);
-      setMsg("✅ Done!");
-      setTimeout(onDone, 900);
+      setDone(true);
+      setTimeout(onDone, 1100);
     } catch (e) {
       setMsg(e instanceof ApiError ? e.message : "Swap failed");
     } finally {
@@ -329,68 +358,142 @@ function TradeSheet({
   }
 
   const fmtOut = quote
-    ? outAsset === "NGN"
+    ? quote.toAsset === "NGN"
       ? "₦" + (Number(quote.amountOut) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })
       : `${(Number(quote.amountOut) / (symbol === "BTC" ? 1e8 : 1e6)).toFixed(symbol === "BTC" ? 8 : 6)} ${symbol}`
     : "";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full max-w-[480px] rounded-t-3xl bg-card p-6"
+        className="w-full max-w-[480px] rounded-t-[28px] border-t border-border bg-card p-6 pb-8"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="mb-4 text-xl font-bold capitalize text-ink">
-          {side} {symbol}
-        </h2>
+        <div className="mx-auto mb-5 h-1.5 w-10 rounded-full bg-border" />
 
-        <label className="mb-2 block text-sm text-muted">
-          Amount in {inAsset === "NGN" ? "Naira (₦)" : symbol}
-        </label>
-        <input
-          inputMode="decimal"
-          value={amount}
-          onChange={(e) => {
-            setAmount(e.target.value);
-            setQuote(null);
-          }}
-          placeholder={inAsset === "NGN" ? "50000" : "0.001"}
-          className="mb-4 w-full rounded-xl border border-border bg-surface px-4 py-3 text-ink outline-none"
-        />
-
-        {quote && (
-          <div className="mb-4 rounded-xl bg-surface p-4 text-sm">
-            <div className="flex justify-between text-muted">
-              <span>You receive</span>
-              <span className="font-bold text-ink">{fmtOut}</span>
+        {done ? (
+          <div className="py-8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#34C759]/15 text-3xl">
+              ✅
             </div>
-            <div className="mt-1 flex justify-between text-muted">
-              <span>Rate</span>
-              <span>₦{Number(quote.rate).toLocaleString()} / {symbol}</span>
-            </div>
+            <p className="text-lg font-bold text-ink">
+              {side === "buy" ? "Purchase complete" : "Sale complete"}
+            </p>
+            <p className="mt-1 text-sm text-muted">Your balance has been updated.</p>
           </div>
-        )}
-
-        {msg && <p className="mb-3 text-center text-sm text-ink">{msg}</p>}
-
-        {!quote ? (
-          <button
-            onClick={getQuote}
-            disabled={busy || !amount}
-            className="w-full rounded-full bg-brand py-4 font-bold text-white disabled:opacity-50"
-          >
-            {busy ? "Getting quote…" : "Get quote"}
-          </button>
         ) : (
-          <button
-            onClick={confirm}
-            disabled={busy}
-            className="w-full rounded-full bg-brand py-4 font-bold text-white disabled:opacity-50"
-          >
-            {busy ? "Processing…" : `Confirm ${side}`}
-          </button>
+          <>
+            {/* Buy/Sell segmented */}
+            <div className="mb-5 flex rounded-full bg-surface p-1">
+              {(["buy", "sell"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => {
+                    setSide(s);
+                    setAmount("");
+                    reset();
+                  }}
+                  className={`flex-1 rounded-full py-2.5 text-sm font-bold capitalize transition-colors ${
+                    side === s ? "bg-brand text-white" : "text-muted"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+
+            <label className="mb-2 block text-sm text-muted">
+              {side === "buy" ? "You pay (Naira)" : `You sell (${symbol})`}
+            </label>
+            <div className="relative mb-3">
+              <input
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  reset();
+                }}
+                placeholder={side === "buy" ? "50,000" : "0.001"}
+                className="w-full rounded-2xl border border-border bg-surface px-4 py-4 text-2xl font-bold text-ink outline-none focus:border-brand"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted">
+                {inAsset}
+              </span>
+            </div>
+
+            {/* Quick chips */}
+            {side === "buy" ? (
+              <div className="mb-4 flex gap-2">
+                {buyChips.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => {
+                      setAmount(c);
+                      reset();
+                    }}
+                    className="flex-1 rounded-full bg-surface py-2 text-xs font-semibold text-ink"
+                  >
+                    ₦{Number(c).toLocaleString()}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="mb-4 flex gap-2">
+                <button
+                  onClick={() => {
+                    setAmount(balance);
+                    reset();
+                  }}
+                  className="flex-1 rounded-full bg-surface py-2 text-xs font-semibold text-ink"
+                >
+                  Max ({balance} {symbol})
+                </button>
+              </div>
+            )}
+
+            {quote && (
+              <div className="mb-4 space-y-2 rounded-2xl bg-surface p-4 text-sm">
+                <Row label="You receive" value={fmtOut} strong />
+                <Row label="Rate" value={`₦${Number(quote.rate).toLocaleString()} / ${symbol}`} />
+                <Row label="Includes spread" value="1.5%" />
+              </div>
+            )}
+
+            {msg && (
+              <p className="mb-3 rounded-lg bg-[#EF4444]/10 px-3 py-2 text-center text-sm text-[#EF4444]">
+                {msg}
+              </p>
+            )}
+
+            {!quote ? (
+              <button
+                onClick={getQuote}
+                disabled={busy || !amount}
+                className="w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white shadow-lg shadow-brand/30 disabled:opacity-50"
+              >
+                {busy ? "Getting quote…" : "Get quote"}
+              </button>
+            ) : (
+              <button
+                onClick={confirm}
+                disabled={busy}
+                className="w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white shadow-lg shadow-brand/30 disabled:opacity-50"
+              >
+                {busy ? "Processing…" : `Confirm ${side}`}
+              </button>
+            )}
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-muted">{label}</span>
+      <span className={strong ? "font-bold text-ink" : "text-ink"}>{value}</span>
     </div>
   );
 }
