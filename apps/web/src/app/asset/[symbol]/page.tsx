@@ -6,6 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import {
   api,
   ApiError,
+  getAccessToken,
   type AssetSymbol,
   type Candle,
   type ChartRange,
@@ -44,11 +45,20 @@ export default function AssetPage() {
   const [balance, setBalance] = useState<string>("0");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
   const [showTrade, setShowTrade] = useState<null | "buy" | "sell">(null);
 
   const loadCore = useCallback(async () => {
     setError(null);
+    setNeedsLogin(false);
     try {
+      // Distinguish "not signed in" from "signed in but the API rejected the token".
+      const token = await getAccessToken();
+      if (!token) {
+        setNeedsLogin(true);
+        setError("Please log in to view this asset.");
+        return;
+      }
       await api.ensureProvisioned();
       const [price, bals] = await Promise.all([api.getPrice(symbol), api.getBalances()]);
       setPriceNgn(price.priceNgn);
@@ -57,7 +67,10 @@ export default function AssetPage() {
       setBalance(b?.availableFormatted ?? "0");
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        setError("Please log in to view this asset.");
+        // We had a token but the API rejected it — surface the real reason
+        // (e.g. SUPABASE_JWT_SECRET misconfigured) instead of a generic prompt.
+        const detail = (e.body as { error?: string } | undefined)?.error;
+        setError(`Sign-in not accepted by the server: ${detail ?? "unauthorized"}`);
       } else {
         setError(e instanceof Error ? e.message : "Failed to load");
       }
@@ -128,12 +141,19 @@ export default function AssetPage() {
       {error ? (
         <div className="px-5 py-10 text-center">
           <p className="text-muted">{error}</p>
-          {error.includes("log in") && (
+          {needsLogin ? (
             <button
               onClick={() => router.push("/login")}
               className="mt-4 rounded-full bg-brand px-6 py-2 font-semibold text-white"
             >
               Go to login
+            </button>
+          ) : (
+            <button
+              onClick={loadCore}
+              className="mt-4 rounded-full bg-card px-6 py-2 font-semibold text-ink"
+            >
+              Retry
             </button>
           )}
         </div>

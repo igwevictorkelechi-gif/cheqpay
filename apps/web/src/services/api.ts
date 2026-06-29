@@ -11,9 +11,13 @@ export class ApiError extends Error {
   }
 }
 
-async function authHeader(): Promise<Record<string, string>> {
+export async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  return data.session?.access_token ?? null;
+}
+
+async function authHeader(): Promise<Record<string, string>> {
+  const token = await getAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
