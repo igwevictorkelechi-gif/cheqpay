@@ -54,6 +54,13 @@ function AssetCard({
   );
 }
 
+/** Resolve which API call a from/to pair uses. */
+function resolveMode(fromSym: ConvertSymbol, toSym: ConvertSymbol) {
+  if (fromSym === "NGN") return { kind: "buy" as const, crypto: toSym as "BTC" | "USDT" };
+  if (toSym === "NGN") return { kind: "sell" as const, crypto: fromSym as "BTC" | "USDT" };
+  return { kind: "convert" as const, crypto: fromSym as "BTC" | "USDT" };
+}
+
 export default function ConvertPage() {
   const router = useRouter();
   const [fromSym, setFromSym] = useState<ConvertSymbol>("NGN");
@@ -80,42 +87,39 @@ export default function ConvertPage() {
     })();
   }, []);
 
-  // The backend swaps NGN <-> crypto only. Keep exactly one side as NGN.
-  function choose(side: Side, sym: ConvertSymbol) {
-    setPicker(null);
-    if (side === "from") {
-      if (sym === fromSym) return;
-      setFromSym(sym);
-      if (sym !== "NGN" && toSym !== "NGN") setToSym("NGN");
-      if (sym === "NGN" && toSym === "NGN") setToSym("BTC");
-    } else {
-      if (sym === toSym) return;
-      setToSym(sym);
-      if (sym !== "NGN" && fromSym !== "NGN") setFromSym("NGN");
-      if (sym === "NGN" && fromSym === "NGN") setFromSym("BTC");
-    }
+  function reset() {
     setAmount("0");
     setOut("0");
     setRate(null);
     setError(null);
+  }
+
+  function choose(side: Side, sym: ConvertSymbol) {
+    setPicker(null);
+    if (side === "from") {
+      if (sym === fromSym) return;
+      // Picking the same asset as the other side swaps them.
+      if (sym === toSym) setToSym(fromSym);
+      setFromSym(sym);
+    } else {
+      if (sym === toSym) return;
+      if (sym === fromSym) setFromSym(toSym);
+      setToSym(sym);
+    }
+    reset();
   }
 
   function flip() {
     setFromSym(toSym);
     setToSym(fromSym);
-    setAmount("0");
-    setOut("0");
-    setRate(null);
-    setError(null);
+    reset();
   }
 
-  const side: "buy" | "sell" = fromSym === "NGN" ? "buy" : "sell";
-  const cryptoAsset = (fromSym === "NGN" ? toSym : fromSym) as "BTC" | "USDT";
+  const mode = resolveMode(fromSym, toSym);
 
-  // Debounced live quote whenever the amount/assets change.
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requote = useCallback(
-    (amt: string, sd: "buy" | "sell", crypto: "BTC" | "USDT", toS: ConvertSymbol) => {
+    (amt: string, f: ConvertSymbol, t: ConvertSymbol) => {
       if (debounce.current) clearTimeout(debounce.current);
       const n = parseFloat(amt || "0") || 0;
       if (n <= 0) {
@@ -128,8 +132,12 @@ export default function ConvertPage() {
         setQuoting(true);
         setError(null);
         try {
-          const q = await api.createQuote(sd, crypto, amt);
-          setOut(formatMinor(q.amountOut, toS));
+          const m = resolveMode(f, t);
+          const q =
+            m.kind === "convert"
+              ? await api.createConvertQuote(f as "BTC" | "USDT", t as "BTC" | "USDT", amt)
+              : await api.createQuote(m.kind, m.crypto, amt);
+          setOut(formatMinor(q.amountOut, t));
           setRate(q.rate);
         } catch (e) {
           setOut("0");
@@ -144,15 +152,15 @@ export default function ConvertPage() {
   );
 
   useEffect(() => {
-    requote(amount, side, cryptoAsset, toSym);
-  }, [amount, side, cryptoAsset, toSym, requote]);
+    requote(amount, fromSym, toSym);
+  }, [amount, fromSym, toSym, requote]);
 
   const press = (key: string) => {
     setAmount((prev) => {
       if (key === "del") return prev.length <= 1 ? "0" : prev.slice(0, -1);
       if (key === ".") return prev.includes(".") ? prev : prev + ".";
-      const next = prev === "0" ? key : prev + key;
-      return next.replace(/^0+(\d)/, "$1").length > 14 ? prev : next.replace(/^0+(\d)/, "$1");
+      const next = (prev === "0" ? key : prev + key).replace(/^0+(\d)/, "$1");
+      return next.length > 14 ? prev : next;
     });
   };
 
@@ -160,13 +168,22 @@ export default function ConvertPage() {
 
   const canPreview = (parseFloat(amount) || 0) > 0 && !!rate && !error;
 
+  const rateLine = (() => {
+    if (error) return null;
+    if (!rate) return "Enter an amount to see the rate";
+    if (mode.kind === "convert") {
+      return `1 ${fromSym} ≈ ${Number(rate).toLocaleString("en-US", {
+        maximumFractionDigits: 8,
+      })} ${toSym}`;
+    }
+    return `1 ${mode.crypto} ≈ ₦${Number(rate).toLocaleString("en-NG", {
+      maximumFractionDigits: 2,
+    })}`;
+  })();
+
   const previewSwap = () => {
     if (!canPreview) return;
-    const q = new URLSearchParams({
-      amount,
-      fromSym,
-      toSym,
-    }).toString();
+    const q = new URLSearchParams({ amount, fromSym, toSym }).toString();
     router.push(`/convert/confirm?${q}`);
   };
 
@@ -211,16 +228,11 @@ export default function ConvertPage() {
         />
       </div>
 
-      {/* Rate / error line */}
       <div className="px-5 pt-3 text-center text-sm">
         {error ? (
           <span className="text-red-400">{error}</span>
-        ) : rate ? (
-          <span className="text-muted">
-            1 {cryptoAsset} ≈ ₦{Number(rate).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
-          </span>
         ) : (
-          <span className="text-muted">Enter an amount to see the rate</span>
+          <span className="text-muted">{rateLine}</span>
         )}
       </div>
 
@@ -247,7 +259,6 @@ export default function ConvertPage() {
         </button>
       </div>
 
-      {/* Asset picker sheet */}
       {picker && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/60"

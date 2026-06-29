@@ -48,6 +48,23 @@ export const quoteCreateSchema = z.object({
 });
 export type QuoteCreateInput = z.infer<typeof quoteCreateSchema>;
 
+/**
+ * Create a crypto-to-crypto convert quote (e.g. BTC -> USDT). Both legs are
+ * crypto; the price is derived from each asset's USDT spot. `amount` is a
+ * decimal string in the FROM asset.
+ */
+export const convertQuoteSchema = z
+  .object({
+    fromAsset: z.enum(["BTC", "USDT"]),
+    toAsset: z.enum(["BTC", "USDT"]),
+    amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount"),
+  })
+  .refine((v) => v.fromAsset !== v.toAsset, {
+    message: "fromAsset and toAsset must differ",
+    path: ["toAsset"],
+  });
+export type ConvertQuoteInput = z.infer<typeof convertQuoteSchema>;
+
 /** Execute a previously issued quote. */
 export const swapExecuteSchema = z.object({
   quoteId: z.string().uuid(),

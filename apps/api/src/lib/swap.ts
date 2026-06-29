@@ -7,7 +7,12 @@ import {
 } from "@cheqpay/db";
 import { ApiError } from "./http";
 import { isWithinSingleTxLimit } from "./kyc";
-import { computeSwap, type SwapSide } from "./rates";
+import {
+  computeCryptoConvert,
+  computeSwap,
+  cryptoToNgnKobo,
+  type SwapSide,
+} from "./rates";
 import { getSwapSpreadBps, getUsdtNgnRate } from "./settings";
 import { getPriceFeed } from "@/market";
 
@@ -64,6 +69,65 @@ export async function createQuote(params: {
 }
 
 /**
+ * Create a crypto-to-crypto convert quote (e.g. BTC -> USDT). Priced from each
+ * asset's USDT spot with the business spread applied once. The NGN value of the
+ * input is used only to enforce the tier single-tx limit.
+ */
+export async function createConvertQuote(params: {
+  userId: string;
+  tier: number;
+  fromAsset: Asset; // BTC | USDT
+  toAsset: Asset; // BTC | USDT
+  amountInMinor: bigint;
+}) {
+  if (params.fromAsset === params.toAsset) {
+    throw new ApiError(422, "Cannot convert an asset to itself", "same_asset");
+  }
+  const usdtNgnRate = await getUsdtNgnRate();
+  if (usdtNgnRate === null) {
+    throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
+  }
+  const spreadBps = await getSwapSpreadBps();
+  const feed = getPriceFeed();
+  const [fromUsdtPrice, toUsdtPrice] = await Promise.all([
+    feed.getSpotUsdt(params.fromAsset),
+    feed.getSpotUsdt(params.toAsset),
+  ]);
+
+  const { amountOutMinor, rate } = computeCryptoConvert({
+    fromAsset: params.fromAsset,
+    toAsset: params.toAsset,
+    amountInMinor: params.amountInMinor,
+    fromUsdtPrice,
+    toUsdtPrice,
+    spreadBps,
+  });
+
+  // Enforce the tier single-tx limit on the NGN value of the input leg.
+  const ngnValueKobo = cryptoToNgnKobo(
+    params.amountInMinor,
+    params.fromAsset,
+    fromUsdtPrice,
+    new Prisma.Decimal(usdtNgnRate)
+  );
+  if (!isWithinSingleTxLimit(params.tier, ngnValueKobo)) {
+    throw new ApiError(403, "Amount exceeds your per-transaction limit", "single_tx_limit");
+  }
+
+  return prisma.quote.create({
+    data: {
+      userId: params.userId,
+      fromAsset: params.fromAsset,
+      toAsset: params.toAsset,
+      rate,
+      amountIn: params.amountInMinor,
+      amountOut: amountOutMinor,
+      expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
+    },
+  });
+}
+
+/**
  * Execute a quote against treasury inventory: debit the from-asset, credit the
  * to-asset, atomically and idempotently. Quote must be unexpired, unconsumed,
  * and owned by the caller.
@@ -91,6 +155,8 @@ export async function executeSwap(params: {
     return { transactionId: existing.id, status: existing.status };
   }
 
+  // A convert has crypto on both legs; otherwise one leg is NGN (buy/sell).
+  const isConvert = quote.fromAsset !== Asset.NGN && quote.toAsset !== Asset.NGN;
   const side: SwapSide = quote.fromAsset === Asset.NGN ? "buy" : "sell";
   const cryptoAsset = side === "buy" ? quote.toAsset : quote.fromAsset;
   const cryptoAmountMinor = side === "buy" ? quote.amountOut : quote.amountIn;
@@ -135,6 +201,7 @@ export async function executeSwap(params: {
         idempotencyKey: params.idempotencyKey,
         quoteId: quote.id,
         metadata: {
+          kind: isConvert ? "convert" : side,
           side,
           fromAsset: quote.fromAsset,
           toAsset: quote.toAsset,

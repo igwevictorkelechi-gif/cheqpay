@@ -105,6 +105,18 @@ export const api = {
     });
   },
 
+  /** Crypto-to-crypto convert quote, e.g. BTC -> USDT. */
+  createConvertQuote(
+    fromAsset: AssetSymbol,
+    toAsset: AssetSymbol,
+    amount: string
+  ): Promise<Quote> {
+    return apiFetch("/api/quotes/convert", {
+      method: "POST",
+      body: JSON.stringify({ fromAsset, toAsset, amount }),
+    });
+  },
+
   executeSwap(quoteId: string): Promise<{ transactionId: string; status: string }> {
     return apiFetch("/api/swaps", {
       method: "POST",

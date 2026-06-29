@@ -74,6 +74,51 @@ export function computeSwap(params: {
   return { amountOutMinor, rate: eff };
 }
 
+/**
+ * Compute a crypto-to-crypto convert (e.g. BTC -> USDT), money-safe:
+ *  - value the input in USDT using the from-asset's USDT spot
+ *  - apply the full business spread once (user receives slightly less)
+ *  - convert that USDT value into the to-asset at its USDT spot
+ *  - FLOOR to integer minor units (never over-credit)
+ *
+ * `rate` is stored as TO-asset whole units per 1 FROM-asset whole unit.
+ */
+export function computeCryptoConvert(params: {
+  fromAsset: Asset; // BTC | USDT
+  toAsset: Asset; // BTC | USDT
+  amountInMinor: bigint;
+  fromUsdtPrice: Decimal; // USDT per 1 from-asset (USDT itself = 1)
+  toUsdtPrice: Decimal; // USDT per 1 to-asset (USDT itself = 1)
+  spreadBps: number;
+}): SwapComputation {
+  if (params.amountInMinor <= 0n) {
+    throw new ApiError(422, "Amount must be positive", "bad_amount");
+  }
+  if (params.fromAsset === params.toAsset) {
+    throw new ApiError(422, "Cannot convert an asset to itself", "same_asset");
+  }
+  if (params.fromUsdtPrice.lte(0) || params.toUsdtPrice.lte(0)) {
+    throw new ApiError(500, "Invalid price", "bad_price");
+  }
+  const fromDecimals = ASSET_DECIMALS[params.fromAsset];
+  const toDecimals = ASSET_DECIMALS[params.toAsset];
+  const s = new D(params.spreadBps).div(10_000);
+
+  const fromWhole = new D(params.amountInMinor.toString()).div(
+    new D(10).pow(fromDecimals)
+  );
+  const valueUsdt = fromWhole.mul(params.fromUsdtPrice).mul(new D(1).sub(s));
+  const toWhole = valueUsdt.div(params.toUsdtPrice);
+  const amountOutMinor = floorToBigInt(toWhole.mul(new D(10).pow(toDecimals)));
+
+  if (amountOutMinor <= 0n) {
+    throw new ApiError(422, "Amount too small to convert", "dust_amount");
+  }
+  // Effective TO per 1 FROM (after spread).
+  const rate = params.fromUsdtPrice.div(params.toUsdtPrice).mul(new D(1).sub(s));
+  return { amountOutMinor, rate };
+}
+
 function floorToBigInt(d: Decimal): bigint {
   return BigInt(d.floor().toFixed(0));
 }

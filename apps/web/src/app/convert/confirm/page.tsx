@@ -38,6 +38,7 @@ function ConfirmInner() {
   const fromSym = (params.get("fromSym") || "NGN") as ConvertSymbol;
   const toSym = (params.get("toSym") || "BTC") as ConvertSymbol;
 
+  const isConvert = fromSym !== "NGN" && toSym !== "NGN";
   const side: "buy" | "sell" = fromSym === "NGN" ? "buy" : "sell";
   const cryptoAsset = (fromSym === "NGN" ? toSym : fromSym) as "BTC" | "USDT";
 
@@ -53,7 +54,13 @@ function ConfirmInner() {
     setError(null);
     try {
       await api.ensureProvisioned();
-      const q = await api.createQuote(side, cryptoAsset, amount);
+      const q = isConvert
+        ? await api.createConvertQuote(
+            fromSym as "BTC" | "USDT",
+            toSym as "BTC" | "USDT",
+            amount
+          )
+        : await api.createQuote(side, cryptoAsset, amount);
       setQuoteId(q.quoteId);
       setOut(formatMinor(q.amountOut, toSym));
       setRate(q.rate);
@@ -62,7 +69,7 @@ function ConfirmInner() {
     } finally {
       setLoading(false);
     }
-  }, [side, cryptoAsset, amount, toSym]);
+  }, [isConvert, side, cryptoAsset, amount, fromSym, toSym]);
 
   useEffect(() => {
     fetchQuote();
@@ -127,11 +134,15 @@ function ConfirmInner() {
           <Row
             label="Rate"
             value={
-              rate
-                ? `1 ${cryptoAsset} = ₦${Number(rate).toLocaleString("en-NG", {
+              !rate
+                ? "—"
+                : isConvert
+                ? `1 ${fromSym} = ${Number(rate).toLocaleString("en-US", {
+                    maximumFractionDigits: 8,
+                  })} ${toSym}`
+                : `1 ${cryptoAsset} = ₦${Number(rate).toLocaleString("en-NG", {
                     maximumFractionDigits: 2,
                   })}`
-                : "—"
             }
           />
           <Row label="Estimated time" value="~ instant" />
