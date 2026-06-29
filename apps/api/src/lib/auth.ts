@@ -1,4 +1,4 @@
-import { jwtVerify } from "jose";
+import { decodeJwt } from "jose";
 import { getEnv } from "./env";
 import { AuthError, ForbiddenError } from "./http";
 
@@ -13,43 +13,58 @@ export interface AuthUser {
   isAdmin?: boolean;
 }
 
-/**
- * Verify a Supabase-issued JWT (HS256, signed with the project's JWT secret).
- * Returns the authenticated user claims, or throws AuthError.
- *
- * `secret` is injectable for tests; defaults to SUPABASE_JWT_SECRET.
- */
-export async function verifySupabaseJwt(
-  token: string,
-  secret?: string
-): Promise<AuthUser> {
-  const s = secret ?? getEnv().SUPABASE_JWT_SECRET;
-  if (!s) {
-    throw new AuthError("Auth is not configured (SUPABASE_JWT_SECRET missing)");
-  }
+// Public project identifiers (the anon key ships in the client bundle), used to
+// validate user tokens against Supabase. Overridable via env.
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ??
+  process.env.NEXT_PUBLIC_SUPABASE_URL ??
+  "https://xttgnswgeffyybjfjlkp.supabase.co";
+const SUPABASE_ANON_KEY =
+  process.env.SUPABASE_ANON_KEY ??
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dGduc3dnZWZmeXliamZqbGtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NjIzMzMsImV4cCI6MjA5MjAzODMzM30.RWUrrTINfqPJ_H6vbFtLZ7uf0okWb5gUYJy9LK9NlCQ";
 
-  let payload;
+/**
+ * Validate a Supabase user access token by asking Supabase to resolve it
+ * (`GET /auth/v1/user`). This works regardless of the project's JWT signing
+ * method (HS256 secret or asymmetric keys) — no shared secret to misconfigure.
+ * The `aal` (MFA level) is read from the token after Supabase confirms it.
+ */
+export async function verifySupabaseJwt(token: string): Promise<AuthUser> {
+  let res: Response;
   try {
-    ({ payload } = await jwtVerify(token, new TextEncoder().encode(s), {
-      algorithms: ["HS256"],
-    }));
+    res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: SUPABASE_ANON_KEY },
+    });
   } catch {
+    throw new AuthError("Could not reach the auth server");
+  }
+  if (!res.ok) {
     throw new AuthError("Invalid or expired token");
   }
-
-  if (!payload.sub) {
-    throw new AuthError("Invalid token: missing subject");
+  const u = (await res.json()) as {
+    id?: string;
+    email?: string;
+    phone?: string;
+    app_metadata?: { role?: unknown };
+  };
+  if (!u.id) {
+    throw new AuthError("Invalid token: no user");
   }
 
-  const appMeta = (payload.app_metadata ?? {}) as { role?: unknown };
+  let aal: string | undefined;
+  try {
+    aal = (decodeJwt(token) as { aal?: string }).aal;
+  } catch {
+    /* token already validated by Supabase; aal is best-effort */
+  }
 
   return {
-    id: String(payload.sub),
-    email: typeof payload.email === "string" ? payload.email : undefined,
-    phone: typeof payload.phone === "string" ? payload.phone : undefined,
-    role: typeof payload.role === "string" ? payload.role : undefined,
-    aal: typeof payload.aal === "string" ? payload.aal : undefined,
-    isAdmin: appMeta.role === "admin",
+    id: u.id,
+    email: u.email,
+    phone: u.phone,
+    aal,
+    isAdmin: u.app_metadata?.role === "admin",
   };
 }
 
