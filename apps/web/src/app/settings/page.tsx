@@ -139,14 +139,21 @@ export default function SettingsPage() {
               <p className="text-sm text-gray-600">support@cheqpay.com</p>
             </a>
             <a
-              href="#"
+              href="/faq"
+              className="block p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-200"
+            >
+              <p className="font-medium">FAQs</p>
+              <p className="text-sm text-gray-600">Answers to common questions</p>
+            </a>
+            <a
+              href="/privacy"
               className="block p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-200"
             >
               <p className="font-medium">Privacy Policy</p>
               <p className="text-sm text-gray-600">View our privacy policy</p>
             </a>
             <a
-              href="#"
+              href="/terms"
               className="block p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-200"
             >
               <p className="font-medium">Terms of Service</p>

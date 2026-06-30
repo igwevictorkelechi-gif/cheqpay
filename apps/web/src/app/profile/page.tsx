@@ -37,7 +37,12 @@ const items: Item[] = [
   {
     title: "About us",
     subtitle: "FAQs, privacy policy, our blog, contact us",
-    href: "/settings",
+    href: "/about",
+  },
+  {
+    title: "Legal & policies",
+    subtitle: "Privacy policy, terms of service, AML & cookies",
+    href: "/legal",
   },
 ];
 
@@ -46,15 +51,18 @@ function FeatureCard({
   title,
   subtitle,
   dark,
+  onClick,
 }: {
   icon: LucideIcon;
   title: string;
   subtitle: string;
   dark?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <div
-      className="flex flex-1 flex-col justify-between rounded-3xl p-4"
+    <button
+      onClick={onClick}
+      className="flex flex-1 flex-col justify-between rounded-3xl p-4 text-left active:scale-95"
       style={{
         minHeight: 130,
         backgroundColor: dark ? "#161320" : "#3A3055",
@@ -70,7 +78,7 @@ function FeatureCard({
         <p className="text-base font-bold text-ink">{title}</p>
         <p className="mt-0.5 text-xs text-muted">{subtitle}</p>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -123,12 +131,14 @@ export default function ProfilePage() {
             icon={Users}
             title="Join CheqPay Tribe"
             subtitle="For exclusive updates"
+            onClick={() => router.push("/about")}
           />
           <FeatureCard
             icon={MessageSquare}
             title="Need help?"
             subtitle="Chat with us"
             dark
+            onClick={() => router.push("/support")}
           />
         </div>
 
