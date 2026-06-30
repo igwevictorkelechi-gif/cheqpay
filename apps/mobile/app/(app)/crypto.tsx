@@ -1,7 +1,9 @@
-import { View, Text, ScrollView } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore, useUIStore } from '@/store';
+import { api, ApiError, type LedgerTransaction } from '@/services/api';
 import {
   colors,
   TopBar,
@@ -11,85 +13,18 @@ import {
   Card,
   SectionHeader,
 } from '@/components/brand';
+import { TxnRow } from '@/components/TxnRow';
 
-type Asset = {
-  symbol: string;
-  name: string;
-  amount: string;
-  fiat: string;
-  bg: string;
-  glyph: string;
-  glyphColor: string;
-};
-
-const assets: Asset[] = [
-  {
-    symbol: 'BTC',
-    name: 'Bitcoin',
-    amount: '0 BTC',
-    fiat: '0 NGN',
-    bg: '#F7931A',
-    glyph: '₿',
-    glyphColor: '#FFFFFF',
-  },
-  {
-    symbol: 'USDT',
-    name: 'Tether',
-    amount: '0 USDT',
-    fiat: '0 NGN',
-    bg: '#26A17B',
-    glyph: '₮',
-    glyphColor: '#FFFFFF',
-  },
+const META = [
+  { symbol: 'BTC', name: 'Bitcoin', bg: '#F7931A', glyph: '₿' },
+  { symbol: 'USDT', name: 'Tether', bg: '#26A17B', glyph: '₮' },
 ];
+const CRYPTO_TYPES = new Set(['BUY', 'SELL', 'CONVERT']);
 
-type CryptoTx = {
-  title: string;
-  date: string;
-  amount: string;
-  fiat: string;
-  positive: boolean;
-  bg: string;
-  glyph: string;
-};
-
-const transactions: CryptoTx[] = [
-  {
-    title: 'Sold BTC',
-    date: 'Jun 21, 2026',
-    amount: '-0.00069782 BTC',
-    fiat: '60,678.8 NGN',
-    positive: false,
-    bg: '#F7931A',
-    glyph: '₿',
-  },
-  {
-    title: 'Received BTC',
-    date: 'Jun 21, 2026',
-    amount: '0.00069782 BTC',
-    fiat: '60,655.17 NGN',
-    positive: true,
-    bg: '#F7931A',
-    glyph: '₿',
-  },
-  {
-    title: 'Sold USDT',
-    date: 'Jun 21, 2026',
-    amount: '-2,000 USDT',
-    fiat: '2,000 NGN',
-    positive: false,
-    bg: '#26A17B',
-    glyph: '₮',
-  },
-];
-
-function CoinIcon({ bg, glyph, color }: { bg: string; glyph: string; color: string }) {
+function CoinIcon({ bg, glyph }: { bg: string; glyph: string }) {
   return (
-    <View
-      className="w-11 h-11 rounded-full items-center justify-center"
-      style={{ backgroundColor: bg }}
-    >
-      <Text style={{ color, fontSize: 20, fontWeight: '700' }}>{glyph}</Text>
+    <View className="w-11 h-11 rounded-full items-center justify-center" style={{ backgroundColor: bg }}>
+      <Text style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '700' }}>{glyph}</Text>
     </View>
   );
 }
@@ -98,24 +33,82 @@ export default function CryptoScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const { showBalance, toggleBalance } = useUIStore();
+  const [bal, setBal] = useState<Record<string, string>>({});
+  const [ngn, setNgn] = useState<Record<string, number>>({});
+  const [txns, setTxns] = useState<LedgerTransaction[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function load() {
+    try {
+      const refresh = async () => {
+        const [{ balances }, btc, usdt, txRes] = await Promise.all([
+          api.getBalances(),
+          api.getPrice('BTC').catch(() => null),
+          api.getPrice('USDT').catch(() => null),
+          api.getTransactions(20).catch(() => ({ transactions: [] as LedgerTransaction[] })),
+        ]);
+        const map: Record<string, string> = {};
+        for (const b of balances) map[b.asset] = b.availableFormatted;
+        const prices: Record<string, number> = {
+          BTC: btc?.priceNgn ? Number(btc.priceNgn) : 0,
+          USDT: usdt?.priceNgn ? Number(usdt.priceNgn) : 0,
+        };
+        setBal(map);
+        setNgn({
+          BTC: Number(map.BTC ?? 0) * prices.BTC,
+          USDT: Number(map.USDT ?? 0) * prices.USDT,
+        });
+        setTxns(
+          txRes.transactions.filter(
+            (t) => CRYPTO_TYPES.has(t.type) || t.asset === 'BTC' || t.asset === 'USDT'
+          )
+        );
+      };
+      try {
+        await refresh();
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 404 || e.status === 401)) {
+          await api.ensureProvisioned();
+          await refresh();
+        }
+      }
+    } catch {
+      /* keep last values */
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, [user?.id]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
+  const totalNgn = (ngn.BTC ?? 0) + (ngn.USDT ?? 0);
+  const fmtNgn = (n: number) =>
+    '₦' + n.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 24 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <TopBar
           name={user?.full_name}
           onAvatarPress={() => router.push('/(app)/profile')}
           icons={[
-            { name: 'search-outline' },
+            { name: 'search-outline', onPress: () => router.push('/(app)/transactions') },
             { name: showBalance ? 'eye-outline' : 'eye-off-outline', onPress: toggleBalance },
             { name: 'notifications-outline' },
           ]}
         />
 
-        <BalanceBlock label="Total Crypto Balance" amount={showBalance ? '₦0.00' : '₦••••'} />
+        <BalanceBlock label="Total Crypto Balance" amount={showBalance ? fmtNgn(totalNgn) : '₦••••'} />
 
         <ActionRow>
           <CircleAction icon="trending-up" label="Trade" onPress={() => router.push('/(app)/convert')} />
@@ -126,13 +119,13 @@ export default function CryptoScreen() {
         {/* Assets */}
         <View className="px-5 mb-6">
           <Card>
-            {assets.map((asset, i) => (
+            {META.map((asset, i) => (
               <View
                 key={asset.symbol}
                 className={`flex-row items-center justify-between ${i > 0 ? 'mt-5' : ''}`}
               >
                 <View className="flex-row items-center">
-                  <CoinIcon bg={asset.bg} glyph={asset.glyph} color={asset.glyphColor} />
+                  <CoinIcon bg={asset.bg} glyph={asset.glyph} />
                   <View className="ml-3">
                     <Text className="text-ink text-lg font-bold">{asset.symbol}</Text>
                     <Text className="text-muted text-sm">{asset.name}</Text>
@@ -140,9 +133,11 @@ export default function CryptoScreen() {
                 </View>
                 <View className="items-end">
                   <Text className="text-ink text-lg font-bold">
-                    {showBalance ? asset.amount : '••••'}
+                    {showBalance ? `${bal[asset.symbol] ?? '0'} ${asset.symbol}` : '••••'}
                   </Text>
-                  <Text className="text-muted text-sm">{asset.fiat}</Text>
+                  <Text className="text-muted text-sm">
+                    {showBalance ? fmtNgn(ngn[asset.symbol] ?? 0) : '••••'}
+                  </Text>
                 </View>
               </View>
             ))}
@@ -152,31 +147,19 @@ export default function CryptoScreen() {
         {/* Transactions */}
         <View className="px-5">
           <SectionHeader title="Transactions" onPress={() => router.push('/(app)/transactions')} />
-          <Card>
-            {transactions.map((tx, i) => (
-              <View
-                key={`${tx.title}-${i}`}
-                className={`flex-row items-center justify-between ${i > 0 ? 'mt-5' : ''}`}
-              >
-                <View className="flex-row items-center flex-1">
-                  <CoinIcon bg={tx.bg} glyph={tx.glyph} color="#FFFFFF" />
-                  <View className="ml-3">
-                    <Text className="text-ink text-base font-bold">{tx.title}</Text>
-                    <Text className="text-muted text-sm">{tx.date}</Text>
-                  </View>
-                </View>
-                <View className="items-end">
-                  <Text
-                    className="text-base font-bold"
-                    style={{ color: tx.positive ? colors.positive : colors.ink }}
-                  >
-                    {tx.amount}
-                  </Text>
-                  <Text className="text-muted text-sm">{tx.fiat}</Text>
-                </View>
-              </View>
-            ))}
-          </Card>
+          {txns.length === 0 ? (
+            <Card>
+              <Text className="text-muted text-sm text-center py-2">
+                Your crypto transactions will appear here.
+              </Text>
+            </Card>
+          ) : (
+            <Card>
+              {txns.slice(0, 6).map((t, i) => (
+                <TxnRow key={t.id} t={t} divider={i > 0} />
+              ))}
+            </Card>
+          )}
         </View>
       </ScrollView>
     </View>

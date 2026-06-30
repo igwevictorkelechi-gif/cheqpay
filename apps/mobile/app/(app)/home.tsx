@@ -1,16 +1,9 @@
 import { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
-} from 'react-native';
+import { View, Text, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useAuthStore, useWalletStore, useUIStore } from '@/store';
-import { walletService } from '@/services/wallet';
+import { useAuthStore, useUIStore } from '@/store';
+import { api, ApiError, type LedgerTransaction } from '@/services/api';
 import {
   colors,
   TopBar,
@@ -21,56 +14,53 @@ import {
   NairaFlag,
   SectionHeader,
 } from '@/components/brand';
+import { TxnRow } from '@/components/TxnRow';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const { wallet, setWallet, setVirtualAccount } = useWalletStore();
   const { showBalance, toggleBalance } = useUIStore();
-  const [loading, setLoading] = useState(true);
+  const [ngn, setNgn] = useState(0);
+  const [txns, setTxns] = useState<LedgerTransaction[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadWalletData();
-  }, [user?.id]);
-
-  const loadWalletData = async () => {
-    if (!user?.id) return;
+  async function load() {
     try {
-      setLoading(true);
-      const walletData = await walletService.getWallet(user.id);
-      const vaData = await walletService.getVirtualAccount(user.id);
-      if (walletData) setWallet(walletData);
-      if (vaData) setVirtualAccount(vaData);
-    } catch (error) {
-      console.error('Error loading wallet:', error);
-      Alert.alert('Error', 'Failed to load wallet data');
-    } finally {
-      setLoading(false);
+      const refresh = async () => {
+        const [{ balances }, { transactions }] = await Promise.all([
+          api.getBalances(),
+          api.getTransactions(6),
+        ]);
+        const cash = Number(balances.find((b) => b.asset === 'NGN')?.availableFormatted ?? 0);
+        setNgn(cash);
+        setTxns(transactions);
+      };
+      try {
+        await refresh();
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 404 || e.status === 401)) {
+          await api.ensureProvisioned();
+          await refresh();
+        }
+      }
+    } catch {
+      /* keep last values */
     }
-  };
+  }
+
+  useEffect(() => {
+    load();
+  }, [user?.id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadWalletData();
+    await load();
     setRefreshing(false);
   };
 
-  const balance = wallet?.balance ?? 0;
   const formattedBalance = showBalance
-    ? '₦' + balance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? '₦' + ngn.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '₦••••';
-
-  if (loading) {
-    return (
-      <View
-        className="flex-1 justify-center items-center"
-        style={{ backgroundColor: colors.surface }}
-      >
-        <ActivityIndicator size="large" color={colors.brand} />
-      </View>
-    );
-  }
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
@@ -92,21 +82,9 @@ export default function HomeScreen() {
         <BalanceBlock label="Total Cash Balance" amount={formattedBalance} />
 
         <ActionRow>
-          <CircleAction
-            icon="arrow-down"
-            label="Deposit"
-            onPress={() => router.push('/(app)/deposit')}
-          />
-          <CircleAction
-            icon="arrow-forward"
-            label="Withdraw"
-            onPress={() => router.push('/(app)/withdraw')}
-          />
-          <CircleAction
-            icon="sync"
-            label="Convert"
-            onPress={() => router.push('/(app)/convert')}
-          />
+          <CircleAction icon="arrow-down" label="Deposit" onPress={() => router.push('/(app)/deposit')} />
+          <CircleAction icon="arrow-forward" label="Withdraw" onPress={() => router.push('/(app)/withdraw')} />
+          <CircleAction icon="sync" label="Convert" onPress={() => router.push('/(app)/convert')} />
         </ActionRow>
 
         {/* Cash account */}
@@ -122,28 +100,10 @@ export default function HomeScreen() {
                 </View>
               </View>
               <Text className="text-ink text-lg font-bold">
-                {showBalance ? `${balance.toLocaleString('en-NG')} NGN` : '•••• NGN'}
+                {showBalance
+                  ? `${ngn.toLocaleString('en-NG', { maximumFractionDigits: 2 })} NGN`
+                  : '•••• NGN'}
               </Text>
-            </View>
-          </Card>
-        </View>
-
-        {/* Savings */}
-        <View className="px-5 mb-6">
-          <Card>
-            <View className="flex-row items-center">
-              <View
-                className="w-14 h-14 rounded-full items-center justify-center"
-                style={{ backgroundColor: colors.circle }}
-              >
-                <Text style={{ fontSize: 22 }}>📊</Text>
-              </View>
-              <View className="ml-4 flex-1">
-                <Text className="text-ink text-xl font-bold">Your money. Working daily</Text>
-                <Text className="text-muted text-sm mt-1">
-                  Daily returns in NGN or USD. Flexible or fixed savings
-                </Text>
-              </View>
             </View>
           </Card>
         </View>
@@ -151,24 +111,19 @@ export default function HomeScreen() {
         {/* Transactions */}
         <View className="px-5">
           <SectionHeader title="Transactions" onPress={() => router.push('/(app)/transactions')} />
-          <TransactionRow />
+          {txns.length === 0 ? (
+            <Card>
+              <Text className="text-muted text-sm text-center py-2">No transactions yet.</Text>
+            </Card>
+          ) : (
+            <Card>
+              {txns.slice(0, 5).map((t, i) => (
+                <TxnRow key={t.id} t={t} divider={i > 0} />
+              ))}
+            </Card>
+          )}
         </View>
       </ScrollView>
-    </View>
-  );
-}
-
-function TransactionRow() {
-  return (
-    <View className="flex-row items-center justify-between py-2">
-      <View className="flex-row items-center">
-        <NairaFlag size={44} />
-        <View className="ml-3">
-          <Text className="text-ink text-base font-bold">VICTOR IGWE</Text>
-          <Text className="text-muted text-sm">Jun 21, 2026</Text>
-        </View>
-      </View>
-      <Text className="text-ink text-base font-bold">-60,521.3 NGN</Text>
     </View>
   );
 }
