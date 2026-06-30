@@ -96,6 +96,22 @@ Work top-to-bottom — the earlier sections gate the later ones.
 
 ---
 
+## 9. Future features (post-launch backlog)
+
+- ☐ **NFC tap-to-share (native app only)** — let users share a crypto wallet
+      address (and optionally bank details) by tapping phones / an NFC card.
+  - Build in `apps/mobile` with `react-native-nfc-manager` (read/write) +
+    `react-native-hce` (Android tap-to-share). Requires an EAS build / custom
+    dev client (not Expo Go) and a physical device to test.
+  - Platform reality: tap-to-**share** is **Android only** (iOS can't emulate a
+    card); tap-to-**receive** works on Android + iOS. Always ship a **QR
+    fallback** so iPhone senders / any device still work.
+  - Start crypto-only (addresses are public = safe); gate bank details behind a
+    confirm step. Add Play Console NFC permission declarations.
+  - Not feasible in the web/PWA build — native only.
+
+---
+
 ### Owner notes
 - Items I can do in code: deploy workflow, guard flags, monitoring wiring,
   TWA/assetlinks, QA fixes.
