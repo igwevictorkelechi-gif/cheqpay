@@ -9,6 +9,7 @@ function CoinBadge({ symbol, size = 36 }: { symbol: string; size?: number }) {
     BTC: { bg: '#F7931A', glyph: '₿' },
     ETH: { bg: '#627EEA', glyph: 'Ξ' },
     USDT: { bg: '#26A17B', glyph: '₮' },
+    NGN: { bg: '#2E8B57', glyph: '₦' },
   };
   const c = map[symbol] ?? { bg: colors.brand, glyph: symbol.charAt(0) };
   return (

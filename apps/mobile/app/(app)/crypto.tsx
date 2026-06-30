@@ -112,8 +112,8 @@ export default function CryptoScreen() {
 
         <ActionRow>
           <CircleAction icon="trending-up" label="Trade" onPress={() => router.push('/(app)/convert')} />
-          <CircleAction icon="arrow-down" label="Receive" />
-          <CircleAction icon="arrow-forward" label="Send" />
+          <CircleAction icon="arrow-down" label="Receive" onPress={() => router.push('/(app)/receive')} />
+          <CircleAction icon="arrow-forward" label="Send" onPress={() => router.push('/(app)/send-crypto')} />
         </ActionRow>
 
         {/* Assets */}

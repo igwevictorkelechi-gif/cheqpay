@@ -12,11 +12,11 @@ type Service = {
 };
 
 const services: Service[] = [
-  { label: 'Airtime', emoji: '📲', route: '/(app)/airtime' },
-  { label: 'Data', emoji: '📶', route: '/(app)/airtime' },
-  { label: 'Betting', emoji: '🎰' },
-  { label: 'Electricity', emoji: '💡', badge: 'New' },
-  { label: 'Cable TV', emoji: '📺', badge: 'New' },
+  { label: 'Airtime', emoji: '📲', route: '/(app)/bill/airtime' },
+  { label: 'Data', emoji: '📶', route: '/(app)/bill/data' },
+  { label: 'Betting', emoji: '🎰', route: '/(app)/bill/betting' },
+  { label: 'Electricity', emoji: '💡', badge: 'New', route: '/(app)/bill/electricity' },
+  { label: 'Cable TV', emoji: '📺', badge: 'New', route: '/(app)/bill/cabletv' },
   { label: 'Vouchers', emoji: '🎟️' },
 ];
 

@@ -55,6 +55,40 @@ export interface Balance {
   availableFormatted: string;
   lockedFormatted: string;
 }
+export interface Quote {
+  quoteId: string;
+  side: 'buy' | 'sell' | 'convert';
+  fromAsset: string;
+  toAsset: string;
+  amountIn: string;
+  amountOut: string;
+  rate: string;
+  expiresAt: string;
+}
+export interface BillBiller {
+  id: string;
+  name: string;
+  short: string;
+  color: string;
+  logo: string | null;
+}
+export interface BillPlan {
+  id: string;
+  billerId: string;
+  name: string;
+  amount: string;
+}
+export interface BillServiceConfig {
+  service: 'airtime' | 'data' | 'electricity' | 'cabletv' | 'betting';
+  label: string;
+  emoji: string;
+  customerLabel: string;
+  customerPlaceholder: string;
+  variableAmount: boolean;
+  requiresValidation: boolean;
+  billers: BillBiller[];
+  plans: BillPlan[];
+}
 export type LedgerTxType = 'DEPOSIT' | 'WITHDRAWAL' | 'BUY' | 'SELL' | 'CONVERT' | 'BILL';
 export type LedgerTxStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
 export interface LedgerTransaction {
@@ -102,10 +136,17 @@ export const api = {
     return apiFetch(`/api/transactions?limit=${limit}`);
   },
 
-  createQuote(side: 'buy' | 'sell', asset: AssetSymbol, amount: string) {
-    return apiFetch<{ quoteId: string; amountOut: string; rate: string }>('/api/quotes', {
+  createQuote(side: 'buy' | 'sell', asset: AssetSymbol, amount: string): Promise<Quote> {
+    return apiFetch('/api/quotes', {
       method: 'POST',
       body: JSON.stringify({ side, asset, amount }),
+    });
+  },
+
+  createConvertQuote(fromAsset: AssetSymbol, toAsset: AssetSymbol, amount: string): Promise<Quote> {
+    return apiFetch('/api/quotes/convert', {
+      method: 'POST',
+      body: JSON.stringify({ fromAsset, toAsset, amount }),
     });
   },
 
@@ -114,6 +155,45 @@ export const api = {
       method: 'POST',
       headers: { 'idempotency-key': idemKey() },
       body: JSON.stringify({ quoteId }),
+    });
+  },
+
+  createCryptoWithdrawal(input: {
+    asset: AssetSymbol;
+    network: 'BITCOIN' | 'TRON';
+    toAddress: string;
+    amount: string;
+  }): Promise<{ transactionId: string; status: string; txHash?: string }> {
+    return apiFetch('/api/withdrawals/crypto', {
+      method: 'POST',
+      headers: { 'idempotency-key': idemKey() },
+      body: JSON.stringify(input),
+    });
+  },
+
+  getBillCatalog(): Promise<{ services: BillServiceConfig[] }> {
+    return apiFetch('/api/bills/catalog');
+  },
+
+  validateBillCustomer(input: {
+    service: string;
+    billerId: string;
+    customer: string;
+  }): Promise<{ valid: boolean; customerName: string | null }> {
+    return apiFetch('/api/bills/validate', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  payBill(input: {
+    service: string;
+    billerId: string;
+    customer: string;
+    planId?: string;
+    amount?: string;
+  }): Promise<{ transactionId: string; status: string; providerRef?: string }> {
+    return apiFetch('/api/bills/pay', {
+      method: 'POST',
+      headers: { 'idempotency-key': idemKey() },
+      body: JSON.stringify(input),
     });
   },
 };
