@@ -17,3 +17,30 @@ export function writeCache<T>(key: string, value: T): void {
     /* quota / disabled — ignore */
   }
 }
+
+/**
+ * Drop every cached balance/transaction snapshot after a money movement
+ * (swap, convert, withdrawal, bill) so the next screen refetches fresh data.
+ */
+export function invalidateMoneyCaches(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (
+        k &&
+        (k.startsWith("cheqpay:crypto:") ||
+          k.startsWith("cheqpay:asset:") ||
+          k === "cheqpay:cash" ||
+          k === "cheqpay:txns" ||
+          k === "cheqpay:home:txns")
+      ) {
+        keys.push(k);
+      }
+    }
+    keys.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* ignore */
+  }
+}

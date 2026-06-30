@@ -10,6 +10,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { api, ApiError } from "@/services/api";
+import { invalidateMoneyCaches } from "@/lib/cache";
 import { getAssetMeta } from "@/lib/cryptoAssets";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
@@ -115,6 +116,7 @@ export default function SendCryptoDetailPage() {
         toAddress: toAddress.trim(),
         amount: amount.trim(),
       });
+      invalidateMoneyCaches();
       setTxHash(res.txHash);
       setStage("done");
     } catch (e) {

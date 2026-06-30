@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Eye, EyeOff, Bell, ArrowDown, ArrowRight, RefreshCw } from "lucide-react";
+import { Search, Eye, EyeOff, Bell, ArrowDown, ArrowRight, RefreshCw, Receipt } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import {
   TopBar,
@@ -14,47 +14,72 @@ import {
   SectionHeader,
   useToast,
 } from "@/components/MobileUI";
+import TxnRow from "@/components/TxnRow";
 import { authService } from "@/services/auth";
-import { walletService } from "@/services/wallet";
-import { useAuthStore, useWalletStore, useUIStore } from "@/store";
+import { useAuthStore, useUIStore } from "@/store";
+import { api, ApiError, type LedgerTransaction } from "@/services/api";
+import { readCache, writeCache } from "@/lib/cache";
+
+const CASH_CACHE = "cheqpay:cash";
+const HOME_TX_CACHE = "cheqpay:home:txns";
 
 export default function HomePage() {
   const router = useRouter();
   const { user, setUser } = useAuthStore();
-  const { wallet, setWallet, setVirtualAccount } = useWalletStore();
   const { showBalance, toggleBalance } = useUIStore();
-  const [, setReady] = useState(false);
   const toast = useToast();
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const currentUser = await authService.getCurrentUser();
-        if (currentUser) {
-          setUser(currentUser);
-          const [walletData, vaData] = await Promise.all([
-            walletService.getWallet(currentUser.id),
-            walletService.getVirtualAccount(currentUser.id),
-          ]);
-          if (walletData) setWallet(walletData);
-          if (vaData) setVirtualAccount(vaData);
-        }
-      } catch (error) {
-        console.error("Load failed:", error);
-      } finally {
-        setReady(true);
-      }
-    };
-    load();
-  }, [setUser, setWallet, setVirtualAccount]);
+  // NGN cash balance from the custody ledger (where deposits + crypto sells land).
+  const [ngn, setNgn] = useState<number>(() => readCache<number>(CASH_CACHE) ?? 0);
+  const [txns, setTxns] = useState<LedgerTransaction[]>(
+    () => readCache<LedgerTransaction[]>(HOME_TX_CACHE) ?? []
+  );
 
-  const balance = wallet?.balance ?? 0;
+  // Keep the user's name fresh (best-effort; non-blocking).
+  useEffect(() => {
+    authService
+      .getCurrentUser()
+      .then((u) => u && setUser(u))
+      .catch(() => undefined);
+  }, [setUser]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function refresh() {
+      const [{ balances }, { transactions }] = await Promise.all([
+        api.getBalances(),
+        api.getTransactions(6),
+      ]);
+      if (!active) return;
+      const cash = Number(balances.find((b) => b.asset === "NGN")?.availableFormatted ?? 0);
+      setNgn(cash);
+      setTxns(transactions);
+      writeCache(CASH_CACHE, cash);
+      writeCache(HOME_TX_CACHE, transactions);
+    }
+
+    (async () => {
+      try {
+        await refresh();
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 404 || e.status === 401)) {
+          try {
+            await api.ensureProvisioned();
+            await refresh();
+          } catch {
+            /* keep cached values */
+          }
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const formattedBalance = showBalance
-    ? "₦" +
-      balance.toLocaleString("en-NG", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
+    ? "₦" + ngn.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : "₦••••";
 
   return (
@@ -90,25 +115,10 @@ export default function HomePage() {
               </div>
             </div>
             <p className="text-lg font-bold text-ink">
-              {showBalance ? `${balance.toLocaleString("en-NG")} NGN` : "•••• NGN"}
+              {showBalance
+                ? `${ngn.toLocaleString("en-NG", { maximumFractionDigits: 2 })} NGN`
+                : "•••• NGN"}
             </p>
-          </div>
-        </Card>
-      </div>
-
-      {/* Savings */}
-      <div className="mb-6 px-5">
-        <Card>
-          <div className="flex items-center">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-circle text-[22px]">
-              📊
-            </span>
-            <div className="ml-4 flex-1">
-              <p className="text-xl font-bold text-ink">Your money. Working daily</p>
-              <p className="mt-1 text-sm text-muted">
-                Daily returns in NGN or USD. Flexible or fixed savings
-              </p>
-            </div>
           </div>
         </Card>
       </div>
@@ -116,16 +126,18 @@ export default function HomePage() {
       {/* Transactions */}
       <div className="px-5">
         <SectionHeader title="Transactions" onClick={() => router.push("/transactions")} />
-        <div className="flex items-center justify-between py-2">
-          <div className="flex items-center">
-            <NairaFlag size={44} />
-            <div className="ml-3">
-              <p className="text-base font-bold text-ink">VICTOR IGWE</p>
-              <p className="text-sm text-muted">Jun 21, 2026</p>
-            </div>
+        {txns.length === 0 ? (
+          <div className="flex flex-col items-center py-8 text-center">
+            <Receipt className="mb-2 h-9 w-9 text-muted" />
+            <p className="text-sm text-muted">No transactions yet.</p>
           </div>
-          <p className="text-base font-bold text-ink">-60,521.3 NGN</p>
-        </div>
+        ) : (
+          <div className="overflow-hidden rounded-3xl bg-card">
+            {txns.slice(0, 5).map((t, i) => (
+              <TxnRow key={t.id} t={t} showStatus={false} divider={i > 0} />
+            ))}
+          </div>
+        )}
       </div>
       {toast.node}
     </AppShell>

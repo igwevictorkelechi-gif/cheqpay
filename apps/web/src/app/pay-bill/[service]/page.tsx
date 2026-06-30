@@ -11,6 +11,7 @@ import {
 import AppShell from "@/components/AppShell";
 import BillerLogo from "@/components/BillerLogo";
 import { api, ApiError, getAccessToken, type BillServiceConfig } from "@/services/api";
+import { invalidateMoneyCaches } from "@/lib/cache";
 
 type Stage = "form" | "review" | "done";
 
@@ -111,6 +112,7 @@ export default function BillServicePage() {
         customer: customer.trim(),
         ...(config.variableAmount ? { amount: String(payAmount) } : { planId }),
       });
+      invalidateMoneyCaches();
       setProviderRef(res.providerRef);
       setStage("done");
     } catch (e) {

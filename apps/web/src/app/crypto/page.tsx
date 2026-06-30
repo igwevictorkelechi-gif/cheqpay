@@ -14,11 +14,14 @@ import {
   useToast,
 } from "@/components/MobileUI";
 import { useAuthStore, useUIStore } from "@/store";
-import { api, ApiError } from "@/services/api";
+import { api, ApiError, type LedgerTransaction } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
+import TxnRow from "@/components/TxnRow";
 
 const BAL_CACHE = "cheqpay:crypto:bal";
 const NGN_CACHE = "cheqpay:crypto:ngn";
+const TX_CACHE = "cheqpay:crypto:txns";
+const CRYPTO_TYPES = new Set(["BUY", "SELL", "CONVERT"]);
 
 const assetMeta = [
   { symbol: "BTC" as const, name: "Bitcoin", bg: "#F7931A", glyph: "₿" },
@@ -48,15 +51,19 @@ export default function CryptoPage() {
   const [ngn, setNgn] = useState<Record<string, number>>(
     () => readCache<Record<string, number>>(NGN_CACHE) ?? {}
   );
+  const [txns, setTxns] = useState<LedgerTransaction[]>(
+    () => readCache<LedgerTransaction[]>(TX_CACHE) ?? []
+  );
 
   useEffect(() => {
     let active = true;
 
     async function refresh() {
-      const [{ balances }, btc, usdt] = await Promise.all([
+      const [{ balances }, btc, usdt, txRes] = await Promise.all([
         api.getBalances(),
         api.getPrice("BTC").catch(() => null),
         api.getPrice("USDT").catch(() => null),
+        api.getTransactions(20).catch(() => ({ transactions: [] as LedgerTransaction[] })),
       ]);
       if (!active) return;
       const map: Record<string, string> = {};
@@ -67,10 +74,15 @@ export default function CryptoPage() {
       };
       const value: Record<string, number> = {};
       for (const a of ["BTC", "USDT"]) value[a] = Number(map[a] ?? 0) * prices[a];
+      const cryptoTx = txRes.transactions.filter(
+        (t) => CRYPTO_TYPES.has(t.type) || t.asset === "BTC" || t.asset === "USDT"
+      );
       setBal(map);
       setNgn(value);
+      setTxns(cryptoTx);
       writeCache(BAL_CACHE, map);
       writeCache(NGN_CACHE, value);
+      writeCache(TX_CACHE, cryptoTx);
     }
 
     (async () => {
@@ -153,11 +165,19 @@ export default function CryptoPage() {
       {/* Transactions */}
       <div className="px-5">
         <SectionHeader title="Transactions" onClick={() => router.push("/transactions")} />
-        <Card>
-          <p className="py-2 text-center text-sm text-muted">
-            Your crypto transactions will appear here.
-          </p>
-        </Card>
+        {txns.length === 0 ? (
+          <Card>
+            <p className="py-2 text-center text-sm text-muted">
+              Your crypto transactions will appear here.
+            </p>
+          </Card>
+        ) : (
+          <div className="overflow-hidden rounded-3xl bg-card">
+            {txns.slice(0, 6).map((t, i) => (
+              <TxnRow key={t.id} t={t} showStatus={false} divider={i > 0} />
+            ))}
+          </div>
+        )}
       </div>
       {toast.node}
     </AppShell>

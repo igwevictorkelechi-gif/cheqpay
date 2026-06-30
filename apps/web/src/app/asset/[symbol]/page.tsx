@@ -11,7 +11,7 @@ import {
   type Candle,
   type ChartRange,
 } from "@/services/api";
-import { readCache, writeCache } from "@/lib/cache";
+import { readCache, writeCache, invalidateMoneyCaches } from "@/lib/cache";
 
 interface AssetSnapshot {
   priceNgn: string | null;
@@ -385,6 +385,7 @@ function TradeSheet({
     setMsg(null);
     try {
       await api.executeSwap(quote.quoteId);
+      invalidateMoneyCaches();
       setDone(true);
       setTimeout(onDone, 1100);
     } catch (e) {

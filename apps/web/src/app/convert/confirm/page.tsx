@@ -6,6 +6,7 @@ import { ChevronLeft, ArrowDown } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { CoinBadge } from "@/components/MobileUI";
 import { api } from "@/services/api";
+import { invalidateMoneyCaches } from "@/lib/cache";
 import { formatMinor, type ConvertSymbol } from "@/lib/cryptoAssets";
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -81,6 +82,7 @@ function ConfirmInner() {
     setError(null);
     try {
       await api.executeSwap(quoteId);
+      invalidateMoneyCaches();
       const q = new URLSearchParams({
         from: amount,
         to: out,
