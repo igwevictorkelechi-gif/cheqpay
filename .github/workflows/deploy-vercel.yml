@@ -73,36 +73,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
-  deploy-admin:
-    runs-on: ubuntu-latest
-    env:
-      VERCEL_PROJECT_ID: prj_Kn8HgZSns0r0FiZ0Jc5QituVrupo
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-      # apps/admin is self-contained. Build it from an isolated copy outside the
-      # bun workspace so `npm install` doesn't walk up into the monorepo (which
-      # fails resolving workspace versions).
-      - name: Stage isolated admin app
-        run: cp -r apps/admin "$RUNNER_TEMP/admin-app"
-      - name: Pull Vercel project settings
-        working-directory: ${{ runner.temp }}/admin-app
-        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      - name: Build
-        working-directory: ${{ runner.temp }}/admin-app
-        run: vercel build --prod --token="$VERCEL_TOKEN"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      - name: Deploy to production
-        working-directory: ${{ runner.temp }}/admin-app
-        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  # NOTE: the admin app (cheqpay-admin project) deploys via its own Vercel Git
+  # integration. Set that project's Root Directory to "apps/admin" in the Vercel
+  # dashboard; it then builds apps/admin/vercel.json on every push. (No CLI job
+  # here, to avoid racing two production deploys onto the same project.)
