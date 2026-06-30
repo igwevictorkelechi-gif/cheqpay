@@ -117,3 +117,8 @@ Work top-to-bottom — the earlier sections gate the later ones.
   TWA/assetlinks, QA fixes.
 - Items only you can do (dashboard/keys/legal): rotate secrets, set provider
   keys + env vars, delete dup Vercel projects, legal review, Play Console.
+
+
+<!-- deploy: trigger clean admin production build (root dir apps/admin) -->
+
+<!-- deploy: trigger clean admin production build -->
