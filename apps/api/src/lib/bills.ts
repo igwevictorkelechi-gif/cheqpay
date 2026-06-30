@@ -189,6 +189,18 @@ export function getBiller(service: string, billerId: string): Biller | undefined
   return getServiceConfig(service)?.billers.find((b) => b.id === billerId);
 }
 
+/** Every biller across all services, tagged with its service. */
+export function getAllBillers(): (Biller & { service: BillService; serviceLabel: string })[] {
+  return BILL_CATALOG.flatMap((s) =>
+    s.billers.map((b) => ({ ...b, service: s.service, serviceLabel: s.label }))
+  );
+}
+
+/** True if a biller id exists anywhere in the catalog. */
+export function billerExists(billerId: string): boolean {
+  return getAllBillers().some((b) => b.id === billerId);
+}
+
 export function getPlan(service: string, planId: string): BillPlan | undefined {
   return getServiceConfig(service)?.plans.find((p) => p.id === planId);
 }

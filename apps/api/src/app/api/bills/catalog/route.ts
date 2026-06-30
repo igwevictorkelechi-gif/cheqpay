@@ -1,3 +1,4 @@
+import { prisma } from "@cheqpay/db";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { BILL_CATALOG } from "@/lib/bills";
 
@@ -6,6 +7,10 @@ export const dynamic = "force-dynamic";
 /** Public catalog of bill services, billers and plans the app offers. */
 export async function GET() {
   try {
+    // Admin-uploaded logos override the default wordmark tiles.
+    const assets = await prisma.billerAsset.findMany();
+    const logoById = new Map(assets.map((a) => [a.billerId, a.logo]));
+
     // Strip Flutterwave-internal codes from the public payload.
     const services = BILL_CATALOG.map((s) => ({
       service: s.service,
@@ -20,7 +25,7 @@ export async function GET() {
         name: b.name,
         short: b.short,
         color: b.color,
-        logo: b.logo ?? null,
+        logo: logoById.get(b.id) ?? b.logo ?? null,
       })),
       plans: s.plans.map((p) => ({
         id: p.id,

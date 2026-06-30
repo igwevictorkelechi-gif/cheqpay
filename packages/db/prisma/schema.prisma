@@ -241,3 +241,13 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs_v2")
 }
+
+// Admin-uploaded brand logos for bill billers (keyed by catalog biller id).
+// `logo` is a data URL (uploaded from the admin dashboard) or an external URL.
+model BillerAsset {
+  billerId  String   @id @map("biller_id")
+  logo      String
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("biller_assets")
+}
