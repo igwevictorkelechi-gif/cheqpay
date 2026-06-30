@@ -38,8 +38,7 @@
     "zod": "^3.22.0",
     "next-auth": "^4.24.0",
     "js-cookie": "^3.0.5",
-    "papaparse": "^5.4.1",
-    "@cheqpay/shared": "*"
+    "papaparse": "^5.4.1"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
