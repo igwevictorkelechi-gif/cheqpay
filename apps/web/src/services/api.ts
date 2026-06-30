@@ -110,7 +110,9 @@ export interface LedgerTransaction {
 export interface BillBiller {
   id: string;
   name: string;
-  emoji: string;
+  short: string;
+  color: string;
+  logo: string | null;
 }
 export interface BillPlan {
   id: string;

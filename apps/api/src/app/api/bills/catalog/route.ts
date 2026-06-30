@@ -15,7 +15,13 @@ export async function GET() {
       customerPlaceholder: s.customerPlaceholder,
       variableAmount: s.variableAmount,
       requiresValidation: s.requiresValidation,
-      billers: s.billers.map((b) => ({ id: b.id, name: b.name, emoji: b.emoji })),
+      billers: s.billers.map((b) => ({
+        id: b.id,
+        name: b.name,
+        short: b.short,
+        color: b.color,
+        logo: b.logo ?? null,
+      })),
       plans: s.plans.map((p) => ({
         id: p.id,
         billerId: p.billerId,

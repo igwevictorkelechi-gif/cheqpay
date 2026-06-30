@@ -16,7 +16,14 @@ export type BillService =
 export interface Biller {
   id: string;
   name: string;
-  emoji: string;
+  /** Short wordmark shown on the brand tile (e.g. "MTN", "DStv"). */
+  short: string;
+  /** Brand colour (hex) for the tile background. */
+  color: string;
+  /** Optional path/URL to a real brand logo; rendered instead of the wordmark
+   * when present. Drop official assets in apps/web/public/billers/ and set this
+   * to e.g. "/billers/mtn.svg". */
+  logo?: string | null;
   /** Flutterwave biller code, where known. */
   flwBillerCode?: string;
 }
@@ -47,10 +54,10 @@ export interface ServiceConfig {
 }
 
 const NETWORKS: Biller[] = [
-  { id: "mtn", name: "MTN", emoji: "🟡", flwBillerCode: "BIL099" },
-  { id: "airtel", name: "Airtel", emoji: "🔴", flwBillerCode: "BIL100" },
-  { id: "glo", name: "Glo", emoji: "🟢", flwBillerCode: "BIL102" },
-  { id: "9mobile", name: "9mobile", emoji: "🟩", flwBillerCode: "BIL103" },
+  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", flwBillerCode: "BIL099" },
+  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", flwBillerCode: "BIL100" },
+  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", flwBillerCode: "BIL102" },
+  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", flwBillerCode: "BIL103" },
 ];
 
 function dataPlans(billerId: string): BillPlan[] {
@@ -64,18 +71,18 @@ function dataPlans(billerId: string): BillPlan[] {
 }
 
 const DISCOS: Biller[] = [
-  { id: "ikedc", name: "Ikeja Electric", emoji: "💡", flwBillerCode: "BIL113" },
-  { id: "ekedc", name: "Eko Electric", emoji: "💡", flwBillerCode: "BIL112" },
-  { id: "aedc", name: "Abuja Electric", emoji: "💡", flwBillerCode: "BIL115" },
-  { id: "phed", name: "Port Harcourt Electric", emoji: "💡", flwBillerCode: "BIL117" },
-  { id: "kedco", name: "Kano Electric", emoji: "💡", flwBillerCode: "BIL116" },
-  { id: "ibedc", name: "Ibadan Electric", emoji: "💡", flwBillerCode: "BIL118" },
+  { id: "ikedc", name: "Ikeja Electric", short: "IKEDC", color: "#C8102E", flwBillerCode: "BIL113" },
+  { id: "ekedc", name: "Eko Electric", short: "EKEDC", color: "#0033A0", flwBillerCode: "BIL112" },
+  { id: "aedc", name: "Abuja Electric", short: "AEDC", color: "#0066B3", flwBillerCode: "BIL115" },
+  { id: "phed", name: "Port Harcourt Electric", short: "PHED", color: "#00833E", flwBillerCode: "BIL117" },
+  { id: "kedco", name: "Kano Electric", short: "KEDCO", color: "#1A8A3B", flwBillerCode: "BIL116" },
+  { id: "ibedc", name: "Ibadan Electric", short: "IBEDC", color: "#E2231A", flwBillerCode: "BIL118" },
 ];
 
 const CABLE: Biller[] = [
-  { id: "dstv", name: "DStv", emoji: "📺", flwBillerCode: "BIL121" },
-  { id: "gotv", name: "GOtv", emoji: "📺", flwBillerCode: "BIL122" },
-  { id: "startimes", name: "StarTimes", emoji: "📺", flwBillerCode: "BIL123" },
+  { id: "dstv", name: "DStv", short: "DStv", color: "#0072CE", flwBillerCode: "BIL121" },
+  { id: "gotv", name: "GOtv", short: "GOtv", color: "#74AA50", flwBillerCode: "BIL122" },
+  { id: "startimes", name: "StarTimes", short: "StarTimes", color: "#E60012", flwBillerCode: "BIL123" },
 ];
 
 function cablePlans(billerId: string): BillPlan[] {
@@ -105,10 +112,10 @@ function cablePlans(billerId: string): BillPlan[] {
 }
 
 const BETTING: Biller[] = [
-  { id: "bet9ja", name: "Bet9ja", emoji: "🎰", flwBillerCode: "BIL310" },
-  { id: "sportybet", name: "SportyBet", emoji: "🎰", flwBillerCode: "BIL311" },
-  { id: "betking", name: "BetKing", emoji: "🎰", flwBillerCode: "BIL312" },
-  { id: "1xbet", name: "1xBet", emoji: "🎰", flwBillerCode: "BIL313" },
+  { id: "bet9ja", name: "Bet9ja", short: "Bet9ja", color: "#16723A", flwBillerCode: "BIL310" },
+  { id: "sportybet", name: "SportyBet", short: "SportyBet", color: "#D6001C", flwBillerCode: "BIL311" },
+  { id: "betking", name: "BetKing", short: "BetKing", color: "#00A859", flwBillerCode: "BIL312" },
+  { id: "1xbet", name: "1xBet", short: "1xBet", color: "#1A5CB0", flwBillerCode: "BIL313" },
 ];
 
 export const BILL_CATALOG: ServiceConfig[] = [

@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import BillerLogo from "@/components/BillerLogo";
 import { api, ApiError, getAccessToken, type BillServiceConfig } from "@/services/api";
 
 type Stage = "form" | "review" | "done";
@@ -167,11 +168,13 @@ export default function BillServicePage() {
                   setBillerId(b.id);
                   setPlanId("");
                 }}
-                className={`flex flex-col items-center gap-1 rounded-2xl border p-3 active:scale-95 ${
-                  billerId === b.id ? "border-brand bg-card" : "border-border bg-card"
+                className={`flex flex-col items-center gap-2 rounded-2xl border p-3 transition active:scale-95 ${
+                  billerId === b.id
+                    ? "border-brand bg-brand/10 ring-1 ring-brand"
+                    : "border-border bg-card"
                 }`}
               >
-                <span className="text-2xl">{b.emoji}</span>
+                <BillerLogo brand={b} size={48} />
                 <span className="text-xs font-semibold text-ink">{b.name}</span>
               </button>
             ))}
@@ -265,7 +268,14 @@ export default function BillServicePage() {
 
       {stage === "review" && (
         <div className="px-5 pb-6">
-          <p className="mb-2 mt-2 text-sm font-semibold text-muted">Review payment</p>
+          {biller && (
+            <div className="mb-5 mt-2 flex flex-col items-center text-center">
+              <BillerLogo brand={biller} size={64} />
+              <p className="mt-3 text-lg font-bold text-ink">{biller.name}</p>
+              <p className="text-sm text-muted">{config.label}</p>
+            </div>
+          )}
+          <p className="mb-2 text-sm font-semibold text-muted">Review payment</p>
           <div className="overflow-hidden rounded-2xl bg-card">
             <Row label="Service" value={config.label} />
             <Row label="Provider" value={biller?.name ?? ""} bordered />

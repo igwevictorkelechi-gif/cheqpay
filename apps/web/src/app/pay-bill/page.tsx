@@ -1,20 +1,37 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Search, Bell, ChevronDown } from "lucide-react";
+import {
+  Search,
+  Bell,
+  ChevronDown,
+  Smartphone,
+  Wifi,
+  Dice5,
+  Zap,
+  Tv,
+  Ticket,
+  type LucideIcon,
+} from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { TopBar, Card, useToast } from "@/components/MobileUI";
 import { useAuthStore } from "@/store";
 
-type Service = { label: string; emoji: string; route?: string; badge?: string };
+type Service = {
+  label: string;
+  icon: LucideIcon;
+  color: string;
+  route?: string;
+  badge?: string;
+};
 
 const services: Service[] = [
-  { label: "Airtime", emoji: "📲", route: "/pay-bill/airtime" },
-  { label: "Data", emoji: "📶", route: "/pay-bill/data" },
-  { label: "Betting", emoji: "🎰", route: "/pay-bill/betting" },
-  { label: "Electricity", emoji: "💡", route: "/pay-bill/electricity", badge: "New" },
-  { label: "Cable TV", emoji: "📺", route: "/pay-bill/cabletv", badge: "New" },
-  { label: "Vouchers", emoji: "🎟️" },
+  { label: "Airtime", icon: Smartphone, color: "#7C5CFF", route: "/pay-bill/airtime" },
+  { label: "Data", icon: Wifi, color: "#2E8BFF", route: "/pay-bill/data" },
+  { label: "Betting", icon: Dice5, color: "#16A34A", route: "/pay-bill/betting" },
+  { label: "Electricity", icon: Zap, color: "#F5A623", route: "/pay-bill/electricity", badge: "New" },
+  { label: "Cable TV", icon: Tv, color: "#EC4899", route: "/pay-bill/cabletv", badge: "New" },
+  { label: "Vouchers", icon: Ticket, color: "#6E6880" },
 ];
 
 export default function PayBillPage() {
@@ -53,30 +70,38 @@ export default function PayBillPage() {
           </div>
 
           <div className="flex flex-wrap justify-between">
-            {services.map((service) => (
-              <button
-                key={service.label}
-                onClick={() =>
-                  service.route
-                    ? router.push(service.route)
-                    : toast.show(`${service.label} — coming soon`)
-                }
-                className="mb-3 flex h-24 w-[48%] flex-col rounded-2xl p-4 text-left transition active:scale-95"
-                style={{ backgroundColor: "#2A2440" }}
-              >
-                <div className="flex items-start justify-between">
-                  <span className="text-[26px]">{service.emoji}</span>
-                  {service.badge ? (
-                    <span className="rounded-full bg-brand px-2 py-0.5 text-xs font-semibold text-white">
-                      {service.badge}
+            {services.map((service) => {
+              const Icon = service.icon;
+              return (
+                <button
+                  key={service.label}
+                  onClick={() =>
+                    service.route
+                      ? router.push(service.route)
+                      : toast.show(`${service.label} — coming soon`)
+                  }
+                  className="mb-3 flex h-24 w-[48%] flex-col rounded-2xl p-4 text-left transition active:scale-95"
+                  style={{ backgroundColor: "#2A2440" }}
+                >
+                  <div className="flex items-start justify-between">
+                    <span
+                      className="flex h-10 w-10 items-center justify-center rounded-xl"
+                      style={{ backgroundColor: `${service.color}22` }}
+                    >
+                      <Icon className="h-5 w-5" style={{ color: service.color }} />
                     </span>
-                  ) : null}
-                </div>
-                <span className="mt-auto text-base font-bold text-ink">
-                  {service.label}
-                </span>
-              </button>
-            ))}
+                    {service.badge ? (
+                      <span className="rounded-full bg-brand px-2 py-0.5 text-xs font-semibold text-white">
+                        {service.badge}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="mt-auto text-base font-bold text-ink">
+                    {service.label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </Card>
       </div>
