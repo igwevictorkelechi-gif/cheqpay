@@ -1,17 +1,45 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors, NairaFlag } from '@/components/brand';
+import { api } from '@/services/api';
 
 export default function AddMoneyScreen() {
   const insets = useSafeAreaInsets();
   const [amount, setAmount] = useState('1000');
+  const [balance, setBalance] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await api.ensureProvisioned();
+        const { balances } = await api.getBalances();
+        setBalance(Number(balances.find((b) => b.asset === 'NGN')?.availableFormatted ?? 0));
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
 
   const digits = amount.replace(/\D/g, '');
   const display = digits ? Number(digits).toLocaleString('en-NG') : '0';
   const valid = Number(digits) > 0;
+
+  async function proceed() {
+    if (!valid || busy) return;
+    setBusy(true);
+    // Record a custody deposit intent (credited later by the PSP webhook).
+    try {
+      await api.initDeposit(digits);
+    } catch {
+      /* fall through — the transfer screen still shows funding details */
+    }
+    setBusy(false);
+    router.push({ pathname: '/(app)/deposit-transfer', params: { amount: digits } });
+  }
 
   return (
     <View
@@ -51,7 +79,9 @@ export default function AddMoneyScreen() {
           </View>
         </View>
       </View>
-      <Text className="text-muted text-sm mt-3">Available: 0 NGN</Text>
+      <Text className="text-muted text-sm mt-3">
+        Available: {balance.toLocaleString('en-NG', { maximumFractionDigits: 2 })} NGN
+      </Text>
 
       {/* Pay with */}
       <Text className="text-ink text-base font-bold mt-8">Pay with</Text>
@@ -68,13 +98,13 @@ export default function AddMoneyScreen() {
       {/* CTA */}
       <View className="flex-1 justify-end">
         <TouchableOpacity
-          disabled={!valid}
-          onPress={() => router.push({ pathname: '/(app)/deposit-transfer', params: { amount: digits } })}
+          disabled={!valid || busy}
+          onPress={proceed}
           className="rounded-full py-4 items-center"
-          style={{ backgroundColor: colors.brand, opacity: valid ? 1 : 0.5 }}
+          style={{ backgroundColor: colors.brand, opacity: valid && !busy ? 1 : 0.5 }}
           activeOpacity={0.85}
         >
-          <Text className="text-white text-base font-bold">Continue</Text>
+          <Text className="text-white text-base font-bold">{busy ? 'Please wait…' : 'Continue'}</Text>
         </TouchableOpacity>
       </View>
     </View>

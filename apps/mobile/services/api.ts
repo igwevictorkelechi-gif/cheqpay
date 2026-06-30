@@ -171,6 +171,32 @@ export const api = {
     });
   },
 
+  createNgnWithdrawal(input: {
+    amount: string;
+    bankCode: string;
+    accountNumber: string;
+    narration?: string;
+  }): Promise<{ transactionId: string; status: string }> {
+    return apiFetch('/api/withdrawals/ngn', {
+      method: 'POST',
+      headers: { 'idempotency-key': idemKey() },
+      body: JSON.stringify(input),
+    });
+  },
+
+  initDeposit(amount: string): Promise<{
+    txRef: string;
+    transactionId: string;
+    amount: string;
+    currency?: string;
+  }> {
+    return apiFetch('/api/deposits/flutterwave', {
+      method: 'POST',
+      headers: { 'idempotency-key': idemKey() },
+      body: JSON.stringify({ amount }),
+    });
+  },
+
   getBillCatalog(): Promise<{ services: BillServiceConfig[] }> {
     return apiFetch('/api/bills/catalog');
   },
