@@ -11,6 +11,13 @@ import {
   type Candle,
   type ChartRange,
 } from "@/services/api";
+import { readCache, writeCache } from "@/lib/cache";
+
+interface AssetSnapshot {
+  priceNgn: string | null;
+  priceUsd: string;
+  balance: string;
+}
 
 const META: Record<AssetSymbol, { name: string; color: string; glyph: string }> = {
   BTC: { name: "Bitcoin", color: "#F7931A", glyph: "₿" },
@@ -37,12 +44,15 @@ export default function AssetPage() {
   const symbol = (params.symbol || "").toUpperCase() as AssetSymbol;
   const meta = META[symbol];
 
+  const cacheKey = `cheqpay:asset:${symbol}`;
+  const cached = readCache<AssetSnapshot>(cacheKey);
+
   const [range, setRange] = useState<ChartRange>("year");
-  const [priceNgn, setPriceNgn] = useState<string | null>(null);
-  const [priceUsd, setPriceUsd] = useState<string>("0");
+  const [priceNgn, setPriceNgn] = useState<string | null>(cached?.priceNgn ?? null);
+  const [priceUsd, setPriceUsd] = useState<string>(cached?.priceUsd ?? "0");
   const [candles, setCandles] = useState<Candle[]>([]);
-  const [balance, setBalance] = useState<string>("0");
-  const [loading, setLoading] = useState(true);
+  const [balance, setBalance] = useState<string>(cached?.balance ?? "0");
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [showTrade, setShowTrade] = useState<null | "buy" | "sell">(null);
@@ -57,12 +67,30 @@ export default function AssetPage() {
         setError("Please log in to view this asset.");
         return;
       }
-      await api.ensureProvisioned();
-      const [price, bals] = await Promise.all([api.getPrice(symbol), api.getBalances()]);
+      const fetchCore = () =>
+        Promise.all([api.getPrice(symbol), api.getBalances()]);
+      let price, bals;
+      try {
+        [price, bals] = await fetchCore();
+      } catch (e) {
+        // New users may not be provisioned — provision once, then retry.
+        if (e instanceof ApiError && (e.status === 404 || e.status === 401)) {
+          await api.ensureProvisioned();
+          [price, bals] = await fetchCore();
+        } else {
+          throw e;
+        }
+      }
       setPriceNgn(price.priceNgn);
       setPriceUsd(price.priceUsd);
       const b = bals.balances.find((x) => x.asset === symbol);
-      setBalance(b?.availableFormatted ?? "0");
+      const bf = b?.availableFormatted ?? "0";
+      setBalance(bf);
+      writeCache<AssetSnapshot>(cacheKey, {
+        priceNgn: price.priceNgn,
+        priceUsd: price.priceUsd,
+        balance: bf,
+      });
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         const detail = (e.body as { error?: string } | undefined)?.error;
@@ -73,7 +101,7 @@ export default function AssetPage() {
     } finally {
       setLoading(false);
     }
-  }, [symbol]);
+  }, [symbol, cacheKey]);
 
   useEffect(() => {
     if (!meta) {
@@ -92,7 +120,16 @@ export default function AssetPage() {
       .catch(() => setCandles([]));
   }, [symbol, range, meta]);
 
-  const values = useMemo(() => candles.map((c) => Number(c.close)), [candles]);
+  const values = useMemo(() => {
+    if (candles.length > 0) return candles.map((c) => Number(c.close));
+    // USDT is a stablecoin with no candle history — render a flat line at its
+    // current NGN value so the chart shows instead of "unavailable".
+    if (symbol === "USDT" && priceNgn) {
+      const p = Number(priceNgn);
+      return Array.from({ length: 24 }, () => p);
+    }
+    return [];
+  }, [candles, symbol, priceNgn]);
   const changePct = useMemo(() => {
     if (values.length < 2) return null;
     const first = values[0];

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 // Server-side proxy to the backend admin settings endpoint. The admin API
 // secret stays on the server and is never exposed to the browser.
-const API_URL = process.env.CHEQPAY_API_URL ?? "http://localhost:4000";
+const API_URL = process.env.CHEQPAY_API_URL ?? "https://cheqpay-admin453.vercel.app";
 const ADMIN_SECRET = process.env.ADMIN_API_SECRET ?? "";
 
 export const dynamic = "force-dynamic";

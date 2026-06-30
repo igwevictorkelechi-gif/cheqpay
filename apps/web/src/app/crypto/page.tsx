@@ -14,7 +14,11 @@ import {
   useToast,
 } from "@/components/MobileUI";
 import { useAuthStore, useUIStore } from "@/store";
-import { api } from "@/services/api";
+import { api, ApiError } from "@/services/api";
+import { readCache, writeCache } from "@/lib/cache";
+
+const BAL_CACHE = "cheqpay:crypto:bal";
+const NGN_CACHE = "cheqpay:crypto:ngn";
 
 const assetMeta = [
   { symbol: "BTC" as const, name: "Bitcoin", bg: "#F7931A", glyph: "₿" },
@@ -36,32 +40,52 @@ export default function CryptoPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { showBalance, toggleBalance } = useUIStore();
-  const [bal, setBal] = useState<Record<string, string>>({});
-  const [ngn, setNgn] = useState<Record<string, number>>({});
+  // Paint last-known balances instantly from cache, then refresh in the
+  // background so the screen never blocks on the network.
+  const [bal, setBal] = useState<Record<string, string>>(
+    () => readCache<Record<string, string>>(BAL_CACHE) ?? {}
+  );
+  const [ngn, setNgn] = useState<Record<string, number>>(
+    () => readCache<Record<string, number>>(NGN_CACHE) ?? {}
+  );
 
   useEffect(() => {
     let active = true;
+
+    async function refresh() {
+      const [{ balances }, btc, usdt] = await Promise.all([
+        api.getBalances(),
+        api.getPrice("BTC").catch(() => null),
+        api.getPrice("USDT").catch(() => null),
+      ]);
+      if (!active) return;
+      const map: Record<string, string> = {};
+      for (const b of balances) map[b.asset] = b.availableFormatted;
+      const prices: Record<string, number> = {
+        BTC: btc?.priceNgn ? Number(btc.priceNgn) : 0,
+        USDT: usdt?.priceNgn ? Number(usdt.priceNgn) : 0,
+      };
+      const value: Record<string, number> = {};
+      for (const a of ["BTC", "USDT"]) value[a] = Number(map[a] ?? 0) * prices[a];
+      setBal(map);
+      setNgn(value);
+      writeCache(BAL_CACHE, map);
+      writeCache(NGN_CACHE, value);
+    }
+
     (async () => {
       try {
-        await api.ensureProvisioned();
-        const [{ balances }, btc, usdt] = await Promise.all([
-          api.getBalances(),
-          api.getPrice("BTC").catch(() => null),
-          api.getPrice("USDT").catch(() => null),
-        ]);
-        if (!active) return;
-        const map: Record<string, string> = {};
-        for (const b of balances) map[b.asset] = b.availableFormatted;
-        setBal(map);
-        const prices: Record<string, number> = {
-          BTC: btc?.priceNgn ? Number(btc.priceNgn) : 0,
-          USDT: usdt?.priceNgn ? Number(usdt.priceNgn) : 0,
-        };
-        const value: Record<string, number> = {};
-        for (const a of ["BTC", "USDT"]) value[a] = Number(map[a] ?? 0) * prices[a];
-        setNgn(value);
-      } catch {
-        /* not logged in / API unavailable — show zeros */
+        await refresh();
+      } catch (e) {
+        // First-time users may not be provisioned yet — provision then retry once.
+        if (e instanceof ApiError && (e.status === 404 || e.status === 401)) {
+          try {
+            await api.ensureProvisioned();
+            await refresh();
+          } catch {
+            /* still failing — keep cached/zero values */
+          }
+        }
       }
     })();
     return () => {

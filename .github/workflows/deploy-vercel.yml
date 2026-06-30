@@ -72,3 +72,34 @@ jobs:
         run: vercel deploy --prod --yes --token="$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+  deploy-admin:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_PROJECT_ID: prj_Kn8HgZSns0r0FiZ0Jc5QituVrupo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+      - name: Pull Vercel project settings
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      # Force the build to target apps/admin regardless of the project's
+      # dashboard Root Directory setting.
+      - name: Point build at apps/admin
+        run: |
+          node -e "const f='.vercel/project.json';const j=JSON.parse(require('fs').readFileSync(f,'utf8'));j.settings=j.settings||{};j.settings.rootDirectory='apps/admin';require('fs').writeFileSync(f,JSON.stringify(j));console.log('rootDirectory set to apps/admin');"
+      - name: Build
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy to production
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
