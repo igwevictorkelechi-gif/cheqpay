@@ -1,10 +1,21 @@
-import React from 'react';
-import { Search, Bell, Settings } from 'lucide-react';
+'use client';
 
-export default function Header() {
+import React from 'react';
+import { Search, Bell, Settings, Menu } from 'lucide-react';
+
+export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-      <div className="px-8 py-4 flex items-center justify-between">
+    <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
+      <div className="px-4 lg:px-8 py-4 flex items-center justify-between gap-3">
+        {/* Mobile menu toggle */}
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden p-2 -ml-1 hover:bg-gray-100 rounded-lg transition-colors"
+          aria-label="Open menu"
+        >
+          <Menu size={22} className="text-gray-700" />
+        </button>
+
         {/* Search */}
         <div className="flex-1 max-w-md">
           <div className="relative">
@@ -18,19 +29,19 @@ export default function Header() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-3 ml-8">
+        <div className="flex items-center gap-2 sm:gap-3 ml-2 sm:ml-8">
           <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <Bell size={20} className="text-gray-600" />
           </button>
           <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <Settings size={20} className="text-gray-600" />
           </button>
-          <div className="ml-4 pl-4 border-l border-gray-200">
+          <div className="ml-2 sm:ml-4 pl-2 sm:pl-4 border-l border-gray-200">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center font-bold">
                 A
               </div>
-              <div className="text-sm">
+              <div className="text-sm hidden sm:block">
                 <p className="font-semibold text-gray-800">Admin</p>
                 <p className="text-gray-500 text-xs">Administrator</p>
               </div>
