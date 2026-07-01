@@ -1,3 +1,4 @@
+// rebuild api preview to include the admin transactions endpoint
 import { prisma, TransactionType } from "@cheqpay/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
