@@ -141,7 +141,7 @@ export default function AnalyticsPage() {
                 <YAxis type="category" dataKey="type" tick={{ fontSize: 11 }} width={80} tickFormatter={(t) => titleCase(String(t))} />
                 <Tooltip />
                 <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                  {(data?.transactions.byType ?? []).map((e, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]} />))}
+                  {(data?.transactions.byType ?? []).map((_, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]} />))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -165,7 +165,7 @@ export default function AnalyticsPage() {
             <ResponsiveContainer>
               <PieChart>
                 <Pie data={data?.bills.byService ?? []} dataKey="ngnVolume" nameKey="service" cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={2}>
-                  {(data?.bills.byService ?? []).map((e, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]} />))}
+                  {(data?.bills.byService ?? []).map((_, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]} />))}
                 </Pie>
                 <Tooltip formatter={(v) => fmtNgn(Number(v))} />
                 <Legend formatter={(val) => titleCase(String(val))} />
