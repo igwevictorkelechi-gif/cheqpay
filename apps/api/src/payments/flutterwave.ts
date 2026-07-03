@@ -1,13 +1,18 @@
 import { timingSafeEqual } from "node:crypto";
 import type {
+  Bank,
   BillPayInput,
   BillPayResult,
   BillValidateInput,
   BillValidateResult,
+  CreateVirtualAccountInput,
   NgnChargeEvent,
   NgnTransferEvent,
   PaymentProvider,
+  ResolveAccountInput,
+  ResolveAccountResult,
   TransferResult,
+  VirtualAccountResult,
 } from "./types";
 
 const FLW_BASE = "https://api.flutterwave.com/v3";
@@ -16,9 +21,9 @@ const FLW_BASE = "https://api.flutterwave.com/v3";
  * Flutterwave payment rail. Webhooks are authenticated by comparing the
  * `verif-hash` header to the configured secret hash (Flutterwave's scheme).
  *
- * NOTE: HTTP calls (transfers) are provider-correct in shape but NOT exercised
- * against the live API in this build. Validate against current Flutterwave docs
- * before enabling in production.
+ * NOTE: HTTP calls (transfers, virtual accounts, resolution) are provider-
+ * correct in shape but NOT exercised against the live API in this build.
+ * Validate against current Flutterwave docs before enabling in production.
  */
 export class FlutterwaveProvider implements PaymentProvider {
   readonly name = "flutterwave";
@@ -118,6 +123,87 @@ export class FlutterwaveProvider implements PaymentProvider {
         ? status
         : "new") as TransferResult["status"],
     };
+  }
+
+  async createVirtualAccount(
+    input: CreateVirtualAccountInput
+  ): Promise<VirtualAccountResult> {
+    const res = await fetch(`${FLW_BASE}/virtual-account-numbers`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.secretKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        email: input.email,
+        is_permanent: input.permanent,
+        bvn: input.bvn,
+        tx_ref: input.txRef,
+        phonenumber: input.phone,
+        firstname: input.firstName,
+        lastname: input.lastName,
+        narration: input.narration ?? `${input.firstName} ${input.lastName}`,
+      }),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      status?: string;
+      data?: {
+        account_number?: string;
+        bank_name?: string;
+        order_ref?: string;
+        flw_ref?: string;
+      };
+    };
+    if (!res.ok || json.status !== "success" || !json.data?.account_number) {
+      throw new Error(`Flutterwave virtual account creation failed: ${res.status}`);
+    }
+    return {
+      accountNumber: json.data.account_number,
+      bankName: json.data.bank_name ?? "Flutterwave",
+      providerRef: String(json.data.order_ref ?? json.data.flw_ref ?? input.txRef),
+      permanent: input.permanent,
+    };
+  }
+
+  async resolveBankAccount(
+    input: ResolveAccountInput
+  ): Promise<ResolveAccountResult> {
+    const res = await fetch(`${FLW_BASE}/accounts/resolve`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.secretKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        account_number: input.accountNumber,
+        account_bank: input.bankCode,
+      }),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      status?: string;
+      data?: { account_name?: string };
+    };
+    if (!res.ok || json.status !== "success" || !json.data?.account_name) {
+      throw new Error(`Flutterwave account resolution failed: ${res.status}`);
+    }
+    return { accountName: json.data.account_name };
+  }
+
+  async listBanks(): Promise<Bank[]> {
+    const res = await fetch(`${FLW_BASE}/banks/NG`, {
+      headers: { authorization: `Bearer ${this.secretKey}` },
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      status?: string;
+      data?: Array<{ code?: string; name?: string }>;
+    };
+    if (!res.ok || json.status !== "success" || !Array.isArray(json.data)) {
+      throw new Error(`Flutterwave bank list failed: ${res.status}`);
+    }
+    return json.data
+      .filter((b): b is { code: string; name: string } => !!b.code && !!b.name)
+      .map((b) => ({ code: String(b.code), name: String(b.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async validateBillCustomer(input: BillValidateInput): Promise<BillValidateResult> {
