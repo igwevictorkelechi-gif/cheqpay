@@ -8,6 +8,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 
+type CryptoAsset = { asset: string; count: number; volume: number; buy: number; sell: number; convert: number; balance: string };
 type Analytics = {
   windowDays: number;
   kpis: {
@@ -26,6 +27,7 @@ type Analytics = {
     byService: { service: string; count: number; ngnVolume: number; successRate: number }[];
     topBillers: { name: string; count: number; ngnVolume: number }[];
   };
+  crypto: { totalCount: number; byAsset: CryptoAsset[] };
 };
 
 const RANGES = [7, 30, 90];
@@ -78,7 +80,7 @@ export default function AnalyticsPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
-          <p className="text-gray-600 mt-2">Platform performance, transactions &amp; bill payments</p>
+          <p className="text-gray-600 mt-2">Platform performance, transactions, crypto &amp; bill payments</p>
         </div>
         <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
           {RANGES.map((r) => (
@@ -147,6 +149,32 @@ export default function AnalyticsPage() {
             </ResponsiveContainer>
           </div>
         </div>
+      </div>
+
+      <div className="mb-3 flex items-center gap-2 flex-wrap">
+        <Coins size={20} className="text-brand-600" />
+        <h2 className="text-xl font-bold text-gray-900">Crypto Activity</h2>
+        {data && (<span className="text-sm text-gray-500">{fmtInt(data.crypto.totalCount)} crypto transactions</span>)}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+        {(data?.crypto.byAsset ?? []).map((c, i) => (
+          <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold text-gray-900">{c.asset}</h3>
+              <span className="text-sm text-gray-500">{fmtInt(c.count)} txns</span>
+            </div>
+            <p className="text-xs text-gray-500">Custody balance</p>
+            <p className="text-2xl font-bold text-gray-900 mb-4">{c.balance} {c.asset}</p>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-lg bg-blue-50 p-2"><p className="text-xs text-blue-700">Buy</p><p className="font-bold text-blue-900">{fmtInt(c.buy)}</p></div>
+              <div className="rounded-lg bg-purple-50 p-2"><p className="text-xs text-purple-700">Sell</p><p className="font-bold text-purple-900">{fmtInt(c.sell)}</p></div>
+              <div className="rounded-lg bg-indigo-50 p-2"><p className="text-xs text-indigo-700">Convert</p><p className="font-bold text-indigo-900">{fmtInt(c.convert)}</p></div>
+            </div>
+          </div>
+        ))}
+        {(data?.crypto.byAsset ?? []).length === 0 && !loading && (
+          <div className="sm:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center text-gray-400">No crypto activity in this window.</div>
+        )}
       </div>
 
       <div className="mb-3 flex items-center gap-2 flex-wrap">
