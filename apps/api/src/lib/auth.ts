@@ -1,4 +1,5 @@
 import { decodeJwt } from "jose";
+import { prisma } from "@cheqpay/db";
 import { getEnv } from "./env";
 import { AuthError, ForbiddenError } from "./http";
 
@@ -98,11 +99,28 @@ export async function requireUser(req: Request): Promise<AuthUser> {
   return verifySupabaseJwt(token);
 }
 
+/** True if the email is in the DB-managed admin allowlist (platform_settings). */
+async function isSettingsAdmin(email?: string): Promise<boolean> {
+  if (!email) return false;
+  try {
+    const row = await prisma.platformSetting.findUnique({ where: { key: "admin_emails" } });
+    if (!row) return false;
+    const parsed = JSON.parse(row.value) as unknown;
+    return (
+      Array.isArray(parsed) &&
+      parsed.map((e) => String(e).toLowerCase()).includes(email.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Admin guard. Accepts either:
- *   1. a trusted service secret in `x-admin-secret` (backend-to-backend, e.g.
- *      the admin dashboard proxy), or
- *   2. an authenticated admin user (Supabase role "admin" or email allowlist).
+ * 1. a trusted service secret in `x-admin-secret` (backend-to-backend, e.g.
+ *    the admin dashboard proxy), or
+ * 2. an authenticated admin user (Supabase role "admin", env email allowlist,
+ *    or the DB-managed admin allowlist).
  */
 export async function requireAdmin(req: Request): Promise<void> {
   // Path 1: service secret.
@@ -111,9 +129,12 @@ export async function requireAdmin(req: Request): Promise<void> {
   if (expected && provided && constantTimeEqual(provided, expected)) {
     return;
   }
-  // Path 2: admin user JWT.
+  // Path 2: admin user JWT (role/env allowlist, then DB allowlist).
   const auth = await requireUser(req);
   if (isAdminUser(auth)) {
+    return;
+  }
+  if (await isSettingsAdmin(auth.email)) {
     return;
   }
   throw new ForbiddenError("Admin privileges required");
