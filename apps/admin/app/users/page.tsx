@@ -144,10 +144,13 @@ export default function UsersPage() {
                   <td className="px-6 py-4 font-semibold text-gray-900">{formatNgn(user.ngnBalance)}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{new Date(user.createdAt).toLocaleDateString()}</td>
                   <td className="px-6 py-4 text-right">
-                    <button className="text-brand-600 hover:text-brand-700 font-semibold flex items-center gap-1 ml-auto">
+                    <a
+                      href={`/users/${user.id}`}
+                      className="text-brand-600 hover:text-brand-700 font-semibold inline-flex items-center gap-1 ml-auto"
+                    >
                       View
                       <ChevronRight size={16} />
-                    </button>
+                    </a>
                   </td>
                 </tr>
               );
