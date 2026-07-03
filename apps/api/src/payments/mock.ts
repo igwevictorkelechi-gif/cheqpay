@@ -1,13 +1,18 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type {
+  Bank,
   BillPayInput,
   BillPayResult,
   BillValidateInput,
   BillValidateResult,
+  CreateVirtualAccountInput,
   NgnChargeEvent,
   NgnTransferEvent,
   PaymentProvider,
+  ResolveAccountInput,
+  ResolveAccountResult,
   TransferResult,
+  VirtualAccountResult,
 } from "./types";
 
 /**
@@ -73,6 +78,53 @@ export class MockPaymentProvider implements PaymentProvider {
       "mock-tr-" +
       createHash("sha256").update(input.reference).digest("hex").slice(0, 16);
     return { providerRef, status: "new" };
+  }
+
+  async createVirtualAccount(
+    input: CreateVirtualAccountInput
+  ): Promise<VirtualAccountResult> {
+    const digits = createHash("sha256")
+      .update(input.txRef)
+      .digest("hex")
+      .replace(/\D/g, "");
+    const accountNumber = (digits + "0000000000").slice(0, 10);
+    return {
+      accountNumber,
+      bankName: "Mock Test Bank",
+      bankCode: "000",
+      providerRef:
+        "mock-va-" +
+        createHash("sha256").update(input.txRef).digest("hex").slice(0, 16),
+      permanent: input.permanent,
+    };
+  }
+
+  async resolveBankAccount(
+    input: ResolveAccountInput
+  ): Promise<ResolveAccountResult> {
+    const NAMES = ["Chinedu Okafor", "Aisha Bello", "Tunde Adeyemi", "Ngozi Eze"];
+    const idx =
+      parseInt(
+        createHash("sha256").update(input.accountNumber).digest("hex").slice(0, 8),
+        16
+      ) % NAMES.length;
+    return { accountName: NAMES[idx] };
+  }
+
+  async listBanks(): Promise<Bank[]> {
+    return [
+      { code: "044", name: "Access Bank" },
+      { code: "023", name: "Citibank Nigeria" },
+      { code: "050", name: "Ecobank Nigeria" },
+      { code: "011", name: "First Bank of Nigeria" },
+      { code: "214", name: "First City Monument Bank" },
+      { code: "058", name: "Guaranty Trust Bank" },
+      { code: "50211", name: "Kuda Bank" },
+      { code: "232", name: "Sterling Bank" },
+      { code: "033", name: "United Bank for Africa" },
+      { code: "035", name: "Wema Bank" },
+      { code: "057", name: "Zenith Bank" },
+    ];
   }
 
   async validateBillCustomer(input: BillValidateInput): Promise<BillValidateResult> {

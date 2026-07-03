@@ -15,6 +15,25 @@ export const depositInitSchema = z.object({
 });
 export type DepositInitInput = z.infer<typeof depositInitSchema>;
 
+/**
+ * Create the user's NGN virtual account (dedicated NUBAN). Supplying a valid
+ * 11-digit BVN mints a PERMANENT account; omitting it mints a temporary one.
+ */
+export const createVirtualAccountSchema = z.object({
+  firstName: z.string().min(1).max(60),
+  lastName: z.string().min(1).max(60),
+  phone: z.string().min(7).max(20).optional(),
+  bvn: z.string().regex(/^\d{11}$/, "Expected an 11-digit BVN").optional(),
+});
+export type VirtualAccountRequestInput = z.infer<typeof createVirtualAccountSchema>;
+
+/** Resolve a bank account holder's name before a withdrawal. */
+export const resolveAccountSchema = z.object({
+  accountNumber: z.string().regex(/^\d{10}$/, "Expected a 10-digit NUBAN"),
+  bankCode: z.string().min(3).max(10),
+});
+export type ResolveAccountRequestInput = z.infer<typeof resolveAccountSchema>;
+
 /** Request an NGN bank payout. */
 export const ngnWithdrawalSchema = z.object({
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Expected an NGN amount like 5000 or 5000.50"),
@@ -94,9 +113,7 @@ export type BillPayInput = z.infer<typeof billPaySchema>;
 /** Admin update of business-controlled platform settings. */
 export const platformSettingsUpdateSchema = z
   .object({
-    // Spread/margin on the USDT->NGN leg, in basis points (100 bps = 1%).
     spreadBps: z.number().int().min(0).max(10_000).optional(),
-    // Business-controlled USDT->NGN rate.
     usdtNgnRate: z.number().positive().max(1_000_000).optional(),
   })
   .refine((v) => v.spreadBps !== undefined || v.usdtNgnRate !== undefined, {
