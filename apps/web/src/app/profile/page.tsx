@@ -94,19 +94,35 @@ function FeatureCard({
   );
 }
 
+type Limits = {
+  singleTxKobo: string;
+  dailyDepositKobo: string;
+  dailyWithdrawalKobo: string;
+  cryptoWithdrawalEnabled: boolean;
+};
+
+function fmtNgn(kobo: string): string {
+  return (
+    "₦" +
+    (Number(kobo) / 100).toLocaleString("en-NG", { maximumFractionDigits: 0 })
+  );
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const [tier, setTier] = useState<number | null>(
     () => readCache<number>("cheqpay:kyctier")
   );
+  const [limits, setLimits] = useState<Limits | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         if (!(await getAccessToken())) return;
-        const { kycTier } = await api.getKyc();
+        const { kycTier, limits } = await api.getKyc();
         setTier(kycTier);
+        setLimits(limits);
         writeCache("cheqpay:kyctier", kycTier);
       } catch {
         /* ignore */
@@ -180,6 +196,53 @@ export default function ProfilePage() {
               </span>
             )}
           </button>
+        )}
+
+        {/* Account limits */}
+        {limits && (
+          <div className="mt-3 rounded-2xl bg-card p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
+              Your limits
+            </p>
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted">Per transaction</span>
+                <span className="text-sm font-semibold text-ink">
+                  {fmtNgn(limits.singleTxKobo)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted">Daily deposit</span>
+                <span className="text-sm font-semibold text-ink">
+                  {fmtNgn(limits.dailyDepositKobo)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted">Daily withdrawal</span>
+                <span className="text-sm font-semibold text-ink">
+                  {fmtNgn(limits.dailyWithdrawalKobo)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted">Crypto withdrawals</span>
+                <span
+                  className={`text-sm font-semibold ${
+                    limits.cryptoWithdrawalEnabled
+                      ? "text-green-400"
+                      : "text-amber-400"
+                  }`}
+                >
+                  {limits.cryptoWithdrawalEnabled ? "Enabled" : "Locked"}
+                </span>
+              </div>
+            </div>
+            {!limits.cryptoWithdrawalEnabled && (
+              <p className="mt-3 text-xs text-muted">
+                Verify your identity to raise limits and unlock crypto
+                withdrawals.
+              </p>
+            )}
+          </div>
         )}
 
         {/* Feature cards */}

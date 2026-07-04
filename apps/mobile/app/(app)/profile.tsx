@@ -50,17 +50,30 @@ function FeatureCard({
   );
 }
 
+type Limits = {
+  singleTxKobo: string;
+  dailyDepositKobo: string;
+  dailyWithdrawalKobo: string;
+  cryptoWithdrawalEnabled: boolean;
+};
+
+function fmtNgn(kobo: string): string {
+  return '₦' + (Number(kobo) / 100).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+}
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuthStore();
   const [tier, setTier] = useState<number | null>(null);
+  const [limits, setLimits] = useState<Limits | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         if (!(await getAccessToken())) return;
-        const { kycTier } = await api.getKyc();
+        const { kycTier, limits } = await api.getKyc();
         setTier(kycTier);
+        setLimits(limits);
       } catch {
         /* ignore */
       }
@@ -139,6 +152,43 @@ export default function ProfileScreen() {
               </View>
             )}
           </TouchableOpacity>
+        )}
+
+        {/* Account limits */}
+        {limits && (
+          <View className="bg-card rounded-2xl p-4 mt-3">
+            <Text className="text-muted text-xs font-semibold uppercase mb-3" style={{ letterSpacing: 0.5 }}>
+              Your limits
+            </Text>
+            <View style={{ gap: 10 }}>
+              <View className="flex-row items-center justify-between">
+                <Text className="text-muted text-sm">Per transaction</Text>
+                <Text className="text-ink text-sm font-semibold">{fmtNgn(limits.singleTxKobo)}</Text>
+              </View>
+              <View className="flex-row items-center justify-between">
+                <Text className="text-muted text-sm">Daily deposit</Text>
+                <Text className="text-ink text-sm font-semibold">{fmtNgn(limits.dailyDepositKobo)}</Text>
+              </View>
+              <View className="flex-row items-center justify-between">
+                <Text className="text-muted text-sm">Daily withdrawal</Text>
+                <Text className="text-ink text-sm font-semibold">{fmtNgn(limits.dailyWithdrawalKobo)}</Text>
+              </View>
+              <View className="flex-row items-center justify-between">
+                <Text className="text-muted text-sm">Crypto withdrawals</Text>
+                <Text
+                  className="text-sm font-semibold"
+                  style={{ color: limits.cryptoWithdrawalEnabled ? colors.positive : '#F5A623' }}
+                >
+                  {limits.cryptoWithdrawalEnabled ? 'Enabled' : 'Locked'}
+                </Text>
+              </View>
+            </View>
+            {!limits.cryptoWithdrawalEnabled && (
+              <Text className="text-muted text-xs mt-3">
+                Verify your identity to raise limits and unlock crypto withdrawals.
+              </Text>
+            )}
+          </View>
         )}
 
         {/* Feature cards */}

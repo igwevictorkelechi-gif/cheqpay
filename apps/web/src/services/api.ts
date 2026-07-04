@@ -161,6 +161,12 @@ export const api = {
 
   getKyc(): Promise<{
     kycTier: number;
+    limits: {
+      singleTxKobo: string;
+      dailyDepositKobo: string;
+      dailyWithdrawalKobo: string;
+      cryptoWithdrawalEnabled: boolean;
+    };
     records: { id: string; tier: number; status: string; createdAt: string }[];
   }> {
     return apiFetch("/api/kyc");
