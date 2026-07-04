@@ -23,8 +23,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="relative flex min-h-screen w-full max-w-[480px] flex-col overflow-hidden bg-surface">
         <div className="flex-1 overflow-y-auto pb-28">{children}</div>
 
-        {/* Floating glass tab bar */}
-        <nav className="absolute bottom-5 left-5 right-5 z-20 flex items-center justify-around rounded-full border border-white/10 bg-card/60 px-2 py-3 shadow-2xl shadow-black/50 backdrop-blur-xl">
+        {/* Floating glass tab bar — pinned to the viewport so it never scrolls */}
+        <nav className="fixed bottom-5 left-1/2 z-30 flex w-[calc(100%-2.5rem)] max-w-[440px] -translate-x-1/2 items-center justify-around rounded-full border border-white/10 bg-card/60 px-2 py-3 shadow-2xl shadow-black/50 backdrop-blur-xl">
           {tabs.map((tab) => {
             const active = pathname === tab.href;
             const Icon = tab.icon;

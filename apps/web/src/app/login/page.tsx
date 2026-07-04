@@ -5,31 +5,15 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "@/components/AuthLayout";
 import { authService } from "@/services/auth";
-import { useAuthStore, useWalletStore } from "@/store";
-import {
-  demoUser,
-  demoWallet,
-  demoVirtualAccount,
-  demoTransactions,
-} from "@/lib/demo";
+import { useAuthStore } from "@/store";
 
 export default function LoginPage() {
   const router = useRouter();
   const { setLoading, setUser } = useAuthStore();
-  const { setWallet, setVirtualAccount, setTransactions } = useWalletStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLocalLoading] = useState(false);
-
-  const continueAsDemo = () => {
-    setUser(demoUser);
-    setWallet(demoWallet);
-    setVirtualAccount(demoVirtualAccount);
-    setTransactions(demoTransactions);
-    setLoading(false);
-    router.push("/");
-  };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,14 +85,6 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
-
-        <button
-          type="button"
-          onClick={continueAsDemo}
-          className="btn-secondary mt-3 w-full"
-        >
-          Continue as demo user
-        </button>
 
         <div className="mt-6 border-t border-border pt-6">
           <p className="text-center text-sm text-muted">
