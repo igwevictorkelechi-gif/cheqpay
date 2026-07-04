@@ -39,6 +39,10 @@ Work top-to-bottom — the earlier sections gate the later ones.
       `FLUTTERWAVE_SECRET_KEY` + `FLUTTERWAVE_WEBHOOK_HASH`. Verify: NGN deposit
       (virtual account/charge), NGN payout, and **bill payments** against the
       live Bills API (validate biller codes — they are currently best-effort).
+- ☐ **KYC (Dojah)**: set `KYC_PROVIDER=dojah` + `DOJAH_APP_ID` / `DOJAH_API_KEY`
+      (enable the BVN product on your Dojah account). Verify: submitting a real
+      BVN + matching name auto-approves to tier 2; mismatches fall to the admin
+      review queue. Mock is the safe default until keys are set.
 - ☐ **Price feed**: confirm `PRICE_FEED=live` and Binance/CoinGecko reachable
       from Vercel in production.
 - ☐ Set the business rate + spread in admin **Trading Settings**

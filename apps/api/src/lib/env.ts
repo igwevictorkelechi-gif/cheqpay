@@ -55,6 +55,13 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
+
+  // KYC / identity verification. `mock` auto-verifies on a well-formed BVN;
+  // `dojah` performs a real BVN lookup + name match (requires Dojah keys).
+  KYC_PROVIDER: z.enum(["mock", "dojah"]).default("mock"),
+  DOJAH_APP_ID: z.string().optional(),
+  DOJAH_API_KEY: z.string().optional(),
+  DOJAH_API_BASE: z.string().url().default("https://api.dojah.io"),
 });
 
 export type Env = z.infer<typeof envSchema>;
