@@ -1,6 +1,9 @@
-# CheqPay - Production-Ready Nigerian Fintech App
+# CheqPay - Nigerian NGN ⇄ Crypto Custodial Wallet
 
-A complete fintech wallet application built with React Native (Expo), Next.js, and Supabase. Features virtual accounts for wallet funding, internal p2p transfers, and seamless integration with Paystack and Flutterwave.
+An NGN ⇄ crypto (BTC + USDT) custodial wallet with a dedicated backend. Users
+fund with Naira via Flutterwave virtual accounts, buy/sell/convert crypto at
+live rates, send/receive crypto on-chain, pay bills, and complete KYC — with a
+web app, a native mobile app, and an admin dashboard.
 
 ## 🏗️ Project Structure
 
@@ -8,23 +11,26 @@ A complete fintech wallet application built with React Native (Expo), Next.js, a
 cheqpay/
 ├── apps/
 │   ├── mobile/          # React Native Expo app (iOS/Android)
-│   ├── admin/           # Next.js 15 admin dashboard (web)
-│   ├── web/             # Next.js 15 responsive web app ✨ NEW
-│   └── (auth & app screens)
+│   ├── web/             # Next.js 15 user app (dark, mobile-first PWA)
+│   ├── admin/           # Next.js 15 admin dashboard
+│   └── api/             # Next.js 15 custodial backend (money engine)
 ├── packages/
+│   ├── db/              # Prisma schema + migrations (Supabase Postgres)
 │   └── shared/          # Shared types and schemas
-└── supabase/
-    ├── functions/       # Edge Functions
-    └── migrations/      # Database schemas
+└── supabase/            # Legacy edge functions / migrations
 ```
+
+Managed with **bun workspaces + Turborepo**. The user apps talk to `apps/api`
+(the custodial backend) over HTTP; auth tokens come from Supabase Auth.
 
 ## 🎯 Apps at a Glance
 
 | App | Platform | Purpose | Stack |
 |-----|----------|---------|-------|
-| **Mobile** | iOS/Android | User wallet & transactions | React Native + Expo |
-| **Web** | Browser | User wallet & transactions (responsive) | Next.js 15 + Tailwind |
-| **Admin** | Browser | Platform management | Next.js 15 + shadcn/ui |
+| **Mobile** | iOS/Android | User wallet, crypto, bills, KYC | React Native + Expo |
+| **Web** | Browser | Same, dark mobile-first PWA | Next.js 15 + Tailwind |
+| **Admin** | Browser | KYC review, settings, bill logos, users | Next.js 15 |
+| **API** | Serverless | Custodial money engine (ledger, swaps, payouts) | Next.js 15 + Prisma |
 
 
 
@@ -52,15 +58,45 @@ cheqpay/
 - **Zustand** for state management
 - **Fully responsive** (mobile, tablet, desktop)
 
-### Backend
-- **Supabase** (Auth, PostgreSQL, RLS)
-- **Edge Functions** (Deno/TypeScript)
-- **Real-time** subscriptions
-- **Vector storage** for documents
+### Backend (`apps/api`) — custodial money engine
+- **Next.js 15** route handlers (serverless on Vercel)
+- **Prisma** on **Supabase Postgres** (BigInt minor units — no floats)
+- **Supabase Auth** token validation; MFA (AAL2) gating on withdrawals
+- **Swappable providers** behind interfaces: custody, payments, price feed, KYC
+- Idempotency keys, webhook signature verification, AML screening, rate limits,
+  append-only audit log
 
-### Payment Integration
-- **Paystack** - Dedicated Virtual Accounts
-- **Flutterwave** - Static Virtual Accounts
+### Provider integrations (all behind interfaces; `mock` is the safe default)
+- **Payments — Flutterwave**: NGN virtual accounts, bank payouts, bill payments
+- **Custody — Tatum**: crypto wallets, deposits, on-chain withdrawals (BTC/USDT)
+- **Price feed**: Binance / CoinGecko (live) for BTC/USDT spot
+- **KYC — Dojah**: BVN lookup + name match for automatic verification
+
+## ✨ Core Features
+
+- **NGN wallet** — fund via a dedicated Flutterwave virtual account (NUBAN);
+  withdraw to any Nigerian bank.
+- **Crypto (BTC + USDT)** — buy, sell, and **convert** (incl. direct BTC↔USDT)
+  at live rates with an admin-controlled spread; **receive** (QR + address) and
+  **send** on-chain.
+- **Bill payments** — airtime, data, electricity, cable TV, betting via
+  Flutterwave, with brand-tiled providers (logos uploadable from admin).
+- **Transactions** — one custodial ledger; unified history across home, crypto,
+  and the transactions screen.
+- **KYC & account tiers** — see below.
+
+## 🪪 KYC & Account Tiers
+
+Tiers gate limits and crypto withdrawals (Tier 0 unverified → Tier 3 premium).
+
+- **Automatic verification** — submitting a valid **BVN + matching name**
+  auto-approves to **Tier 2** via the KYC provider (Dojah in prod; a mock
+  auto-approves on a well-formed BVN in dev).
+- **Manual review** — anything that doesn't auto-verify lands in the admin
+  **KYC Review** queue (approve/reject → sets the record status and user tier,
+  audited).
+- **In-app** — an alert bar prompts unverified users to verify, and the profile
+  shows the current account level.
 
 ## 📋 Prerequisites
 

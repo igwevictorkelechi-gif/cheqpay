@@ -17,6 +17,7 @@ import { useAuthStore, useUIStore } from "@/store";
 import { api, ApiError, type LedgerTransaction } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
 import TxnRow from "@/components/TxnRow";
+import KycBanner from "@/components/KycBanner";
 
 const BAL_CACHE = "cheqpay:crypto:bal";
 const NGN_CACHE = "cheqpay:crypto:ngn";
@@ -126,6 +127,8 @@ export default function CryptoPage() {
         label="Total Crypto Balance"
         amount={showBalance ? fmtNgn(totalNgn) : "₦••••"}
       />
+
+      <KycBanner />
 
       <ActionRow>
         <CircleAction icon={TrendingUp} label="Trade" onClick={() => router.push("/asset/BTC")} />

@@ -15,6 +15,7 @@ import {
   useToast,
 } from "@/components/MobileUI";
 import TxnRow from "@/components/TxnRow";
+import KycBanner from "@/components/KycBanner";
 import { authService } from "@/services/auth";
 import { useAuthStore, useUIStore } from "@/store";
 import { api, ApiError, type LedgerTransaction } from "@/services/api";
@@ -95,6 +96,8 @@ export default function HomePage() {
       />
 
       <BalanceBlock label="Total Cash Balance" amount={formattedBalance} />
+
+      <KycBanner />
 
       <ActionRow>
         <CircleAction icon={ArrowDown} label="Deposit" onClick={() => router.push("/deposit")} />

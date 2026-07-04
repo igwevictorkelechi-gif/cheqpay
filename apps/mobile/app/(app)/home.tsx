@@ -15,6 +15,7 @@ import {
   SectionHeader,
 } from '@/components/brand';
 import { TxnRow } from '@/components/TxnRow';
+import { KycBanner } from '@/components/KycBanner';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -80,6 +81,8 @@ export default function HomeScreen() {
         />
 
         <BalanceBlock label="Total Cash Balance" amount={formattedBalance} />
+
+        <KycBanner />
 
         <ActionRow>
           <CircleAction icon="arrow-down" label="Deposit" onPress={() => router.push('/(app)/deposit')} />

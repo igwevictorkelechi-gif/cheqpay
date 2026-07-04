@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 import { colors, Avatar } from '@/components/brand';
 import { useAuthStore } from '@/store';
 import { authService } from '@/services/auth';
+import { api, getAccessToken } from '@/services/api';
+import { tierInfo } from '@/lib/tier';
 
 type Item = { title: string; subtitle: string; route?: string };
 
@@ -51,6 +53,19 @@ function FeatureCard({
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuthStore();
+  const [tier, setTier] = useState<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!(await getAccessToken())) return;
+        const { kycTier } = await api.getKyc();
+        setTier(kycTier);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
 
   const name = user?.full_name || 'CheqPay User';
   const handle =
@@ -96,6 +111,35 @@ export default function ProfileScreen() {
             <Text className="text-muted text-sm font-medium">{handle}</Text>
           </View>
         </View>
+
+        {/* Account level (KYC tier) */}
+        {tier !== null && (
+          <TouchableOpacity
+            onPress={() => router.push('/(app)/kyc')}
+            activeOpacity={0.85}
+            className="flex-row items-center bg-card rounded-2xl p-4 mt-6"
+          >
+            <View
+              className="w-11 h-11 rounded-full items-center justify-center"
+              style={{ backgroundColor: tierInfo(tier).verified ? 'rgba(52,199,89,0.15)' : 'rgba(245,166,35,0.15)' }}
+            >
+              <Ionicons
+                name={tierInfo(tier).verified ? 'shield-checkmark' : 'shield-half'}
+                size={22}
+                color={tierInfo(tier).verified ? colors.positive : '#F5A623'}
+              />
+            </View>
+            <View className="ml-3 flex-1">
+              <Text className="text-ink text-base font-bold">{tierInfo(tier).label}</Text>
+              <Text className="text-muted text-xs mt-0.5">{tierInfo(tier).description}</Text>
+            </View>
+            {!tierInfo(tier).verified && (
+              <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: colors.brand }}>
+                <Text className="text-white text-xs font-bold">Verify</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
 
         {/* Feature cards */}
         <View className="flex-row mt-6" style={{ gap: 16 }}>

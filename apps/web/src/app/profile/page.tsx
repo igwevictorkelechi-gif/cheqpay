@@ -1,10 +1,22 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Users, MessageSquare, ChevronRight, LucideIcon } from "lucide-react";
+import {
+  X,
+  Users,
+  MessageSquare,
+  ChevronRight,
+  ShieldCheck,
+  BadgeCheck,
+  LucideIcon,
+} from "lucide-react";
 import { Avatar } from "@/components/MobileUI";
 import { authService } from "@/services/auth";
 import { useAuthStore } from "@/store";
+import { api, getAccessToken } from "@/services/api";
+import { tierInfo } from "@/lib/tier";
+import { readCache, writeCache } from "@/lib/cache";
 
 type Item = {
   title: string;
@@ -85,6 +97,22 @@ function FeatureCard({
 export default function ProfilePage() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const [tier, setTier] = useState<number | null>(
+    () => readCache<number>("cheqpay:kyctier")
+  );
+
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!(await getAccessToken())) return;
+        const { kycTier } = await api.getKyc();
+        setTier(kycTier);
+        writeCache("cheqpay:kyctier", kycTier);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
 
   const name = user?.full_name || "CheqPay User";
   const handle =
@@ -124,6 +152,35 @@ export default function ProfilePage() {
             {handle}
           </span>
         </div>
+
+        {/* Account level (KYC tier) */}
+        {tier !== null && (
+          <button
+            onClick={() => router.push("/kyc")}
+            className="mt-6 flex w-full items-center gap-3 rounded-2xl bg-card p-4 text-left active:scale-[0.99]"
+          >
+            <span
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
+                tierInfo(tier).verified ? "bg-green-500/15" : "bg-amber-500/15"
+              }`}
+            >
+              {tierInfo(tier).verified ? (
+                <BadgeCheck className="h-6 w-6 text-green-400" />
+              ) : (
+                <ShieldCheck className="h-6 w-6 text-amber-400" />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-bold text-ink">{tierInfo(tier).label}</p>
+              <p className="mt-0.5 text-xs text-muted">{tierInfo(tier).description}</p>
+            </div>
+            {!tierInfo(tier).verified && (
+              <span className="shrink-0 rounded-full bg-brand px-3 py-1.5 text-xs font-bold text-white">
+                Verify
+              </span>
+            )}
+          </button>
+        )}
 
         {/* Feature cards */}
         <div className="mt-6 flex gap-4">
