@@ -55,6 +55,12 @@ export interface Balance {
   availableFormatted: string;
   lockedFormatted: string;
 }
+export interface VirtualAccount {
+  accountNumber: string;
+  bankName: string;
+  bankCode?: string;
+  permanent: boolean;
+}
 export interface Quote {
   quoteId: string;
   side: 'buy' | 'sell' | 'convert';
@@ -194,6 +200,22 @@ export const api = {
       method: 'POST',
       headers: { 'idempotency-key': idemKey() },
       body: JSON.stringify({ amount }),
+    });
+  },
+
+  getVirtualAccount(): Promise<{ virtualAccount: VirtualAccount | null }> {
+    return apiFetch('/api/virtual-accounts');
+  },
+
+  createVirtualAccount(input: {
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    bvn?: string;
+  }): Promise<{ virtualAccount: VirtualAccount }> {
+    return apiFetch('/api/virtual-accounts', {
+      method: 'POST',
+      body: JSON.stringify(input),
     });
   },
 

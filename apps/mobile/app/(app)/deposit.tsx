@@ -35,10 +35,11 @@ export default function AddMoneyScreen() {
     try {
       await api.initDeposit(digits);
     } catch {
-      /* fall through — the transfer screen still shows funding details */
+      /* fall through — the account screen still shows funding details */
     }
     setBusy(false);
-    router.push({ pathname: '/(app)/deposit-transfer', params: { amount: digits } });
+    // Fund via the user's NGN virtual account (creates one if needed).
+    router.push('/(app)/virtual-account');
   }
 
   return (
