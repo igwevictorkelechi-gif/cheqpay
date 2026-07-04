@@ -67,7 +67,7 @@ export default function AddMoneyPage() {
         <div className="mt-auto pt-6">
           <button
             disabled={!valid}
-            onClick={() => router.push(`/deposit/transfer?amount=${digits}`)}
+            onClick={() => router.push("/virtual-account")}
             className="w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white shadow-lg shadow-brand/30 active:scale-[0.98] disabled:opacity-50"
           >
             Continue

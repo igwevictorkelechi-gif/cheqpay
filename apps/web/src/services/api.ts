@@ -107,6 +107,13 @@ export interface LedgerTransaction {
   customer: string | null;
 }
 
+export interface VirtualAccount {
+  accountNumber: string;
+  bankName: string;
+  bankCode?: string;
+  permanent: boolean;
+}
+
 export interface BillBiller {
   id: string;
   name: string;
@@ -150,6 +157,24 @@ export const api = {
 
   getTransactions(limit = 50): Promise<{ transactions: LedgerTransaction[] }> {
     return apiFetch(`/api/transactions?limit=${limit}`);
+  },
+
+  /** The user's NGN virtual account (dedicated NUBAN), or null if not created. */
+  getVirtualAccount(): Promise<{ virtualAccount: VirtualAccount | null }> {
+    return apiFetch("/api/virtual-accounts");
+  },
+
+  /** Create the NGN virtual account. A valid BVN mints a permanent NUBAN. */
+  createVirtualAccount(input: {
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    bvn?: string;
+  }): Promise<{ virtualAccount: VirtualAccount }> {
+    return apiFetch("/api/virtual-accounts", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   },
 
   getPrice(asset: AssetSymbol): Promise<MarketPrice> {
