@@ -159,6 +159,29 @@ export const api = {
     return apiFetch(`/api/transactions?limit=${limit}`);
   },
 
+  getKyc(): Promise<{
+    kycTier: number;
+    records: { id: string; tier: number; status: string; createdAt: string }[];
+  }> {
+    return apiFetch("/api/kyc");
+  },
+
+  submitKyc(input: {
+    firstName: string;
+    lastName: string;
+    dateOfBirth?: string;
+    bvn?: string;
+    documentRefs?: string[];
+  }): Promise<{
+    id: string;
+    status: string;
+    tier: number;
+    autoVerified: boolean;
+    message: string;
+  }> {
+    return apiFetch("/api/kyc", { method: "POST", body: JSON.stringify(input) });
+  },
+
   /** The user's NGN virtual account (dedicated NUBAN), or null if not created. */
   getVirtualAccount(): Promise<{ virtualAccount: VirtualAccount | null }> {
     return apiFetch("/api/virtual-accounts");

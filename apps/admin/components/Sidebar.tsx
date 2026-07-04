@@ -26,6 +26,7 @@ const categories: Category[] = [
     icon: Users,
     items: [
       { label: 'User Management', href: '/users', icon: Users },
+      { label: 'KYC Review', href: '/kyc', icon: ShieldCheck },
       { label: 'Roles & Access', href: '/roles', icon: ShieldCheck },
     ],
   },

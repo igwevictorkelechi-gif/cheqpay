@@ -2,6 +2,7 @@ import { prisma, KycStatus } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { getTierLimits } from "@/lib/kyc";
+import { getKycProvider } from "@/kyc";
 import { kycTier1Schema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -51,32 +52,63 @@ export async function POST(req: Request) {
 
     const body = kycTier1Schema.parse(await req.json());
 
+    // Automated identity check (BVN/ID). Passing auto-approves; otherwise the
+    // submission stays PENDING for manual admin review.
+    const verdict = await getKycProvider().verify({
+      firstName: body.firstName,
+      lastName: body.lastName,
+      dateOfBirth: body.dateOfBirth,
+      bvn: body.bvn,
+      documentRefs: body.documentRefs,
+    });
+
     const record = await prisma.kycRecord.create({
       data: {
         userId: auth.id,
-        tier: 1,
-        status: KycStatus.PENDING,
+        tier: verdict.verified ? verdict.tier : 1,
+        status: verdict.verified ? KycStatus.APPROVED : KycStatus.PENDING,
+        reviewedAt: verdict.verified ? new Date() : null,
         documentRefs: body.documentRefs,
       },
     });
 
-    // Append-only audit trail of the submission.
+    // Elevate the user's tier immediately on an automatic pass.
+    if (verdict.verified) {
+      await prisma.user.update({
+        where: { id: auth.id },
+        data: { kycTier: { set: Math.max(user.kycTier, verdict.tier) } },
+      });
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: auth.id,
-        action: "kyc.tier1.submitted",
+        action: verdict.verified ? "kyc.auto_approved" : "kyc.submitted",
         resourceType: "KycRecord",
         resourceId: record.id,
         details: {
-          fullName: body.fullName,
+          firstName: body.firstName,
+          lastName: body.lastName,
           dateOfBirth: body.dateOfBirth,
           country: body.country,
+          hasBvn: !!body.bvn,
           documentCount: body.documentRefs.length,
+          verified: verdict.verified,
+          reason: verdict.reason,
         },
       },
     });
 
-    return jsonOk({ id: record.id, status: record.status, tier: record.tier }, 201);
+    return jsonOk(
+      {
+        id: record.id,
+        status: record.status,
+        tier: verdict.verified ? Math.max(user.kycTier, verdict.tier) : user.kycTier,
+        autoVerified: verdict.verified,
+        message: verdict.reason,
+      },
+      201
+    );
   } catch (err) {
     return toErrorResponse(err);
   }

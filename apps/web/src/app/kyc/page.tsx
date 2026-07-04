@@ -1,127 +1,198 @@
 "use client";
 
-import { useState } from "react";
-import MainLayout from "@/components/MainLayout";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ShieldCheck, Clock, CheckCircle2, Loader2 } from "lucide-react";
+import { api, ApiError } from "@/services/api";
 import { useAuthStore } from "@/store";
-import { FileText } from "lucide-react";
+
+type State = "loading" | "form" | "pending" | "approved";
 
 export default function KYCPage() {
+  const router = useRouter();
   const { user } = useAuthStore();
-  const [selectedType, setSelectedType] = useState("bvn");
-  const [docNumber, setDocNumber] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const [state, setState] = useState<State>("loading");
+  const [tier, setTier] = useState(0);
 
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [dob, setDob] = useState("");
+  const [bvn, setBvn] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const parts = (user?.full_name ?? "").trim().split(/\s+/);
+    if (parts[0]) setFirstName((v) => v || parts[0]);
+    if (parts.length > 1) setLastName((v) => v || parts.slice(1).join(" "));
+  }, [user?.full_name]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await api.ensureProvisioned();
+        const { kycTier, records } = await api.getKyc();
+        setTier(kycTier);
+        if (kycTier >= 2) setState("approved");
+        else if (records.some((r) => r.status === "PENDING")) setState("pending");
+        else setState("form");
+      } catch {
+        setState("form");
+      }
+    })();
+  }, []);
+
+  const bvnValid = bvn === "" || /^\d{11}$/.test(bvn);
+  const canSubmit =
+    firstName.trim().length >= 2 && lastName.trim().length >= 2 && bvnValid && !submitting;
+
+  async function submit() {
+    setError(null);
+    setSubmitting(true);
     try {
-      // KYC submission logic would go here
-      setSuccess("KYC document submitted for verification");
-      setDocNumber("");
-      setFile(null);
-    } catch (error) {
-      console.error("KYC submission failed:", error);
+      const res = await api.submitKyc({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        dateOfBirth: dob || undefined,
+        bvn: bvn.trim() || undefined,
+      });
+      setTier(res.tier);
+      setState(res.autoVerified ? "approved" : "pending");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not submit. Please try again.");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
-  };
+  }
 
   return (
-    <MainLayout>
-      <div className="max-w-2xl mx-auto">
-        <div className="card-lg">
-          <div className="flex items-center gap-3 mb-6">
-            <FileText className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">KYC Verification</h1>
-          </div>
+    <div className="flex min-h-screen justify-center bg-black">
+      <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4">
+        <button
+          onClick={() => router.back()}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
 
-          {/* KYC Status */}
-          <div className="mb-6 rounded-lg bg-yellow-50 p-4 border border-yellow-200">
-            <p className="font-medium text-yellow-900">Status: Pending</p>
-            <p className="text-sm text-yellow-800 mt-1">
-              Please complete KYC verification to unlock higher withdrawal limits
+        {state === "loading" && (
+          <div className="mt-16 flex justify-center">
+            <Loader2 className="h-7 w-7 animate-spin text-muted" />
+          </div>
+        )}
+
+        {state === "approved" && (
+          <div className="mt-10 flex flex-col items-center text-center">
+            <CheckCircle2 className="h-20 w-20 text-green-400" />
+            <h1 className="mt-6 text-2xl font-extrabold text-ink">You&apos;re verified</h1>
+            <p className="mt-2 text-sm text-muted">
+              Your identity is confirmed (Tier {tier}). Higher limits and crypto withdrawals are
+              unlocked.
             </p>
+            <button
+              onClick={() => router.push("/")}
+              className="mt-8 w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+            >
+              Done
+            </button>
           </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="label">Document Type</label>
-              <select
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value)}
-                className="input"
-                disabled={loading}
-              >
-                <option value="bvn">BVN (Bank Verification Number)</option>
-                <option value="nin">NIN (National Identification Number)</option>
-              </select>
+        {state === "pending" && (
+          <div className="mt-10 flex flex-col items-center text-center">
+            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/15">
+              <Clock className="h-10 w-10 text-amber-400" />
+            </span>
+            <h1 className="mt-6 text-2xl font-extrabold text-ink">Under review</h1>
+            <p className="mt-2 text-sm text-muted">
+              We couldn&apos;t verify you automatically, so our team is reviewing your details.
+              You&apos;ll be upgraded as soon as it&apos;s approved — usually within a few hours.
+            </p>
+            <button
+              onClick={() => router.push("/")}
+              className="mt-8 w-full rounded-2xl bg-card py-4 font-bold text-ink active:scale-[0.99]"
+            >
+              Back home
+            </button>
+          </div>
+        )}
+
+        {state === "form" && (
+          <>
+            <div className="mt-6 flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand/20">
+                <ShieldCheck className="h-6 w-6 text-brand-light" />
+              </span>
+              <h1 className="text-2xl font-extrabold text-ink">Verify your identity</h1>
             </div>
+            <p className="mt-2 text-sm text-muted">
+              Confirm your details to raise your limits and unlock crypto withdrawals. With a valid
+              BVN you&apos;re verified instantly.
+            </p>
 
-            <div>
-              <label className="label">
-                {selectedType === "bvn" ? "BVN" : "NIN"}
-              </label>
-              <input
-                type="text"
-                value={docNumber}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, "").slice(0, 11);
-                  setDocNumber(value);
-                }}
-                placeholder={selectedType === "bvn" ? "12345678901" : "12345678901"}
-                maxLength={11}
-                className="input font-mono"
-                disabled={loading}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Must be 11 digits
-              </p>
-            </div>
-
-            <div>
-              <label className="label">Supporting Document</label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+            <div className="mt-6 space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-muted">First name</label>
                 <input
-                  type="file"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  className="hidden"
-                  id="doc-upload"
-                  disabled={loading}
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="First name"
+                  className="w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand"
                 />
-                <label
-                  htmlFor="doc-upload"
-                  className="flex flex-col items-center justify-center cursor-pointer"
-                >
-                  <FileText className="h-8 w-8 text-gray-400 mb-2" />
-                  <span className="text-sm font-medium text-gray-900">
-                    {file?.name || "Click to upload or drag and drop"}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    PDF, JPG or PNG (up to 5MB)
-                  </span>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-muted">Last name</label>
+                <input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Last name"
+                  className="w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-muted">
+                  Date of birth <span className="font-normal">(optional)</span>
                 </label>
+                <input
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                  type="date"
+                  className="w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-muted">
+                  BVN <span className="font-normal">(for instant verification)</span>
+                </label>
+                <input
+                  value={bvn}
+                  onChange={(e) => setBvn(e.target.value.replace(/\D/g, "").slice(0, 11))}
+                  inputMode="numeric"
+                  placeholder="11-digit BVN"
+                  className={`w-full rounded-2xl border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand ${
+                    bvnValid ? "border-border" : "border-red-500/60"
+                  }`}
+                />
+                <p className="mt-1.5 text-xs text-muted">
+                  Without a BVN we&apos;ll review your submission manually.
+                </p>
               </div>
             </div>
 
-            {success && (
-              <div className="rounded-lg bg-green-50 p-4 text-sm text-green-800 border border-green-200">
-                {success}
-              </div>
-            )}
+            {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
 
             <button
-              type="submit"
-              disabled={loading || !docNumber || !file}
-              className="btn-primary w-full"
+              onClick={submit}
+              disabled={!canSubmit}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99] disabled:opacity-40"
             >
-              {loading ? "Submitting..." : "Submit for Verification"}
+              {submitting && <Loader2 className="h-5 w-5 animate-spin" />}
+              {submitting ? "Verifying…" : "Submit for verification"}
             </button>
-          </form>
-        </div>
+          </>
+        )}
       </div>
-    </MainLayout>
+    </div>
   );
 }

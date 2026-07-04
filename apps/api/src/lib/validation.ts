@@ -1,13 +1,27 @@
 import { z } from "zod";
 
-/** Tier-1 KYC submission (minimal info; ID/BVN belong to tier 2). */
+/**
+ * KYC submission. First/last name are required; a valid 11-digit BVN enables
+ * automatic verification (tier 2). Without it, the submission goes to the admin
+ * review queue.
+ */
 export const kycTier1Schema = z.object({
-  fullName: z.string().min(2).max(120),
-  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
+  firstName: z.string().min(2).max(60),
+  lastName: z.string().min(2).max(60),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD").optional(),
   country: z.string().length(2).default("NG"),
+  bvn: z.string().regex(/^\d{11}$/, "Expected an 11-digit BVN").optional(),
   documentRefs: z.array(z.string().min(1)).max(10).default([]),
 });
 export type KycTier1Input = z.infer<typeof kycTier1Schema>;
+
+/** Admin action on a KYC submission. */
+export const kycReviewSchema = z.object({
+  recordId: z.string().uuid(),
+  action: z.enum(["approve", "reject"]),
+  tier: z.number().int().min(1).max(3).optional(),
+});
+export type KycReviewInput = z.infer<typeof kycReviewSchema>;
 
 /** Start an NGN deposit. Amount is a decimal NGN string (validated downstream). */
 export const depositInitSchema = z.object({
