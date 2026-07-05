@@ -3,126 +3,150 @@
 Status legend: ☐ not started · ◐ in progress · ☑ done
 
 This is the path from "working demo" to a real-money, Play-Store-ready app.
-Work top-to-bottom — the earlier sections gate the later ones.
+Sections 1–8 are the launch gate; section 0 records what's already built.
+
+---
+
+## 0. Product build status (done in code, deployed to `main`)
+
+Authentication & onboarding
+- ☑ Email OTP auth (Supabase `signInWithOtp`/`verifyOtp`) on web + mobile
+- ☑ Guided onboarding: Login/Signup → Email verification → KYC → PIN
+- ☑ Unverified users (login *or* signup) routed through KYC; verified go home
+- ☑ App requires login — web `AuthGuard` + mobile route guard block signed-out access
+- ☑ Branded HTML email templates for all Supabase auth emails (`supabase/email-templates/`)
+
+Wallet / money features (web + mobile)
+- ☑ NGN⇄crypto buy/sell, BTC↔USDT convert, receive/send crypto
+- ☑ Deposits (virtual account), NGN + crypto withdrawals, bill payments
+- ☑ Ledger-backed transaction history; transaction details page
+- ☑ Shareable **branded receipt** — PDF (mobile, expo-print) / PNG (web, canvas)
+
+Profile → Preferences
+- ☑ Preferences hub + Notifications, App Theme, App Icon screens
+
+Notifications & push
+- ☑ Per-category notification prefs persisted (`notification_prefs`)
+- ☑ Expo push token registration + `sendPush`/`broadcastPush`
+- ☑ Event pushes: deposits, withdrawals, trades, bills, security
+- ☑ Daily price-alert cron (`/api/cron/price-alerts`)
+
+Profile → Account
+- ☑ Account hub, Personal details (editable username/DOB/next-of-kin), Account limits,
+      Wallet statement (export), Delete account (real, cascade + optional auth delete)
+
+Profile → Security
+- ☑ 2FA (TOTP / Google Authenticator), Change password, App lock (PIN + Face ID),
+      Instant withdrawal toggle
+
+Admin dashboard
+- ☑ Analytics page fixed (crypto section + recharts/victory-vendor d3 imports)
+- ☑ Dashboard secured with a login gate (was fully open); default credential
+      `admin@cheqpay.com` / `CheqPayAdmin!2026`, changeable from **Admin Profile**
+
+Database migrations applied to prod
+- ☑ 0001–0004 (init, CONVERT, BILL, biller_assets)
+- ☑ 0005 notification prefs + push tokens
+- ☑ 0006 profile fields (username/DOB/next-of-kin)
+- ☑ 0007 instant_withdrawal
 
 ---
 
 ## 1. Secrets & credentials (do first)
 
-- ☐ **Rotate every secret that was ever pasted in chat or committed history**
-  - Tatum mainnet API key (the one shared earlier — assume burned)
-  - Supabase DB password
-  - `ADMIN_API_SECRET` (rotate, then update backend + admin env)
-- ☐ Confirm `.env*` is gitignored and no secret is in git history
-  (`git log -p | grep -i secret` spot-check; rotate anything found).
-- ☐ Store all secrets only in Vercel project env vars (never in the repo).
+- ☐ **Rotate every secret ever pasted in chat or committed history**
+  - Tatum mainnet API key (assume burned) · Supabase DB password · `ADMIN_API_SECRET`
+- ☐ Confirm `.env*` is gitignored and no secret is in git history.
+- ☐ Store all secrets only in Vercel project env vars.
+- ☑ Admin dashboard no longer uses a shared in-repo password — credential is
+      scrypt-hashed in the DB and changed from the Admin Profile page (change the
+      default `CheqPayAdmin!2026` on first login).
 
-## 2. Deployment pipeline (currently the blocker)
+## 2. Deployment pipeline
 
-- ☐ Delete duplicate Vercel projects: **`admin`**, **`cheqpay-web`**
-      (they auto-deploy on every push and exhaust the free 100/day cap).
-- ☐ Keep + verify the three real projects:
-  - `cheqpy` → web (apps/web)
-  - `cheqpay-admin453` → api (apps/api)
-  - `cheqpay-admin` → admin (apps/admin)
-- ☐ On `cheqpay-admin`: set env `ADMIN_API_SECRET` (matches backend) and
-      redeploy; confirm the **Bill Logos** page loads.
-- ☐ Consider Vercel Pro if the 100/day deploy cap keeps blocking releases.
-- ☐ (Optional) switch the deploy workflow to **main-only** to halve deploy churn.
+- ☑ Web + API deploy via GitHub Actions (`deploy-vercel.yml`) — currently green.
+- ☑ Admin deploys as its own project (`cheqpay-admin`, root `apps/admin`).
+- ☐ Delete any leftover duplicate Vercel projects that auto-deploy.
+- ☐ Set env on **`cheqpay-admin`**: `ADMIN_API_SECRET` (matches API),
+      `ADMIN_DASHBOARD_SECRET`, `SUPABASE_URL` + anon key; then redeploy and log in.
+- ☐ Set `CRON_SECRET` on the API project (gates the price-alert cron).
+- ☐ Consider Vercel Pro (Hobby caps crons at once/day and 100 deploys/day).
 
 ## 3. Provider integrations — move OFF mock
 
-- ☐ **Custody (Tatum)**: set `CUSTODY_PROVIDER=tatum` + a **fresh** `TATUM_API_KEY`
-      and `TATUM_WEBHOOK_SECRET`. Verify: wallet creation, deposit webhook,
-      withdrawal broadcast on a small real amount.
-- ☐ **Payments (Flutterwave)**: set `PAYMENT_PROVIDER=flutterwave` +
-      `FLUTTERWAVE_SECRET_KEY` + `FLUTTERWAVE_WEBHOOK_HASH`. Verify: NGN deposit
-      (virtual account/charge), NGN payout, and **bill payments** against the
-      live Bills API (validate biller codes — they are currently best-effort).
-- ☐ **KYC (Dojah)**: set `KYC_PROVIDER=dojah` + `DOJAH_APP_ID` / `DOJAH_API_KEY`
-      (enable the BVN product on your Dojah account). Verify: submitting a real
-      BVN + matching name auto-approves to tier 2; mismatches fall to the admin
-      review queue. Mock is the safe default until keys are set.
-- ☐ **Price feed**: confirm `PRICE_FEED=live` and Binance/CoinGecko reachable
-      from Vercel in production.
-- ☐ Set the business rate + spread in admin **Trading Settings**
-      (`BUSINESS_USDT_NGN_RATE` / `SWAP_SPREAD_BPS`).
+- ☐ **Custody (Tatum)**: `CUSTODY_PROVIDER=tatum` + fresh `TATUM_API_KEY` /
+      `TATUM_WEBHOOK_SECRET`. Verify wallet creation, deposit webhook, withdrawal.
+- ☐ **Payments (Flutterwave)**: `PAYMENT_PROVIDER=flutterwave` +
+      `FLUTTERWAVE_SECRET_KEY` + `FLUTTERWAVE_WEBHOOK_HASH`. Verify NGN deposit,
+      payout, and bill payments against the live Bills API.
+- ☐ **KYC (Dojah)**: `KYC_PROVIDER=dojah` + `DOJAH_APP_ID` / `DOJAH_API_KEY`
+      (enable BVN). Verify auto-approve to tier 2; mismatches → admin review queue.
+- ☐ **Price feed**: confirm `PRICE_FEED=live` reachable from Vercel.
+- ☐ Set business rate + spread in admin **Trading Settings**.
 
-## 4. Money-safety & security review
+## 4. Email / OTP delivery (Supabase)
 
-- ☐ Set **`RELAX_WITHDRAWAL_GUARDS=false`** (or remove) in production so MFA
-      (AAL2) + KYC tier-2 gates are enforced on withdrawals.
-- ☐ Confirm MFA enrolment flow exists for users who want to withdraw crypto.
-- ☐ Re-confirm idempotency keys on every money endpoint (swaps, withdrawals,
-      bills, deposits) and webhook signature verification.
+- ☐ Enable **Email OTP** + email signups (Auth → Providers → Email).
+- ☐ Set **OTP length = 6** (or the app accepts up to 10 either way).
+- ☐ Paste the branded templates (Auth → Emails → Templates); keep `{{ .Token }}`
+      (code) — no `{{ .ConfirmationURL }}` so users get a code, not a magic link.
+- ☐ **Configure custom SMTP** (Resend/SendGrid/SES) + raise rate limits — the
+      built-in email won't deliver OTPs to real users.
+- ☐ Set Site URL + Redirect URLs to the live web app.
+
+## 5. Money-safety & security review
+
+- ☐ Set **`RELAX_WITHDRAWAL_GUARDS=false`** in prod (enforce MFA + KYC-tier gates).
+- ☑ MFA enrolment flow exists (Profile → Security → 2-step authentication).
+- ☑ Per-user "instant withdrawal" opt-out of 2FA (audited).
+- ☐ Re-confirm idempotency keys + webhook signature verification on money endpoints.
 - ☐ Verify atomic debit/refund paths (insufficient funds, provider failure).
-- ☐ Run the `/security-review` over the diff; address findings.
-- ☐ Rate limits sane for production volume.
+- ☐ Run `/security-review` over the diff; address findings.
+- ☐ Set `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` on the API so account
+      deletion also removes the Supabase auth user.
 
-## 5. Data & reliability
+## 6. Data & reliability
 
-- ☐ Confirm all Prisma migrations are applied to prod DB (0001–0004 + enum adds
-      CONVERT/BILL). `biller_assets` table present.
+- ☑ Prisma migrations 0001–0007 applied to prod.
 - ☐ Supabase: enable Point-in-Time Recovery / backups.
-- ☐ Use the Supabase **pooler** URL (port 6543, pgbouncer=true) in prod, not the
-      IPv6-only direct host.
-- ☐ Add basic error monitoring (e.g. Sentry) on web + api.
-- ☐ `/api/health` and `/api/ready` wired to an uptime monitor.
+- ☐ Use the Supabase **pooler** URL (6543, pgbouncer) in prod.
+- ☐ Add error monitoring (e.g. Sentry) on web + api.
+- ☐ `/api/health` + uptime monitor.
 
-## 6. Compliance & legal
+## 7. Compliance & legal
 
-- ☐ Replace placeholder contact details (phone/WhatsApp/address) in
-      Support/Contact pages.
-- ☐ Have the Privacy Policy / Terms / AML pages reviewed by counsel; publish a
-      canonical Privacy Policy URL (Play requires one).
-- ☐ KYC/AML: confirm tier gating + sanctions screening behaviour with real data.
-- ☐ Crypto + remittance licensing posture confirmed for Nigeria.
+- ☐ Replace placeholder contact details in Support/Contact pages.
+- ☐ Privacy Policy / Terms / AML reviewed by counsel; canonical Privacy URL.
+- ☐ KYC/AML tier gating + sanctions screening confirmed with real data.
+- ☐ Crypto + remittance licensing posture for Nigeria.
 
-## 7. Mobile / Play Store packaging
+## 8. Mobile / Play Store packaging
 
-- ☐ Decide wrapper: **TWA (Trusted Web Activity)** of the PWA, or the existing
-      `apps/mobile` (Expo) build.
-- ☐ PWA: verify installability, icons, offline shell, `manifest` (already added).
-- ☐ For TWA: `assetlinks.json` Digital Asset Links hosted on the web domain.
-- ☐ Custom production domain (e.g. app.cheqpay.com) + HTTPS.
-- ☐ Play Console: listing, screenshots, data-safety form, content rating,
-      privacy policy URL, target API level.
-- ☐ Crypto/financial app policy compliance for Play.
+- ☐ Set a real EAS `projectId` in `app.json` (real push tokens).
+- ☐ EAS dev/production build (native modules: biometrics, alternate app icons,
+      expo-print, push — none work in Expo Go).
+- ☐ Custom production domain + HTTPS; PWA installability / TWA `assetlinks.json`.
+- ☐ Play Console listing, data-safety, content rating, privacy URL, target API.
 
-## 8. Pre-launch QA (end-to-end on production, small real amounts)
+## 9. Pre-launch QA (production, small real amounts)
 
-- ☐ Sign up → KYC → deposit NGN → buy BTC → sell BTC → NGN balance updates.
-- ☐ Convert BTC↔USDT; balances + history update.
-- ☐ Receive crypto (real address) and Send crypto (real withdrawal).
-- ☐ Pay each bill type via Flutterwave.
-- ☐ Transactions history correct across home/crypto/history.
-- ☐ Admin: trading settings, bill logos, view users/transactions.
+- ☐ Sign up → KYC → deposit NGN → buy BTC → sell BTC → balance updates.
+- ☐ Convert BTC↔USDT; receive + send crypto; pay each bill type.
+- ☐ 2FA enrol + withdraw with MFA; app lock; delete account.
+- ☐ Admin: log in, analytics, trading settings, users/transactions, KYC review.
 
 ---
 
-## 9. Future features (post-launch backlog)
+## 10. Future features (post-launch backlog)
 
-- ☐ **NFC tap-to-share (native app only)** — let users share a crypto wallet
-      address (and optionally bank details) by tapping phones / an NFC card.
-  - Build in `apps/mobile` with `react-native-nfc-manager` (read/write) +
-    `react-native-hce` (Android tap-to-share). Requires an EAS build / custom
-    dev client (not Expo Go) and a physical device to test.
-  - Platform reality: tap-to-**share** is **Android only** (iOS can't emulate a
-    card); tap-to-**receive** works on Android + iOS. Always ship a **QR
-    fallback** so iPhone senders / any device still work.
-  - Start crypto-only (addresses are public = safe); gate bank details behind a
-    confirm step. Add Play Console NFC permission declarations.
-  - Not feasible in the web/PWA build — native only.
+- ☐ **NFC tap-to-share (native only)** — share a wallet address by tapping phones /
+      an NFC card (`react-native-nfc-manager` + `react-native-hce`, Android-only for
+      share; QR fallback for iOS). Needs an EAS build + physical device.
 
 ---
 
 ### Owner notes
-- Items I can do in code: deploy workflow, guard flags, monitoring wiring,
-  TWA/assetlinks, QA fixes.
-- Items only you can do (dashboard/keys/legal): rotate secrets, set provider
-  keys + env vars, delete dup Vercel projects, legal review, Play Console.
-
-
-<!-- deploy: trigger clean admin production build (root dir apps/admin) -->
-
-<!-- deploy: trigger clean admin production build -->
+- Code-side items I can do: main-only deploy workflow, `/api/health` + monitoring
+  wiring, TWA/assetlinks, QA fixes.
+- Dashboard/keys/legal (yours): rotate secrets, provider keys + env vars, Supabase
+  email/SMTP config, legal review, Play Console.
