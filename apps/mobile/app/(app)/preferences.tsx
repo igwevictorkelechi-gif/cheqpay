@@ -21,7 +21,7 @@ const rows: Row[] = [
     iconBg: 'rgba(245,166,35,0.15)',
     title: 'Notifications',
     subtitle: 'Customize your notification experience',
-    route: '/(app)/settings',
+    route: '/(app)/notifications',
   },
   {
     icon: 'color-palette',
@@ -29,7 +29,7 @@ const rows: Row[] = [
     iconBg: 'rgba(79,168,255,0.15)',
     title: 'App Theme',
     subtitle: "Control CheqPay app's look and feel",
-    route: '/(app)/settings',
+    route: '/(app)/app-theme',
   },
   {
     icon: 'cash',
@@ -44,6 +44,7 @@ const rows: Row[] = [
     iconBg: 'rgba(138,123,181,0.2)',
     title: 'App Icon',
     subtitle: 'Change CheqPay app icon to your style',
+    route: '/(app)/app-icon',
   },
 ];
 

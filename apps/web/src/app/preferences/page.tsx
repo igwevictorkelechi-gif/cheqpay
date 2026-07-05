@@ -27,7 +27,7 @@ const rows: Row[] = [
     iconBg: "rgba(245,166,35,0.15)",
     title: "Notifications",
     subtitle: "Customize your notification experience",
-    href: "/settings",
+    href: "/notifications",
   },
   {
     icon: Palette,
@@ -35,7 +35,7 @@ const rows: Row[] = [
     iconBg: "rgba(79,168,255,0.15)",
     title: "App Theme",
     subtitle: "Control CheqPay app's look and feel",
-    href: "/settings",
+    href: "/app-theme",
   },
   {
     icon: Banknote,
@@ -50,6 +50,7 @@ const rows: Row[] = [
     iconBg: "rgba(138,123,181,0.2)",
     title: "App Icon",
     subtitle: "Change CheqPay app icon to your style",
+    href: "/app-icon",
   },
 ];
 
