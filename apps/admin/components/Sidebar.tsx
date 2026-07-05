@@ -58,6 +58,7 @@ const categories: Category[] = [
     items: [
       { label: 'Payment Settings', href: '/payment-settings', icon: CreditCard },
       { label: 'Provider Settings', href: '/provider-settings', icon: Server },
+      { label: 'Admin Profile', href: '/profile', icon: ShieldCheck },
     ],
   },
 ];

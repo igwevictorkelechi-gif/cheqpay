@@ -2,34 +2,22 @@ import { NextResponse } from "next/server";
 import {
   SESSION_COOKIE,
   adminSecret,
-  isAllowedEmail,
   sessionCookieValue,
   sessionEmail,
 } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 
+const API_URL = process.env.CHEQPAY_API_URL ?? "https://cheqpay-admin453.vercel.app";
 const TWELVE_HOURS = 60 * 60 * 12;
 
-function supabaseConfig() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const anon =
-    process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  return { url, anon };
-}
-
-/**
- * Log in with an admin's own Supabase email + password. Grants a session only
- * if the credentials are valid AND the email is on the ADMIN_EMAILS allowlist.
- */
+/** Log in with the admin dashboard credentials (verified by the backend). */
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const email = String(body?.email ?? "").trim().toLowerCase();
   const password = String(body?.password ?? "");
 
-  const { url, anon } = supabaseConfig();
-  // Fail-closed if the server isn't configured to authenticate/sign sessions.
-  if (!url || !anon || !adminSecret()) {
+  if (!adminSecret()) {
     return NextResponse.json(
       { error: "Admin login is not configured on the server." },
       { status: 503 }
@@ -39,25 +27,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
   }
 
-  // Verify credentials against Supabase Auth (password grant).
-  const auth = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+  const verify = await fetch(`${API_URL}/api/admin/login`, {
     method: "POST",
-    headers: { apikey: anon, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
+    cache: "no-store",
   }).catch(() => null);
 
-  if (!auth || !auth.ok) {
-    return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
-  }
-  const data = (await auth.json().catch(() => ({}))) as { user?: { email?: string } };
-  const authedEmail = (data.user?.email ?? email).toLowerCase();
-
-  if (!isAllowedEmail(authedEmail)) {
+  if (!verify || !verify.ok) {
+    const status = verify?.status === 401 ? 401 : verify?.status ?? 502;
     return NextResponse.json(
-      { error: "This account is not authorized for the admin dashboard." },
-      { status: 403 }
+      { error: status === 401 ? "Invalid email or password" : "Login is temporarily unavailable" },
+      { status }
     );
   }
+  const data = (await verify.json().catch(() => ({}))) as { email?: string };
+  const authedEmail = (data.email ?? email).toLowerCase();
 
   const res = NextResponse.json({ ok: true, email: authedEmail });
   res.cookies.set(SESSION_COOKIE, await sessionCookieValue(authedEmail), {

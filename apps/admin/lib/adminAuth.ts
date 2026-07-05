@@ -12,20 +12,6 @@ export function adminSecret(): string {
   return process.env.ADMIN_DASHBOARD_SECRET || process.env.ADMIN_API_SECRET || "";
 }
 
-/** Allowlisted admin emails (lowercased). */
-export function adminEmails(): Set<string> {
-  return new Set(
-    (process.env.ADMIN_EMAILS || "")
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean)
-  );
-}
-
-export function isAllowedEmail(email: string): boolean {
-  return adminEmails().has(email.trim().toLowerCase());
-}
-
 // --- base64url helpers (email <-> cookie segment) --------------------------
 function b64urlEncode(s: string): string {
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -83,7 +69,6 @@ export async function sessionEmail(cookie: string | undefined): Promise<string |
   const sig = cookie.slice(dot + 1);
   const expected = await hmacHex(secret, `session:${email}`);
   if (!timingSafeEqual(sig, expected)) return null;
-  if (!isAllowedEmail(email)) return null;
   return email;
 }
 
