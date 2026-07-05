@@ -61,7 +61,8 @@ export default function VerifyOTPScreen() {
         if (result.success && result.data?.user) {
           setUser(result.data.user);
           setIsAuthenticated(true);
-          router.replace('/(app)/home');
+          // New users continue onboarding: identity check, then app PIN.
+          router.replace('/(app)/onboarding');
         }
       } else {
         // Login existing user

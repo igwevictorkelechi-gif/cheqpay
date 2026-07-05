@@ -79,6 +79,7 @@ export default function AppLayout() {
       <Tabs.Screen name="app-lock" options={{ href: null }} />
       <Tabs.Screen name="instant-withdrawal" options={{ href: null }} />
       <Tabs.Screen name="transaction/[id]" options={{ href: null }} />
+      <Tabs.Screen name="onboarding" options={{ href: null }} />
       <Tabs.Screen name="kyc" options={{ href: null }} />
       <Tabs.Screen name="bill/[service]" options={{ href: null }} />
       <Tabs.Screen name="receive" options={{ href: null }} />

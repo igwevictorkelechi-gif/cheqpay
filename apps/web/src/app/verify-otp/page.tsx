@@ -49,7 +49,8 @@ function VerifyOTPForm() {
       const user = await authService.getCurrentUser();
       if (user) {
         setUser(user);
-        router.push("/");
+        // New sign-ups continue onboarding (identity + PIN); logins go home.
+        router.push(type === "signup" ? "/onboarding" : "/");
       }
     } catch (err) {
       setError("Invalid OTP. Please try again.");
