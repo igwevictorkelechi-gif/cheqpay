@@ -14,26 +14,25 @@ import { authService } from '@/services/auth';
 import { Logo } from '@/components/brand';
 
 export default function LoginScreen() {
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSendOTP = async () => {
-    if (!phone || phone.length < 10) {
-      Alert.alert('Error', 'Please enter a valid phone number');
+    if (!email || !email.includes('@')) {
+      Alert.alert('Error', 'Please enter a valid email address');
       return;
     }
 
     setLoading(true);
     try {
-      const result = await authService.sendOTP(phone);
+      const result = await authService.sendEmailOtp(email.trim().toLowerCase(), { create: false });
       if (result.success) {
-        // Navigate to OTP verification screen
         router.push({
           pathname: '/(auth)/verify-otp',
-          params: { phone, isSignup: false },
+          params: { email: email.trim().toLowerCase(), isSignup: '' },
         });
       } else {
-        Alert.alert('Error', 'Failed to send OTP. Please try again.');
+        Alert.alert('Error', 'Could not send the code. Check the email and try again.');
       }
     } catch (error) {
       Alert.alert('Error', 'An error occurred. Please try again.');
@@ -53,23 +52,24 @@ export default function LoginScreen() {
           </Text>
         </View>
 
-        {/* Phone Input */}
+        {/* Email Input */}
         <View className="mb-6">
-          <Text className="text-gray-700 font-semibold mb-3">Phone Number</Text>
+          <Text className="text-gray-700 font-semibold mb-3">Email Address</Text>
           <TextInput
             className="border border-gray-300 rounded-lg px-4 py-3 text-base"
-            placeholder="08012345678"
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
+            placeholder="you@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
             editable={!loading}
           />
           <Text className="text-gray-500 text-xs mt-2">
-            We'll send an OTP to verify your number
+            We'll email you a 6-digit code to sign in
           </Text>
         </View>
 
-        {/* Send OTP Button */}
+        {/* Send Code Button */}
         <TouchableOpacity
           className={`${
             loading ? 'bg-green-400' : 'bg-green-600'
@@ -80,7 +80,7 @@ export default function LoginScreen() {
           {loading ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text className="text-white font-bold text-lg">Send OTP</Text>
+            <Text className="text-white font-bold text-lg">Send code</Text>
           )}
         </TouchableOpacity>
 

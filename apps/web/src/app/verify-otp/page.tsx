@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthLayout from "@/components/AuthLayout";
 import { authService } from "@/services/auth";
+import { api } from "@/services/api";
 import { useAuthStore } from "@/store";
 
 function VerifyOTPForm() {
@@ -11,7 +12,6 @@ function VerifyOTPForm() {
   const searchParams = useSearchParams();
   const { setUser, setLoading: setAuthLoading } = useAuthStore();
 
-  const phone = searchParams.get("phone") || "";
   const type = searchParams.get("type") || "login";
   const fullName = searchParams.get("fullName") || "";
   const email = searchParams.get("email") || "";
@@ -40,20 +40,23 @@ function VerifyOTPForm() {
     }
 
     try {
-      if (type === "signup") {
-        await authService.register(phone, email, fullName, otp);
-      } else {
-        await authService.verifyOTP(phone, otp);
+      const verified = await authService.verifyEmailOtp(email, otp);
+      if (!verified) {
+        setError("Invalid or expired code. Please try again.");
+        return;
       }
-
+      // Ensure the custodial backend profile + wallets exist.
+      try {
+        await api.ensureProvisioned();
+      } catch {
+        /* non-fatal — screens re-provision on demand */
+      }
       const user = await authService.getCurrentUser();
-      if (user) {
-        setUser(user);
-        // New sign-ups continue onboarding (identity + PIN); logins go home.
-        router.push(type === "signup" ? "/onboarding" : "/");
-      }
+      if (user) setUser(user);
+      // New sign-ups continue onboarding (identity + PIN); logins go home.
+      router.push(type === "signup" ? "/onboarding" : "/");
     } catch (err) {
-      setError("Invalid OTP. Please try again.");
+      setError("Invalid or expired code. Please try again.");
       console.error(err);
     } finally {
       setLoading(false);
@@ -62,11 +65,11 @@ function VerifyOTPForm() {
 
   const handleResendOTP = async () => {
     try {
-      await authService.sendOTP(phone);
+      await authService.sendEmailOtp(email, { create: type === "signup", fullName });
       setResendTimer(60);
       setOtp("");
     } catch (err) {
-      setError("Failed to resend OTP");
+      setError("Failed to resend the code");
       console.error(err);
     }
   };
@@ -74,9 +77,9 @@ function VerifyOTPForm() {
   return (
     <AuthLayout>
       <div className="p-8">
-        <h2 className="text-2xl font-bold text-gray-900">Verify OTP</h2>
-        <p className="mt-2 text-sm text-gray-600">
-          Enter the 6-digit code sent to {phone}
+        <h2 className="text-2xl font-bold text-ink">Verify your email</h2>
+        <p className="mt-2 text-sm text-muted">
+          Enter the 6-digit code sent to <span className="font-semibold">{email}</span>
         </p>
 
         <form onSubmit={handleVerifyOTP} className="mt-6 space-y-4">

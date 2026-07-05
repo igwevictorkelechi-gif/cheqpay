@@ -5,31 +5,26 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "@/components/AuthLayout";
 import { authService } from "@/services/auth";
-import { useAuthStore } from "@/store";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setLoading, setUser } = useAuthStore();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLocalLoading] = useState(false);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please enter a valid email address.");
+      return;
+    }
     setLocalLoading(true);
     try {
-      const user = await authService.signInWithEmail(email.trim(), password);
-      if (!user) {
-        setError("Could not sign you in. Please check your details.");
-        return;
-      }
-      setUser(user);
-      setLoading(false);
-      router.push("/");
+      await authService.sendEmailOtp(email.trim().toLowerCase(), { create: false });
+      router.push(`/verify-otp?type=login&email=${encodeURIComponent(email.trim().toLowerCase())}`);
     } catch (err) {
-      setError("Invalid email or password.");
+      setError("Could not send the code. Please try again.");
       console.error(err);
     } finally {
       setLocalLoading(false);
@@ -41,7 +36,7 @@ export default function LoginPage() {
       <div className="p-8">
         <h2 className="text-2xl font-bold text-ink">Welcome Back</h2>
         <p className="mt-2 text-sm text-muted">
-          Sign in to your CheqPay account
+          Sign in with a code sent to your email
         </p>
 
         <form onSubmit={handleSignIn} className="mt-6 space-y-4">
@@ -58,19 +53,6 @@ export default function LoginPage() {
             />
           </div>
 
-          <div>
-            <label className="label">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="input"
-              disabled={loading}
-              autoComplete="current-password"
-            />
-          </div>
-
           {error && (
             <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-400">
               {error}
@@ -79,10 +61,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading || !email.trim() || !password}
+            disabled={loading || !email.trim()}
             className="btn-primary w-full"
           >
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? "Sending code..." : "Send code"}
           </button>
         </form>
 

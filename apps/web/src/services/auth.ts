@@ -53,6 +53,37 @@ export const authService = {
     return { user: null, needsConfirmation: true };
   },
 
+  /**
+   * Send a 6-digit email verification code (Supabase email OTP). For sign-up,
+   * pass create=true plus the profile metadata to stamp onto the auth user.
+   */
+  async sendEmailOtp(
+    email: string,
+    opts?: { create?: boolean; fullName?: string; phone?: string }
+  ): Promise<void> {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: opts?.create ?? false,
+        data: opts?.create
+          ? { full_name: opts?.fullName ?? "", phone: opts?.phone ?? "" }
+          : undefined,
+      },
+    });
+    if (error) throw error;
+  },
+
+  /** Verify the emailed code and establish the session. */
+  async verifyEmailOtp(email: string, token: string): Promise<User | null> {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: "email",
+    });
+    if (error) throw error;
+    return data.user ? toUser(data.user) : null;
+  },
+
   async sendOTP(phone: string) {
     try {
       const response = await fetch("/api/auth/send-otp", {

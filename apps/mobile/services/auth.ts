@@ -1,62 +1,57 @@
 import { supabase } from './supabase';
 import { User } from '@cheqpay/shared';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
+
+/** Build the app User shape from a Supabase auth user + its metadata. */
+function toUser(u: SupabaseUser): User {
+  const meta = (u.user_metadata ?? {}) as { full_name?: string; phone?: string };
+  return {
+    id: u.id,
+    email: u.email ?? '',
+    phone: meta.phone ?? u.phone ?? '',
+    full_name: meta.full_name ?? '',
+    kyc_status: 'pending',
+    referral_code: '',
+    created_at: u.created_at ?? '',
+    updated_at: u.updated_at ?? '',
+  };
+}
 
 export const authService = {
-  async sendOTP(phone: string) {
-    try {
-      // Call edge function to send OTP
-      const { data, error } = await supabase.functions.invoke('send-otp', {
-        body: { phone },
-      });
-
-      if (error) throw error;
-      return { success: true, data };
-    } catch (error) {
-      console.error('Send OTP error:', error);
-      return { success: false, error };
-    }
-  },
-
-  async verifyOTP(phone: string, otpCode: string) {
-    try {
-      const { data, error } = await supabase.functions.invoke('verify-otp', {
-        body: { phone, otp_code: otpCode },
-      });
-
-      if (error) throw error;
-
-      // Store session
-      if (data?.session) {
-        await supabase.auth.setSession(data.session);
-      }
-
-      return { success: true, data };
-    } catch (error) {
-      console.error('Verify OTP error:', error);
-      return { success: false, error };
-    }
-  },
-
-  async register(
-    phone: string,
+  /**
+   * Send a 6-digit email verification code (Supabase email OTP). For sign-up,
+   * pass create=true plus the profile metadata to stamp onto the auth user.
+   */
+  async sendEmailOtp(
     email: string,
-    fullName: string,
-    otpCode: string
+    opts?: { create?: boolean; fullName?: string; phone?: string }
   ) {
     try {
-      const { data, error } = await supabase.functions.invoke('register', {
-        body: {
-          phone,
-          email,
-          full_name: fullName,
-          otp_code: otpCode,
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: opts?.create ?? false,
+          data: opts?.create
+            ? { full_name: opts?.fullName ?? '', phone: opts?.phone ?? '' }
+            : undefined,
         },
       });
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Send email OTP error:', error);
+      return { success: false, error };
+    }
+  },
 
+  /** Verify the emailed code and establish the session. */
+  async verifyEmailOtp(email: string, token: string) {
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
       if (error) throw error;
       return { success: true, data };
     } catch (error) {
-      console.error('Register error:', error);
+      console.error('Verify email OTP error:', error);
       return { success: false, error };
     }
   },
@@ -67,18 +62,8 @@ export const authService = {
         data: { user },
         error,
       } = await supabase.auth.getUser();
-
       if (error || !user) return null;
-
-      // Fetch full user profile
-      const { data, error: fetchError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (fetchError) return null;
-      return data;
+      return toUser(user);
     } catch (error) {
       console.error('Get current user error:', error);
       return null;

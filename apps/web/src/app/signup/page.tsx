@@ -5,14 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "@/components/AuthLayout";
 import { authService } from "@/services/auth";
-import { useAuthStore } from "@/store";
 
 export default function SignupPage() {
   const router = useRouter();
-  const { setUser, setLoading } = useAuthStore();
-  const [form, setForm] = useState({ fullName: "", email: "", password: "" });
+  const [form, setForm] = useState({ fullName: "", email: "", phone: "" });
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [loading, setLocalLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -21,7 +18,6 @@ export default function SignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setNotice("");
 
     if (form.fullName.trim().length < 2) {
       setError("Full name must be at least 2 characters");
@@ -31,27 +27,18 @@ export default function SignupPage() {
       setError("Please enter a valid email address");
       return;
     }
-    if (form.password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
 
     setLocalLoading(true);
     try {
-      const { user, needsConfirmation } = await authService.signUpWithEmail(
-        form.email.trim(),
-        form.password,
-        form.fullName.trim()
+      const email = form.email.trim().toLowerCase();
+      await authService.sendEmailOtp(email, {
+        create: true,
+        fullName: form.fullName.trim(),
+        phone: form.phone.trim(),
+      });
+      router.push(
+        `/verify-otp?type=signup&email=${encodeURIComponent(email)}&fullName=${encodeURIComponent(form.fullName.trim())}`
       );
-      if (user) {
-        setUser(user);
-        setLoading(false);
-        router.push("/");
-      } else if (needsConfirmation) {
-        setNotice(
-          "Account created. Please check your email to confirm, then log in."
-        );
-      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sign up failed";
       setError(message);
@@ -98,32 +85,29 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <label className="label">Password</label>
+            <label className="label">Phone Number (optional)</label>
             <input
-              type="password"
-              name="password"
-              value={form.password}
+              type="tel"
+              name="phone"
+              value={form.phone}
               onChange={handleChange}
-              placeholder="At least 6 characters"
+              placeholder="08012345678"
               className="input"
               disabled={loading}
-              autoComplete="new-password"
+              autoComplete="tel"
             />
           </div>
 
           {error && (
             <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
           )}
-          {notice && (
-            <div className="rounded-lg bg-green-500/10 p-3 text-sm text-green-400">{notice}</div>
-          )}
 
           <button
             type="submit"
-            disabled={loading || !form.fullName || !form.email || !form.password}
+            disabled={loading || !form.fullName || !form.email}
             className="btn-primary w-full"
           >
-            {loading ? "Creating account..." : "Create Account"}
+            {loading ? "Sending code..." : "Create Account"}
           </button>
         </form>
 

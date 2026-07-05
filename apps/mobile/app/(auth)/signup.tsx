@@ -21,10 +21,6 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleSendOTP = async () => {
-    if (!phone || phone.length < 10) {
-      Alert.alert('Error', 'Please enter a valid phone number');
-      return;
-    }
     if (!email || !email.includes('@')) {
       Alert.alert('Error', 'Please enter a valid email address');
       return;
@@ -36,14 +32,18 @@ export default function SignupScreen() {
 
     setLoading(true);
     try {
-      const result = await authService.sendOTP(phone);
+      const result = await authService.sendEmailOtp(email.trim().toLowerCase(), {
+        create: true,
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+      });
       if (result.success) {
         router.push({
           pathname: '/(auth)/verify-otp',
-          params: { phone, email, fullName, isSignup: true },
+          params: { email: email.trim().toLowerCase(), fullName, isSignup: '1' },
         });
       } else {
-        Alert.alert('Error', 'Failed to send OTP. Please try again.');
+        Alert.alert('Error', 'Could not send the code. Please try again.');
       }
     } catch (error) {
       Alert.alert('Error', 'An error occurred. Please try again.');
@@ -92,7 +92,7 @@ export default function SignupScreen() {
 
         {/* Phone Input */}
         <View className="mb-6">
-          <Text className="text-gray-700 font-semibold mb-2">Phone Number</Text>
+          <Text className="text-gray-700 font-semibold mb-2">Phone Number (optional)</Text>
           <TextInput
             className="border border-gray-300 rounded-lg px-4 py-3 text-base"
             placeholder="08012345678"
