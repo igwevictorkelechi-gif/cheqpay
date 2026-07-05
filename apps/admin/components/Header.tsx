@@ -1,9 +1,18 @@
 'use client';
 
 import React from 'react';
-import { Search, Bell, Settings, Menu } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, Bell, Settings, Menu, LogOut } from 'lucide-react';
 
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
+  const router = useRouter();
+
+  const logout = async () => {
+    await fetch('/api/auth', { method: 'DELETE' }).catch(() => {});
+    router.replace('/login');
+    router.refresh();
+  };
+
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
       <div className="px-4 lg:px-8 py-4 flex items-center justify-between gap-3">
@@ -47,6 +56,13 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               </div>
             </div>
           </div>
+          <button
+            onClick={logout}
+            title="Log out"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
+          >
+            <LogOut size={20} />
+          </button>
         </div>
       </div>
     </header>
