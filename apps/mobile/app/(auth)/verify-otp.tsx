@@ -55,6 +55,11 @@ export default function VerifyOTPScreen() {
         return;
       }
 
+      // The session is now established. Mark authenticated immediately so the
+      // root route guard doesn't bounce us to /login while we finish the async
+      // provisioning below (which would skip onboarding entirely).
+      setIsAuthenticated(true);
+
       // Ensure the custodial backend profile + wallets exist.
       try {
         await api.ensureProvisioned();
@@ -63,10 +68,8 @@ export default function VerifyOTPScreen() {
       }
 
       const user = await authService.getCurrentUser();
-      if (user) {
-        setUser(user);
-        setIsAuthenticated(true);
-      }
+      if (user) setUser(user);
+
       // New sign-ups continue onboarding (identity + PIN); logins go home.
       router.replace(signingUp ? '/(app)/onboarding' : '/(app)/home');
     } catch (error) {
