@@ -40,7 +40,17 @@ export default function ProviderSettingsPage() {
     let active = true;
     fetch('/api/provider-status')
       .then(async (r) => {
-        if (!r.ok) throw new Error('Failed to load provider status (' + r.status + ')');
+        if (!r.ok) {
+          const hint =
+            r.status === 401
+              ? 'Your admin session is invalid. Log out and back in, and make sure ADMIN_DASHBOARD_SECRET is set on the admin (cheqpay-admin) project.'
+              : r.status === 403
+                ? 'The dashboard could not authenticate to the backend API. Set the SAME ADMIN_API_SECRET on BOTH the admin project (cheqpay-admin) and the API project (cheqpay-admin453), then redeploy both.'
+                : r.status >= 500
+                  ? 'The backend API is unreachable. Check CHEQPAY_API_URL on the admin project points to the API (https://cheqpay-admin453.vercel.app).'
+                  : 'Unexpected error reaching the backend.';
+          throw new Error(`Couldn’t load provider status (HTTP ${r.status}). ${hint}`);
+        }
         return r.json();
       })
       .then((d) => { if (active) setData(d); })
