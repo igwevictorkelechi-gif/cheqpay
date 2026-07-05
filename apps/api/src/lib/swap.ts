@@ -7,6 +7,8 @@ import {
 } from "@cheqpay/db";
 import { ApiError } from "./http";
 import { isWithinSingleTxLimit } from "./kyc";
+import { fromMinorUnits } from "./money";
+import { sendPush } from "./push";
 import {
   computeCryptoConvert,
   computeSwap,
@@ -161,7 +163,7 @@ export async function executeSwap(params: {
   const cryptoAsset = side === "buy" ? quote.toAsset : quote.fromAsset;
   const cryptoAmountMinor = side === "buy" ? quote.amountOut : quote.amountIn;
 
-  return prisma.$transaction(async (db) => {
+  const result = await prisma.$transaction(async (db) => {
     // Consume the quote (first writer wins).
     const consumed = await db.quote.updateMany({
       where: { id: quote.id, consumed: false },
@@ -233,4 +235,31 @@ export async function executeSwap(params: {
 
     return { transactionId: record.id, status: record.status };
   });
+
+  // Trade confirmation (best-effort, after commit).
+  const fmtNgn = (m: bigint) => `₦${fromMinorUnits(m, Asset.NGN)}`;
+  const fmtCrypto = (m: bigint, a: Asset) => `${fromMinorUnits(m, a)} ${a}`;
+  let title: string;
+  let body: string;
+  if (isConvert) {
+    title = "Conversion complete";
+    body = `Converted ${fmtCrypto(quote.amountIn, quote.fromAsset)} to ${fmtCrypto(
+      quote.amountOut,
+      quote.toAsset
+    )}.`;
+  } else if (side === "buy") {
+    title = "Purchase complete";
+    body = `Bought ${fmtCrypto(quote.amountOut, cryptoAsset)} for ${fmtNgn(quote.amountIn)}.`;
+  } else {
+    title = "Sale complete";
+    body = `Sold ${fmtCrypto(quote.amountIn, cryptoAsset)} for ${fmtNgn(quote.amountOut)}.`;
+  }
+  await sendPush(params.userId, {
+    category: "trades",
+    title,
+    body,
+    data: { transactionId: result.transactionId },
+  });
+
+  return result;
 }

@@ -2,10 +2,11 @@ import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { getPaymentProvider } from "@/payments";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
-import { toMinorUnits } from "@/lib/money";
+import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { getBiller, getPlan, getServiceConfig } from "@/lib/bills";
 import { billPaySchema } from "@/lib/validation";
+import { sendPush } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
@@ -151,6 +152,17 @@ export async function POST(req: Request) {
           },
         },
       });
+      if (status === TransactionStatus.COMPLETED) {
+        await sendPush(auth.id, {
+          category: "bills",
+          title: "Bill paid",
+          body: `${biller.name} — ₦${fromMinorUnits(amountMinor, Asset.NGN)}${
+            body.customer ? ` for ${body.customer}` : ""
+          }.`,
+          data: { transactionId: tx.id },
+        });
+      }
+
       return jsonOk({
         transactionId: tx.id,
         status: status === TransactionStatus.COMPLETED ? "completed" : "processing",

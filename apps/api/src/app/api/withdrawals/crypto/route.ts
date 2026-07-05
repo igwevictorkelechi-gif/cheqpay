@@ -13,7 +13,8 @@ import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { isSupportedWallet } from "@/lib/assets";
 import { getTierLimits, MAX_TIER } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
-import { toMinorUnits } from "@/lib/money";
+import { toMinorUnits, fromMinorUnits } from "@/lib/money";
+import { sendPush } from "@/lib/push";
 import { cryptoToNgnKobo } from "@/lib/rates";
 import { getUsdtNgnRate } from "@/lib/settings";
 import {
@@ -147,6 +148,12 @@ export async function POST(req: Request) {
           details: { reasons: aml.reasons, ngnValueKobo: ngnValueKobo.toString() },
         },
       });
+      await sendPush(auth.id, {
+        category: "security",
+        title: "Withdrawal under review",
+        body: `Your ${asset} withdrawal is being reviewed by our compliance team.`,
+        data: { transactionId: tx.id },
+      });
       return jsonOk({ transactionId: tx.id, status: "under_review", reasons: aml.reasons });
     }
 
@@ -172,6 +179,12 @@ export async function POST(req: Request) {
           resourceId: tx.id,
           details: { asset, network, amountMinor: amountMinor.toString(), txHash: result.txHash },
         },
+      });
+      await sendPush(auth.id, {
+        category: "withdrawals",
+        title: "Crypto withdrawal sent",
+        body: `${fromMinorUnits(amountMinor, asset)} ${asset} is on its way to ${body.toAddress.slice(0, 8)}…`,
+        data: { transactionId: tx.id, txHash: result.txHash },
       });
       return jsonOk({ transactionId: tx.id, status: "processing", txHash: result.txHash });
     } catch {

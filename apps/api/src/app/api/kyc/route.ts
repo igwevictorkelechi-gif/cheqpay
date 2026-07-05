@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { getTierLimits } from "@/lib/kyc";
 import { getKycProvider } from "@/kyc";
+import { sendPush } from "@/lib/push";
 import { kycTier1Schema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -77,6 +78,11 @@ export async function POST(req: Request) {
       await prisma.user.update({
         where: { id: auth.id },
         data: { kycTier: { set: Math.max(user.kycTier, verdict.tier) } },
+      });
+      await sendPush(auth.id, {
+        category: "security",
+        title: "Identity verified",
+        body: "Your KYC is approved. Your limits are raised and withdrawals are unlocked.",
       });
     }
 

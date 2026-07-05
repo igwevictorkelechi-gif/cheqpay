@@ -1,6 +1,7 @@
 import { KycStatus, prisma } from "@cheqpay/db";
 import { requireAdmin } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
+import { sendPush } from "@/lib/push";
 import { kycReviewSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +97,14 @@ export async function POST(req: Request) {
           details: { actor, tier: approving ? grantTier : record.tier },
         },
       });
+    });
+
+    await sendPush(record.userId, {
+      category: "security",
+      title: approving ? "Identity verified" : "KYC needs attention",
+      body: approving
+        ? "Your KYC was approved. Your limits are raised and withdrawals are unlocked."
+        : "Your KYC submission was not approved. Please review and resubmit.",
     });
 
     return jsonOk({
