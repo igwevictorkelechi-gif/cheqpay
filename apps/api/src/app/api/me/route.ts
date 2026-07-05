@@ -32,11 +32,27 @@ export async function POST(req: Request) {
     if (!auth.email) {
       throw new ApiError(400, "Token has no email claim", "missing_email");
     }
-    const user = await prisma.user.upsert({
-      where: { id: auth.id },
-      update: { email: auth.email, phone: auth.phone ?? undefined },
-      create: { id: auth.id, email: auth.email, phone: auth.phone ?? null },
-    });
+    // Phone is unique; if the token's phone already belongs to another account
+    // (or collides), provision without it rather than failing the whole login.
+    const withPhone = auth.phone ?? undefined;
+    let user;
+    try {
+      user = await prisma.user.upsert({
+        where: { id: auth.id },
+        update: { email: auth.email, phone: withPhone },
+        create: { id: auth.id, email: auth.email, phone: auth.phone ?? null },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        user = await prisma.user.upsert({
+          where: { id: auth.id },
+          update: { email: auth.email },
+          create: { id: auth.id, email: auth.email, phone: null },
+        });
+      } else {
+        throw e;
+      }
+    }
     return jsonOk(serialize(user));
   } catch (err) {
     return toErrorResponse(err);
