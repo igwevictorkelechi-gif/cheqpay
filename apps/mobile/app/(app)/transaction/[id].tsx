@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Share, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/components/brand';
 import { txnIcon, txnTitle, txnAmount, fmt } from '@/components/TxnRow';
+import { shareReceipt } from '@/lib/receipt';
 import { api, getAccessToken, type LedgerTransaction } from '@/services/api';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -48,25 +49,17 @@ export default function TransactionDetailScreen() {
     })();
   }, [id]);
 
+  const [sharing, setSharing] = useState(false);
   const share = async () => {
-    if (!tx) return;
-    const amt = txnAmount(tx);
-    const when = new Date(tx.createdAt).toLocaleString('en-NG');
-    const lines = [
-      'CheqPay receipt',
-      '',
-      `${txnTitle(tx)}`,
-      `Amount: ${amt.text}`,
-      `Status: ${tx.status}`,
-      `Date: ${when}`,
-      tx.fromFormatted && tx.toFormatted ? `From: ${fmt(tx.fromFormatted)} ${tx.fromAsset}` : '',
-      tx.fromFormatted && tx.toFormatted ? `To: ${fmt(tx.toFormatted)} ${tx.toAsset}` : '',
-      tx.customer ? `Recipient: ${tx.customer}` : '',
-      tx.toAddress ? `Address: ${tx.toAddress}` : '',
-      tx.txHash ? `Tx hash: ${tx.txHash}` : '',
-      `Reference: ${tx.id}`,
-    ].filter(Boolean);
-    await Share.share({ message: lines.join('\n') });
+    if (!tx || sharing) return;
+    setSharing(true);
+    try {
+      await shareReceipt(tx);
+    } catch {
+      Alert.alert('Could not share', 'Please try again.');
+    } finally {
+      setSharing(false);
+    }
   };
 
   const statusColor = tx ? STATUS_COLOR[tx.status] ?? colors.muted : colors.muted;

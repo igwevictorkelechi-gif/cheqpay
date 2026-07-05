@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Share2, Loader2 } from "lucide-react";
 import { txnIcon, txnTitle, txnAmount } from "@/components/TxnRow";
+import { shareReceiptImage } from "@/lib/receipt";
 import { api, getAccessToken, type LedgerTransaction } from "@/services/api";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -51,35 +52,19 @@ export default function TransactionDetailPage() {
     })();
   }, [id]);
 
+  const [sharing, setSharing] = useState(false);
   const share = async () => {
-    if (!tx) return;
-    const amt = txnAmount(tx);
-    const lines = [
-      "CheqPay receipt",
-      "",
-      txnTitle(tx),
-      `Amount: ${amt.text}`,
-      `Status: ${tx.status}`,
-      `Date: ${new Date(tx.createdAt).toLocaleString("en-NG")}`,
-      tx.fromFormatted && tx.toFormatted ? `From: ${num(tx.fromFormatted)} ${tx.fromAsset}` : "",
-      tx.fromFormatted && tx.toFormatted ? `To: ${num(tx.toFormatted)} ${tx.toAsset}` : "",
-      tx.customer ? `Recipient: ${tx.customer}` : "",
-      tx.toAddress ? `Address: ${tx.toAddress}` : "",
-      tx.txHash ? `Tx hash: ${tx.txHash}` : "",
-      `Reference: ${tx.id}`,
-    ].filter(Boolean);
-    const text = lines.join("\n");
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "CheqPay receipt", text });
-        return;
-      } catch {
-        /* fall through to copy */
+    if (!tx || sharing) return;
+    setSharing(true);
+    try {
+      const result = await shareReceiptImage(tx);
+      if (result === "downloaded") {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1800);
       }
+    } finally {
+      setSharing(false);
     }
-    await navigator.clipboard?.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
   };
 
   const statusColor = tx ? STATUS_COLOR[tx.status] ?? "#9A93AD" : "#9A93AD";
@@ -98,10 +83,11 @@ export default function TransactionDetailPage() {
           {tx && (
             <button
               onClick={share}
+              disabled={sharing}
               className="flex items-center gap-2 rounded-full bg-card px-4 py-2.5 text-sm font-semibold text-ink"
             >
               <Share2 className="h-4 w-4" />
-              {copied ? "Copied" : "Share"}
+              {sharing ? "…" : copied ? "Saved" : "Share"}
             </button>
           )}
         </div>
@@ -164,10 +150,11 @@ export default function TransactionDetailPage() {
 
             <button
               onClick={share}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-brand py-4 text-base font-bold text-white"
+              disabled={sharing}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-brand py-4 text-base font-bold text-white disabled:opacity-70"
             >
               <Share2 className="h-5 w-5" />
-              Share receipt
+              {sharing ? "Preparing…" : "Share receipt"}
             </button>
           </>
         )}
