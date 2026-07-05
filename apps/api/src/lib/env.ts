@@ -1,6 +1,25 @@
 import { z } from "zod";
 
 /**
+ * A provider-mode selector that is forgiving of misconfiguration: values are
+ * trimmed + lowercased, and anything not in the allow-list falls back to a safe
+ * default (with a warning) instead of throwing. This prevents a single bad env
+ * var (e.g. a secret key pasted into CUSTODY_PROVIDER) from crashing the whole
+ * API. The invalid value is never logged (it may be a secret).
+ */
+function providerEnum<T extends [string, ...string[]]>(name: string, values: T, fallback: T[number]) {
+  return z.preprocess(
+    (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
+    z.enum(values).catch(() => {
+      console.warn(
+        `[env] Invalid ${name}; expected one of ${values.join(", ")}. Falling back to "${fallback}".`
+      );
+      return fallback;
+    })
+  );
+}
+
+/**
  * Central, validated environment access for the backend.
  *
  * Phase 0 keeps the integration secrets optional so the skeleton boots
@@ -35,17 +54,17 @@ const envSchema = z.object({
   SANCTIONED_ADDRESSES: z.string().optional(), // comma-separated
 
   // Phase 2 (custody — Tatum)
-  CUSTODY_PROVIDER: z.enum(["mock", "tatum"]).default("mock"),
+  CUSTODY_PROVIDER: providerEnum("CUSTODY_PROVIDER", ["mock", "tatum"], "mock"),
   TATUM_API_KEY: z.string().optional(),
   TATUM_WEBHOOK_SECRET: z.string().optional(),
 
   // Phase 3 (Naira rails)
-  PAYMENT_PROVIDER: z.enum(["mock", "flutterwave"]).default("mock"),
+  PAYMENT_PROVIDER: providerEnum("PAYMENT_PROVIDER", ["mock", "flutterwave"], "mock"),
   FLUTTERWAVE_SECRET_KEY: z.string().optional(),
   FLUTTERWAVE_WEBHOOK_HASH: z.string().optional(),
 
   // Phase 4 (rates / market data)
-  PRICE_FEED: z.enum(["live", "mock"]).default("live"),
+  PRICE_FEED: providerEnum("PRICE_FEED", ["live", "mock"], "live"),
   BINANCE_API_BASE: z.string().url().default("https://api.binance.com"),
   // Business-controlled USDT->NGN rate + spread (basis points). The spread is
   // where the business margin lives; both are server-side only.
@@ -62,7 +81,7 @@ const envSchema = z.object({
 
   // KYC / identity verification. `mock` auto-verifies on a well-formed BVN;
   // `dojah` performs a real BVN lookup + name match (requires Dojah keys).
-  KYC_PROVIDER: z.enum(["mock", "dojah"]).default("mock"),
+  KYC_PROVIDER: providerEnum("KYC_PROVIDER", ["mock", "dojah"], "mock"),
   DOJAH_APP_ID: z.string().optional(),
   DOJAH_API_KEY: z.string().optional(),
   DOJAH_API_BASE: z.string().url().default("https://api.dojah.io"),
