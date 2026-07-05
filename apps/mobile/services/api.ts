@@ -123,6 +123,7 @@ export interface LedgerTransaction {
   amount: string;
   amountFormatted: string;
   fee: string;
+  feeFormatted: string;
   status: LedgerTxStatus;
   txHash: string | null;
   createdAt: string;
@@ -130,6 +131,8 @@ export interface LedgerTransaction {
   toAsset: string | null;
   fromFormatted: string | null;
   toFormatted: string | null;
+  rate: string | null;
+  toAddress: string | null;
   service: string | null;
   billerName: string | null;
   planName: string | null;
@@ -184,6 +187,10 @@ export const api = {
 
   getTransactions(limit = 50): Promise<{ transactions: LedgerTransaction[] }> {
     return apiFetch(`/api/transactions?limit=${limit}`);
+  },
+
+  getTransaction(id: string): Promise<{ transaction: LedgerTransaction }> {
+    return apiFetch(`/api/transactions/${id}`);
   },
 
   createQuote(side: 'buy' | 'sell', asset: AssetSymbol, amount: string): Promise<Quote> {

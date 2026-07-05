@@ -1,7 +1,7 @@
-import { Asset, prisma } from "@cheqpay/db";
+import { prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
-import { fromMinorUnits } from "@/lib/money";
+import { serializeTransaction } from "@/lib/txn";
 
 export const dynamic = "force-dynamic";
 
@@ -22,45 +22,7 @@ export async function GET(req: Request) {
       take: limit,
     });
 
-    const transactions = rows.map((t) => {
-      const meta = (t.metadata ?? {}) as {
-        fromAsset?: string;
-        toAsset?: string;
-        amountIn?: string;
-        amountOut?: string;
-        kind?: string;
-        service?: string;
-        billerName?: string;
-        planName?: string | null;
-        customer?: string;
-      };
-      const fromAsset = meta.fromAsset as Asset | undefined;
-      const toAsset = meta.toAsset as Asset | undefined;
-      return {
-        id: t.id,
-        type: t.type, // DEPOSIT | WITHDRAWAL | BUY | SELL | CONVERT | BILL
-        asset: t.asset,
-        network: t.network,
-        amount: t.amount.toString(),
-        amountFormatted: fromMinorUnits(t.amount, t.asset),
-        fee: t.fee.toString(),
-        status: t.status, // PENDING | PROCESSING | COMPLETED | FAILED | REVERSED
-        txHash: t.txHash,
-        createdAt: t.createdAt.toISOString(),
-        // Swap/convert legs (present for BUY/SELL/CONVERT).
-        fromAsset: fromAsset ?? null,
-        toAsset: toAsset ?? null,
-        fromFormatted:
-          fromAsset && meta.amountIn ? fromMinorUnits(BigInt(meta.amountIn), fromAsset) : null,
-        toFormatted:
-          toAsset && meta.amountOut ? fromMinorUnits(BigInt(meta.amountOut), toAsset) : null,
-        // Bill details (present for BILL).
-        service: meta.service ?? null,
-        billerName: meta.billerName ?? null,
-        planName: meta.planName ?? null,
-        customer: meta.customer ?? null,
-      };
-    });
+    const transactions = rows.map(serializeTransaction);
 
     return jsonOk({ transactions });
   } catch (err) {

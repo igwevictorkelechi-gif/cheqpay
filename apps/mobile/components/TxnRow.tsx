@@ -1,10 +1,10 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from './brand';
 import type { LedgerTransaction } from '@/services/api';
 
-function icon(type: LedgerTransaction['type']): {
+export function txnIcon(type: LedgerTransaction['type']): {
   name: React.ComponentProps<typeof Ionicons>['name'];
   color: string;
   bg: string;
@@ -23,7 +23,7 @@ function icon(type: LedgerTransaction['type']): {
   }
 }
 
-function title(t: LedgerTransaction): string {
+export function txnTitle(t: LedgerTransaction): string {
   switch (t.type) {
     case 'DEPOSIT':
       return `Received ${t.asset}`;
@@ -44,12 +44,12 @@ function title(t: LedgerTransaction): string {
   }
 }
 
-function fmt(v: string): string {
+export function fmt(v: string): string {
   const n = Number(v);
   return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 8 }) : v;
 }
 
-function amount(t: LedgerTransaction): { text: string; positive: boolean } {
+export function txnAmount(t: LedgerTransaction): { text: string; positive: boolean } {
   if (t.type === 'DEPOSIT') return { text: `+${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
   if (t.type === 'WITHDRAWAL') return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
   if (t.type === 'BILL') return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
@@ -57,11 +57,24 @@ function amount(t: LedgerTransaction): { text: string; positive: boolean } {
   return { text: `${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
 }
 
-export function TxnRow({ t, divider }: { t: LedgerTransaction; divider?: boolean }) {
-  const ic = icon(t.type);
-  const amt = amount(t);
+export function TxnRow({
+  t,
+  divider,
+  onPress,
+}: {
+  t: LedgerTransaction;
+  divider?: boolean;
+  onPress?: () => void;
+}) {
+  const ic = txnIcon(t.type);
+  const amt = txnAmount(t);
+  const Container: React.ComponentType<Record<string, unknown>> = onPress
+    ? (TouchableOpacity as React.ComponentType<Record<string, unknown>>)
+    : (View as React.ComponentType<Record<string, unknown>>);
   return (
-    <View
+    <Container
+      onPress={onPress}
+      activeOpacity={0.7}
       className="flex-row items-center py-3"
       style={divider ? { borderTopWidth: 1, borderTopColor: colors.border } : undefined}
     >
@@ -73,7 +86,7 @@ export function TxnRow({ t, divider }: { t: LedgerTransaction; divider?: boolean
       </View>
       <View className="ml-3 flex-1">
         <Text className="text-ink font-bold" numberOfLines={1}>
-          {title(t)}
+          {txnTitle(t)}
         </Text>
         <Text className="text-muted text-xs mt-0.5">
           {new Date(t.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}
@@ -82,6 +95,6 @@ export function TxnRow({ t, divider }: { t: LedgerTransaction; divider?: boolean
       <Text className="font-bold" style={{ color: amt.positive ? colors.positive : colors.ink }}>
         {amt.text}
       </Text>
-    </View>
+    </Container>
   );
 }

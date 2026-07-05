@@ -121,7 +121,12 @@ export default function HomeScreen() {
           ) : (
             <Card>
               {txns.slice(0, 5).map((t, i) => (
-                <TxnRow key={t.id} t={t} divider={i > 0} />
+                <TxnRow
+                  key={t.id}
+                  t={t}
+                  divider={i > 0}
+                  onPress={() => router.push(`/(app)/transaction/${t.id}`)}
+                />
               ))}
             </Card>
           )}

@@ -86,16 +86,22 @@ export default function TxnRow({
   t,
   showStatus = true,
   divider = false,
+  onClick,
 }: {
   t: LedgerTransaction;
   showStatus?: boolean;
   divider?: boolean;
+  onClick?: () => void;
 }) {
   const { Icon, color, bg } = txnIcon(t.type);
   const amt = txnAmount(t);
   return (
     <div
-      className={`flex items-center gap-3 px-4 py-4 ${divider ? "border-t border-border" : ""}`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      className={`flex items-center gap-3 px-4 py-4 ${divider ? "border-t border-border" : ""} ${
+        onClick ? "cursor-pointer active:opacity-70" : ""
+      }`}
     >
       <span
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"

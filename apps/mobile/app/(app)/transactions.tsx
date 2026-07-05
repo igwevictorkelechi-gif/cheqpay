@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, FlatList, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useAuthStore } from '@/store';
 import { api, ApiError, type LedgerTransaction } from '@/services/api';
 import { colors } from '@/components/brand';
@@ -51,7 +52,9 @@ export default function TransactionsScreen() {
 
       <FlatList
         data={txns}
-        renderItem={({ item, index }) => <TxnRow t={item} divider={index > 0} />}
+        renderItem={({ item, index }) => (
+          <TxnRow t={item} divider={index > 0} onPress={() => router.push(`/(app)/transaction/${item.id}`)} />
+        )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}
         refreshControl={

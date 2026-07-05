@@ -135,7 +135,7 @@ export default function WalletStatementPage() {
             ) : (
               <div className="rounded-3xl bg-card px-4">
                 {txns.map((t, i) => (
-                  <TxnRow key={t.id} t={t} divider={i > 0} />
+                  <TxnRow key={t.id} t={t} divider={i > 0} onClick={() => router.push(`/transaction/${t.id}`)} />
                 ))}
               </div>
             )}
