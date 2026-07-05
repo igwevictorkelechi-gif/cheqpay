@@ -8,6 +8,7 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/";
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,7 +21,7 @@ function LoginForm() {
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email, password }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -44,16 +45,25 @@ function LoginForm() {
             <ShieldCheck size={24} />
           </span>
           <h1 className="text-xl font-bold text-gray-900">CheqPay Admin</h1>
-          <p className="mt-1 text-sm text-gray-500">Enter the admin password to continue</p>
+          <p className="mt-1 text-sm text-gray-500">Sign in with your admin account</p>
         </div>
 
         <form onSubmit={submit} className="space-y-4">
           <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@cheqpay.com"
+            autoFocus
+            autoComplete="email"
+            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+          />
+          <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Admin password"
-            autoFocus
+            placeholder="Password"
+            autoComplete="current-password"
             className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
           />
           {error && (
@@ -63,7 +73,7 @@ function LoginForm() {
           )}
           <button
             type="submit"
-            disabled={loading || !password}
+            disabled={loading || !email || !password}
             className="flex w-full items-center justify-center rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}

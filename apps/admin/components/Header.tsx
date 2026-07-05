@@ -1,11 +1,19 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Bell, Settings, Menu, LogOut } from 'lucide-react';
 
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter();
+  const [email, setEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth')
+      .then((r) => r.json())
+      .then((d) => setEmail(d.email ?? null))
+      .catch(() => {});
+  }, []);
 
   const logout = async () => {
     await fetch('/api/auth', { method: 'DELETE' }).catch(() => {});
@@ -47,11 +55,11 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           </button>
           <div className="ml-2 sm:ml-4 pl-2 sm:pl-4 border-l border-gray-200">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center font-bold">
-                A
+              <div className="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center font-bold uppercase">
+                {email ? email.charAt(0) : 'A'}
               </div>
               <div className="text-sm hidden sm:block">
-                <p className="font-semibold text-gray-800">Admin</p>
+                <p className="font-semibold text-gray-800 max-w-[180px] truncate">{email ?? 'Admin'}</p>
                 <p className="text-gray-500 text-xs">Administrator</p>
               </div>
             </div>
