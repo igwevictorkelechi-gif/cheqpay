@@ -154,10 +154,10 @@ export default function AnalyticsPage() {
       <div className="mb-3 flex items-center gap-2 flex-wrap">
         <Coins size={20} className="text-brand-600" />
         <h2 className="text-xl font-bold text-gray-900">Crypto Activity</h2>
-        {data && (<span className="text-sm text-gray-500">{fmtInt(data.crypto.totalCount)} crypto transactions</span>)}
+        {data?.crypto && (<span className="text-sm text-gray-500">{fmtInt(data.crypto.totalCount)} crypto transactions</span>)}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-        {(data?.crypto.byAsset ?? []).map((c, i) => (
+        {(data?.crypto?.byAsset ?? []).map((c, i) => (
           <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-bold text-gray-900">{c.asset}</h3>
@@ -172,7 +172,7 @@ export default function AnalyticsPage() {
             </div>
           </div>
         ))}
-        {(data?.crypto.byAsset ?? []).length === 0 && !loading && (
+        {(data?.crypto?.byAsset ?? []).length === 0 && !loading && (
           <div className="sm:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center text-gray-400">No crypto activity in this window.</div>
         )}
       </div>

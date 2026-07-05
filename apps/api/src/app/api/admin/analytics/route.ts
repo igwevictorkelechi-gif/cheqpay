@@ -147,6 +147,37 @@ export async function GET(req: Request) {
       .sort((a, b) => b.ngnVolume - a.ngnVolume)
       .slice(0, 8);
 
+    // Crypto activity: per-asset trade counts + custody balance (window).
+    const CRYPTO_ASSETS = ["BTC", "USDT"];
+    const cryptoStats: Record<
+      string,
+      { count: number; volume: number; buy: number; sell: number; convert: number }
+    > = {};
+    let cryptoTotal = 0;
+    for (const t of windowTxns) {
+      if (!CRYPTO_ASSETS.includes(t.asset)) continue;
+      const s =
+        cryptoStats[t.asset] ??
+        (cryptoStats[t.asset] = { count: 0, volume: 0, buy: 0, sell: 0, convert: 0 });
+      s.count += 1;
+      cryptoTotal += 1;
+      s.volume += Number(fromMinorUnits(t.amount, t.asset));
+      if (t.type === "BUY") s.buy += 1;
+      else if (t.type === "SELL") s.sell += 1;
+      else if (t.type === "CONVERT") s.convert += 1;
+    }
+    const cryptoByAsset = CRYPTO_ASSETS.filter((a) => cryptoStats[a]?.count)
+      .map((asset) => ({
+        asset,
+        count: cryptoStats[asset].count,
+        volume: cryptoStats[asset].volume,
+        buy: cryptoStats[asset].buy,
+        sell: cryptoStats[asset].sell,
+        convert: cryptoStats[asset].convert,
+        balance: balancesByAsset[asset] ?? "0",
+      }))
+      .sort((a, b) => b.count - a.count);
+
     return jsonOk({
       windowDays: days,
       kpis: {
@@ -175,6 +206,7 @@ export async function GET(req: Request) {
         byService: billsByService,
         topBillers,
       },
+      crypto: { totalCount: cryptoTotal, byAsset: cryptoByAsset },
     });
   } catch (err) {
     return toErrorResponse(err);
