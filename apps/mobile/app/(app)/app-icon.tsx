@@ -1,22 +1,56 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import {
+  setAlternateAppIcon,
+  getAppIconName,
+  supportsAlternateIcons,
+} from 'expo-alternate-app-icons';
 import { colors } from '@/components/brand';
 
-type IconOption = { key: string; label: string; bg: string; fg: string };
+// `iconName` maps to the alternate icon declared in app.json (null = default).
+type IconOption = { key: string; iconName: string | null; label: string; bg: string; fg: string };
 
 const iconOptions: IconOption[] = [
-  { key: 'default', label: 'Default', bg: colors.brand, fg: '#FFFFFF' },
-  { key: 'midnight', label: 'Midnight', bg: '#14121A', fg: colors.brandLight },
-  { key: 'mint', label: 'Mint', bg: '#34C759', fg: '#0B2A16' },
-  { key: 'gold', label: 'Gold', bg: '#F5A623', fg: '#3A2600' },
+  { key: 'default', iconName: null, label: 'Default', bg: colors.brand, fg: '#FFFFFF' },
+  { key: 'midnight', iconName: 'Midnight', label: 'Midnight', bg: '#14121A', fg: colors.brandLight },
+  { key: 'mint', iconName: 'Mint', label: 'Mint', bg: '#34C759', fg: '#0B2A16' },
+  { key: 'gold', iconName: 'Gold', label: 'Gold', bg: '#F5A623', fg: '#3A2600' },
 ];
+
+function currentKey(): string {
+  try {
+    const name = getAppIconName();
+    return iconOptions.find((o) => o.iconName === name)?.key ?? 'default';
+  } catch {
+    return 'default';
+  }
+}
 
 export default function AppIconScreen() {
   const insets = useSafeAreaInsets();
-  const [selected, setSelected] = useState('default');
+  const [selected, setSelected] = useState(currentKey);
+
+  const choose = async (opt: IconOption) => {
+    if (opt.key === selected) return;
+    if (!supportsAlternateIcons) {
+      Alert.alert(
+        'Not available',
+        'Changing the app icon needs the full CheqPay build. It isn’t supported in Expo Go.'
+      );
+      return;
+    }
+    const prev = selected;
+    setSelected(opt.key); // optimistic
+    try {
+      await setAlternateAppIcon(opt.iconName);
+    } catch {
+      setSelected(prev);
+      Alert.alert('Could not change icon', 'Please try again.');
+    }
+  };
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top + 8 }}>
@@ -43,7 +77,7 @@ export default function AppIconScreen() {
               <TouchableOpacity
                 key={o.key}
                 activeOpacity={0.85}
-                onPress={() => setSelected(o.key)}
+                onPress={() => choose(o)}
                 className="items-center bg-card rounded-3xl p-4"
                 style={{
                   width: '47%',
@@ -71,7 +105,7 @@ export default function AppIconScreen() {
         </View>
 
         <Text className="text-muted text-xs text-center mt-6">
-          Your selection is applied across the app.
+          Your selection is applied to your home screen.
         </Text>
       </ScrollView>
     </View>

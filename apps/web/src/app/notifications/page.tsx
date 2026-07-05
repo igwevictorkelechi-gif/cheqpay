@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import { api, getAccessToken } from "@/services/api";
 
-type Toggle = { key: string; title: string; subtitle: string };
-
-const rows: Toggle[] = [
+const rows: { key: string; title: string; subtitle: string }[] = [
   { key: "deposits", title: "Deposits", subtitle: "When money lands in your wallet" },
   { key: "withdrawals", title: "Withdrawals", subtitle: "Status updates on your payouts" },
   { key: "trades", title: "Buy, sell & convert", subtitle: "Confirmations for crypto trades" },
@@ -16,22 +15,32 @@ const rows: Toggle[] = [
   { key: "promos", title: "Product & promotions", subtitle: "News, tips and special offers" },
 ];
 
-const defaults: Record<string, boolean> = {
-  deposits: true,
-  withdrawals: true,
-  trades: true,
-  bills: true,
-  price: false,
-  security: true,
-  promos: false,
-};
-
 export default function NotificationsPage() {
   const router = useRouter();
-  const [state, setState] = useState<Record<string, boolean>>(defaults);
+  const [prefs, setPrefs] = useState<Record<string, boolean> | null>(null);
 
-  const flip = (key: string) =>
-    setState((prev) => ({ ...prev, [key]: !prev[key] }));
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!(await getAccessToken())) return;
+        const { preferences } = await api.getNotificationPrefs();
+        setPrefs(preferences);
+      } catch {
+        /* leave loading */
+      }
+    })();
+  }, []);
+
+  const flip = async (key: string) => {
+    if (!prefs) return;
+    const next = !prefs[key];
+    setPrefs({ ...prefs, [key]: next });
+    try {
+      await api.updateNotificationPrefs({ [key]: next });
+    } catch {
+      setPrefs((p) => (p ? { ...p, [key]: !next } : p));
+    }
+  };
 
   return (
     <div className="flex min-h-screen justify-center bg-black">
@@ -48,32 +57,38 @@ export default function NotificationsPage() {
           Choose what CheqPay lets you know about.
         </p>
 
-        <div className="rounded-3xl bg-card px-4">
-          {rows.map((r, i) => (
-            <div
-              key={r.key}
-              className={`flex items-center py-4 ${i > 0 ? "border-t border-border" : ""}`}
-            >
-              <div className="flex-1 pr-3">
-                <p className="text-base font-semibold text-ink">{r.title}</p>
-                <p className="mt-0.5 text-xs text-muted">{r.subtitle}</p>
-              </div>
-              <button
-                onClick={() => flip(r.key)}
-                aria-pressed={state[r.key]}
-                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${
-                  state[r.key] ? "bg-brand" : "bg-circle"
-                }`}
+        {!prefs ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-brand" />
+          </div>
+        ) : (
+          <div className="rounded-3xl bg-card px-4">
+            {rows.map((r, i) => (
+              <div
+                key={r.key}
+                className={`flex items-center py-4 ${i > 0 ? "border-t border-border" : ""}`}
               >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                    state[r.key] ? "translate-x-6" : "translate-x-1"
+                <div className="flex-1 pr-3">
+                  <p className="text-base font-semibold text-ink">{r.title}</p>
+                  <p className="mt-0.5 text-xs text-muted">{r.subtitle}</p>
+                </div>
+                <button
+                  onClick={() => flip(r.key)}
+                  aria-pressed={!!prefs[r.key]}
+                  className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${
+                    prefs[r.key] ? "bg-brand" : "bg-circle"
                   }`}
-                />
-              </button>
-            </div>
-          ))}
-        </div>
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                      prefs[r.key] ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

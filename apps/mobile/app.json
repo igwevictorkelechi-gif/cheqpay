@@ -34,6 +34,35 @@
           "defaultChannel": "default",
           "sounds": []
         }
+      ],
+      [
+        "expo-alternate-app-icons",
+        [
+          {
+            "name": "Midnight",
+            "ios": "./assets/icons/icon-midnight.png",
+            "android": {
+              "foregroundImage": "./assets/icons/icon-midnight.png",
+              "backgroundColor": "#14121A"
+            }
+          },
+          {
+            "name": "Mint",
+            "ios": "./assets/icons/icon-mint.png",
+            "android": {
+              "foregroundImage": "./assets/icons/icon-mint.png",
+              "backgroundColor": "#34C759"
+            }
+          },
+          {
+            "name": "Gold",
+            "ios": "./assets/icons/icon-gold.png",
+            "android": {
+              "foregroundImage": "./assets/icons/icon-gold.png",
+              "backgroundColor": "#F5A623"
+            }
+          }
+        ]
       ]
     ],
     "extra": {

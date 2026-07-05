@@ -134,3 +134,25 @@ export const platformSettingsUpdateSchema = z
     message: "Provide at least one of spreadBps or usdtNgnRate",
   });
 export type PlatformSettingsUpdate = z.infer<typeof platformSettingsUpdateSchema>;
+
+/** Update per-category notification opt-ins (any subset of booleans). */
+export const notificationPrefsSchema = z
+  .object({
+    deposits: z.boolean().optional(),
+    withdrawals: z.boolean().optional(),
+    trades: z.boolean().optional(),
+    bills: z.boolean().optional(),
+    price: z.boolean().optional(),
+    security: z.boolean().optional(),
+    promos: z.boolean().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, {
+    message: "Provide at least one preference to update",
+  });
+export type NotificationPrefsInput = z.infer<typeof notificationPrefsSchema>;
+
+/** Register (or remove) an Expo push token for the current device. */
+export const pushTokenSchema = z.object({
+  token: z.string().regex(/^Expo(nent)?PushToken\[[^\]]+\]$/, "Invalid Expo push token"),
+});
+export type PushTokenInput = z.infer<typeof pushTokenSchema>;

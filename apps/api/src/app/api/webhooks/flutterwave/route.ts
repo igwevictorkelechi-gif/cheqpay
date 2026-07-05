@@ -7,7 +7,8 @@ import {
 } from "@cheqpay/db";
 import { getPaymentProvider } from "@/payments";
 import { jsonOk, toErrorResponse } from "@/lib/http";
-import { toMinorUnits } from "@/lib/money";
+import { toMinorUnits, fromMinorUnits } from "@/lib/money";
+import { sendPush } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,31 @@ export async function POST(req: Request) {
       : await finalizeWithdrawal(transfer!.reference, transfer!.status);
 
     await markProcessed(psp.name, event.eventId);
+
+    // Fire notifications after the ledger has committed (best-effort).
+    if (result.status === "credited" && result.userId) {
+      await sendPush(result.userId, {
+        category: "deposits",
+        title: "Deposit received",
+        body: `₦${fromMinorUnits(BigInt(result.amountMinor!), Asset.NGN)} has landed in your CheqPay wallet.`,
+        data: { transactionId: result.transactionId },
+      });
+    } else if (result.status === "reversed" && result.userId) {
+      await sendPush(result.userId, {
+        category: "withdrawals",
+        title: "Withdrawal reversed",
+        body: `Your payout of ₦${fromMinorUnits(BigInt(result.amountMinor!), Asset.NGN)} failed and was refunded.`,
+        data: { transactionId: result.transactionId },
+      });
+    } else if (result.status === "completed" && result.userId) {
+      await sendPush(result.userId, {
+        category: "withdrawals",
+        title: "Withdrawal sent",
+        body: "Your payout was completed successfully.",
+        data: { transactionId: result.transactionId },
+      });
+    }
+
     return jsonOk({ ...result, eventId: event.eventId });
   } catch (err) {
     return toErrorResponse(err);
@@ -109,7 +135,12 @@ async function finalizeDeposit(
         details: { amountMinor: amountMinor.toString(), txRef },
       },
     });
-    return { status: "credited" as const, transactionId: dep.id };
+    return {
+      status: "credited" as const,
+      transactionId: dep.id,
+      userId: dep.userId,
+      amountMinor: amountMinor.toString(),
+    };
   });
 }
 
@@ -135,7 +166,12 @@ async function finalizeWithdrawal(
         where: { id: wd.id },
         data: { status: TransactionStatus.COMPLETED },
       });
-      return { status: "completed" as const, transactionId: wd.id };
+      return {
+        status: "completed" as const,
+        transactionId: wd.id,
+        userId: wd.userId,
+        amountMinor: wd.amount.toString(),
+      };
     }
 
     if (status === "failed") {
@@ -157,7 +193,12 @@ async function finalizeWithdrawal(
           details: { amountMinor: wd.amount.toString(), reason: "payout_failed" },
         },
       });
-      return { status: "reversed" as const, transactionId: wd.id };
+      return {
+        status: "reversed" as const,
+        transactionId: wd.id,
+        userId: wd.userId,
+        amountMinor: wd.amount.toString(),
+      };
     }
 
     return { status: "pending" as const, transactionId: wd.id };

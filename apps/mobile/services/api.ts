@@ -226,6 +226,26 @@ export const api = {
     return apiFetch('/api/kyc', { method: 'POST', body: JSON.stringify(input) });
   },
 
+  getNotificationPrefs(): Promise<{ preferences: Record<string, boolean> }> {
+    return apiFetch('/api/notifications/preferences');
+  },
+
+  updateNotificationPrefs(
+    patch: Record<string, boolean>
+  ): Promise<{ preferences: Record<string, boolean> }> {
+    return apiFetch('/api/notifications/preferences', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+  },
+
+  registerPushToken(token: string): Promise<{ registered: boolean }> {
+    return apiFetch('/api/push/register', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  },
+
   getVirtualAccount(): Promise<{ virtualAccount: VirtualAccount | null }> {
     return apiFetch('/api/virtual-accounts');
   },

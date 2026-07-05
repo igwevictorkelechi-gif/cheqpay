@@ -1,8 +1,14 @@
+import { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/components/brand';
+import { registerForPushNotifications } from '@/services/push';
 
 export default function AppLayout() {
+  useEffect(() => {
+    registerForPushNotifications();
+  }, []);
+
   return (
     <Tabs
       screenOptions={{

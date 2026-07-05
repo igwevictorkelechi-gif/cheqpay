@@ -188,6 +188,19 @@ export const api = {
     return apiFetch("/api/kyc", { method: "POST", body: JSON.stringify(input) });
   },
 
+  getNotificationPrefs(): Promise<{ preferences: Record<string, boolean> }> {
+    return apiFetch("/api/notifications/preferences");
+  },
+
+  updateNotificationPrefs(
+    patch: Record<string, boolean>
+  ): Promise<{ preferences: Record<string, boolean> }> {
+    return apiFetch("/api/notifications/preferences", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  },
+
   /** The user's NGN virtual account (dedicated NUBAN), or null if not created. */
   getVirtualAccount(): Promise<{ virtualAccount: VirtualAccount | null }> {
     return apiFetch("/api/virtual-accounts");

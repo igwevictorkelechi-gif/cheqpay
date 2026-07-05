@@ -80,6 +80,10 @@ model User {
   passwordHash String?    @map("password_hash")
   kycTier      Int        @default(0) @map("kyc_tier")
   status       UserStatus @default(ACTIVE)
+  // Per-category push/notification opt-ins (see lib/notifications defaults).
+  notificationPrefs Json? @map("notification_prefs")
+  // Registered Expo push tokens for this user's devices.
+  pushTokens   String[]   @default([]) @map("push_tokens")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
