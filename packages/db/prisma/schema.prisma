@@ -80,6 +80,11 @@ model User {
   passwordHash String?    @map("password_hash")
   kycTier      Int        @default(0) @map("kyc_tier")
   status       UserStatus @default(ACTIVE)
+  // Editable profile fields. Username is unique (nulls allowed); DOB is set on
+  // KYC submission and locked once verified; next of kin is free-form.
+  username     String?    @unique
+  dateOfBirth  DateTime?  @map("date_of_birth") @db.Date
+  nextOfKin    String?    @map("next_of_kin")
   // Per-category push/notification opt-ins (see lib/notifications defaults).
   notificationPrefs Json? @map("notification_prefs")
   // Registered Expo push tokens for this user's devices.

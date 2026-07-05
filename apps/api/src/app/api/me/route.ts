@@ -1,8 +1,9 @@
-import { prisma } from "@cheqpay/db";
+import { Prisma, prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { getTierLimits } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
+import { profileUpdateSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,45 @@ export async function POST(req: Request) {
       create: { id: auth.id, email: auth.email, phone: auth.phone ?? null },
     });
     return jsonOk(serialize(user));
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+/**
+ * Update editable profile fields (username, next of kin, and — while the
+ * account is not yet verified — date of birth). Verified users can't change
+ * their DOB; identity edits go through support.
+ */
+export async function PATCH(req: Request) {
+  try {
+    const auth = await requireUser(req);
+    const patch = profileUpdateSchema.parse(await req.json());
+
+    const user = await prisma.user.findUnique({ where: { id: auth.id } });
+    if (!user) {
+      throw new ApiError(404, "Profile not provisioned; POST /api/me first", "no_profile");
+    }
+
+    const data: Prisma.UserUpdateInput = {};
+    if (patch.username !== undefined) data.username = patch.username;
+    if (patch.nextOfKin !== undefined) data.nextOfKin = patch.nextOfKin;
+    if (patch.dateOfBirth !== undefined) {
+      if (user.kycTier >= 2) {
+        throw new ApiError(403, "Date of birth is locked on verified accounts", "dob_locked");
+      }
+      data.dateOfBirth = new Date(patch.dateOfBirth);
+    }
+
+    try {
+      const updated = await prisma.user.update({ where: { id: auth.id }, data });
+      return jsonOk(serialize(updated));
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        throw new ApiError(409, "That username is already taken", "username_taken");
+      }
+      throw err;
+    }
   } catch (err) {
     return toErrorResponse(err);
   }
@@ -114,6 +154,9 @@ function serialize(user: {
   kycTier: number;
   status: string;
   createdAt: Date;
+  username?: string | null;
+  dateOfBirth?: Date | null;
+  nextOfKin?: string | null;
 }) {
   const limits = getTierLimits(user.kycTier);
   return {
@@ -123,6 +166,12 @@ function serialize(user: {
     kycTier: user.kycTier,
     status: user.status,
     createdAt: user.createdAt,
+    username: user.username ?? null,
+    // Serialize DOB as a plain YYYY-MM-DD date (no timezone shifting).
+    dateOfBirth: user.dateOfBirth
+      ? user.dateOfBirth.toISOString().slice(0, 10)
+      : null,
+    nextOfKin: user.nextOfKin ?? null,
     limits: {
       singleTxKobo: limits.singleTxKobo.toString(),
       dailyDepositKobo: limits.dailyDepositKobo.toString(),

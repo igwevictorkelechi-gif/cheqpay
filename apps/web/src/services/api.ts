@@ -63,6 +63,23 @@ export interface Balance {
   availableFormatted: string;
   lockedFormatted: string;
 }
+export interface Me {
+  id: string;
+  email: string;
+  phone: string | null;
+  kycTier: number;
+  status: string;
+  createdAt: string;
+  username: string | null;
+  dateOfBirth: string | null;
+  nextOfKin: string | null;
+  limits: {
+    singleTxKobo: string;
+    dailyDepositKobo: string;
+    dailyWithdrawalKobo: string;
+    cryptoWithdrawalEnabled: boolean;
+  };
+}
 export interface Quote {
   quoteId: string;
   side: "buy" | "sell";
@@ -147,21 +164,17 @@ export const api = {
     await apiFetch("/api/wallets", { method: "POST" });
   },
 
-  getMe(): Promise<{
-    id: string;
-    email: string;
-    phone: string | null;
-    kycTier: number;
-    status: string;
-    createdAt: string;
-    limits: {
-      singleTxKobo: string;
-      dailyDepositKobo: string;
-      dailyWithdrawalKobo: string;
-      cryptoWithdrawalEnabled: boolean;
-    };
-  }> {
+  getMe(): Promise<Me> {
     return apiFetch("/api/me");
+  },
+
+  /** Update editable profile fields (username, next of kin, DOB if unverified). */
+  updateProfile(patch: {
+    username?: string;
+    dateOfBirth?: string;
+    nextOfKin?: string;
+  }): Promise<Me> {
+    return apiFetch("/api/me", { method: "PATCH", body: JSON.stringify(patch) });
   },
 
   /** Permanently delete the account. Refuses if the wallet holds a balance. */

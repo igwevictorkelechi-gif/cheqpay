@@ -156,3 +156,23 @@ export const pushTokenSchema = z.object({
   token: z.string().regex(/^Expo(nent)?PushToken\[[^\]]+\]$/, "Invalid Expo push token"),
 });
 export type PushTokenInput = z.infer<typeof pushTokenSchema>;
+
+/** Update editable profile fields. Username is normalized (leading @ stripped). */
+export const profileUpdateSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .transform((v) => v.replace(/^@+/, ""))
+      .pipe(z.string().regex(/^[a-zA-Z0-9_]{3,20}$/, "3–20 letters, numbers or underscores"))
+      .optional(),
+    dateOfBirth: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD")
+      .optional(),
+    nextOfKin: z.string().trim().max(120).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, {
+    message: "Provide at least one field to update",
+  });
+export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
