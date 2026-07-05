@@ -42,8 +42,8 @@ export default function VerifyOTPScreen() {
   }, []);
 
   const handleVerifyOTP = async () => {
-    if (!otp || otp.length !== 6) {
-      Alert.alert('Error', 'Please enter the 6-digit code');
+    if (!otp || otp.length < 6) {
+      Alert.alert('Error', 'Please enter the code from your email');
       return;
     }
 
@@ -104,8 +104,8 @@ export default function VerifyOTPScreen() {
             placeholder="000000"
             keyboardType="number-pad"
             value={otp}
-            onChangeText={(text) => setOtp(text.replace(/\D/g, '').slice(0, 6))}
-            maxLength={6}
+            onChangeText={(text) => setOtp(text.replace(/\D/g, '').slice(0, 10))}
+            maxLength={10}
             editable={!loading}
           />
         </View>

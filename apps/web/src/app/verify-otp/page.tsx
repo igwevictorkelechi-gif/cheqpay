@@ -33,8 +33,8 @@ function VerifyOTPForm() {
     setError("");
     setLoading(true);
 
-    if (otp.length !== 6) {
-      setError("OTP must be 6 digits");
+    if (otp.length < 6) {
+      setError("Enter the code from your email");
       setLoading(false);
       return;
     }
@@ -89,16 +89,17 @@ function VerifyOTPForm() {
               type="text"
               value={otp}
               onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, "").slice(0, 6);
+                const value = e.target.value.replace(/\D/g, "").slice(0, 10);
                 setOtp(value);
               }}
               placeholder="000000"
-              maxLength={6}
+              maxLength={10}
+              inputMode="numeric"
               className="input text-center text-2xl font-bold tracking-widest"
               disabled={loading}
             />
             <p className="mt-1 text-xs text-gray-500">
-              Enter the code you received via SMS
+              Enter the code you received via email
             </p>
           </div>
 
@@ -110,7 +111,7 @@ function VerifyOTPForm() {
 
           <button
             type="submit"
-            disabled={loading || otp.length !== 6}
+            disabled={loading || otp.length < 6}
             className="btn-primary w-full"
           >
             {loading ? "Verifying..." : "Verify OTP"}
