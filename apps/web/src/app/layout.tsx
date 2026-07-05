@@ -3,6 +3,7 @@ import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import InstallPrompt from "@/components/InstallPrompt";
 import LockGate from "@/components/LockGate";
+import AuthGuard from "@/components/AuthGuard";
 
 export const metadata: Metadata = {
   title: "CheqPay - Beyond Finance",
@@ -35,7 +36,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <div className="min-h-screen">{children}</div>
+        <AuthGuard>
+          <div className="min-h-screen">{children}</div>
+        </AuthGuard>
         <LockGate />
         <InstallPrompt />
         <ServiceWorkerRegister />
