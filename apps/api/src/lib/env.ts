@@ -62,6 +62,12 @@ const envSchema = z.object({
   DOJAH_APP_ID: z.string().optional(),
   DOJAH_API_KEY: z.string().optional(),
   DOJAH_API_BASE: z.string().url().default("https://api.dojah.io"),
+
+  // Scheduled jobs. CRON_SECRET gates the /api/cron/* endpoints (Vercel Cron
+  // sends it automatically as `Authorization: Bearer <secret>`).
+  CRON_SECRET: z.string().min(16).optional(),
+  // Percentage move (since the last alert) that triggers a price notification.
+  PRICE_ALERT_THRESHOLD_PCT: z.coerce.number().positive().max(100).default(5),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -2,5 +2,11 @@
   "framework": "nextjs",
   "installCommand": "cd ../.. && bun install",
   "buildCommand": "cd ../.. && bunx prisma generate --schema packages/db/prisma/schema.prisma && cd apps/api && bunx next build",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/cron/price-alerts",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
