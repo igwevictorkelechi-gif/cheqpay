@@ -20,7 +20,7 @@ const items: Item[] = [
   { title: 'Recipients', subtitle: 'Bank accounts, Mobile money', route: '/(app)/send-money' },
   { title: 'Connected bank accounts', subtitle: 'Manage your payment accounts', route: '/(app)/settings' },
   { title: 'Security', subtitle: '2FA, app lock, passcode, biometrics, instant withdrawal', route: '/(app)/settings' },
-  { title: 'Preferences', subtitle: 'Notifications, display currency & app themes', route: '/(app)/settings' },
+  { title: 'Preferences', subtitle: 'Notifications, display currency & app themes', route: '/(app)/preferences' },
   { title: 'About us', subtitle: 'FAQs, privacy policy, our blog, contact us', route: '/(app)/settings' },
 ];
 

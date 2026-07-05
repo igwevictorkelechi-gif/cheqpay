@@ -58,6 +58,7 @@ export default function AppLayout() {
       <Tabs.Screen name="withdraw" options={{ href: null }} />
       <Tabs.Screen name="fund-wallet" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
+      <Tabs.Screen name="preferences" options={{ href: null }} />
       <Tabs.Screen name="kyc" options={{ href: null }} />
       <Tabs.Screen name="bill/[service]" options={{ href: null }} />
       <Tabs.Screen name="receive" options={{ href: null }} />

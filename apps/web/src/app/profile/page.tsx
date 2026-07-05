@@ -44,7 +44,7 @@ const items: Item[] = [
   {
     title: "Preferences",
     subtitle: "Notifications, display currency & app themes",
-    href: "/settings",
+    href: "/preferences",
   },
   {
     title: "About us",
