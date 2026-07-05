@@ -157,6 +157,7 @@ function serialize(user: {
   username?: string | null;
   dateOfBirth?: Date | null;
   nextOfKin?: string | null;
+  instantWithdrawal?: boolean;
 }) {
   const limits = getTierLimits(user.kycTier);
   return {
@@ -166,6 +167,7 @@ function serialize(user: {
     kycTier: user.kycTier,
     status: user.status,
     createdAt: user.createdAt,
+    instantWithdrawal: user.instantWithdrawal ?? false,
     username: user.username ?? null,
     // Serialize DOB as a plain YYYY-MM-DD date (no timezone shifting).
     dateOfBirth: user.dateOfBirth

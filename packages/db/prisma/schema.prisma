@@ -85,6 +85,8 @@ model User {
   username     String?    @unique
   dateOfBirth  DateTime?  @map("date_of_birth") @db.Date
   nextOfKin    String?    @map("next_of_kin")
+  // When true, crypto withdrawals skip the per-request 2FA (AAL2) step.
+  instantWithdrawal Boolean @default(false) @map("instant_withdrawal")
   // Per-category push/notification opt-ins (see lib/notifications defaults).
   notificationPrefs Json? @map("notification_prefs")
   // Registered Expo push tokens for this user's devices.

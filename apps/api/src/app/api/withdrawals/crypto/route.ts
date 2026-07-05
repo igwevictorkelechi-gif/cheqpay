@@ -40,7 +40,6 @@ export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
     const relaxGuards = getEnv().RELAX_WITHDRAWAL_GUARDS;
-    if (!relaxGuards) requireMfa(auth);
     enforceRateLimit(`wd:crypto:${auth.id}`, 5, 60_000);
 
     const idempotencyKey = req.headers.get("idempotency-key");
@@ -52,6 +51,9 @@ export async function POST(req: Request) {
     if (!user) {
       throw new ApiError(404, "Profile not provisioned; POST /api/me first", "no_profile");
     }
+    // Require 2FA (AAL2) unless globally relaxed or the user opted into instant
+    // withdrawal in their security settings.
+    if (!relaxGuards && !user.instantWithdrawal) requireMfa(auth);
     if (!relaxGuards && !getTierLimits(user.kycTier).cryptoWithdrawalEnabled) {
       throw new ApiError(403, "Your KYC tier does not permit crypto withdrawals", "tier_blocked");
     }

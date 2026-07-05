@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '@/store';
 import { authService } from '@/services/auth';
+import { LockGate } from '@/components/LockGate';
 
 export default function RootLayout() {
   const { setUser, setLoading, setIsAuthenticated } = useAuthStore();
@@ -22,7 +23,7 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <>
+    <LockGate>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen
           name="(auth)"
@@ -38,6 +39,6 @@ export default function RootLayout() {
         />
       </Stack>
       <StatusBar style="light" />
-    </>
+    </LockGate>
   );
 }

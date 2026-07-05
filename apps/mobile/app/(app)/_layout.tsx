@@ -73,6 +73,11 @@ export default function AppLayout() {
       <Tabs.Screen name="account-limits" options={{ href: null }} />
       <Tabs.Screen name="wallet-statement" options={{ href: null }} />
       <Tabs.Screen name="delete-account" options={{ href: null }} />
+      <Tabs.Screen name="security" options={{ href: null }} />
+      <Tabs.Screen name="two-factor" options={{ href: null }} />
+      <Tabs.Screen name="change-password" options={{ href: null }} />
+      <Tabs.Screen name="app-lock" options={{ href: null }} />
+      <Tabs.Screen name="instant-withdrawal" options={{ href: null }} />
       <Tabs.Screen name="kyc" options={{ href: null }} />
       <Tabs.Screen name="bill/[service]" options={{ href: null }} />
       <Tabs.Screen name="receive" options={{ href: null }} />

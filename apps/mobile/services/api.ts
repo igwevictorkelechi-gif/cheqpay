@@ -65,6 +65,7 @@ export interface Me {
   username: string | null;
   dateOfBirth: string | null;
   nextOfKin: string | null;
+  instantWithdrawal: boolean;
   limits: {
     singleTxKobo: string;
     dailyDepositKobo: string;
@@ -154,6 +155,14 @@ export const api = {
     nextOfKin?: string;
   }): Promise<Me> {
     return apiFetch('/api/me', { method: 'PATCH', body: JSON.stringify(patch) });
+  },
+
+  /** Toggle instant withdrawal (skip 2FA on crypto withdrawals). */
+  setInstantWithdrawal(enabled: boolean): Promise<{ instantWithdrawal: boolean }> {
+    return apiFetch('/api/security/instant-withdrawal', {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    });
   },
 
   /** Permanently delete the account. Refuses if the wallet holds a balance. */

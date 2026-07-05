@@ -39,7 +39,7 @@ const items: Item[] = [
   {
     title: "Security",
     subtitle: "2FA, app lock, passcode, biometrics, instant withdrawal",
-    href: "/settings",
+    href: "/security",
   },
   {
     title: "Preferences",
