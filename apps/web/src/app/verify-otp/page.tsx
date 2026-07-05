@@ -53,8 +53,15 @@ function VerifyOTPForm() {
       }
       const user = await authService.getCurrentUser();
       if (user) setUser(user);
-      // New sign-ups continue onboarding (identity + PIN); logins go home.
-      router.push(type === "signup" ? "/onboarding" : "/");
+      // Route by KYC status: anyone not yet verified (tier < 2) goes through
+      // onboarding (identity check + PIN); verified users go straight home.
+      let tier = 0;
+      try {
+        tier = (await api.getKyc()).kycTier;
+      } catch {
+        /* default to onboarding on any error */
+      }
+      router.push(tier >= 2 ? "/" : "/onboarding");
     } catch (err) {
       setError("Invalid or expired code. Please try again.");
       console.error(err);

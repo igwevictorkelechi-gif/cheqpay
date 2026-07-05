@@ -70,8 +70,15 @@ export default function VerifyOTPScreen() {
       const user = await authService.getCurrentUser();
       if (user) setUser(user);
 
-      // New sign-ups continue onboarding (identity + PIN); logins go home.
-      router.replace(signingUp ? '/(app)/onboarding' : '/(app)/home');
+      // Route by KYC status: anyone not yet verified (tier < 2) goes through
+      // onboarding (identity check + PIN); verified users go straight home.
+      let tier = 0;
+      try {
+        tier = (await api.getKyc()).kycTier;
+      } catch {
+        /* default to onboarding on any error */
+      }
+      router.replace(tier >= 2 ? '/(app)/home' : '/(app)/onboarding');
     } catch (error) {
       Alert.alert('Error', 'An error occurred. Please try again.');
     } finally {
