@@ -27,8 +27,8 @@ type Item = {
 const items: Item[] = [
   {
     title: "Account",
-    subtitle: "Personal details, invite friends, account limits, statements, delete account",
-    href: "/settings",
+    subtitle: "Personal details, account limits, statements, delete account",
+    href: "/account",
   },
   { title: "Recipients", subtitle: "Bank accounts, Mobile money", href: "/send" },
   {

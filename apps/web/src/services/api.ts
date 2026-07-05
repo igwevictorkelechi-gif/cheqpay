@@ -147,6 +147,28 @@ export const api = {
     await apiFetch("/api/wallets", { method: "POST" });
   },
 
+  getMe(): Promise<{
+    id: string;
+    email: string;
+    phone: string | null;
+    kycTier: number;
+    status: string;
+    createdAt: string;
+    limits: {
+      singleTxKobo: string;
+      dailyDepositKobo: string;
+      dailyWithdrawalKobo: string;
+      cryptoWithdrawalEnabled: boolean;
+    };
+  }> {
+    return apiFetch("/api/me");
+  },
+
+  /** Permanently delete the account. Refuses if the wallet holds a balance. */
+  deleteAccount(): Promise<{ deleted: boolean }> {
+    return apiFetch("/api/me", { method: "DELETE" });
+  },
+
   getBalances(): Promise<{ balances: Balance[] }> {
     return apiFetch("/api/balances");
   },

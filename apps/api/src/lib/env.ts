@@ -18,6 +18,10 @@ const envSchema = z.object({
 
   // Phase 1 (auth) — Supabase Auth issues the JWTs; we verify them here.
   SUPABASE_JWT_SECRET: z.string().min(16).optional(),
+  // Service-role access to the Supabase Admin API (used to delete the auth
+  // user on permanent account deletion). Both must be set to take effect.
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   // Admin auth: a trusted service secret (backend-to-backend, e.g. the admin
   // dashboard proxy) AND/OR an email allowlist for admin Supabase users.
   ADMIN_API_SECRET: z.string().min(16).optional(),

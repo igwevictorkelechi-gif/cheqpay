@@ -14,8 +14,8 @@ type Item = { title: string; subtitle: string; route?: string };
 const items: Item[] = [
   {
     title: 'Account',
-    subtitle: 'Personal details, invite friends, account limits, statements, delete account',
-    route: '/(app)/settings',
+    subtitle: 'Personal details, account limits, statements, delete account',
+    route: '/(app)/account',
   },
   { title: 'Recipients', subtitle: 'Bank accounts, Mobile money', route: '/(app)/send-money' },
   { title: 'Connected bank accounts', subtitle: 'Manage your payment accounts', route: '/(app)/settings' },
