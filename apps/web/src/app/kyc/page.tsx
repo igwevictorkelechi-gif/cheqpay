@@ -14,6 +14,16 @@ export default function KYCPage() {
 
   const [state, setState] = useState<State>("loading");
   const [tier, setTier] = useState(0);
+  // Optional post-verification destination (e.g. the deposit flow sends the
+  // user here to verify, then wants them back on the account page).
+  const [nextUrl, setNextUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const n = new URLSearchParams(window.location.search).get("next");
+    if (n && n.startsWith("/")) setNextUrl(n);
+  }, []);
+
+  const goNext = () => router.push(nextUrl || "/");
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -91,10 +101,10 @@ export default function KYCPage() {
               unlocked.
             </p>
             <button
-              onClick={() => router.push("/")}
+              onClick={goNext}
               className="mt-8 w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
             >
-              Done
+              {nextUrl ? "Continue to deposit" : "Done"}
             </button>
           </div>
         )}
