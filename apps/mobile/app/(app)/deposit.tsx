@@ -38,8 +38,8 @@ export default function AddMoneyScreen() {
       /* fall through — the account screen still shows funding details */
     }
     setBusy(false);
-    // Fund via the user's NGN virtual account (creates one if needed).
-    router.push('/(app)/virtual-account');
+    // Fund via the user's NGN virtual account (KYC-gated; created if needed).
+    router.push({ pathname: '/(app)/virtual-account', params: { amount: digits } });
   }
 
   return (

@@ -12,18 +12,24 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { useAuthStore } from '@/store';
 import { colors } from '@/components/brand';
 import { api, ApiError, type VirtualAccount } from '@/services/api';
+import { authService } from '@/services/auth';
 
 export default function VirtualAccountScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
+  const params = useLocalSearchParams<{ amount?: string }>();
+  const amount = Number(String(params.amount ?? '').replace(/\D/g, '')) || 0;
 
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<VirtualAccount | null>(null);
+  // Manual form is only a fallback (verified but no name on file). Verified
+  // users normally never see it — their account opens automatically.
+  const [showForm, setShowForm] = useState(false);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -43,15 +49,55 @@ export default function VirtualAccountScreen() {
     (async () => {
       try {
         await api.ensureProvisioned();
-        const { virtualAccount } = await api.getVirtualAccount();
-        setAccount(virtualAccount);
+        const [{ virtualAccount }, me] = await Promise.all([
+          api.getVirtualAccount(),
+          api.getMe(),
+        ]);
+
+        // Already have an account → show it, regardless of tier.
+        if (virtualAccount) {
+          setAccount(virtualAccount);
+          return;
+        }
+
+        // No account yet. Deposits require a verified identity.
+        if (me.kycTier < 2) {
+          // Not verified → go to KYC first, then return here.
+          router.replace({ pathname: '/(app)/kyc', params: { next: '/(app)/virtual-account' } });
+          return;
+        }
+
+        // Verified → open the account automatically from the name on file.
+        await autoOpen();
       } catch {
-        /* ignore — show the form */
+        /* fall through — the loader clears and the fallback form shows */
+        setShowForm(true);
       } finally {
         setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function autoOpen(): Promise<void> {
+    let fullName = (user?.full_name ?? '').trim();
+    if (!fullName) {
+      const current = await authService.getCurrentUser().catch(() => null);
+      fullName = (current?.full_name ?? '').trim();
+    }
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    const first = parts[0] ?? '';
+    const last = parts.length > 1 ? parts.slice(1).join(' ') : first;
+    if (first.length < 2 || last.length < 2) {
+      setShowForm(true);
+      return;
+    }
+    const { virtualAccount } = await api.createVirtualAccount({
+      firstName: first,
+      lastName: last,
+    });
+    setAccount(virtualAccount);
+  }
 
   const bvnValid = bvn === '' || /^\d{11}$/.test(bvn);
   const canSubmit =
@@ -115,9 +161,18 @@ export default function VirtualAccountScreen() {
                 </View>
                 <Text className="text-ink text-2xl font-extrabold mt-4">Your account is ready</Text>
                 <Text className="text-muted text-sm mt-1 text-center">
-                  Send money to this account from any Nigerian bank to fund your wallet instantly.
+                  {amount
+                    ? `Transfer ₦${amount.toLocaleString('en-NG')} to this account from any Nigerian bank to fund your wallet instantly.`
+                    : 'Send money to this account from any Nigerian bank to fund your wallet instantly.'}
                 </Text>
               </View>
+
+              {amount ? (
+                <View className="rounded-3xl p-5 mt-6 items-center" style={{ backgroundColor: 'rgba(107,91,149,0.1)' }}>
+                  <Text className="text-muted text-xs font-semibold uppercase">Amount to transfer</Text>
+                  <Text className="text-ink text-3xl font-extrabold mt-1">₦{amount.toLocaleString('en-NG')}</Text>
+                </View>
+              ) : null}
 
               <View className="rounded-3xl p-5 mt-6" style={{ backgroundColor: colors.card }}>
                 <Field label="Bank name" value={account.bankName} />
@@ -164,7 +219,7 @@ export default function VirtualAccountScreen() {
                 </TouchableOpacity>
               </View>
             </>
-          ) : (
+          ) : showForm ? (
             <>
               <Text className="text-ink text-3xl font-extrabold mt-4">Set up your account</Text>
               <Text className="text-muted text-sm mt-2">
@@ -223,6 +278,8 @@ export default function VirtualAccountScreen() {
                 </Text>
               </TouchableOpacity>
             </>
+          ) : (
+            <ActivityIndicator color={colors.brand} style={{ marginTop: 40 }} />
           )}
         </ScrollView>
       </View>
