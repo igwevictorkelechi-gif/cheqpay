@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Search } from "lucide-react";
 import { api } from "@/services/api";
-import { CRYPTO_ASSETS, isAssetEnabled } from "@/lib/cryptoAssets";
+import { CRYPTO_ASSETS } from "@/lib/cryptoAssets";
+import { useCryptoAvailability } from "@/lib/useCryptoAvailability";
 
 function CoinIcon({ bg, glyph, size = 48 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -20,6 +21,7 @@ function CoinIcon({ bg, glyph, size = 48 }: { bg: string; glyph: string; size?: 
 export default function SendCryptoPickerPage() {
   const router = useRouter();
   const [q, setQ] = useState("");
+  const { entries } = useCryptoAvailability();
   const [bal, setBal] = useState<Record<string, string>>({});
   const [ngn, setNgn] = useState<Record<string, number>>({});
 
@@ -92,7 +94,7 @@ export default function SendCryptoPickerPage() {
         <p className="mb-2 mt-7 text-sm font-semibold text-muted">Your assets</p>
         <div className="overflow-hidden rounded-3xl bg-card">
           {list.map((a, i) => {
-            const enabled = isAssetEnabled(a.symbol);
+            const enabled = !!entries[a.symbol];
             const amount = Number(bal[a.symbol] ?? 0);
             const has = amount > 0;
             return (

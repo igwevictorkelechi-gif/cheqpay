@@ -6,7 +6,7 @@ export class MockPriceFeed implements PriceFeed {
   readonly name = "mock";
 
   private spot(asset: Asset): Prisma.Decimal {
-    if (asset === Asset.USDT) return new Prisma.Decimal(1);
+    if (asset === Asset.USDT || asset === Asset.USDC) return new Prisma.Decimal(1);
     if (asset === Asset.BTC) return new Prisma.Decimal("60000");
     return new Prisma.Decimal(0);
   }
@@ -16,7 +16,7 @@ export class MockPriceFeed implements PriceFeed {
   }
 
   async getCandles(asset: Asset, range: ChartRange): Promise<Candle[]> {
-    if (asset === Asset.USDT) return [];
+    if (asset === Asset.USDT || asset === Asset.USDC) return [];
     const base = this.spot(asset).toNumber();
     const counts: Record<ChartRange, number> = {
       day: 24,

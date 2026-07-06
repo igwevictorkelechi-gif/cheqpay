@@ -7,28 +7,34 @@ import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import { colors } from '@/components/brand';
 import { api } from '@/services/api';
-import { ASSET_META, CRYPTO_SEND, isAssetEnabled } from '@/lib/assets';
+import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
 
-type Sym = 'BTC' | 'USDT';
-const ASSETS: Sym[] = ['BTC', 'USDT'];
+type Sym = 'BTC' | 'USDT' | 'USDC';
+const ASSETS: Sym[] = ['BTC', 'USDT', 'USDC'];
 
 export default function ReceiveScreen() {
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<Sym | null>(null);
   const [addresses, setAddresses] = useState<Record<string, string>>({});
+  const [netLabels, setNetLabels] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        await api.ensureProvisioned();
-        const { wallets } = await api.getWallets();
+        // Manual custody: live assets are the ones the admin configured.
+        const { addresses } = await api.getCryptoDepositAddresses();
         const map: Record<string, string> = {};
-        for (const w of wallets) if (w.address) map[w.asset] = w.address;
+        const labels: Record<string, string> = {};
+        for (const e of addresses) {
+          map[e.asset] = e.address;
+          labels[e.asset] = e.networkLabel;
+        }
         setAddresses(map);
+        setNetLabels(labels);
       } catch {
-        setError('Please sign in to view your deposit addresses.');
+        setError('We couldn’t load deposit addresses. Please try again shortly.');
       }
     })();
   }, []);
@@ -62,7 +68,7 @@ export default function ReceiveScreen() {
               <Text style={{ color: '#fff', fontSize: 26, fontWeight: '700' }}>{meta.glyph}</Text>
             </View>
             <Text className="text-ink text-lg font-bold mt-3">{meta.name}</Text>
-            <Text className="text-muted text-sm">{info.networkLabel}</Text>
+            <Text className="text-muted text-sm">{netLabels[selected] ?? info.networkLabel}</Text>
           </View>
 
           <View className="items-center mt-6">
@@ -129,7 +135,7 @@ export default function ReceiveScreen() {
         <View className="rounded-3xl overflow-hidden" style={{ backgroundColor: colors.card }}>
           {ASSETS.map((sym, i) => {
             const meta = ASSET_META[sym];
-            const enabled = isAssetEnabled(sym);
+            const enabled = !!addresses[sym];
             return (
               <TouchableOpacity
                 key={sym}

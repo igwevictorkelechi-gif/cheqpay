@@ -11,6 +11,8 @@ import { getPaymentProvider } from "@/payments";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { fromMinorUnits } from "@/lib/money";
 import { reviewActionSchema } from "@/lib/validation";
+import { isManualAsset } from "@/lib/manualCrypto";
+import { sendPush } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +46,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     await requireAdmin(req);
-    const { transactionId, action } = reviewActionSchema.parse(await req.json());
+    const { transactionId, action, txHash } = reviewActionSchema.parse(await req.json());
 
     const tx = await prisma.transaction.findUnique({ where: { id: transactionId } });
     if (!tx || tx.type !== TransactionType.WITHDRAWAL) {
@@ -97,6 +99,22 @@ export async function POST(req: Request) {
         await prisma.transaction.update({
           where: { id: tx.id },
           data: { status: TransactionStatus.PROCESSING, externalRef: transfer.providerRef },
+        });
+      } else if (await isManualAsset(tx.asset)) {
+        // Manual custody: the admin has already sent the funds from the
+        // business wallet — approving records completion (+ on-chain hash).
+        await prisma.transaction.update({
+          where: { id: tx.id },
+          data: {
+            status: TransactionStatus.COMPLETED,
+            ...(txHash ? { txHash, externalRef: txHash } : {}),
+          },
+        });
+        await sendPush(tx.userId, {
+          category: "withdrawals",
+          title: "Crypto withdrawal sent",
+          body: `Your ${amount} ${tx.asset} withdrawal has been sent.`,
+          data: { transactionId: tx.id, ...(txHash ? { txHash } : {}) },
         });
       } else {
         const custody = getCustodyProvider();

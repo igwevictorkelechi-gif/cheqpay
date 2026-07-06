@@ -8,6 +8,7 @@ import {
 } from "@cheqpay/db";
 import { requireMfa, requireUser } from "@/lib/auth";
 import { getCustodyProvider } from "@/custody";
+import { isManualAsset } from "@/lib/manualCrypto";
 import { getPriceFeed } from "@/market";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { isSupportedWallet } from "@/lib/assets";
@@ -108,9 +109,13 @@ export async function POST(req: Request) {
       return jsonOk({ transactionId: existing.id, status: existing.status });
     }
 
+    // Manual-custody assets always queue as PENDING: the business pays out
+    // from its own wallet, then the admin marks the withdrawal complete.
+    const manual = await isManualAsset(asset);
+
     // Atomic debit + record. Held-for-review withdrawals are PENDING (funds
     // reserved) and not broadcast until an admin approves.
-    const initialStatus = aml.holdForReview
+    const initialStatus = aml.holdForReview || manual
       ? TransactionStatus.PENDING
       : TransactionStatus.PROCESSING;
     const tx = await prisma.$transaction(async (db) => {
@@ -135,6 +140,7 @@ export async function POST(req: Request) {
             ngnValueKobo: ngnValueKobo.toString(),
             amlReview: aml.holdForReview,
             amlReasons: aml.reasons,
+            manualPayout: manual,
           },
         },
       });
@@ -157,6 +163,26 @@ export async function POST(req: Request) {
         data: { transactionId: tx.id },
       });
       return jsonOk({ transactionId: tx.id, status: "under_review", reasons: aml.reasons });
+    }
+
+    if (manual) {
+      // Queue for the operations team; funds are already reserved.
+      await prisma.auditLog.create({
+        data: {
+          userId: auth.id,
+          action: "crypto.withdrawal.queued_manual",
+          resourceType: "Transaction",
+          resourceId: tx.id,
+          details: { asset, network, amountMinor: amountMinor.toString(), toAddress: body.toAddress },
+        },
+      });
+      await sendPush(auth.id, {
+        category: "withdrawals",
+        title: "Withdrawal processing",
+        body: `Your ${fromMinorUnits(amountMinor, asset)} ${asset} withdrawal is being processed. You'll be notified when it's sent.`,
+        data: { transactionId: tx.id },
+      });
+      return jsonOk({ transactionId: tx.id, status: "processing" });
     }
 
     // Provider signs + broadcasts; refund on failure.

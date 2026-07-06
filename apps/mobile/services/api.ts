@@ -41,7 +41,7 @@ function idemKey(): string {
 }
 
 // ---- Types ----
-export type AssetSymbol = 'BTC' | 'USDT';
+export type AssetSymbol = 'BTC' | 'USDT' | 'USDC';
 
 export interface MarketPrice {
   asset: string;
@@ -215,9 +215,16 @@ export const api = {
     });
   },
 
+  /** Live crypto deposit addresses (manual custody). Absent asset = coming soon. */
+  getCryptoDepositAddresses(): Promise<{
+    addresses: { asset: string; address: string; network: string; networkLabel: string }[];
+  }> {
+    return apiFetch('/api/crypto/deposit-addresses');
+  },
+
   createCryptoWithdrawal(input: {
     asset: AssetSymbol;
-    network: 'BITCOIN' | 'TRON';
+    network: 'BITCOIN' | 'TRON' | 'ETHEREUM' | 'BSC';
     toAddress: string;
     amount: string;
   }): Promise<{ transactionId: string; status: string; txHash?: string }> {

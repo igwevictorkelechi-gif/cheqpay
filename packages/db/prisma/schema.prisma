@@ -29,6 +29,7 @@ enum Asset {
   NGN
   BTC
   USDT
+  USDC
 }
 
 enum Network {

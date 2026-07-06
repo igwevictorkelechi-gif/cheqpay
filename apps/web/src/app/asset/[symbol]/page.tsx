@@ -22,6 +22,7 @@ interface AssetSnapshot {
 const META: Record<AssetSymbol, { name: string; color: string; glyph: string }> = {
   BTC: { name: "Bitcoin", color: "#F7931A", glyph: "₿" },
   USDT: { name: "Tether", color: "#26A17B", glyph: "₮" },
+  USDC: { name: "USD Coin", color: "#2775CA", glyph: "$" },
 };
 
 const RANGES: ChartRange[] = ["day", "week", "month", "year", "all"];

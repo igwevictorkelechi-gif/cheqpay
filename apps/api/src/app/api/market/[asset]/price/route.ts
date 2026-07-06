@@ -6,7 +6,7 @@ import { getPriceFeed } from "@/market";
 
 export const dynamic = "force-dynamic";
 
-const SUPPORTED = new Set<string>([Asset.BTC, Asset.USDT]);
+const SUPPORTED = new Set<string>([Asset.BTC, Asset.USDT, Asset.USDC]);
 
 /** Live display price for the asset page (USD via USDT, plus NGN at the business rate). */
 export async function GET(

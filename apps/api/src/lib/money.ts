@@ -6,11 +6,13 @@ import { ApiError } from "./http";
  *  - NGN  -> 2 (kobo)
  *  - BTC  -> 8 (satoshi)
  *  - USDT -> 6 (base units)
+ *  - USDC -> 6 (base units)
  */
 export const ASSET_DECIMALS: Record<Asset, number> = {
   NGN: 2,
   BTC: 8,
   USDT: 6,
+  USDC: 6,
 };
 
 export function decimalsFor(asset: Asset): number {

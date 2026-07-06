@@ -41,7 +41,7 @@ function idemKey(): string {
 }
 
 // ---- Types ----
-export type AssetSymbol = "BTC" | "USDT";
+export type AssetSymbol = "BTC" | "USDT" | "USDC";
 export type ChartRange = "day" | "week" | "month" | "year" | "all";
 
 export interface MarketPrice {
@@ -336,7 +336,7 @@ export const api = {
 
   createCryptoWithdrawal(input: {
     asset: AssetSymbol;
-    network: "BITCOIN" | "TRON";
+    network: "BITCOIN" | "TRON" | "ETHEREUM" | "BSC";
     toAddress: string;
     amount: string;
   }): Promise<{ transactionId: string; status: string; txHash?: string }> {
@@ -345,6 +345,13 @@ export const api = {
       headers: { "idempotency-key": idemKey() },
       body: JSON.stringify(input),
     });
+  },
+
+  /** Live crypto deposit addresses (manual custody). Absent asset = coming soon. */
+  getCryptoDepositAddresses(): Promise<{
+    addresses: { asset: string; address: string; network: string; networkLabel: string }[];
+  }> {
+    return apiFetch("/api/crypto/deposit-addresses");
   },
 
   // ---- NGN payout (withdrawal) ----

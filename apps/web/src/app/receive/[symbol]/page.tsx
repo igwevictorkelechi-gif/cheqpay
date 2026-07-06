@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { ChevronLeft, Copy, Share2, Check, AlertTriangle } from "lucide-react";
 import { api, ApiError } from "@/services/api";
-import { getAssetMeta, isAssetEnabled } from "@/lib/cryptoAssets";
+import { getAssetMeta } from "@/lib/cryptoAssets";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -30,8 +30,10 @@ export default function ReceiveDetailPage() {
   const [needsAuth, setNeedsAuth] = useState(false);
   const [copied, setCopied] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-
-  const enabled = meta ? isAssetEnabled(meta.symbol) : false;
+  // Manual custody: the asset is live only when the admin has configured its
+  // deposit wallet; otherwise it renders as "Coming soon".
+  const [notLive, setNotLive] = useState(false);
+  const [netLabel, setNetLabel] = useState<string | null>(null);
 
   useEffect(() => {
     if (!meta) {
@@ -39,33 +41,31 @@ export default function ReceiveDetailPage() {
       setLoading(false);
       return;
     }
-    if (!enabled) {
-      setLoading(false);
-      return;
-    }
     let active = true;
     setLoading(true);
     setError(null);
     setNeedsAuth(false);
+    setNotLive(false);
     (async () => {
       try {
-        await api.ensureProvisioned();
-        const { wallets } = await api.getWallets();
+        const { addresses } = await api.getCryptoDepositAddresses();
         if (!active) return;
-        const w =
-          wallets.find((x) => x.asset === meta.symbol && x.network === meta.network) ??
-          wallets.find((x) => x.asset === meta.symbol);
-        if (w?.address) setAddress(w.address);
-        else setError("No deposit address available yet. Please try again shortly.");
+        const entry = addresses.find((x) => x.asset === meta.symbol);
+        if (entry) {
+          setAddress(entry.address);
+          setNetLabel(entry.networkLabel);
+        } else {
+          setNotLive(true);
+        }
       } catch (e) {
         if (!active) return;
         // Only a genuine 401 means "sign in" — anything else is a temporary
-        // problem generating the address, not an auth issue.
+        // problem loading the address, not an auth issue.
         if (e instanceof ApiError && e.status === 401) {
           setNeedsAuth(true);
           setError("Your session has expired. Please sign in again.");
         } else {
-          setError("We couldn’t load your deposit address. Please try again.");
+          setError("We couldn’t load the deposit address. Please try again.");
         }
       } finally {
         if (active) setLoading(false);
@@ -74,7 +74,7 @@ export default function ReceiveDetailPage() {
     return () => {
       active = false;
     };
-  }, [meta, enabled, reloadKey]);
+  }, [meta, reloadKey]);
 
   async function copy() {
     if (!address) return;
@@ -115,7 +115,7 @@ export default function ReceiveDetailPage() {
     );
   }
 
-  if (!enabled) {
+  if (!loading && notLive) {
     return (
       <div className="flex min-h-screen w-full justify-center bg-black">
         <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4">
@@ -163,7 +163,7 @@ export default function ReceiveDetailPage() {
         <div className="mt-6 flex flex-col items-center">
           <CoinIcon bg={meta.color} glyph={meta.glyph} size={56} />
           <p className="mt-3 text-lg font-bold text-ink">{meta.name}</p>
-          <p className="text-sm text-muted">{meta.networkLabel}</p>
+          <p className="text-sm text-muted">{netLabel ?? meta.networkLabel}</p>
         </div>
 
         {/* QR */}
@@ -223,7 +223,7 @@ export default function ReceiveDetailPage() {
         <div className="mt-6 overflow-hidden rounded-2xl bg-card">
           <div className="flex items-center justify-between px-4 py-4">
             <span className="text-sm text-muted">Network</span>
-            <span className="text-sm font-semibold text-ink">{meta.networkLabel}</span>
+            <span className="text-sm font-semibold text-ink">{netLabel ?? meta.networkLabel}</span>
           </div>
           <div className="flex items-center justify-between border-t border-border px-4 py-4">
             <span className="text-sm text-muted">Minimum deposit</span>
@@ -238,8 +238,17 @@ export default function ReceiveDetailPage() {
           <AlertTriangle className="h-5 w-5 shrink-0 text-amber-400" />
           <p className="text-xs leading-relaxed text-amber-200/90">
             Send only <span className="font-bold">{meta.symbol}</span> on the{" "}
-            <span className="font-bold">{meta.networkLabel}</span> network to this address. Sending
-            any other coin or using the wrong network will result in permanent loss of funds.
+            <span className="font-bold">{netLabel ?? meta.networkLabel}</span> network to this
+            address. Sending any other coin or using the wrong network will result in permanent
+            loss of funds.
+          </p>
+        </div>
+
+        {/* Manual crediting note */}
+        <div className="mt-4 rounded-2xl bg-card p-4">
+          <p className="text-xs leading-relaxed text-muted">
+            Your balance is credited after the deposit is confirmed on-chain — usually within
+            30 minutes. Contact support with your transaction hash if it takes longer.
           </p>
         </div>
       </div>
