@@ -25,7 +25,8 @@ export async function handleCustodyWebhook(req: Request) {
   const signature =
     req.headers.get("x-payload-hash") ??
     req.headers.get("x-signature") ??
-    req.headers.get("x-signature-sha256");
+    req.headers.get("x-signature-sha256") ??
+    req.headers.get("biz-resp-signature"); // Cobo
 
   if (!custody.verifyWebhookSignature(rawBody, signature)) {
     // Do not record unverified payloads; just reject.

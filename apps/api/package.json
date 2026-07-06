@@ -13,6 +13,7 @@
   "dependencies": {
     "@cheqpay/db": "*",
     "@cheqpay/shared": "*",
+    "@cobo/cobo-waas2": "^1.38.0",
     "@sentry/nextjs": "^10.63.0",
     "jose": "^5.9.0",
     "next": "^15.0.0",
