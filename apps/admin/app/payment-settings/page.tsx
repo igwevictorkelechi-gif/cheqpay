@@ -1,251 +1,149 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Eye, EyeOff, Save, AlertCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, CheckCircle2, Copy, Check, CreditCard, ExternalLink, KeyRound, XCircle } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
+type Status = {
+  payments: { provider: string; secretKeyConfigured: boolean; webhookConfigured: boolean };
+  apiBaseUrl?: string;
+};
+
+function Pill({ ok, okLabel, badLabel }: { ok: boolean; okLabel: string; badLabel: string }) {
+  return ok ? (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+      <CheckCircle2 size={14} /> {okLabel}
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+      <XCircle size={14} /> {badLabel}
+    </span>
+  );
+}
+
 export default function PaymentSettingsPage() {
-  const [showPaystackSecret, setShowPaystackSecret] = useState(false);
-  const [showFlutterwaveSecret, setShowFlutterwaveSecret] = useState(false);
-  const [paystackPublic, setPaystackPublic] = useState('pk_live_...');
-  const [paystackSecret, setPaystackSecret] = useState('sk_live_...');
-  const [flutterwavePublic, setFlutterwavePublic] = useState('FLWPUBK_...');
-  const [flutterwaveSecret, setFlutterwaveSecret] = useState('FLWSECK_...');
-  const [activeProvider, setActiveProvider] = useState<'paystack' | 'flutterwave'>('paystack');
-  const [saving, setSaving] = useState(false);
+  const [data, setData] = useState<Status | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  const handleSavePaystack = async () => {
-    setSaving(true);
-    try {
-      // Call API to save Paystack config
-      console.log('Saving Paystack config...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      alert('Paystack settings saved successfully!');
-    } finally {
-      setSaving(false);
-    }
-  };
+  useEffect(() => {
+    let active = true;
+    fetch('/api/provider-status')
+      .then(async (r) => {
+        if (!r.ok) throw new Error('Couldn’t load payment settings (HTTP ' + r.status + ')');
+        return r.json();
+      })
+      .then((d) => { if (active) setData(d); })
+      .catch((e) => { if (active) setError(e.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
-  const handleSaveFlutterwave = async () => {
-    setSaving(true);
+  const live = Boolean(data && data.payments.provider.toLowerCase() !== 'mock');
+  const webhookUrl = (data?.apiBaseUrl ?? 'https://cheqpay-admin453.vercel.app') + '/api/webhooks/flutterwave';
+
+  const copyWebhook = async () => {
     try {
-      // Call API to save Flutterwave config
-      console.log('Saving Flutterwave config...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      alert('Flutterwave settings saved successfully!');
-    } finally {
-      setSaving(false);
-    }
+      await navigator.clipboard.writeText(webhookUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard unavailable */ }
   };
 
   return (
     <DashboardLayout>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Payment Gateway Settings</h1>
-        <p className="text-gray-600 mt-2">Configure and manage your payment provider API credentials</p>
+        <h1 className="text-3xl font-bold text-gray-900">Payment Gateway</h1>
+        <p className="text-gray-600 mt-2">Flutterwave powers NGN deposits, bank payouts and bill payments</p>
       </div>
 
-      {/* Warning */}
-      <div className="mb-8 bg-orange-50 border border-orange-200 rounded-lg p-4 flex gap-3">
-        <AlertCircle className="text-orange-600 flex-shrink-0" size={20} />
+      <div className="mb-8 bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 max-w-3xl">
+        <KeyRound className="text-blue-600 flex-shrink-0" size={20} />
         <div>
-          <p className="font-semibold text-orange-900">Security Notice</p>
-          <p className="text-sm text-orange-800 mt-1">
-            Secret keys are encrypted and stored securely. They are never transmitted to the client and only used in Supabase Edge Functions.
+          <p className="font-semibold text-blue-900">Keys live in Vercel, not here</p>
+          <p className="text-sm text-blue-800 mt-1">
+            For security, API keys are set as environment variables on the backend API project
+            (<code className="font-mono">FLUTTERWAVE_SECRET_KEY</code>, <code className="font-mono">FLUTTERWAVE_WEBHOOK_HASH</code>,
+            <code className="font-mono"> PAYMENT_PROVIDER=flutterwave</code>) and never pass through this dashboard.
+            Update them in Vercel → API project → Settings → Environment Variables, then redeploy.
           </p>
         </div>
       </div>
 
-      {/* Provider Toggle */}
-      <div className="mb-8 flex gap-4">
-        <button
-          onClick={() => setActiveProvider('paystack')}
-          className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-            activeProvider === 'paystack'
-              ? 'bg-brand-600 text-white'
-              : 'bg-white border border-gray-200 text-gray-700 hover:border-gray-300'
-          }`}
-        >
-          Paystack
-        </button>
-        <button
-          onClick={() => setActiveProvider('flutterwave')}
-          className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-            activeProvider === 'flutterwave'
-              ? 'bg-brand-600 text-white'
-              : 'bg-white border border-gray-200 text-gray-700 hover:border-gray-300'
-          }`}
-        >
-          Flutterwave
-        </button>
-      </div>
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 max-w-3xl">{error}</div>
+      )}
+      {loading && <p className="text-gray-500">Loading…</p>}
 
-      {/* Paystack Settings */}
-      {activeProvider === 'paystack' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 max-w-2xl">
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Paystack Configuration</h2>
-
-            {/* Status Toggle */}
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+      {data && (
+        <div className="space-y-6 max-w-3xl">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="p-2 rounded-lg bg-orange-100 text-orange-600"><CreditCard size={20} /></div>
               <div>
-                <p className="font-semibold text-blue-900">Current Status</p>
-                <p className="text-sm text-blue-800">Virtual account creation and funding</p>
+                <h2 className="text-lg font-bold text-gray-900">Flutterwave</h2>
+                <p className="text-sm text-gray-500">Virtual accounts · transfers · bills</p>
               </div>
-              <label className="flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked className="w-5 h-5 accent-brand-600" />
-                <span className="ml-2 text-sm font-semibold text-gray-700">Active</span>
-              </label>
+              <span className={'ml-auto px-3 py-1 rounded-full text-xs font-semibold ' + (live ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>
+                {live ? 'LIVE' : 'MOCK MODE'}
+              </span>
             </div>
-
-            {/* Public Key */}
-            <div className="mb-6">
-              <label className="label">Public Key</label>
-              <input
-                type="text"
-                value={paystackPublic}
-                onChange={(e) => setPaystackPublic(e.target.value)}
-                placeholder="pk_live_..."
-                className="input"
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                Find your public key in your Paystack <a href="https://dashboard.paystack.co/settings/developers" target="_blank" rel="noopener noreferrer" className="text-brand-600 underline">Dashboard</a>
-              </p>
-            </div>
-
-            {/* Secret Key */}
-            <div className="mb-8">
-              <label className="label">Secret Key</label>
-              <div className="relative">
-                <input
-                  type={showPaystackSecret ? 'text' : 'password'}
-                  value={paystackSecret}
-                  onChange={(e) => setPaystackSecret(e.target.value)}
-                  placeholder="sk_live_..."
-                  className="input pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPaystackSecret(!showPaystackSecret)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                >
-                  {showPaystackSecret ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Provider mode</p>
+                <p className="font-semibold text-gray-900">{data.payments.provider}</p>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Your secret key is encrypted and only used in secure backend operations
-              </p>
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Secret key</p>
+                <Pill ok={data.payments.secretKeyConfigured} okLabel="Configured" badLabel="Not set" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Webhook hash</p>
+                <Pill ok={data.payments.webhookConfigured} okLabel="Configured" badLabel="Not set" />
+              </div>
             </div>
-
-            {/* Save Button */}
-            <button
-              onClick={handleSavePaystack}
-              disabled={saving}
-              className="btn-primary flex items-center gap-2 w-full justify-center"
+            {!live && (
+              <div className="mt-4 flex items-start gap-2 rounded-lg bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <span>
+                  Payments are in <b>mock</b> mode — deposits and payouts are simulated. Set{' '}
+                  <code className="font-mono">PAYMENT_PROVIDER=flutterwave</code> plus the two keys above and redeploy to go live.
+                </span>
+              </div>
+            )}
+            <a
+              href="https://app.flutterwave.com/dashboard/settings/apis"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700"
             >
-              <Save size={18} />
-              {saving ? 'Saving...' : 'Save Paystack Settings'}
-            </button>
+              Open Flutterwave dashboard <ExternalLink size={14} />
+            </a>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-2">Webhook URL</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Paste this in Flutterwave → Settings → Webhooks, and set the same secret hash there
+              as <code className="font-mono">FLUTTERWAVE_WEBHOOK_HASH</code> on the API project.
+              It confirms deposits into virtual accounts and finalizes transfers.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 block bg-gray-900 text-green-400 p-3 rounded-lg text-sm overflow-x-auto">
+                {webhookUrl}
+              </code>
+              <button
+                onClick={copyWebhook}
+                className="flex items-center gap-1.5 px-4 py-3 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                {copied ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
           </div>
         </div>
       )}
-
-      {/* Flutterwave Settings */}
-      {activeProvider === 'flutterwave' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 max-w-2xl">
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Flutterwave Configuration</h2>
-
-            {/* Status Toggle */}
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-blue-900">Current Status</p>
-                <p className="text-sm text-blue-800">Virtual account creation and funding</p>
-              </div>
-              <label className="flex items-center cursor-pointer">
-                <input type="checkbox" className="w-5 h-5 accent-brand-600" />
-                <span className="ml-2 text-sm font-semibold text-gray-700">Active</span>
-              </label>
-            </div>
-
-            {/* Public Key */}
-            <div className="mb-6">
-              <label className="label">Public Key</label>
-              <input
-                type="text"
-                value={flutterwavePublic}
-                onChange={(e) => setFlutterwavePublic(e.target.value)}
-                placeholder="FLWPUBK_..."
-                className="input"
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                Find your public key in your Flutterwave <a href="https://dashboard.flutterwave.com/settings/apis" target="_blank" rel="noopener noreferrer" className="text-brand-600 underline">Dashboard</a>
-              </p>
-            </div>
-
-            {/* Secret Key */}
-            <div className="mb-8">
-              <label className="label">Secret Key</label>
-              <div className="relative">
-                <input
-                  type={showFlutterwaveSecret ? 'text' : 'password'}
-                  value={flutterwaveSecret}
-                  onChange={(e) => setFlutterwaveSecret(e.target.value)}
-                  placeholder="FLWSECK_..."
-                  className="input pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowFlutterwaveSecret(!showFlutterwaveSecret)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                >
-                  {showFlutterwaveSecret ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Your secret key is encrypted and only used in secure backend operations
-              </p>
-            </div>
-
-            {/* Save Button */}
-            <button
-              onClick={handleSaveFlutterwave}
-              disabled={saving}
-              className="btn-primary flex items-center gap-2 w-full justify-center"
-            >
-              <Save size={18} />
-              {saving ? 'Saving...' : 'Save Flutterwave Settings'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Webhook Configuration */}
-      <div className="mt-12 bg-white rounded-xl shadow-sm border border-gray-200 p-8 max-w-2xl">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Webhook Configuration</h2>
-        
-        <div className="space-y-4">
-          <div>
-            <p className="font-semibold text-gray-900 mb-2">Paystack Webhook URL</p>
-            <code className="block bg-gray-900 text-green-400 p-3 rounded text-sm overflow-x-auto">
-              https://your-supabase-url.supabase.co/functions/v1/handle-webhook-paystack
-            </code>
-            <p className="text-xs text-gray-500 mt-2">
-              Add this URL to Paystack Dashboard Settings → Webhooks
-            </p>
-          </div>
-
-          <div className="border-t border-gray-200 pt-4">
-            <p className="font-semibold text-gray-900 mb-2">Flutterwave Webhook URL</p>
-            <code className="block bg-gray-900 text-green-400 p-3 rounded text-sm overflow-x-auto">
-              https://your-supabase-url.supabase.co/functions/v1/handle-webhook-flutterwave
-            </code>
-            <p className="text-xs text-gray-500 mt-2">
-              Add this URL to Flutterwave Dashboard Settings → Webhooks
-            </p>
-          </div>
-        </div>
-      </div>
     </DashboardLayout>
   );
 }

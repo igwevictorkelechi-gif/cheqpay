@@ -23,12 +23,14 @@ export async function GET(req: Request) {
     const held = await prisma.transaction.findMany({
       where: { type: TransactionType.WITHDRAWAL, status: TransactionStatus.PENDING },
       orderBy: { createdAt: "asc" },
+      include: { user: { select: { email: true } } },
       take: 100,
     });
     return jsonOk({
       withdrawals: held.map((w) => ({
         id: w.id,
         userId: w.userId,
+        email: w.user.email,
         asset: w.asset,
         network: w.network,
         amount: w.amount.toString(),

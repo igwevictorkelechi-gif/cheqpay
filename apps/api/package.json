@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@cheqpay/db": "*",
     "@cheqpay/shared": "*",
     "@cobo/cobo-waas2": "^1.38.0",

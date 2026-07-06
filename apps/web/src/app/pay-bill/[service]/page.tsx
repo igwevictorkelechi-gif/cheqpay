@@ -35,6 +35,7 @@ export default function BillServicePage() {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [providerRef, setProviderRef] = useState<string | undefined>();
+  const [billToken, setBillToken] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -114,6 +115,7 @@ export default function BillServicePage() {
       });
       invalidateMoneyCaches();
       setProviderRef(res.providerRef);
+      setBillToken(res.token ?? null);
       setStage("done");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Payment failed");
@@ -318,6 +320,25 @@ export default function BillServicePage() {
           <p className="mt-2 text-sm text-muted">
             ₦{payAmount.toLocaleString()} {config.label} for {customer.trim()}.
           </p>
+          {billToken && (
+            <div className="mt-4 w-full rounded-2xl border border-green-500/30 bg-green-500/10 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Recharge token
+              </p>
+              <p className="mt-1 break-all text-xl font-extrabold tracking-wider text-ink">
+                {billToken}
+              </p>
+              <button
+                onClick={() => navigator.clipboard?.writeText(billToken)}
+                className="mt-3 rounded-full bg-card px-5 py-2 text-sm font-bold text-ink active:scale-95"
+              >
+                Copy token
+              </button>
+              <p className="mt-2 text-xs text-muted">
+                Enter this token on your meter to load the units.
+              </p>
+            </div>
+          )}
           {providerRef && (
             <p className="mt-3 break-all rounded-xl bg-card px-3 py-2 text-xs text-muted">
               Ref: {providerRef}

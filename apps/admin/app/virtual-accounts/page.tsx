@@ -1,140 +1,159 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Search, RotateCw, Copy } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Search, Copy, Check, CreditCard, RefreshCw } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+
+type VirtualAccount = {
+  id: string;
+  userId: string;
+  email: string;
+  kycTier: number;
+  userStatus: string;
+  accountNumber: string;
+  bankName: string;
+  bankCode: string | null;
+  permanent: boolean;
+  createdAt: string;
+};
 
 export default function VirtualAccountsPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [rows, setRows] = useState<VirtualAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
 
-  const virtualAccounts = [
-    {
-      id: '1',
-      userName: 'John Doe',
-      accountNumber: '1000000001',
-      bankName: 'Wema Bank',
-      bankCode: '035',
-      provider: 'paystack',
-      status: 'active',
-      createdAt: '2024-01-15',
-    },
-    {
-      id: '2',
-      userName: 'Jane Smith',
-      accountNumber: '1000000002',
-      bankName: 'Zenith Bank',
-      bankCode: '057',
-      provider: 'flutterwave',
-      status: 'active',
-      createdAt: '2024-01-20',
-    },
-    {
-      id: '3',
-      userName: 'Mike Johnson',
-      accountNumber: '1000000003',
-      bankName: 'GTBank',
-      bankCode: '058',
-      provider: 'paystack',
-      status: 'inactive',
-      createdAt: '2024-01-22',
-    },
-  ];
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    const q = searchTerm.trim();
+    const t = setTimeout(() => {
+      fetch('/api/virtual-accounts' + (q ? `?q=${encodeURIComponent(q)}` : ''), { cache: 'no-store' })
+        .then(async (r) => {
+          if (!r.ok) throw new Error('Failed to load virtual accounts (' + r.status + ')');
+          return r.json();
+        })
+        .then((d) => { if (active) setRows(Array.isArray(d.virtualAccounts) ? d.virtualAccounts : []); })
+        .catch((e) => { if (active) setError(e.message); })
+        .finally(() => { if (active) setLoading(false); });
+    }, q ? 350 : 0);
+    return () => { active = false; clearTimeout(t); };
+  }, [searchTerm, reload]);
 
-  const handleCopyAccount = (accountNumber: string) => {
-    navigator.clipboard.writeText(accountNumber);
-    alert('Account number copied!');
-  };
-
-  const handleRegenerate = (id: string) => {
-    alert(`Regenerating virtual account for ${id}...`);
+  const copyAccount = async (accountNumber: string) => {
+    try {
+      await navigator.clipboard.writeText(accountNumber);
+      setCopied(accountNumber);
+      setTimeout(() => setCopied(null), 1500);
+    } catch { /* clipboard unavailable */ }
   };
 
   return (
     <DashboardLayout>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Virtual Accounts</h1>
-        <p className="text-gray-600 mt-2">Manage user virtual accounts for wallet funding</p>
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Virtual Accounts</h1>
+          <p className="text-gray-600 mt-2">Dedicated NGN deposit accounts issued to users</p>
+        </div>
+        <button
+          onClick={() => setReload((n) => n + 1)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Refresh
+        </button>
       </div>
 
-      {/* Search */}
-      <div className="mb-8 flex gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-          <input
-            type="text"
-            placeholder="Search by user name or account number..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
+      <div className="mb-6 relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+        <input
+          type="text"
+          placeholder="Search by user email or account number..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+        />
+      </div>
+
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">User</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Account Number</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Bank</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Type</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">KYC</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Created</th>
+                <th className="px-6 py-4 text-right text-sm font-semibold text-gray-900">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {loading && (
+                <tr><td colSpan={7} className="px-6 py-10 text-center text-gray-400">Loading…</td></tr>
+              )}
+              {!loading && rows.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center">
+                    <CreditCard size={36} className="mx-auto text-gray-300 mb-3" />
+                    <p className="font-semibold text-gray-700">
+                      {searchTerm ? 'No accounts match your search' : 'No virtual accounts yet'}
+                    </p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      Accounts are created when a verified user opens the deposit screen.
+                    </p>
+                  </td>
+                </tr>
+              )}
+              {!loading && rows.map((va) => (
+                <tr key={va.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <p className="font-semibold text-gray-900">{va.email}</p>
+                    {va.userStatus !== 'ACTIVE' && (
+                      <span className="text-xs font-medium text-red-600">{va.userStatus}</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 font-mono text-gray-900">{va.accountNumber}</td>
+                  <td className="px-6 py-4 text-gray-900">{va.bankName}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                      va.permanent ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {va.permanent ? 'Permanent' : 'Temporary'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-gray-700">Tier {va.kycTier}</td>
+                  <td className="px-6 py-4 text-gray-500 text-sm">
+                    {new Date(va.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      onClick={() => copyAccount(va.accountNumber)}
+                      className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-semibold text-sm"
+                    >
+                      {copied === va.accountNumber ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
+                      {copied === va.accountNumber ? 'Copied' : 'Copy'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* Virtual Accounts Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">User</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Account Number</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Bank</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Provider</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
-              <th className="px-6 py-4 text-right text-sm font-semibold text-gray-900">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {virtualAccounts.map((va) => (
-              <tr key={va.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-4">
-                  <p className="font-semibold text-gray-900">{va.userName}</p>
-                </td>
-                <td className="px-6 py-4 font-mono text-gray-900">{va.accountNumber}</td>
-                <td className="px-6 py-4 text-gray-900">{va.bankName}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    va.provider === 'paystack'
-                      ? 'bg-blue-100 text-blue-800'
-                      : 'bg-purple-100 text-purple-800'
-                  }`}>
-                    {va.provider}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    va.status === 'active'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {va.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right space-x-2">
-                  <button
-                    onClick={() => handleCopyAccount(va.accountNumber)}
-                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-semibold text-sm"
-                  >
-                    <Copy size={16} />
-                    Copy
-                  </button>
-                  <button
-                    onClick={() => handleRegenerate(va.id)}
-                    className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-700 font-semibold text-sm"
-                  >
-                    <RotateCw size={16} />
-                    Regenerate
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Info */}
       <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="text-sm text-blue-900">
-          <strong>Note:</strong> Virtual accounts are automatically created when users sign up. You can regenerate an account if needed, which will create a new account number while keeping the old one active for a transition period.
+          <strong>Note:</strong> A permanent account is minted after the user completes BVN
+          verification (KYC). Bank transfers into these accounts are credited to the user&apos;s
+          Naira balance automatically via the Flutterwave webhook.
         </p>
       </div>
     </DashboardLayout>

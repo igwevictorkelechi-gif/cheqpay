@@ -263,7 +263,7 @@ export default function AnalyticsPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="font-bold text-gray-900 mb-4">Custody Balances</h3>
           <div className="space-y-4">
-            {['NGN', 'BTC', 'USDT'].map((asset, i) => (
+            {['NGN', 'BTC', 'USDT', 'USDC'].map((asset, i) => (
               <div key={i} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CreditCard size={16} className="text-gray-400" />

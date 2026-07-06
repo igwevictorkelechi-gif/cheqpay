@@ -126,6 +126,7 @@ export interface LedgerTransaction {
   billerName: string | null;
   planName: string | null;
   customer: string | null;
+  token: string | null;
 }
 
 export interface VirtualAccount {
@@ -318,7 +319,7 @@ export const api = {
     customer: string;
     planId?: string;
     amount?: string;
-  }): Promise<{ transactionId: string; status: string; providerRef?: string }> {
+  }): Promise<{ transactionId: string; status: string; providerRef?: string; token?: string | null }> {
     return apiFetch("/api/bills/pay", {
       method: "POST",
       headers: { "idempotency-key": idemKey() },
@@ -386,6 +387,16 @@ export const api = {
 
   deleteBeneficiary(id: string): Promise<{ deleted: boolean }> {
     return apiFetch(`/api/beneficiaries/${id}`, { method: "DELETE" });
+  },
+
+  /** Ask the AI support agent a question (FAQ-grounded). */
+  supportChat(
+    messages: { role: "user" | "assistant"; content: string }[]
+  ): Promise<{ reply: string; agent: boolean }> {
+    return apiFetch("/api/support/chat", {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    });
   },
 
   createNgnWithdrawal(input: {

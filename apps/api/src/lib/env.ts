@@ -107,6 +107,10 @@ const envSchema = z.object({
   DOJAH_API_KEY: z.string().optional(),
   DOJAH_API_BASE: z.string().url().default("https://api.dojah.io"),
 
+  // AI support agent (/api/support/chat). Optional — without it the endpoint
+  // degrades to a "contact human support" reply instead of erroring.
+  ANTHROPIC_API_KEY: z.string().optional(),
+
   // Scheduled jobs. CRON_SECRET gates the /api/cron/* endpoints (Vercel Cron
   // sends it automatically as `Authorization: Bearer <secret>`).
   CRON_SECRET: z.string().min(16).optional(),

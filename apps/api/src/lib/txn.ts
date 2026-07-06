@@ -18,6 +18,7 @@ export function serializeTransaction(t: Transaction) {
     billerName?: string;
     planName?: string | null;
     customer?: string;
+    token?: string | null;
     toAddress?: string;
     rate?: string;
   };
@@ -47,5 +48,6 @@ export function serializeTransaction(t: Transaction) {
     billerName: meta.billerName ?? null,
     planName: meta.planName ?? null,
     customer: meta.customer ?? null,
+    token: meta.token ?? null,
   };
 }

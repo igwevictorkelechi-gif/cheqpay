@@ -140,7 +140,11 @@ export class MockPaymentProvider implements PaymentProvider {
     const providerRef =
       "mock-bill-" +
       createHash("sha256").update(input.reference).digest("hex").slice(0, 16);
-    return { providerRef, status: "successful" };
+    // Prepaid electricity issues a recharge token; fake a deterministic one.
+    const token = input.service === "electricity"
+      ? createHash("sha256").update(input.reference).digest("hex").replace(/\D/g, "").slice(0, 20).replace(/(\d{4})(?=\d)/g, "$1-")
+      : null;
+    return { providerRef, status: "successful", token };
   }
 }
 

@@ -87,7 +87,7 @@ export default function ProviderSettingsPage() {
               <div className="p-2 rounded-lg bg-brand-100 text-brand-600"><Server size={20} /></div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Custody (Crypto)</h2>
-                <p className="text-sm text-gray-500">Wallet creation, deposits &amp; withdrawals (Crypto APIs)</p>
+                <p className="text-sm text-gray-500">Crypto deposits &amp; withdrawals</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -98,12 +98,17 @@ export default function ProviderSettingsPage() {
               <div><p className="text-xs text-gray-500 mb-1">Custody API key</p><StatusPill ok={data.custody.apiKeyConfigured} /></div>
               <div><p className="text-xs text-gray-500 mb-1">Deposit webhook secret</p><StatusPill ok={data.custody.webhookConfigured} /></div>
             </div>
-            {!isLive(data.custody.provider) && (
-              <div className="mt-4 flex items-start gap-2 rounded-lg bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
-                <ShieldAlert size={16} className="mt-0.5 shrink-0" />
-                <span>Custody is in <b>mock</b> mode. To go live set <code className="font-mono">CUSTODY_PROVIDER=cryptoapis</code>, <code className="font-mono">CRYPTOAPIS_API_KEY</code>, <code className="font-mono">CRYPTOAPIS_WALLET_ID</code> and <code className="font-mono">CRYPTOAPIS_WEBHOOK_SECRET</code>, then redeploy.</span>
-              </div>
-            )}
+            <div className="mt-4 flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
+              <ShieldAlert size={16} className="mt-0.5 shrink-0" />
+              <span>
+                Crypto custody is <b>manual</b>: deposit addresses are managed on the{' '}
+                <a href="/crypto-wallets" className="font-semibold underline">Crypto Wallets</a> page,
+                incoming deposits are credited there, and outgoing withdrawals are paid from the
+                business wallet and completed on the{' '}
+                <a href="/withdrawals" className="font-semibold underline">Withdrawals Review</a> page.
+                The provider mode below only applies if an automated custody provider is re-enabled.
+              </span>
+            </div>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

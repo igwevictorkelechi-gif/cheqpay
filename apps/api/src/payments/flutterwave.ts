@@ -227,43 +227,95 @@ export class FlutterwaveProvider implements PaymentProvider {
   }
 
   async payBill(input: BillPayInput): Promise<BillPayResult> {
-    const res = await fetch(`${FLW_BASE}/bills`, {
+    // Preferred: the per-biller item payment endpoint (current FLW bills API).
+    // Fallback: the legacy /bills endpoint by bill type (no item code known).
+    const useItem = !!(input.flwBillerCode && input.flwItemCode);
+    const url = useItem
+      ? `${FLW_BASE}/billers/${input.flwBillerCode}/items/${input.flwItemCode}/payment`
+      : `${FLW_BASE}/bills`;
+    const body = useItem
+      ? {
+          country: "NG",
+          customer_id: input.customer,
+          amount: Number(input.amount),
+          reference: input.reference,
+        }
+      : {
+          country: "NG",
+          customer: input.customer,
+          amount: Number(input.amount),
+          type: input.flwType,
+          reference: input.reference,
+          recurrence: "ONCE",
+        };
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         authorization: `Bearer ${this.secretKey}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        country: "NG",
-        customer: input.customer,
-        amount: Number(input.amount),
-        type: input.flwType,
-        reference: input.reference,
-        recurrence: "ONCE",
-        biller_name: input.flwBillerCode,
-      }),
+      body: JSON.stringify(body),
     });
     const json = (await res.json().catch(() => ({}))) as {
       status?: string;
-      data?: { reference?: string; tx_ref?: string; status?: string };
+      message?: string;
+      data?: Record<string, unknown>;
     };
     if (!res.ok || json.status !== "success" || !json.data) {
-      throw new Error(`Flutterwave bill payment failed: ${res.status}`);
+      throw new Error(
+        `Flutterwave bill payment failed: ${res.status} ${json.message ?? ""}`.trim()
+      );
     }
-    const raw = (json.data.status ?? "pending").toLowerCase();
+    const d = json.data;
+    const raw = String(d.status ?? "pending").toLowerCase();
     const status: BillPayResult["status"] =
       raw.includes("success") || raw.includes("completed")
         ? "successful"
         : raw.includes("fail")
           ? "failed"
           : "pending";
-    return {
-      providerRef: String(json.data.reference ?? json.data.tx_ref ?? input.reference),
-      status,
-    };
+    const providerRef = String(d.reference ?? d.flw_ref ?? d.tx_ref ?? input.reference);
+
+    // Prepaid services (electricity) issue a recharge token — surface it. The
+    // token can arrive inline or only on the status requery.
+    let token = extractBillToken(d);
+    if (!token && status === "successful") {
+      token = await this.requeryBillToken(input.reference);
+    }
+    return { providerRef, status, token };
+  }
+
+  /** Requery a bill payment to pick up the prepaid token once processed. */
+  private async requeryBillToken(reference: string): Promise<string | null> {
+    try {
+      const res = await fetch(`${FLW_BASE}/bills/${reference}`, {
+        headers: { authorization: `Bearer ${this.secretKey}` },
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        status?: string;
+        data?: Record<string, unknown>;
+      };
+      if (json.status !== "success" || !json.data) return null;
+      return extractBillToken(json.data);
+    } catch {
+      return null;
+    }
   }
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object";
+}
+
+/** Pull a prepaid token out of the varied shapes FLW bill responses use. */
+function extractBillToken(d: Record<string, unknown>): string | null {
+  const direct = d.token ?? d.recharge_token ?? d.rechargeToken;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const extra = d.extra;
+  if (typeof extra === "string" && extra.trim()) return extra.trim();
+  if (isRecord(extra)) {
+    const t = extra.token ?? extra.recharge_token;
+    if (typeof t === "string" && t.trim()) return t.trim();
+  }
+  return null;
 }
