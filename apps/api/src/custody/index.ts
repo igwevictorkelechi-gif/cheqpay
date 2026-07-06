@@ -3,6 +3,7 @@ import type { CustodyProvider } from "./types";
 import { MockCustodyProvider } from "./mock";
 import { TatumCustodyProvider } from "./tatum";
 import { CryptoApisCustodyProvider } from "./cryptoapis";
+import { CoboCustodyProvider } from "./cobo";
 
 export * from "./types";
 
@@ -20,7 +21,19 @@ export function getCustodyProvider(): CustodyProvider {
   if (cached) return cached;
 
   const env = getEnv();
-  if (env.CUSTODY_PROVIDER === "cryptoapis") {
+  if (env.CUSTODY_PROVIDER === "cobo") {
+    if (!env.COBO_API_PRIVATE_KEY || !env.COBO_WALLET_ID || !env.COBO_CALLBACK_PUBKEY) {
+      throw new Error(
+        "CUSTODY_PROVIDER=cobo requires COBO_API_PRIVATE_KEY, COBO_WALLET_ID and COBO_CALLBACK_PUBKEY"
+      );
+    }
+    cached = new CoboCustodyProvider(
+      env.COBO_API_PRIVATE_KEY,
+      env.COBO_WALLET_ID,
+      env.COBO_ENV,
+      env.COBO_CALLBACK_PUBKEY
+    );
+  } else if (env.CUSTODY_PROVIDER === "cryptoapis") {
     if (!env.CRYPTOAPIS_API_KEY || !env.CRYPTOAPIS_WALLET_ID || !env.CRYPTOAPIS_WEBHOOK_SECRET) {
       throw new Error(
         "CUSTODY_PROVIDER=cryptoapis requires CRYPTOAPIS_API_KEY, CRYPTOAPIS_WALLET_ID and CRYPTOAPIS_WEBHOOK_SECRET"

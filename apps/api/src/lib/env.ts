@@ -58,16 +58,26 @@ const envSchema = z.object({
   // trailing slash.
   API_PUBLIC_URL: z.string().url().optional(),
 
-  // Phase 2 (custody). Tatum's Virtual Accounts product is closed to new
-  // accounts, so Crypto APIs is the supported live provider.
-  CUSTODY_PROVIDER: providerEnum("CUSTODY_PROVIDER", ["mock", "tatum", "cryptoapis"], "mock"),
+  // Phase 2 (custody). Cobo WaaS is the current live provider (Tatum's Virtual
+  // Accounts closed; Crypto APIs' WaaS migrated to Vaultody).
+  CUSTODY_PROVIDER: providerEnum(
+    "CUSTODY_PROVIDER",
+    ["mock", "tatum", "cryptoapis", "cobo"],
+    "mock"
+  ),
   TATUM_API_KEY: z.string().optional(),
   TATUM_WEBHOOK_SECRET: z.string().optional(),
-  // Crypto APIs (cryptoapis.io) Wallet-as-a-Service.
+  // Crypto APIs (cryptoapis.io) Wallet-as-a-Service (legacy — migrating away).
   CRYPTOAPIS_API_KEY: z.string().optional(),
   CRYPTOAPIS_WALLET_ID: z.string().optional(),
   CRYPTOAPIS_WEBHOOK_SECRET: z.string().optional(),
   CRYPTOAPIS_NETWORK: z.string().default("mainnet"),
+  // Cobo WaaS 2.0. API auth is Ed25519 request signing (SDK-handled); the
+  // callback public key verifies inbound webhooks. COBO_ENV: "dev" | "prod".
+  COBO_API_PRIVATE_KEY: z.string().optional(),
+  COBO_WALLET_ID: z.string().optional(),
+  COBO_CALLBACK_PUBKEY: z.string().optional(),
+  COBO_ENV: z.enum(["dev", "prod"]).default("dev"),
 
   // Phase 3 (Naira rails)
   PAYMENT_PROVIDER: providerEnum("PAYMENT_PROVIDER", ["mock", "flutterwave"], "mock"),
