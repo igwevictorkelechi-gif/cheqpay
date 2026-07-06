@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, Receipt } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import TxnRow from "@/components/TxnRow";
-import { api, getAccessToken, type LedgerTransaction } from "@/services/api";
+import { api, ApiError, getAccessToken, type LedgerTransaction } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
 
 const TX_CACHE = "cheqpay:txns";
@@ -17,6 +17,7 @@ export default function TransactionsPage() {
   );
   const [loading, setLoading] = useState(() => !readCache<LedgerTransaction[]>(TX_CACHE));
   const [needsLogin, setNeedsLogin] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -38,8 +39,11 @@ export default function TransactionsPage() {
         if (!active) return;
         setTxns(res.transactions);
         writeCache(TX_CACHE, res.transactions);
-      } catch {
-        if (active && txns.length === 0) setNeedsLogin(true);
+      } catch (e) {
+        // Only a real 401 means "sign in" — other failures are transient.
+        if (!active) return;
+        if (e instanceof ApiError && e.status === 401) setNeedsLogin(true);
+        else if (txns.length === 0) setLoadError(true);
       } finally {
         if (active) setLoading(false);
       }
@@ -74,6 +78,17 @@ export default function TransactionsPage() {
             <div className="py-16 text-center">
               <Receipt className="mx-auto mb-4 h-12 w-12 text-muted" />
               <p className="text-muted">Sign in to see your transactions.</p>
+            </div>
+          ) : loadError ? (
+            <div className="py-16 text-center">
+              <Receipt className="mx-auto mb-4 h-12 w-12 text-muted" />
+              <p className="text-muted">We couldn’t load your transactions.</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-4 rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white active:scale-95"
+              >
+                Try again
+              </button>
             </div>
           ) : txns.length === 0 ? (
             <div className="py-16 text-center">

@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { api, ApiError, type VirtualAccount } from "@/services/api";
+import { supabase } from "@/services/supabase";
 import { useAuthStore } from "@/store";
 
 export default function VirtualAccountPage() {
@@ -21,6 +22,10 @@ export default function VirtualAccountPage() {
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<VirtualAccount | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  // Manual form is only a fallback (verified user but no name on file). Verified
+  // users normally never see it — their account opens automatically.
+  const [showForm, setShowForm] = useState(false);
 
   // Form state
   const [firstName, setFirstName] = useState("");
@@ -42,15 +47,64 @@ export default function VirtualAccountPage() {
     (async () => {
       try {
         await api.ensureProvisioned();
-        const { virtualAccount } = await api.getVirtualAccount();
-        setAccount(virtualAccount);
+        const [{ virtualAccount }, me] = await Promise.all([
+          api.getVirtualAccount(),
+          api.getMe(),
+        ]);
+
+        // Already have an account → straight to the number, regardless of tier.
+        if (virtualAccount) {
+          setAccount(virtualAccount);
+          setLoading(false);
+          return;
+        }
+
+        // No account yet. Deposits require a verified identity.
+        if (me.kycTier < 2) {
+          // Not verified → send to KYC first, then come back here. Keep the
+          // spinner up while we navigate (don't flash the fallback form).
+          router.replace("/kyc?next=/virtual-account");
+          return;
+        }
+
+        // Verified → open the Naira account automatically from the name on
+        // file. No form, no re-verification.
+        await autoOpen();
+        setLoading(false);
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) setNeedsLogin(true);
-      } finally {
+        else setLoadError(true);
         setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * Open the user's NGN virtual account without asking anything, using the name
+   * captured at sign-up. Falls back to the manual form only if we have no usable
+   * name to send.
+   */
+  async function autoOpen(): Promise<void> {
+    const { data } = await supabase.auth.getUser();
+    const meta = (data.user?.user_metadata ?? {}) as { full_name?: string };
+    const fullName = (user?.full_name || meta.full_name || "").trim();
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    const first = parts[0] ?? "";
+    const last = parts.length > 1 ? parts.slice(1).join(" ") : first;
+
+    if (first.length < 2 || last.length < 2) {
+      // No usable name on file — ask once (rare fallback).
+      setShowForm(true);
+      return;
+    }
+
+    const { virtualAccount } = await api.createVirtualAccount({
+      firstName: first,
+      lastName: last,
+    });
+    setAccount(virtualAccount);
+  }
 
   const bvnValid = bvn === "" || /^\d{11}$/.test(bvn);
   const canSubmit =
@@ -104,6 +158,16 @@ export default function VirtualAccountPage() {
           </div>
         ) : needsLogin ? (
           <p className="mt-10 text-center text-muted">Please sign in to set up your account.</p>
+        ) : loadError ? (
+          <div className="mt-16 flex flex-col items-center text-center">
+            <p className="text-muted">We couldn’t load your deposit account.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white active:scale-95"
+            >
+              Try again
+            </button>
+          </div>
         ) : account ? (
           // ---- Result: existing / newly-created account ----
           <>
@@ -165,8 +229,8 @@ export default function VirtualAccountPage() {
               Fund my wallet
             </button>
           </>
-        ) : (
-          // ---- Onboarding form ----
+        ) : showForm ? (
+          // ---- Fallback form (verified but no name on file) ----
           <>
             <h1 className="mt-6 text-3xl font-extrabold text-ink">Set up your account</h1>
             <p className="mt-2 text-sm text-muted">
@@ -241,6 +305,10 @@ export default function VirtualAccountPage() {
               {submitting ? "Creating account…" : "Create my account"}
             </button>
           </>
+        ) : (
+          <div className="mt-16 flex justify-center">
+            <Loader2 className="h-7 w-7 animate-spin text-muted" />
+          </div>
         )}
       </div>
     </div>
