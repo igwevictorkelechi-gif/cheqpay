@@ -7,6 +7,8 @@ export interface AuthUser {
   id: string;
   email?: string;
   phone?: string;
+  /** Full name from Supabase user_metadata (set at signup). */
+  fullName?: string;
   role?: string;
   /** Supabase assurance level: "aal1" (password/OTP) or "aal2" (MFA verified). */
   aal?: string;
@@ -48,10 +50,13 @@ export async function verifySupabaseJwt(token: string): Promise<AuthUser> {
     email?: string;
     phone?: string;
     app_metadata?: { role?: unknown };
+    user_metadata?: { full_name?: unknown };
   };
   if (!u.id) {
     throw new AuthError("Invalid token: no user");
   }
+  const fullName =
+    typeof u.user_metadata?.full_name === "string" ? u.user_metadata.full_name : undefined;
 
   let aal: string | undefined;
   try {
@@ -64,6 +69,7 @@ export async function verifySupabaseJwt(token: string): Promise<AuthUser> {
     id: u.id,
     email: u.email,
     phone: u.phone,
+    fullName,
     aal,
     isAdmin: u.app_metadata?.role === "admin",
   };

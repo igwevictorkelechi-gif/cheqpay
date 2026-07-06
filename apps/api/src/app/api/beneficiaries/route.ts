@@ -37,16 +37,12 @@ export async function POST(req: Request) {
     const auth = await requireUser(req);
     const body = addBeneficiarySchema.parse(await req.json());
 
-    const user = await prisma.user.findUnique({ where: { id: auth.id } });
-    if (!user) {
-      throw new ApiError(404, "Profile not provisioned; POST /api/me first", "no_profile");
-    }
-    const legalName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+    const legalName = (auth.fullName ?? "").trim();
     if (!legalName) {
       throw new ApiError(
         403,
-        "Verify your identity (KYC) before adding a payout account",
-        "kyc_required"
+        "Add your name to your profile before adding a payout account",
+        "name_required"
       );
     }
 

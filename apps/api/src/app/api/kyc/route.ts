@@ -74,19 +74,14 @@ export async function POST(req: Request) {
       },
     });
 
-    // Persist the submitted legal name (used later to verify withdrawal
-    // beneficiary accounts belong to the user) and date of birth (shown on
-    // Personal details, locked once verified).
-    await prisma.user.update({
-      where: { id: auth.id },
-      data: {
-        firstName: body.firstName,
-        lastName: body.lastName,
-        ...(body.dateOfBirth && /^\d{4}-\d{2}-\d{2}$/.test(body.dateOfBirth)
-          ? { dateOfBirth: new Date(body.dateOfBirth) }
-          : {}),
-      },
-    });
+    // Persist the submitted date of birth on the profile so Personal details
+    // can show it (it becomes locked once the account is verified).
+    if (body.dateOfBirth && /^\d{4}-\d{2}-\d{2}$/.test(body.dateOfBirth)) {
+      await prisma.user.update({
+        where: { id: auth.id },
+        data: { dateOfBirth: new Date(body.dateOfBirth) },
+      });
+    }
 
     // Elevate the user's tier immediately on an automatic pass.
     if (verdict.verified) {
