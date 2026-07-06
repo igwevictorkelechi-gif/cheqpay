@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { ChevronLeft, Copy, Share2, Check, AlertTriangle } from "lucide-react";
-import { api } from "@/services/api";
+import { api, ApiError } from "@/services/api";
 import { getAssetMeta } from "@/lib/cryptoAssets";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
@@ -27,7 +27,9 @@ export default function ReceiveDetailPage() {
   const [address, setAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [needsAuth, setNeedsAuth] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!meta) {
@@ -36,6 +38,9 @@ export default function ReceiveDetailPage() {
       return;
     }
     let active = true;
+    setLoading(true);
+    setError(null);
+    setNeedsAuth(false);
     (async () => {
       try {
         await api.ensureProvisioned();
@@ -46,8 +51,16 @@ export default function ReceiveDetailPage() {
           wallets.find((x) => x.asset === meta.symbol);
         if (w?.address) setAddress(w.address);
         else setError("No deposit address available yet. Please try again shortly.");
-      } catch {
-        if (active) setError("Please sign in to view your deposit address.");
+      } catch (e) {
+        if (!active) return;
+        // Only a genuine 401 means "sign in" — anything else is a temporary
+        // problem generating the address, not an auth issue.
+        if (e instanceof ApiError && e.status === 401) {
+          setNeedsAuth(true);
+          setError("Your session has expired. Please sign in again.");
+        } else {
+          setError("We couldn’t load your deposit address. Please try again.");
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -55,7 +68,7 @@ export default function ReceiveDetailPage() {
     return () => {
       active = false;
     };
-  }, [meta]);
+  }, [meta, reloadKey]);
 
   async function copy() {
     if (!address) return;
@@ -137,6 +150,16 @@ export default function ReceiveDetailPage() {
           <p className="mt-2 break-all text-sm font-medium text-ink">
             {address ?? (loading ? "Loading…" : error ?? "—")}
           </p>
+          {!loading && !address && error && (
+            <button
+              onClick={() =>
+                needsAuth ? router.push("/login") : setReloadKey((k) => k + 1)
+              }
+              className="mt-3 rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white active:scale-95"
+            >
+              {needsAuth ? "Sign in" : "Try again"}
+            </button>
+          )}
         </div>
 
         {/* Copy / Share */}

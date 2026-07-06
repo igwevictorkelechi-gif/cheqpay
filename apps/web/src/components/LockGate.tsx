@@ -5,29 +5,47 @@ import { Lock, Fingerprint } from "lucide-react";
 import { isAppLockEnabled, verifyPin } from "@/lib/applock";
 import { supabase } from "@/services/supabase";
 
+// Only re-lock after the app has been in the background for at least this long.
+// Quick tab switches (copying an address, checking another app for a code)
+// should NOT force a PIN re-entry — that was the old, spammy behaviour.
+const RELOCK_AFTER_MS = 60_000;
+
 /**
  * PIN lock overlay for the web PWA. Engages only when the user has a session
- * AND an app-lock PIN set. Re-locks when the tab regains focus.
+ * AND has explicitly turned on App Lock. It locks once on a fresh open, and
+ * again only after the app has been backgrounded past RELOCK_AFTER_MS — not on
+ * every window focus.
  */
 export default function LockGate() {
   const [locked, setLocked] = useState(false);
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
 
-  const maybeLock = async () => {
+  const lockNow = async () => {
     if (!isAppLockEnabled()) return;
     const { data } = await supabase.auth.getSession();
     if (data.session) setLocked(true);
   };
 
   useEffect(() => {
-    maybeLock();
-    const onFocus = () => maybeLock();
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") maybeLock();
-    });
-    return () => window.removeEventListener("focus", onFocus);
+    // Lock once when the app first loads with an active session.
+    lockNow();
+
+    let hiddenAt: number | null = null;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      // Became visible again — only re-lock if we were away long enough.
+      if (hiddenAt !== null && Date.now() - hiddenAt >= RELOCK_AFTER_MS) {
+        lockNow();
+      }
+      hiddenAt = null;
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
   const submit = (value: string) => {

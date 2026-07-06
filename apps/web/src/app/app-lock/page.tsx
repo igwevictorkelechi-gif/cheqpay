@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Lock, Unlock } from "lucide-react";
-import { isAppLockEnabled, setPin, disableAppLock } from "@/lib/applock";
+import { isAppLockEnabled, enableAppLock, disableAppLock } from "@/lib/applock";
 
 export default function AppLockPage() {
   const router = useRouter();
@@ -20,7 +20,7 @@ export default function AppLockPage() {
   const save = () => {
     if (pin.length < 4) return setError("Use at least 4 digits.");
     if (pin !== confirm) return setError("PINs don’t match.");
-    setPin(pin);
+    enableAppLock(pin);
     setPinValue("");
     setConfirm("");
     setSettingPin(false);
