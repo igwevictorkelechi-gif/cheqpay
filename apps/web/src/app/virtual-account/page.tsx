@@ -35,6 +35,14 @@ export default function VirtualAccountPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Amount the user chose on the previous (Add money) step, shown as a hint.
+  const [amount, setAmount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get("amount");
+    const n = raw ? Number(raw.replace(/\D/g, "")) : 0;
+    if (n > 0) setAmount(n);
+  }, []);
 
   useEffect(() => {
     // Prefill names from the profile.
@@ -177,9 +185,22 @@ export default function VirtualAccountPage() {
               </span>
               <h1 className="mt-4 text-2xl font-extrabold text-ink">Your account is ready</h1>
               <p className="mt-1 text-sm text-muted">
-                Send money to this account from any Nigerian bank to fund your wallet instantly.
+                {amount
+                  ? `Transfer ₦${amount.toLocaleString("en-NG")} to this account from any Nigerian bank to fund your wallet instantly.`
+                  : "Send money to this account from any Nigerian bank to fund your wallet instantly."}
               </p>
             </div>
+
+            {amount ? (
+              <div className="mt-6 rounded-3xl bg-brand/10 p-5 text-center">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  Amount to transfer
+                </p>
+                <p className="mt-1 text-3xl font-extrabold text-ink">
+                  ₦{amount.toLocaleString("en-NG")}
+                </p>
+              </div>
+            ) : null}
 
             <div className="mt-6 rounded-3xl bg-card p-5">
               <Field label="Bank name" value={account.bankName} />
