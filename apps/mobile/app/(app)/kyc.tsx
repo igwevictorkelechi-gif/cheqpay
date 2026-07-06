@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '@/store';
 import { colors } from '@/components/brand';
 import { api, ApiError } from '@/services/api';
@@ -21,6 +21,12 @@ type State = 'loading' | 'form' | 'pending' | 'approved';
 export default function KYCScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
+  // Optional post-verification destination (e.g. the deposit flow sends the
+  // user here to verify, then wants them back on the account page).
+  const params = useLocalSearchParams<{ next?: string }>();
+  const nextUrl =
+    typeof params.next === 'string' && params.next.startsWith('/') ? params.next : null;
+  const goNext = () => router.replace((nextUrl ?? '/(app)/home') as never);
 
   const [state, setState] = useState<State>('loading');
   const [tier, setTier] = useState(0);
@@ -96,8 +102,8 @@ export default function KYCScreen() {
                 Your identity is confirmed (Tier {tier}). Higher limits and crypto withdrawals are
                 unlocked.
               </Text>
-              <TouchableOpacity onPress={() => router.replace('/(app)/home')} className="rounded-2xl py-4 items-center mt-8 w-full" style={{ backgroundColor: colors.brand }}>
-                <Text className="text-white font-bold text-base">Done</Text>
+              <TouchableOpacity onPress={goNext} className="rounded-2xl py-4 items-center mt-8 w-full" style={{ backgroundColor: colors.brand }}>
+                <Text className="text-white font-bold text-base">{nextUrl ? 'Continue to deposit' : 'Done'}</Text>
               </TouchableOpacity>
             </View>
           )}
