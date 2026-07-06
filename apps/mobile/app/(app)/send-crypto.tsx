@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors } from '@/components/brand';
 import { api, ApiError } from '@/services/api';
-import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
+import { ASSET_META, CRYPTO_SEND, isAssetEnabled } from '@/lib/assets';
 
 type Sym = 'BTC' | 'USDT';
 const ASSETS: Sym[] = ['BTC', 'USDT'];
@@ -90,17 +90,18 @@ export default function SendCryptoScreen() {
             {ASSETS.map((s, i) => {
               const m = ASSET_META[s];
               const amt = Number(bal[s] ?? 0);
+              const enabled = isAssetEnabled(s);
               return (
                 <TouchableOpacity
                   key={s}
-                  disabled={amt <= 0}
+                  disabled={!enabled || amt <= 0}
                   onPress={() => {
                     setSym(s);
                     setStage('form');
                   }}
                   className="flex-row items-center px-4 py-4"
                   style={{
-                    opacity: amt > 0 ? 1 : 0.4,
+                    opacity: enabled && amt > 0 ? 1 : 0.4,
                     ...(i > 0 ? { borderTopWidth: 1, borderTopColor: colors.border } : {}),
                   }}
                 >
@@ -111,7 +112,13 @@ export default function SendCryptoScreen() {
                     <Text className="text-ink text-lg font-bold">{s}</Text>
                     <Text className="text-muted text-sm">{m.name}</Text>
                   </View>
-                  <Text className="text-ink font-bold">{bal[s] ?? '0'} {s}</Text>
+                  {enabled ? (
+                    <Text className="text-ink font-bold">{bal[s] ?? '0'} {s}</Text>
+                  ) : (
+                    <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: 'rgba(107,91,149,0.15)' }}>
+                      <Text style={{ color: colors.brandLight, fontSize: 11, fontWeight: '700' }}>Coming soon</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               );
             })}

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Search } from "lucide-react";
 import { api } from "@/services/api";
-import { CRYPTO_ASSETS } from "@/lib/cryptoAssets";
+import { CRYPTO_ASSETS, isAssetEnabled } from "@/lib/cryptoAssets";
 
 function CoinIcon({ bg, glyph, size = 48 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -92,13 +92,14 @@ export default function SendCryptoPickerPage() {
         <p className="mb-2 mt-7 text-sm font-semibold text-muted">Your assets</p>
         <div className="overflow-hidden rounded-3xl bg-card">
           {list.map((a, i) => {
+            const enabled = isAssetEnabled(a.symbol);
             const amount = Number(bal[a.symbol] ?? 0);
             const has = amount > 0;
             return (
               <button
                 key={a.symbol}
-                onClick={() => router.push(`/send-crypto/${a.symbol}`)}
-                disabled={!has}
+                onClick={() => enabled && router.push(`/send-crypto/${a.symbol}`)}
+                disabled={!enabled || !has}
                 className={`flex w-full items-center justify-between px-4 py-4 active:bg-surface disabled:opacity-40 ${
                   i > 0 ? "border-t border-border" : ""
                 }`}
@@ -110,14 +111,20 @@ export default function SendCryptoPickerPage() {
                     <p className="text-sm text-muted">{a.name}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-ink">
-                    {bal[a.symbol] ?? "0"} {a.symbol}
-                  </p>
-                  <p className="text-sm text-muted">
-                    ₦{(ngn[a.symbol] ?? 0).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
-                  </p>
-                </div>
+                {enabled ? (
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-ink">
+                      {bal[a.symbol] ?? "0"} {a.symbol}
+                    </p>
+                    <p className="text-sm text-muted">
+                      ₦{(ngn[a.symbol] ?? 0).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                ) : (
+                  <span className="rounded-full bg-brand/15 px-3 py-1.5 text-xs font-bold text-brand-light">
+                    Coming soon
+                  </span>
+                )}
               </button>
             );
           })}

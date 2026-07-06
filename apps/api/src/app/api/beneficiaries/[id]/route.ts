@@ -1,6 +1,7 @@
 import { prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
+import { ensureBeneficiariesTable } from "@/lib/ensureBeneficiaries";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export async function DELETE(
 ) {
   try {
     const auth = await requireUser(req);
+    await ensureBeneficiariesTable();
     const { id } = await params;
     // Scoped delete: only removes the row if it belongs to this user.
     await prisma.beneficiary.deleteMany({ where: { id, userId: auth.id } });

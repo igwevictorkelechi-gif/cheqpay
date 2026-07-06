@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Search } from "lucide-react";
 import { api } from "@/services/api";
-import { CRYPTO_ASSETS } from "@/lib/cryptoAssets";
+import { CRYPTO_ASSETS, isAssetEnabled } from "@/lib/cryptoAssets";
 
 function CoinIcon({ bg, glyph, size = 48 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -88,8 +88,9 @@ export default function ReceivePickerPage() {
           {CRYPTO_ASSETS.map((a) => (
             <button
               key={a.symbol}
-              onClick={() => router.push(`/receive/${a.symbol}`)}
-              className="flex items-center gap-2 rounded-full bg-card py-2 pl-2 pr-4 active:scale-95"
+              onClick={() => isAssetEnabled(a.symbol) && router.push(`/receive/${a.symbol}`)}
+              disabled={!isAssetEnabled(a.symbol)}
+              className="flex items-center gap-2 rounded-full bg-card py-2 pl-2 pr-4 active:scale-95 disabled:opacity-50"
             >
               <CoinIcon bg={a.color} glyph={a.glyph} size={34} />
               <span className="text-sm font-bold text-ink">{a.symbol}</span>
@@ -100,31 +101,41 @@ export default function ReceivePickerPage() {
         {/* All assets */}
         <p className="mb-2 mt-7 text-sm font-semibold text-muted">All assets</p>
         <div className="overflow-hidden rounded-3xl bg-card">
-          {list.map((a, i) => (
-            <button
-              key={a.symbol}
-              onClick={() => router.push(`/receive/${a.symbol}`)}
-              className={`flex w-full items-center justify-between px-4 py-4 active:bg-surface ${
-                i > 0 ? "border-t border-border" : ""
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <CoinIcon bg={a.color} glyph={a.glyph} />
-                <div className="text-left">
-                  <p className="text-lg font-bold text-ink">{a.symbol}</p>
-                  <p className="text-sm text-muted">{a.name}</p>
+          {list.map((a, i) => {
+            const enabled = isAssetEnabled(a.symbol);
+            return (
+              <button
+                key={a.symbol}
+                onClick={() => enabled && router.push(`/receive/${a.symbol}`)}
+                disabled={!enabled}
+                className={`flex w-full items-center justify-between px-4 py-4 active:bg-surface ${
+                  i > 0 ? "border-t border-border" : ""
+                } ${enabled ? "" : "opacity-60"}`}
+              >
+                <div className="flex items-center gap-3">
+                  <CoinIcon bg={a.color} glyph={a.glyph} />
+                  <div className="text-left">
+                    <p className="text-lg font-bold text-ink">{a.symbol}</p>
+                    <p className="text-sm text-muted">{a.name}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-ink">
-                  {bal[a.symbol] ?? "0"} {a.symbol}
-                </p>
-                <p className="text-sm text-muted">
-                  ₦{(ngn[a.symbol] ?? 0).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
-                </p>
-              </div>
-            </button>
-          ))}
+                {enabled ? (
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-ink">
+                      {bal[a.symbol] ?? "0"} {a.symbol}
+                    </p>
+                    <p className="text-sm text-muted">
+                      ₦{(ngn[a.symbol] ?? 0).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                ) : (
+                  <span className="rounded-full bg-brand/15 px-3 py-1.5 text-xs font-bold text-brand-light">
+                    Coming soon
+                  </span>
+                )}
+              </button>
+            );
+          })}
           {list.length === 0 && (
             <p className="px-4 py-6 text-center text-sm text-muted">No assets found.</p>
           )}

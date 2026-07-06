@@ -4,6 +4,7 @@ import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { getPaymentProvider } from "@/payments";
 import { accountNameMatchesUser } from "@/lib/nameMatch";
 import { addBeneficiarySchema } from "@/lib/validation";
+import { ensureBeneficiariesTable } from "@/lib/ensureBeneficiaries";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const auth = await requireUser(req);
+    await ensureBeneficiariesTable();
     const beneficiaries = await prisma.beneficiary.findMany({
       where: { userId: auth.id },
       orderBy: { createdAt: "desc" },
@@ -35,6 +37,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
+    await ensureBeneficiariesTable();
     const body = addBeneficiarySchema.parse(await req.json());
 
     const legalName = (auth.fullName ?? "").trim();

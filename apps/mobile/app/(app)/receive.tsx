@@ -7,7 +7,7 @@ import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import { colors } from '@/components/brand';
 import { api } from '@/services/api';
-import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
+import { ASSET_META, CRYPTO_SEND, isAssetEnabled } from '@/lib/assets';
 
 type Sym = 'BTC' | 'USDT';
 const ASSETS: Sym[] = ['BTC', 'USDT'];
@@ -129,12 +129,17 @@ export default function ReceiveScreen() {
         <View className="rounded-3xl overflow-hidden" style={{ backgroundColor: colors.card }}>
           {ASSETS.map((sym, i) => {
             const meta = ASSET_META[sym];
+            const enabled = isAssetEnabled(sym);
             return (
               <TouchableOpacity
                 key={sym}
-                onPress={() => setSelected(sym)}
+                onPress={() => enabled && setSelected(sym)}
+                disabled={!enabled}
                 className="flex-row items-center px-4 py-4"
-                style={i > 0 ? { borderTopWidth: 1, borderTopColor: colors.border } : undefined}
+                style={[
+                  i > 0 ? { borderTopWidth: 1, borderTopColor: colors.border } : undefined,
+                  enabled ? undefined : { opacity: 0.6 },
+                ]}
               >
                 <View className="rounded-full items-center justify-center" style={{ width: 44, height: 44, backgroundColor: meta.bg }}>
                   <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700' }}>{meta.glyph}</Text>
@@ -143,7 +148,13 @@ export default function ReceiveScreen() {
                   <Text className="text-ink text-lg font-bold">{sym}</Text>
                   <Text className="text-muted text-sm">{meta.name}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+                {enabled ? (
+                  <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+                ) : (
+                  <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: 'rgba(107,91,149,0.15)' }}>
+                    <Text style={{ color: colors.brandLight, fontSize: 11, fontWeight: '700' }}>Coming soon</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
