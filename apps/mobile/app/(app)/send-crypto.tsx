@@ -5,10 +5,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors } from '@/components/brand';
 import { api, ApiError } from '@/services/api';
-import { ASSET_META, CRYPTO_SEND, isAssetEnabled } from '@/lib/assets';
+import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
 
-type Sym = 'BTC' | 'USDT';
-const ASSETS: Sym[] = ['BTC', 'USDT'];
+type Sym = 'BTC' | 'USDT' | 'USDC';
+const ASSETS: Sym[] = ['BTC', 'USDT', 'USDC'];
 type Stage = 'pick' | 'form' | 'review' | 'checking' | 'done';
 
 export default function SendCryptoScreen() {
@@ -21,14 +21,23 @@ export default function SendCryptoScreen() {
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | undefined>();
 
+  // Manual custody: live assets + their admin-configured network.
+  const [live, setLive] = useState<Record<string, { network: string; networkLabel: string }>>({});
+
   useEffect(() => {
     (async () => {
       try {
         await api.ensureProvisioned();
-        const { balances } = await api.getBalances();
+        const [{ balances }, { addresses }] = await Promise.all([
+          api.getBalances(),
+          api.getCryptoDepositAddresses().catch(() => ({ addresses: [] })),
+        ]);
         const b: Record<string, string> = {};
         for (const x of balances) b[x.asset] = x.availableFormatted;
         setBal(b);
+        const l: Record<string, { network: string; networkLabel: string }> = {};
+        for (const e of addresses) l[e.asset] = { network: e.network, networkLabel: e.networkLabel };
+        setLive(l);
       } catch {
         /* ignore */
       }
@@ -58,7 +67,7 @@ export default function SendCryptoScreen() {
     try {
       const res = await api.createCryptoWithdrawal({
         asset: sym!,
-        network: info!.network,
+        network: (live[sym!]?.network ?? info!.network) as 'BITCOIN' | 'TRON' | 'ETHEREUM' | 'BSC',
         toAddress: toAddress.trim(),
         amount: amount.trim(),
       });
@@ -90,7 +99,7 @@ export default function SendCryptoScreen() {
             {ASSETS.map((s, i) => {
               const m = ASSET_META[s];
               const amt = Number(bal[s] ?? 0);
-              const enabled = isAssetEnabled(s);
+              const enabled = !!live[s];
               return (
                 <TouchableOpacity
                   key={s}

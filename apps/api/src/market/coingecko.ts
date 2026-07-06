@@ -6,6 +6,7 @@ const CG_BASE = "https://api.coingecko.com/api/v3";
 const COIN_ID: Partial<Record<Asset, string>> = {
   [Asset.BTC]: "bitcoin",
   [Asset.USDT]: "tether",
+  [Asset.USDC]: "usd-coin",
 };
 
 const RANGE_DAYS: Record<ChartRange, string> = {
@@ -40,7 +41,7 @@ export class CoinGeckoPriceFeed implements PriceFeed {
   readonly name = "coingecko";
 
   async getSpotUsdt(asset: Asset): Promise<Prisma.Decimal> {
-    if (asset === Asset.USDT) return new Prisma.Decimal(1);
+    if (asset === Asset.USDT || asset === Asset.USDC) return new Prisma.Decimal(1);
     const id = COIN_ID[asset];
     if (!id) throw new Error(`Unsupported asset for CoinGecko: ${asset}`);
     const res = await fetch(`${CG_BASE}/simple/price?ids=${id}&vs_currencies=usd`);
@@ -49,7 +50,7 @@ export class CoinGeckoPriceFeed implements PriceFeed {
   }
 
   async getCandles(asset: Asset, range: ChartRange): Promise<Candle[]> {
-    if (asset === Asset.USDT) return [];
+    if (asset === Asset.USDT || asset === Asset.USDC) return [];
     const id = COIN_ID[asset];
     if (!id) throw new Error(`Unsupported asset for CoinGecko: ${asset}`);
     const res = await fetch(

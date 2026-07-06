@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Search } from "lucide-react";
 import { api } from "@/services/api";
-import { CRYPTO_ASSETS, isAssetEnabled } from "@/lib/cryptoAssets";
+import { CRYPTO_ASSETS } from "@/lib/cryptoAssets";
+import { useCryptoAvailability } from "@/lib/useCryptoAvailability";
 
 function CoinIcon({ bg, glyph, size = 48 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -20,6 +21,8 @@ function CoinIcon({ bg, glyph, size = 48 }: { bg: string; glyph: string; size?: 
 export default function ReceivePickerPage() {
   const router = useRouter();
   const [q, setQ] = useState("");
+  const { entries } = useCryptoAvailability();
+  const isLive = (sym: string) => !!entries[sym];
   const [bal, setBal] = useState<Record<string, string>>({});
   const [ngn, setNgn] = useState<Record<string, number>>({});
 
@@ -88,8 +91,8 @@ export default function ReceivePickerPage() {
           {CRYPTO_ASSETS.map((a) => (
             <button
               key={a.symbol}
-              onClick={() => isAssetEnabled(a.symbol) && router.push(`/receive/${a.symbol}`)}
-              disabled={!isAssetEnabled(a.symbol)}
+              onClick={() => isLive(a.symbol) && router.push(`/receive/${a.symbol}`)}
+              disabled={!isLive(a.symbol)}
               className="flex items-center gap-2 rounded-full bg-card py-2 pl-2 pr-4 active:scale-95 disabled:opacity-50"
             >
               <CoinIcon bg={a.color} glyph={a.glyph} size={34} />
@@ -102,7 +105,7 @@ export default function ReceivePickerPage() {
         <p className="mb-2 mt-7 text-sm font-semibold text-muted">All assets</p>
         <div className="overflow-hidden rounded-3xl bg-card">
           {list.map((a, i) => {
-            const enabled = isAssetEnabled(a.symbol);
+            const enabled = isLive(a.symbol);
             return (
               <button
                 key={a.symbol}

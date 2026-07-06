@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
-  TrendingUp, Receipt, Settings, Server, LogOut, ChevronDown, type LucideIcon,
+  TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown, type LucideIcon,
 } from 'lucide-react';
 
 type Item = { label: string; href: string; icon: LucideIcon };
@@ -43,6 +43,7 @@ const categories: Category[] = [
     icon: TrendingUp,
     items: [
       { label: 'Trading Settings', href: '/trading-settings', icon: TrendingUp },
+      { label: 'Crypto Wallets', href: '/crypto-wallets', icon: Wallet },
     ],
   },
   {

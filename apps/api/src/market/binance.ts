@@ -13,6 +13,7 @@ const RANGE: Record<ChartRange, { interval: string; limit: number }> = {
 
 function symbolFor(asset: Asset): string | null {
   if (asset === Asset.BTC) return "BTCUSDT";
+  if (asset === Asset.USDC) return "USDCUSDT";
   return null; // USDT handled as 1; others unsupported here
 }
 

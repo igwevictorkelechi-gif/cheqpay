@@ -1,8 +1,8 @@
 /** Crypto assets the backend custodies (launch set). */
 export interface CryptoAssetMeta {
-  symbol: "BTC" | "USDT";
+  symbol: "BTC" | "USDT" | "USDC";
   name: string;
-  network: "BITCOIN" | "TRON";
+  network: "BITCOIN" | "TRON" | "ETHEREUM" | "BSC";
   networkLabel: string;
   color: string;
   glyph: string;
@@ -28,6 +28,16 @@ export const CRYPTO_ASSETS: CryptoAssetMeta[] = [
     networkLabel: "Tron (TRC-20)",
     color: "#26A17B",
     glyph: "₮",
+    minSend: "2",
+    decimals: 6,
+  },
+  {
+    symbol: "USDC",
+    name: "USD Coin",
+    network: "ETHEREUM",
+    networkLabel: "Ethereum (ERC-20)",
+    color: "#2775CA",
+    glyph: "$",
     minSend: "2",
     decimals: 6,
   },

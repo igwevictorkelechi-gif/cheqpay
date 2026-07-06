@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { api, ApiError } from "@/services/api";
 import { invalidateMoneyCaches } from "@/lib/cache";
-import { getAssetMeta, isAssetEnabled } from "@/lib/cryptoAssets";
+import { getAssetMeta } from "@/lib/cryptoAssets";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -39,6 +39,10 @@ export default function SendCryptoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [checkStep, setCheckStep] = useState(0);
   const [txHash, setTxHash] = useState<string | undefined>();
+  // Manual custody: live only when the admin configured this asset's wallet.
+  const [avail, setAvail] = useState<"loading" | "live" | "notlive">("loading");
+  const [liveNetwork, setLiveNetwork] = useState<string | null>(null);
+  const [liveNetLabel, setLiveNetLabel] = useState<string | null>(null);
 
   useEffect(() => {
     if (!meta) return;
@@ -46,10 +50,21 @@ export default function SendCryptoDetailPage() {
     (async () => {
       try {
         await api.ensureProvisioned();
-        const { balances } = await api.getBalances();
+        const [{ balances }, { addresses }] = await Promise.all([
+          api.getBalances(),
+          api.getCryptoDepositAddresses().catch(() => ({ addresses: [] })),
+        ]);
         if (!active) return;
         const b = balances.find((x) => x.asset === meta.symbol);
         if (b) setAvailable(Number(b.availableFormatted));
+        const entry = addresses.find((x) => x.asset === meta.symbol);
+        if (entry) {
+          setAvail("live");
+          setLiveNetwork(entry.network);
+          setLiveNetLabel(entry.networkLabel);
+        } else {
+          setAvail("notlive");
+        }
       } catch {
         /* not logged in */
       }
@@ -75,7 +90,7 @@ export default function SendCryptoDetailPage() {
     );
   }
 
-  if (!isAssetEnabled(meta.symbol)) {
+  if (avail === "notlive") {
     return (
       <div className="flex min-h-screen w-full justify-center bg-black">
         <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4">
@@ -142,7 +157,7 @@ export default function SendCryptoDetailPage() {
     try {
       const res = await api.createCryptoWithdrawal({
         asset: meta!.symbol,
-        network: meta!.network,
+        network: (liveNetwork ?? meta!.network) as "BITCOIN" | "TRON" | "ETHEREUM" | "BSC",
         toAddress: toAddress.trim(),
         amount: amount.trim(),
       });
@@ -190,7 +205,7 @@ export default function SendCryptoDetailPage() {
               value={toAddress}
               onChange={(e) => setToAddress(e.target.value)}
               rows={2}
-              placeholder={`Paste ${meta.symbol} (${meta.networkLabel}) address`}
+              placeholder={`Paste ${meta.symbol} (${liveNetLabel ?? meta.networkLabel}) address`}
               className="w-full resize-none rounded-2xl border border-border bg-card px-4 py-3.5 text-sm text-ink placeholder-muted outline-none focus:border-brand"
             />
 
@@ -212,7 +227,7 @@ export default function SendCryptoDetailPage() {
               </button>
             </div>
             <p className="mt-2 text-xs text-muted">
-              Minimum {meta.minSend} {meta.symbol} · Network {meta.networkLabel}
+              Minimum {meta.minSend} {meta.symbol} · Network {liveNetLabel ?? meta.networkLabel}
             </p>
 
             {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
@@ -241,7 +256,7 @@ export default function SendCryptoDetailPage() {
             <p className="mb-2 mt-7 text-sm font-semibold text-muted">Review transfer</p>
             <div className="overflow-hidden rounded-2xl bg-card">
               <Row label="Asset" value={`${meta.name} (${meta.symbol})`} />
-              <Row label="Network" value={meta.networkLabel} bordered />
+              <Row label="Network" value={liveNetLabel ?? meta.networkLabel} bordered />
               <Row label="Amount" value={`${amount} ${meta.symbol}`} bordered />
               <div className="border-t border-border px-4 py-4">
                 <p className="text-sm text-muted">To address</p>

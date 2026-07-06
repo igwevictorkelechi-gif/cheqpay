@@ -69,13 +69,15 @@ export type NgnWithdrawalInput = z.infer<typeof ngnWithdrawalSchema>;
 export const reviewActionSchema = z.object({
   transactionId: z.string().uuid(),
   action: z.enum(["approve", "reject"]),
+  /** On-chain hash for manually-paid crypto withdrawals (audit + receipt). */
+  txHash: z.string().trim().min(8).max(120).optional(),
 });
 export type ReviewActionInput = z.infer<typeof reviewActionSchema>;
 
 /** Request a crypto withdrawal to an external address. */
 export const cryptoWithdrawalSchema = z.object({
-  asset: z.enum(["BTC", "USDT"]),
-  network: z.enum(["BITCOIN", "TRON"]),
+  asset: z.enum(["BTC", "USDT", "USDC"]),
+  network: z.enum(["BITCOIN", "TRON", "ETHEREUM", "BSC"]),
   toAddress: z.string().min(20).max(120),
   amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount"),
 });
