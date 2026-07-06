@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import * as Sentry from "@sentry/nextjs";
 
 /** Typed API error carrying an HTTP status + machine-readable code. */
 export class ApiError extends Error {
@@ -43,7 +44,9 @@ export function toErrorResponse(err: unknown) {
       { status: 422 }
     );
   }
-  // Never leak internals.
+  // Never leak internals to the client, but do report to Sentry (no-op when
+  // no DSN is configured).
+  Sentry.captureException(err);
   console.error("Unhandled API error:", err);
   return NextResponse.json(
     { error: "Internal server error", code: "internal_error" },

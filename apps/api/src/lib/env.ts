@@ -53,6 +53,11 @@ const envSchema = z.object({
   AML_VELOCITY_SUM_NGN: z.coerce.number().positive().default(10_000_000),
   SANCTIONED_ADDRESSES: z.string().optional(), // comma-separated
 
+  // Public origin of this API (e.g. https://cheqpay-admin453.vercel.app). Used
+  // to build the webhook callback URLs we register with providers (Tatum). No
+  // trailing slash.
+  API_PUBLIC_URL: z.string().url().optional(),
+
   // Phase 2 (custody — Tatum)
   CUSTODY_PROVIDER: providerEnum("CUSTODY_PROVIDER", ["mock", "tatum"], "mock"),
   TATUM_API_KEY: z.string().optional(),
