@@ -4,6 +4,7 @@ import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { getTierLimits } from "@/lib/kyc";
 import { getKycProvider } from "@/kyc";
 import { sendPush } from "@/lib/push";
+import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { kycTier1Schema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -88,6 +89,22 @@ export async function POST(req: Request) {
         where: { id: auth.id },
         data: { kycTier: { set: Math.max(user.kycTier, verdict.tier) } },
       });
+
+      // Open the permanent, dedicated NGN deposit account now, using the BVN
+      // and name we already have in hand. It's persisted (idempotent) and
+      // reused forever — the user never has to re-verify or generate another.
+      // Best-effort: a PSP hiccup here must not fail verification; the deposit
+      // page will provision one on demand if this didn't land.
+      try {
+        await createVirtualAccount(auth.id, user.email, {
+          firstName: body.firstName,
+          lastName: body.lastName,
+          bvn: body.bvn,
+        });
+      } catch (e) {
+        console.error("[kyc] virtual account provisioning failed (will retry on deposit)", e);
+      }
+
       await sendPush(auth.id, {
         category: "security",
         title: "Identity verified",
