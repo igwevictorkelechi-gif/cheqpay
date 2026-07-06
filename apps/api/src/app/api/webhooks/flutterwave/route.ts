@@ -1,12 +1,15 @@
 import {
   Asset,
+  Network,
   Prisma,
   TransactionStatus,
   TransactionType,
   prisma,
 } from "@cheqpay/db";
 import { getPaymentProvider } from "@/payments";
+import type { NgnChargeEvent } from "@/payments/types";
 import { jsonOk, toErrorResponse } from "@/lib/http";
+import { creditBalance } from "@/lib/ledger";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { sendPush } from "@/lib/push";
 
@@ -58,9 +61,16 @@ export async function POST(req: Request) {
       throw err;
     }
 
-    const result = charge
+    let result = charge
       ? await finalizeDeposit(charge.txRef, charge.amount, charge.status)
       : await finalizeWithdrawal(transfer!.reference, transfer!.status);
+
+    // Transfers into a STATIC virtual account have no pre-created PENDING
+    // transaction (the VA's tx_ref is minted once at account creation), so an
+    // "unmatched" successful charge is credited to the VA's owner directly.
+    if (charge && result.status === "unmatched" && charge.status === "successful") {
+      result = await creditStaticVaDeposit(charge);
+    }
 
     await markProcessed(psp.name, event.eventId);
 
@@ -210,4 +220,82 @@ function markProcessed(source: string, eventId: string) {
     where: { source_eventId: { source, eventId } },
     data: { processedAt: new Date() },
   });
+}
+
+/**
+ * Credit a successful charge that arrived via the user's STATIC virtual
+ * account. Resolution order:
+ *   1. the VA tx_ref we minted at creation embeds the owner ("va_<userId>_<ts>")
+ *   2. otherwise the charge's customer email, but only when that user actually
+ *      owns an NGN virtual account (conservative — we never guess with money)
+ * The credit is idempotent on the provider event id, so replays can't double-credit.
+ */
+async function creditStaticVaDeposit(charge: NgnChargeEvent) {
+  if (charge.currency.toUpperCase() !== "NGN") {
+    return { status: "unmatched" as const };
+  }
+
+  // 1) Owner embedded in the VA's tx_ref.
+  let userId: string | null = null;
+  const m = /^va_([0-9a-f-]{36})_/i.exec(charge.txRef);
+  if (m) {
+    const user = await prisma.user.findUnique({ where: { id: m[1] } });
+    if (user) userId = user.id;
+  }
+
+  // 2) Fall back to the customer email, requiring VA ownership.
+  if (!userId && charge.customerEmail) {
+    const user = await prisma.user.findUnique({
+      where: { email: charge.customerEmail },
+    });
+    if (user) {
+      const va = await prisma.wallet.findUnique({
+        where: {
+          userId_asset_network: {
+            userId: user.id,
+            asset: Asset.NGN,
+            network: Network.FIAT,
+          },
+        },
+      });
+      if (va) userId = user.id;
+    }
+  }
+
+  if (!userId) return { status: "unmatched" as const };
+
+  const amountMinor = toMinorUnits(charge.amount, Asset.NGN);
+  const credit = await creditBalance({
+    userId,
+    asset: Asset.NGN,
+    amountMinor,
+    type: TransactionType.DEPOSIT,
+    idempotencyKey: `deposit:flutterwave:${charge.eventId}`,
+    network: Network.FIAT,
+    externalRef: charge.txRef,
+    metadata: { source: "virtual_account", eventId: charge.eventId },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      action: "ngn.deposit.credited",
+      resourceType: "Transaction",
+      resourceId: credit.transactionId,
+      details: {
+        amountMinor: amountMinor.toString(),
+        txRef: charge.txRef,
+        via: "static_virtual_account",
+      },
+    },
+  });
+
+  return credit.created
+    ? {
+        status: "credited" as const,
+        transactionId: credit.transactionId,
+        userId,
+        amountMinor: amountMinor.toString(),
+      }
+    : { status: "already_credited" as const, transactionId: credit.transactionId };
 }

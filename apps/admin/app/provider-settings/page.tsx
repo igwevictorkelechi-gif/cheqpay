@@ -87,7 +87,7 @@ export default function ProviderSettingsPage() {
               <div className="p-2 rounded-lg bg-brand-100 text-brand-600"><Server size={20} /></div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Custody (Crypto)</h2>
-                <p className="text-sm text-gray-500">Wallet creation, deposits &amp; withdrawals (Tatum)</p>
+                <p className="text-sm text-gray-500">Wallet creation, deposits &amp; withdrawals (Crypto APIs)</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -95,13 +95,13 @@ export default function ProviderSettingsPage() {
                 <p className="text-xs text-gray-500 mb-1">Provider mode</p>
                 <span className={'px-2.5 py-1 rounded-full text-xs font-medium ' + (isLive(data.custody.provider) ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>{data.custody.provider}</span>
               </div>
-              <div><p className="text-xs text-gray-500 mb-1">Tatum API key</p><StatusPill ok={data.custody.apiKeyConfigured} /></div>
+              <div><p className="text-xs text-gray-500 mb-1">Custody API key</p><StatusPill ok={data.custody.apiKeyConfigured} /></div>
               <div><p className="text-xs text-gray-500 mb-1">Deposit webhook secret</p><StatusPill ok={data.custody.webhookConfigured} /></div>
             </div>
             {!isLive(data.custody.provider) && (
               <div className="mt-4 flex items-start gap-2 rounded-lg bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
                 <ShieldAlert size={16} className="mt-0.5 shrink-0" />
-                <span>Custody is in <b>mock</b> mode. To go live set <code className="font-mono">CUSTODY_PROVIDER=tatum</code>, <code className="font-mono">TATUM_API_KEY</code> and <code className="font-mono">TATUM_WEBHOOK_SECRET</code>, then redeploy.</span>
+                <span>Custody is in <b>mock</b> mode. To go live set <code className="font-mono">CUSTODY_PROVIDER=cryptoapis</code>, <code className="font-mono">CRYPTOAPIS_API_KEY</code>, <code className="font-mono">CRYPTOAPIS_WALLET_ID</code> and <code className="font-mono">CRYPTOAPIS_WEBHOOK_SECRET</code>, then redeploy.</span>
               </div>
             )}
           </div>

@@ -223,10 +223,10 @@ export default function VirtualAccountPage() {
             )}
 
             <button
-              onClick={() => router.push("/deposit")}
+              onClick={() => router.push("/")}
               className="mt-6 w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
             >
-              Fund my wallet
+              Done
             </button>
           </>
         ) : showForm ? (

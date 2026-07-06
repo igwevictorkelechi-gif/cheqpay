@@ -14,7 +14,17 @@ export interface WalletView {
  * only called for missing asset/network pairs. Safe to call on every login.
  */
 export async function provisionWallets(userId: string): Promise<WalletView[]> {
-  const custody = getCustodyProvider();
+  // A custody misconfiguration/outage must not fail the whole provisioning
+  // pass — that would break every flow that bootstraps via ensureProvisioned
+  // (NGN deposits included). Crypto wallets are simply retried on the next
+  // call; the receive screen shows "address not available yet" meanwhile.
+  let custody;
+  try {
+    custody = getCustodyProvider();
+  } catch (err) {
+    console.error("[wallets] custody provider unavailable (skipping crypto provisioning)", err);
+    return listWallets(userId);
+  }
 
   for (const { asset, network } of SUPPORTED_WALLETS) {
     const existing = await prisma.wallet.findUnique({
@@ -22,15 +32,20 @@ export async function provisionWallets(userId: string): Promise<WalletView[]> {
     });
     if (existing) continue;
 
-    const { address, custodyRef } = await custody.createDepositAddress({
-      userId,
-      asset,
-      network,
-    });
+    let provisioned: { address: string; custodyRef: string };
+    try {
+      provisioned = await custody.createDepositAddress({ userId, asset, network });
+    } catch (err) {
+      console.error(
+        `[wallets] custody provisioning failed for ${asset}/${network} (will retry)`,
+        err
+      );
+      continue;
+    }
 
     try {
       await prisma.wallet.create({
-        data: { userId, asset, network, address, custodyRef },
+        data: { userId, asset, network, ...provisioned },
       });
     } catch (err) {
       // Tolerate a concurrent create (unique violation) — another request won.
