@@ -135,6 +135,7 @@ export async function POST(req: Request) {
             customer: body.customer,
             planName,
             providerRef: result.providerRef,
+            token: result.token ?? null,
           },
         },
       });
@@ -158,7 +159,7 @@ export async function POST(req: Request) {
           title: "Bill paid",
           body: `${biller.name} — ₦${fromMinorUnits(amountMinor, Asset.NGN)}${
             body.customer ? ` for ${body.customer}` : ""
-          }.`,
+          }.${result.token ? " Your recharge token is in the receipt." : ""}`,
           data: { transactionId: tx.id },
         });
       }
@@ -167,6 +168,7 @@ export async function POST(req: Request) {
         transactionId: tx.id,
         status: status === TransactionStatus.COMPLETED ? "completed" : "processing",
         providerRef: result.providerRef,
+        token: result.token ?? null,
       });
     } catch (err) {
       if (err instanceof ApiError) throw err;

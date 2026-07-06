@@ -3,10 +3,11 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
-  TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown, type LucideIcon,
+  TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
+  Banknote, type LucideIcon,
 } from 'lucide-react';
 
 type Item = { label: string; href: string; icon: LucideIcon };
@@ -35,6 +36,7 @@ const categories: Category[] = [
     icon: Activity,
     items: [
       { label: 'Transactions', href: '/transactions', icon: Activity },
+      { label: 'Withdrawals Review', href: '/withdrawals', icon: Banknote },
       { label: 'Virtual Accounts', href: '/virtual-accounts', icon: CreditCard },
     ],
   },
@@ -66,6 +68,14 @@ const categories: Category[] = [
 
 export default function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const logout = async () => {
+    try {
+      await fetch('/api/auth', { method: 'DELETE' });
+    } finally {
+      router.replace('/login');
+    }
+  };
   const [openCats, setOpenCats] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     for (const c of categories) init[c.label] = true;
@@ -152,7 +162,7 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
         </nav>
 
         <div className="p-4 border-t border-gray-200 bg-white">
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+          <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
             <LogOut size={20} />
             <span className="font-medium">Logout</span>
           </button>

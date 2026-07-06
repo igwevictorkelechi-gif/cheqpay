@@ -87,6 +87,8 @@ export interface BillPayInput {
 export interface BillPayResult {
   providerRef: string;
   status: "successful" | "pending" | "failed";
+  /** Prepaid token / recharge PIN (e.g. electricity meter token), if issued. */
+  token?: string | null;
 }
 
 export interface PaymentProvider {
