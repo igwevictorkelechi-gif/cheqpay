@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { api, ApiError } from "@/services/api";
 import { invalidateMoneyCaches } from "@/lib/cache";
-import { getAssetMeta } from "@/lib/cryptoAssets";
+import { getAssetMeta, isAssetEnabled } from "@/lib/cryptoAssets";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -70,6 +70,36 @@ export default function SendCryptoDetailPage() {
             <ChevronLeft className="h-5 w-5" />
           </button>
           <p className="mt-10 text-center text-muted">Unsupported asset.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAssetEnabled(meta.symbol)) {
+    return (
+      <div className="flex min-h-screen w-full justify-center bg-black">
+        <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4">
+          <button
+            onClick={() => router.back()}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <div className="mt-16 flex flex-col items-center text-center">
+            <h1 className="text-2xl font-extrabold text-ink">
+              Sending {meta.symbol} is coming soon
+            </h1>
+            <p className="mt-2 max-w-[300px] text-sm text-muted">
+              We&apos;re upgrading to secure stablecoin rails. {meta.symbol} transfers will be
+              available shortly — your Naira wallet works as usual.
+            </p>
+            <button
+              onClick={() => router.push("/")}
+              className="mt-8 w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+            >
+              Back home
+            </button>
+          </div>
         </div>
       </div>
     );

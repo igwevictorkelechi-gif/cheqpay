@@ -28,3 +28,20 @@ export const CRYPTO_SEND = {
   BTC: { network: 'BITCOIN' as const, networkLabel: 'Bitcoin', minSend: '0.0001' },
   USDT: { network: 'TRON' as const, networkLabel: 'Tron (TRC-20)', minSend: '2' },
 };
+
+/**
+ * Which crypto assets are live for deposits/sends. Crypto custody is moving to
+ * Flutterwave's stablecoin rails; until an asset's rail is enabled, it shows
+ * "Coming soon" and its receive/send flows are blocked. Flip an asset on with
+ * EXPO_PUBLIC_ENABLED_CRYPTO (comma list, e.g. "USDT") and rebuild.
+ */
+const ENABLED_CRYPTO = new Set(
+  (process.env.EXPO_PUBLIC_ENABLED_CRYPTO ?? '')
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean)
+);
+
+export function isAssetEnabled(symbol: string): boolean {
+  return ENABLED_CRYPTO.has(symbol.toUpperCase());
+}

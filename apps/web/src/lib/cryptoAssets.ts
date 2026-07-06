@@ -37,6 +37,24 @@ export function getAssetMeta(symbol: string): CryptoAssetMeta | undefined {
   return CRYPTO_ASSETS.find((a) => a.symbol === symbol.toUpperCase());
 }
 
+/**
+ * Which crypto assets are live for deposits/sends. Crypto custody is moving to
+ * Flutterwave's stablecoin rails (StableRails); until an asset's rail is
+ * enabled on our account, it shows as "Coming soon" and its receive/send flows
+ * are blocked. Flip an asset on by setting NEXT_PUBLIC_ENABLED_CRYPTO (comma
+ * list, e.g. "USDT") on the web project and redeploying.
+ */
+const ENABLED_CRYPTO = new Set(
+  (process.env.NEXT_PUBLIC_ENABLED_CRYPTO ?? "")
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean)
+);
+
+export function isAssetEnabled(symbol: string): boolean {
+  return ENABLED_CRYPTO.has(symbol.toUpperCase());
+}
+
 /** All assets the convert/swap flow can switch between. NGN is the fiat leg. */
 export type ConvertSymbol = "NGN" | "BTC" | "USDT";
 
