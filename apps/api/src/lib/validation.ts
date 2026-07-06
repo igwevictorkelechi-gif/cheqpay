@@ -48,6 +48,14 @@ export const resolveAccountSchema = z.object({
 });
 export type ResolveAccountRequestInput = z.infer<typeof resolveAccountSchema>;
 
+/** Save a withdrawal beneficiary (bank account). Name is resolved server-side. */
+export const addBeneficiarySchema = z.object({
+  bankCode: z.string().min(3).max(10),
+  bankName: z.string().min(1).max(100),
+  accountNumber: z.string().regex(/^\d{10}$/, "Expected a 10-digit NUBAN"),
+});
+export type AddBeneficiaryInput = z.infer<typeof addBeneficiarySchema>;
+
 /** Request an NGN bank payout. */
 export const ngnWithdrawalSchema = z.object({
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Expected an NGN amount like 5000 or 5000.50"),
