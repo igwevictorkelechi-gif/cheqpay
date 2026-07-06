@@ -94,14 +94,34 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  wallets      Wallet[]
-  balances     Balance[]
-  quotes       Quote[]
-  transactions Transaction[]
-  kycRecords   KycRecord[]
-  auditLogs    AuditLog[]
+  wallets       Wallet[]
+  balances      Balance[]
+  quotes        Quote[]
+  transactions  Transaction[]
+  kycRecords    KycRecord[]
+  auditLogs     AuditLog[]
+  beneficiaries Beneficiary[]
 
   @@map("app_users")
+}
+
+// A saved NGN payout destination (bank account) for withdrawals. The account
+// name is resolved via the PSP and verified to match the user's legal name at
+// save time, so payouts can only go to the user's own accounts.
+model Beneficiary {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  bankCode      String   @map("bank_code")
+  bankName      String   @map("bank_name")
+  accountNumber String   @map("account_number")
+  accountName   String   @map("account_name")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bankCode, accountNumber])
+  @@index([userId])
+  @@map("beneficiaries")
 }
 
 // One immutable on-chain deposit address per asset/network, backed by a
