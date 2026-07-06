@@ -21,7 +21,16 @@ export function getCustodyProvider(): CustodyProvider {
         "CUSTODY_PROVIDER=tatum requires TATUM_API_KEY and TATUM_WEBHOOK_SECRET"
       );
     }
-    cached = new TatumCustodyProvider(env.TATUM_API_KEY, env.TATUM_WEBHOOK_SECRET);
+    if (!env.API_PUBLIC_URL) {
+      throw new Error(
+        "CUSTODY_PROVIDER=tatum requires API_PUBLIC_URL so deposit webhooks can be registered"
+      );
+    }
+    cached = new TatumCustodyProvider(
+      env.TATUM_API_KEY,
+      env.TATUM_WEBHOOK_SECRET,
+      `${env.API_PUBLIC_URL.replace(/\/$/, "")}/api/webhooks/tatum`
+    );
   } else {
     cached = new MockCustodyProvider(env.TATUM_WEBHOOK_SECRET ?? undefined);
   }

@@ -32,7 +32,10 @@ export class TatumCustodyProvider implements CustodyProvider {
 
   constructor(
     private readonly apiKey: string,
-    private readonly webhookSecret: string
+    private readonly webhookSecret: string,
+    // Fully-qualified callback we register with Tatum, e.g.
+    // https://cheqpay-admin453.vercel.app/api/webhooks/tatum
+    private readonly webhookUrl: string
   ) {}
 
   private async call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -74,7 +77,35 @@ export class TatumCustodyProvider implements CustodyProvider {
       `/offchain/account/${account.id}/address`,
       { method: "POST" }
     );
+    // 3) Register a webhook subscription so incoming deposits to this account
+    // notify our /api/webhooks/tatum endpoint. This throws on failure, which
+    // prevents the caller from persisting a wallet we can't monitor — so it is
+    // retried on the next provisioning pass rather than silently missing funds.
+    await this.subscribeAccount(account.id);
     return { address: address.address, custodyRef: account.id };
+  }
+
+  /**
+   * Subscribe the given virtual account to incoming-deposit notifications.
+   * Idempotent from our side: Tatum rejects a duplicate subscription with a
+   * "subscription already exists" error, which we treat as success.
+   */
+  private async subscribeAccount(accountId: string): Promise<void> {
+    try {
+      await this.call("/subscription", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "ACCOUNT_INCOMING_BLOCKCHAIN_TRANSACTION",
+          attr: { id: accountId, url: this.webhookUrl },
+        }),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message.toLowerCase() : "";
+      // A pre-existing subscription for this account is fine — the webhook is
+      // already wired, so don't fail address provisioning over it.
+      if (msg.includes("already") && msg.includes("subscription")) return;
+      throw err;
+    }
   }
 
   verifyWebhookSignature(rawBody: string, signature: string | null): boolean {
