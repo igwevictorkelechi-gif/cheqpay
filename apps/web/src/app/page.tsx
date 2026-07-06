@@ -100,7 +100,7 @@ export default function HomePage() {
       <KycBanner />
 
       <ActionRow>
-        <CircleAction icon={ArrowDown} label="Deposit" onClick={() => router.push("/deposit")} />
+        <CircleAction icon={ArrowDown} label="Deposit" onClick={() => router.push("/virtual-account")} />
         <CircleAction icon={ArrowRight} label="Withdraw" onClick={() => router.push("/withdraw")} />
         <CircleAction icon={RefreshCw} label="Convert" onClick={() => router.push("/convert")} />
       </ActionRow>

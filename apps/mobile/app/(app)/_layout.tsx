@@ -52,8 +52,6 @@ export default function AppLayout() {
 
       {/* Secondary screens — reachable via navigation but hidden from the tab bar */}
       <Tabs.Screen name="deposit" options={{ href: null }} />
-      <Tabs.Screen name="deposit-transfer" options={{ href: null }} />
-      <Tabs.Screen name="deposit-done" options={{ href: null }} />
       <Tabs.Screen name="convert" options={{ href: null }} />
       <Tabs.Screen name="swap-confirm" options={{ href: null }} />
       <Tabs.Screen name="swap-success" options={{ href: null }} />
@@ -62,7 +60,6 @@ export default function AppLayout() {
       <Tabs.Screen name="profile" options={{ href: null }} />
       <Tabs.Screen name="airtime" options={{ href: null }} />
       <Tabs.Screen name="withdraw" options={{ href: null }} />
-      <Tabs.Screen name="fund-wallet" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="preferences" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
