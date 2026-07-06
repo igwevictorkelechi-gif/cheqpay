@@ -58,10 +58,16 @@ const envSchema = z.object({
   // trailing slash.
   API_PUBLIC_URL: z.string().url().optional(),
 
-  // Phase 2 (custody — Tatum)
-  CUSTODY_PROVIDER: providerEnum("CUSTODY_PROVIDER", ["mock", "tatum"], "mock"),
+  // Phase 2 (custody). Tatum's Virtual Accounts product is closed to new
+  // accounts, so Crypto APIs is the supported live provider.
+  CUSTODY_PROVIDER: providerEnum("CUSTODY_PROVIDER", ["mock", "tatum", "cryptoapis"], "mock"),
   TATUM_API_KEY: z.string().optional(),
   TATUM_WEBHOOK_SECRET: z.string().optional(),
+  // Crypto APIs (cryptoapis.io) Wallet-as-a-Service.
+  CRYPTOAPIS_API_KEY: z.string().optional(),
+  CRYPTOAPIS_WALLET_ID: z.string().optional(),
+  CRYPTOAPIS_WEBHOOK_SECRET: z.string().optional(),
+  CRYPTOAPIS_NETWORK: z.string().default("mainnet"),
 
   // Phase 3 (Naira rails)
   PAYMENT_PROVIDER: providerEnum("PAYMENT_PROVIDER", ["mock", "flutterwave"], "mock"),

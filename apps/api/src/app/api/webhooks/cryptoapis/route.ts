@@ -3,7 +3,7 @@ import { toErrorResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
-/** Custody deposit/withdrawal webhook (Tatum). Logic lives in the shared handler. */
+/** Custody deposit/withdrawal webhook (Crypto APIs). Shares the custody handler. */
 export async function POST(req: Request) {
   try {
     return await handleCustodyWebhook(req);
