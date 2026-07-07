@@ -82,6 +82,10 @@ export default function AppLayout() {
       <Tabs.Screen name="receive" options={{ href: null }} />
       <Tabs.Screen name="send-crypto" options={{ href: null }} />
       <Tabs.Screen name="virtual-account" options={{ href: null }} />
+      <Tabs.Screen name="support" options={{ href: null }} />
+      <Tabs.Screen name="support-chat" options={{ href: null }} />
+      <Tabs.Screen name="activity" options={{ href: null }} />
+      <Tabs.Screen name="bank-accounts" options={{ href: null }} />
     </Tabs>
   );
 }

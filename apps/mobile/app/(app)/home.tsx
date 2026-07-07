@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore, useUIStore } from '@/store';
 import { api, ApiError, type LedgerTransaction } from '@/services/api';
@@ -76,13 +77,34 @@ export default function HomeScreen() {
           icons={[
             { name: 'search-outline', onPress: () => router.push('/(app)/transactions') },
             { name: showBalance ? 'eye-outline' : 'eye-off-outline', onPress: toggleBalance },
-            { name: 'notifications-outline' },
+            { name: 'notifications-outline', onPress: () => router.push('/(app)/activity') },
           ]}
         />
 
         <BalanceBlock label="Total Cash Balance" amount={formattedBalance} />
 
         <KycBanner />
+
+        {ngn === 0 && txns.length === 0 && (
+          <View className="px-5 mb-6">
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => router.push('/(app)/deposit')}
+              className="flex-row items-center rounded-3xl p-5"
+              style={{ backgroundColor: colors.brand }}
+            >
+              <View className="w-12 h-12 rounded-2xl items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                <Ionicons name="arrow-down" size={24} color="#FFFFFF" />
+              </View>
+              <View className="flex-1 ml-4">
+                <Text className="text-white font-bold text-base">Add money to get started</Text>
+                <Text className="text-white/80 text-sm mt-0.5">
+                  Fund your wallet by bank transfer to buy crypto and pay bills.
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <ActionRow>
           <CircleAction icon="arrow-down" label="Deposit" onPress={() => router.push('/(app)/deposit')} />
