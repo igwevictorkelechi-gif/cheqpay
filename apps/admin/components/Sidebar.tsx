@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -44,7 +44,7 @@ const categories: Category[] = [
     label: 'Finance',
     icon: TrendingUp,
     items: [
-      { label: 'Trading Settings', href: '/trading-settings', icon: TrendingUp },
+      { label: 'Fees & Trading', href: '/trading-settings', icon: TrendingUp },
       { label: 'Crypto Wallets', href: '/crypto-wallets', icon: Wallet },
     ],
   },
@@ -69,6 +69,13 @@ const categories: Category[] = [
 export default function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => {
+    fetch('/api/auth')
+      .then((r) => r.json())
+      .then((d) => setEmail(d.email ?? null))
+      .catch(() => {});
+  }, []);
   const logout = async () => {
     try {
       await fetch('/api/auth', { method: 'DELETE' });
@@ -103,7 +110,7 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
             width={180}
             height={75}
             priority
-            className="h-auto w-[160px]"
+            className="h-auto w-[160px] brightness-0 invert"
           />
           <p className="mt-2 text-sm text-gray-500">Admin Panel</p>
         </div>
@@ -162,10 +169,30 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
         </nav>
 
         <div className="p-4 border-t border-gray-200 bg-white">
-          <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-            <LogOut size={20} />
-            <span className="font-medium">Logout</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/profile"
+              onClick={onClose}
+              className="flex flex-1 items-center gap-3 rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors min-w-0"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600 font-bold">
+                {(email || 'A').charAt(0).toUpperCase()}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-gray-900">
+                  {email ?? 'Admin'}
+                </span>
+                <span className="block text-xs text-gray-500">View profile</span>
+              </span>
+            </Link>
+            <button
+              onClick={logout}
+              aria-label="Logout"
+              className="p-2.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
         </div>
       </aside>
     </>

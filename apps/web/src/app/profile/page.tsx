@@ -86,8 +86,10 @@ function FeatureCard({
         <Icon className="h-5 w-5 text-white" />
       </span>
       <div>
-        <p className="text-base font-bold text-ink">{title}</p>
-        <p className="mt-0.5 text-xs text-muted">{subtitle}</p>
+        {/* These cards keep fixed dark backgrounds in both themes, so the
+            text stays white rather than following the ink token. */}
+        <p className="text-base font-bold text-white">{title}</p>
+        <p className="mt-0.5 text-xs text-white/70">{subtitle}</p>
       </div>
     </button>
   );

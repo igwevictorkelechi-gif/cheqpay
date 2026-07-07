@@ -15,10 +15,18 @@ export async function creditBalance(params: {
   txHash?: string;
   externalRef?: string;
   metadata?: Prisma.InputJsonValue;
+  /** Optional fee (minor units) withheld from the credit: the balance is
+   *  incremented by amount − fee, while the ledger records gross + fee. */
+  feeMinor?: bigint;
 }): Promise<{ created: boolean; transactionId: string }> {
   if (params.amountMinor <= 0n) {
     throw new Error("creditBalance requires a positive amount");
   }
+  const fee = params.feeMinor ?? 0n;
+  if (fee < 0n || fee >= params.amountMinor) {
+    throw new Error("creditBalance fee must be >= 0 and < amount");
+  }
+  const net = params.amountMinor - fee;
 
   return prisma.$transaction(async (tx) => {
     // Idempotency: a repeated idempotencyKey must not double-credit.
@@ -31,8 +39,8 @@ export async function creditBalance(params: {
 
     await tx.balance.upsert({
       where: { userId_asset: { userId: params.userId, asset: params.asset } },
-      update: { available: { increment: params.amountMinor } },
-      create: { userId: params.userId, asset: params.asset, available: params.amountMinor },
+      update: { available: { increment: net } },
+      create: { userId: params.userId, asset: params.asset, available: net },
     });
 
     const record = await tx.transaction.create({
@@ -42,6 +50,7 @@ export async function creditBalance(params: {
         asset: params.asset,
         network: params.network,
         amount: params.amountMinor,
+        fee,
         status: TransactionStatus.COMPLETED,
         txHash: params.txHash,
         externalRef: params.externalRef,

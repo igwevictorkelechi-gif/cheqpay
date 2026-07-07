@@ -1,126 +1,331 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { TrendingUp, Users, Wallet, Clock } from 'lucide-react';
+import { Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import {
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+} from 'recharts';
 
-type Stats = {
-  totalWallets: number;
-  activeUsers: number;
-  pendingKyc: number;
-  dailyVolumeNgn: string;
+type Analytics = {
+  windowDays: number;
+  kpis: {
+    totalUsers: number; activeUsers: number; totalWallets: number; fundedWallets: number;
+    totalTransactions: number; ngnVolumeWindow: number; feesNgnWindow: number; successRate: number;
+  };
+  transactions: { daily: { date: string; count: number; ngnVolume: number }[] };
+  bills: { topBillers: { name: string; count: number; ngnVolume: number }[] };
 };
-type RecentUser = { id: string; email: string; createdAt: string };
 
-function formatNgn(value: string): string {
+type AdminTx = {
+  id: string;
+  userEmail: string;
+  type: string;
+  asset: string;
+  amount: string;
+  status: string;
+  createdAt: string;
+};
+
+const RANGES = [7, 30, 90];
+
+function fmtNgn(n: number): string {
+  return '₦' + Math.round(n || 0).toLocaleString('en-NG');
+}
+function fmtNgnCompact(n: number): string {
+  const v = n || 0;
+  if (v >= 1e9) return '₦' + (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return '₦' + (v / 1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return '₦' + (v / 1e3).toFixed(1) + 'K';
+  return '₦' + Math.round(v).toLocaleString('en-NG');
+}
+function fmtAmount(asset: string, value: string): string {
   const n = Number(value);
-  if (!isFinite(n)) return `₦${value}`;
-  return `₦${Math.round(n).toLocaleString('en-NG')}`;
+  const prefix = asset === 'NGN' ? '₦' : '';
+  const suffix = asset === 'NGN' ? '' : ' ' + asset;
+  if (!isFinite(n)) return prefix + value + suffix;
+  return prefix + n.toLocaleString('en-NG', { maximumFractionDigits: asset === 'NGN' ? 2 : 8 }) + suffix;
+}
+
+/** % change of the second half of a daily series vs the first half. */
+function halfOverHalf(daily: { ngnVolume: number; count: number }[], key: 'ngnVolume' | 'count') {
+  if (daily.length < 4) return null;
+  const mid = Math.floor(daily.length / 2);
+  const a = daily.slice(0, mid).reduce((s, d) => s + d[key], 0);
+  const b = daily.slice(mid).reduce((s, d) => s + d[key], 0);
+  if (a <= 0) return null;
+  return ((b - a) / a) * 100;
+}
+
+function DeltaChip({ pct }: { pct: number | null }) {
+  if (pct === null) return null;
+  const up = pct >= 0;
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold ${
+        up ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+      }`}
+    >
+      {up ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+      {Math.abs(pct).toFixed(1)}%
+    </span>
+  );
+}
+
+function statusChip(status: string) {
+  const s = status.toUpperCase();
+  const cls =
+    s === 'COMPLETED'
+      ? 'bg-green-100 text-green-700'
+      : s === 'FAILED' || s === 'REVERSED'
+        ? 'bg-red-100 text-red-700'
+        : 'bg-yellow-100 text-yellow-700';
+  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{s.toLowerCase()}</span>;
 }
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [recent, setRecent] = useState<RecentUser[]>([]);
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState<Analytics | null>(null);
+  const [recent, setRecent] = useState<AdminTx[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetch('/api/stats')
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`Failed to load stats (${r.status})`);
-        return r.json();
-      })
-      .then((d) => {
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      fetch('/api/analytics?days=' + days).then(async (r) => {
+        if (!r.ok) throw new Error('Failed to load overview (' + r.status + ')');
+        return r.json() as Promise<Analytics>;
+      }),
+      fetch('/api/transactions?page=1')
+        .then((r) => (r.ok ? r.json() : { transactions: [] }))
+        .catch(() => ({ transactions: [] })),
+    ])
+      .then(([a, t]) => {
         if (!active) return;
-        setStats(d.stats ?? null);
-        setRecent(Array.isArray(d.recentUsers) ? d.recentUsers : []);
+        setData(a);
+        setRecent(Array.isArray(t.transactions) ? t.transactions.slice(0, 6) : []);
       })
-      .catch((e) => {
-        if (active) setError(e.message);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+      .catch((e) => { if (active) setError(e.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [days]);
 
-  const cards = [
-    { title: 'Total Wallets', value: stats ? stats.totalWallets.toLocaleString() : '—', icon: Wallet, color: 'bg-blue-100 text-blue-600' },
-    { title: 'Active Users', value: stats ? stats.activeUsers.toLocaleString() : '—', icon: Users, color: 'bg-brand-100 text-brand-600' },
-    { title: 'Pending KYC', value: stats ? stats.pendingKyc.toLocaleString() : '—', icon: Clock, color: 'bg-yellow-100 text-yellow-600' },
-    { title: 'Daily Volume', value: stats ? formatNgn(stats.dailyVolumeNgn) : '—', icon: TrendingUp, color: 'bg-purple-100 text-purple-600' },
+  const daily = useMemo(() => data?.transactions.daily ?? [], [data]);
+  const volDelta = useMemo(() => halfOverHalf(daily, 'ngnVolume'), [daily]);
+  const txDelta = useMemo(() => halfOverHalf(daily, 'count'), [daily]);
+  const k = data?.kpis;
+
+  const overview = [
+    {
+      label: 'Total volume',
+      value: k ? fmtNgnCompact(k.ngnVolumeWindow) : '—',
+      delta: volDelta,
+      sub: `last ${days} days`,
+    },
+    {
+      label: 'Transactions',
+      value: k ? k.totalTransactions.toLocaleString() : '—',
+      delta: txDelta,
+      sub: 'all time',
+    },
+    {
+      label: 'Active users',
+      value: k ? k.activeUsers.toLocaleString() : '—',
+      delta: null,
+      sub: k ? `of ${k.totalUsers.toLocaleString()} users` : '',
+    },
+    {
+      label: 'Fees earned',
+      value: k ? fmtNgn(k.feesNgnWindow) : '—',
+      delta: null,
+      sub: `last ${days} days`,
+    },
   ];
 
   return (
     <DashboardLayout>
-      <div className="mb-8">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">Welcome back! Here&apos;s what&apos;s happening with your business today.</p>
+        <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-1">
+          <Calendar size={15} className="ml-2 text-gray-400" />
+          {RANGES.map((r) => (
+            <button
+              key={r}
+              onClick={() => setDays(r)}
+              className={
+                'px-3 py-1.5 rounded-md text-sm font-medium transition-colors ' +
+                (days === r ? 'bg-brand-600 text-white' : 'text-gray-600 hover:bg-gray-50')
+              }
+            >
+              Last {r}d
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {cards.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <div key={index} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-gray-600 font-medium">{stat.title}</h3>
-                <div className={`p-3 rounded-lg ${stat.color}`}>
-                  <Icon size={20} />
-                </div>
+      {/* Overview */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-5">Overview</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+          {overview.map((s) => (
+            <div key={s.label} className="min-w-0">
+              <p className="text-sm text-gray-500">{s.label}</p>
+              <div className="mt-1 flex items-center gap-2">
+                <p className="text-2xl font-bold text-gray-900 truncate">{loading ? '…' : s.value}</p>
+                {!loading && <DeltaChip pct={s.delta} />}
               </div>
-              <p className="text-2xl font-bold text-gray-900 mb-2">{loading ? '…' : stat.value}</p>
-              <p className="text-sm text-gray-500">Live</p>
+              <p className="text-xs text-gray-400 mt-1">{s.sub}</p>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Revenue / volume chart */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Revenue</h2>
+            <div className="mt-1 flex items-center gap-2">
+              <p className="text-3xl font-bold text-gray-900">
+                {loading ? '…' : k ? fmtNgn(k.ngnVolumeWindow) : '—'}
+              </p>
+              {!loading && <DeltaChip pct={volDelta} />}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Processed NGN volume · last {days} days · success rate {k ? k.successRate : '—'}%
+            </p>
+          </div>
+        </div>
+        <div className="mt-4" style={{ width: '100%', height: 280 }}>
+          <ResponsiveContainer>
+            <AreaChart data={daily}>
+              <defs>
+                <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.45} />
+                  <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#272433" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11, fill: '#8d87a0' }}
+                tickFormatter={(d) => String(d).slice(5)}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: '#8d87a0' }}
+                tickFormatter={(v) => fmtNgnCompact(Number(v))}
+                width={64}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                formatter={(v) => fmtNgn(Number(v))}
+                contentStyle={{
+                  backgroundColor: '#17151f',
+                  border: '1px solid #272433',
+                  borderRadius: 8,
+                  color: '#f2f1f7',
+                }}
+                labelStyle={{ color: '#8d87a0' }}
+              />
+              <Area
+                type="monotone"
+                dataKey="ngnVolume"
+                stroke="#8b5cf6"
+                strokeWidth={2}
+                fill="url(#rev)"
+                dot={{ r: 3, fill: '#8b5cf6', strokeWidth: 0 }}
+                activeDot={{ r: 5 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Bottom tables */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-gray-900">Recent Users</h2>
-            <Link href="/users" className="text-brand-600 text-sm font-semibold hover:underline">View All</Link>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Top billers</h2>
+            <Link
+              href="/analytics"
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              View all
+            </Link>
           </div>
-          <div className="space-y-4">
-            {loading && <p className="text-sm text-gray-500">Loading…</p>}
-            {!loading && recent.length === 0 && <p className="text-sm text-gray-500">No users yet.</p>}
-            {recent.map((u) => (
-              <div key={u.id} className="flex items-center gap-3 pb-4 border-b border-gray-100 last:border-0">
-                <div className="w-10 h-10 rounded-full bg-gray-300" />
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">{u.email}</p>
-                  <p className="text-sm text-gray-500">{new Date(u.createdAt).toLocaleDateString()}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <table className="w-full text-sm">
+            <thead className="text-left text-gray-500 border-b border-gray-100">
+              <tr>
+                <th className="py-2 font-medium">Biller</th>
+                <th className="py-2 font-medium">Payments</th>
+                <th className="py-2 font-medium text-right">Volume</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading && (
+                <tr><td colSpan={3} className="py-6 text-center text-gray-400">Loading…</td></tr>
+              )}
+              {!loading && (data?.bills.topBillers ?? []).length === 0 && (
+                <tr><td colSpan={3} className="py-6 text-center text-gray-400">No bill payments yet.</td></tr>
+              )}
+              {(data?.bills.topBillers ?? []).slice(0, 5).map((b) => (
+                <tr key={b.name}>
+                  <td className="py-3 font-medium text-gray-900">{b.name}</td>
+                  <td className="py-3 text-gray-600">{b.count.toLocaleString()}</td>
+                  <td className="py-3 text-right text-gray-900 font-semibold">{fmtNgn(b.ngnVolume)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-6">Quick Actions</h2>
-          <div className="space-y-3">
-            <Link href="/payment-settings" className="block p-4 bg-brand-50 hover:bg-brand-100 rounded-lg transition-colors">
-              <p className="font-semibold text-brand-900">Configure Payment Gateways</p>
-              <p className="text-sm text-brand-700 mt-1">Set up Paystack &amp; Flutterwave API keys</p>
-            </Link>
-            <Link href="/virtual-accounts" className="block p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
-              <p className="font-semibold text-blue-900">Manage Virtual Accounts</p>
-              <p className="text-sm text-blue-700 mt-1">View and regenerate user virtual accounts</p>
-            </Link>
-            <Link href="/transactions" className="block p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors">
-              <p className="font-semibold text-purple-900">Transaction Analytics</p>
-              <p className="text-sm text-purple-700 mt-1">View all platform transactions</p>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Recent transactions</h2>
+            <Link
+              href="/transactions"
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              View all
             </Link>
           </div>
+          <table className="w-full text-sm">
+            <thead className="text-left text-gray-500 border-b border-gray-100">
+              <tr>
+                <th className="py-2 font-medium">User</th>
+                <th className="py-2 font-medium">Type</th>
+                <th className="py-2 font-medium">Amount</th>
+                <th className="py-2 font-medium text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading && (
+                <tr><td colSpan={4} className="py-6 text-center text-gray-400">Loading…</td></tr>
+              )}
+              {!loading && recent.length === 0 && (
+                <tr><td colSpan={4} className="py-6 text-center text-gray-400">No transactions yet.</td></tr>
+              )}
+              {recent.map((t) => (
+                <tr key={t.id}>
+                  <td className="py-3 text-gray-900 font-medium max-w-[140px] truncate">{t.userEmail}</td>
+                  <td className="py-3 text-gray-600">{t.type.toLowerCase()}</td>
+                  <td className="py-3 text-gray-900 font-semibold">{fmtAmount(t.asset, t.amount)}</td>
+                  <td className="py-3 text-right">{statusChip(t.status)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </DashboardLayout>

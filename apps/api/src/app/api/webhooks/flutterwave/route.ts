@@ -12,6 +12,7 @@ import { jsonOk, toErrorResponse } from "@/lib/http";
 import { creditBalance } from "@/lib/ledger";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { sendPush } from "@/lib/push";
+import { feeFromBps, getDepositFeeBps } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -127,14 +128,17 @@ async function finalizeDeposit(
     }
 
     const amountMinor = toMinorUnits(amount, Asset.NGN);
+    // Business deposit fee (admin-set, default 0): credit net, record gross+fee.
+    const feeMinor = feeFromBps(amountMinor, await getDepositFeeBps());
+    const netMinor = amountMinor - feeMinor;
     await tx.balance.upsert({
       where: { userId_asset: { userId: dep.userId, asset: Asset.NGN } },
-      update: { available: { increment: amountMinor } },
-      create: { userId: dep.userId, asset: Asset.NGN, available: amountMinor },
+      update: { available: { increment: netMinor } },
+      create: { userId: dep.userId, asset: Asset.NGN, available: netMinor },
     });
     await tx.transaction.update({
       where: { id: dep.id },
-      data: { status: TransactionStatus.COMPLETED, amount: amountMinor },
+      data: { status: TransactionStatus.COMPLETED, amount: amountMinor, fee: feeMinor },
     });
     await tx.auditLog.create({
       data: {
@@ -142,14 +146,15 @@ async function finalizeDeposit(
         action: "ngn.deposit.credited",
         resourceType: "Transaction",
         resourceId: dep.id,
-        details: { amountMinor: amountMinor.toString(), txRef },
+        details: { amountMinor: amountMinor.toString(), feeMinor: feeMinor.toString(), txRef },
       },
     });
     return {
       status: "credited" as const,
       transactionId: dep.id,
       userId: dep.userId,
-      amountMinor: amountMinor.toString(),
+      // Net figure — used for the "landed in your wallet" notification.
+      amountMinor: netMinor.toString(),
     };
   });
 }
@@ -185,10 +190,10 @@ async function finalizeWithdrawal(
     }
 
     if (status === "failed") {
-      // Refund the debited funds and reverse.
+      // Refund the debited funds (amount + any fee) and reverse.
       await tx.balance.update({
         where: { userId_asset: { userId: wd.userId, asset: Asset.NGN } },
-        data: { available: { increment: wd.amount } },
+        data: { available: { increment: wd.amount + wd.fee } },
       });
       await tx.transaction.update({
         where: { id: wd.id },
@@ -265,10 +270,13 @@ async function creditStaticVaDeposit(charge: NgnChargeEvent) {
   if (!userId) return { status: "unmatched" as const };
 
   const amountMinor = toMinorUnits(charge.amount, Asset.NGN);
+  // Business deposit fee (admin-set, default 0): credit net, record gross+fee.
+  const feeMinor = feeFromBps(amountMinor, await getDepositFeeBps());
   const credit = await creditBalance({
     userId,
     asset: Asset.NGN,
     amountMinor,
+    feeMinor,
     type: TransactionType.DEPOSIT,
     idempotencyKey: `deposit:flutterwave:${charge.eventId}`,
     network: Network.FIAT,
@@ -284,6 +292,7 @@ async function creditStaticVaDeposit(charge: NgnChargeEvent) {
       resourceId: credit.transactionId,
       details: {
         amountMinor: amountMinor.toString(),
+        feeMinor: feeMinor.toString(),
         txRef: charge.txRef,
         via: "static_virtual_account",
       },
@@ -295,7 +304,7 @@ async function creditStaticVaDeposit(charge: NgnChargeEvent) {
         status: "credited" as const,
         transactionId: credit.transactionId,
         userId,
-        amountMinor: amountMinor.toString(),
+        amountMinor: (amountMinor - feeMinor).toString(),
       }
     : { status: "already_credited" as const, transactionId: credit.transactionId };
 }

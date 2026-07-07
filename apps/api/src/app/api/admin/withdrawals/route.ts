@@ -68,7 +68,8 @@ export async function POST(req: Request) {
       await prisma.$transaction([
         prisma.balance.update({
           where: { userId_asset: { userId: tx.userId, asset: tx.asset } },
-          data: { available: { increment: tx.amount } },
+          // Refund the full debit, including any withheld fee.
+          data: { available: { increment: tx.amount + tx.fee } },
         }),
         prisma.transaction.update({
           where: { id: tx.id },
