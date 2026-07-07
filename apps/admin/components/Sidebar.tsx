@@ -98,12 +98,12 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
 
       <aside
         className={
-          'w-64 bg-white border-r border-gray-200 min-h-screen fixed left-0 top-0 z-50 flex flex-col transform transition-transform duration-200 ease-in-out ' +
+          'w-64 bg-white border-r border-gray-200 h-screen fixed left-0 top-0 z-50 flex flex-col transform transition-transform duration-200 ease-in-out ' +
           (open ? 'translate-x-0' : '-translate-x-full') +
           ' lg:translate-x-0'
         }
       >
-        <div className="p-6 border-b border-gray-200">
+        <div className="shrink-0 p-6 border-b border-gray-200">
           <Image
             src="/cheqpay-logo.png"
             alt="CheqPay"
@@ -115,7 +115,7 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
           <p className="mt-2 text-sm text-gray-500">Admin Panel</p>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+        <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1">
           {categories.map((cat) => {
             const CatIcon = cat.icon;
             const expanded = openCats[cat.label];
@@ -168,7 +168,7 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
           })}
         </nav>
 
-        <div className="p-4 border-t border-gray-200 bg-white">
+        <div className="shrink-0 p-4 border-t border-gray-200 bg-white">
           <div className="flex items-center gap-2">
             <Link
               href="/profile"
