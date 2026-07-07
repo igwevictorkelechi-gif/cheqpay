@@ -122,9 +122,9 @@ export default function CryptoPage() {
         name={user?.full_name}
         onAvatar={() => router.push("/profile")}
         icons={[
-          { icon: Search, onClick: () => router.push("/transactions") },
-          { icon: showBalance ? Eye : EyeOff, onClick: toggleBalance },
-          { icon: Bell, onClick: () => setNotifOpen(true) },
+          { icon: Search, label: "View transactions", onClick: () => router.push("/transactions") },
+          { icon: showBalance ? Eye : EyeOff, label: showBalance ? "Hide balance" : "Show balance", onClick: toggleBalance },
+          { icon: Bell, label: "Notifications", onClick: () => setNotifOpen(true) },
         ]}
       />
 

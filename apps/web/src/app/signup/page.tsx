@@ -58,8 +58,9 @@ export default function SignupPage() {
 
         <form onSubmit={handleSignup} className="mt-6 space-y-4">
           <div>
-            <label className="label">Full Name</label>
+            <label htmlFor="fullName" className="label">Full Name</label>
             <input
+              id="fullName"
               type="text"
               name="fullName"
               value={form.fullName}
@@ -71,8 +72,9 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <label className="label">Email Address</label>
+            <label htmlFor="email" className="label">Email Address</label>
             <input
+              id="email"
               type="email"
               name="email"
               value={form.email}
@@ -85,8 +87,9 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <label className="label">Phone Number (optional)</label>
+            <label htmlFor="phone" className="label">Phone Number (optional)</label>
             <input
+              id="phone"
               type="tel"
               name="phone"
               value={form.phone}

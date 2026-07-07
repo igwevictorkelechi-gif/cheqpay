@@ -87,7 +87,8 @@ export default function NotificationsSheet({
           <h2 className="text-lg font-bold text-ink">Notifications</h2>
           <button
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+            aria-label="Close"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
           >
             <X className="h-5 w-5" />
           </button>
