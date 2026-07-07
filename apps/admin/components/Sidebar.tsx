@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
-  Banknote, type LucideIcon,
+  Banknote, MessageSquare, type LucideIcon,
 } from 'lucide-react';
 
 type Item = { label: string; href: string; icon: LucideIcon };
@@ -61,6 +61,7 @@ const categories: Category[] = [
     items: [
       { label: 'Payment Settings', href: '/payment-settings', icon: CreditCard },
       { label: 'Provider Settings', href: '/provider-settings', icon: Server },
+      { label: 'Support Contact', href: '/support-contact', icon: MessageSquare },
       { label: 'Admin Profile', href: '/profile', icon: ShieldCheck },
     ],
   },
@@ -70,11 +71,25 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
   const pathname = usePathname();
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
+  const [pendingWithdrawals, setPendingWithdrawals] = useState(0);
   useEffect(() => {
     fetch('/api/auth')
       .then((r) => r.json())
       .then((d) => setEmail(d.email ?? null))
       .catch(() => {});
+  }, []);
+  // Live count of withdrawals awaiting review — surfaced as a nav badge so the
+  // admin sees queued payouts the moment they open the dashboard.
+  useEffect(() => {
+    let active = true;
+    const poll = () =>
+      fetch('/api/withdrawals', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : { withdrawals: [] }))
+        .then((d) => { if (active) setPendingWithdrawals(Array.isArray(d.withdrawals) ? d.withdrawals.length : 0); })
+        .catch(() => {});
+    poll();
+    const id = setInterval(poll, 60_000);
+    return () => { active = false; clearInterval(id); };
   }, []);
   const logout = async () => {
     try {
@@ -157,7 +172,12 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
                           }
                         >
                           <Icon size={18} />
-                          <span>{item.label}</span>
+                          <span className="flex-1">{item.label}</span>
+                          {item.href === '/withdrawals' && pendingWithdrawals > 0 && (
+                            <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white">
+                              {pendingWithdrawals}
+                            </span>
+                          )}
                         </Link>
                       );
                     })}

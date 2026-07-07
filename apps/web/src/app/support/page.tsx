@@ -1,32 +1,49 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mail, MessageCircle, Phone, HelpCircle, FileText, Sparkles } from "lucide-react";
 import InfoPage, { Section } from "@/components/InfoPage";
+import { api } from "@/services/api";
+
+type Channel = { icon: typeof Mail; title: string; subtitle: string; href: string };
 
 export default function SupportPage() {
   const router = useRouter();
+  const [contact, setContact] = useState<{ email: string; phone: string; whatsapp: string }>({
+    email: "support@cheqpay.com",
+    phone: "",
+    whatsapp: "",
+  });
 
-  const channels = [
-    {
+  useEffect(() => {
+    api
+      .getSupportContact()
+      .then(setContact)
+      .catch(() => undefined);
+  }, []);
+
+  // Only render channels the business has configured — no placeholder numbers.
+  const channels: Channel[] = [
+    contact.email && {
       icon: Mail,
       title: "Email us",
-      subtitle: "support@cheqpay.com",
-      href: "mailto:support@cheqpay.com",
+      subtitle: contact.email,
+      href: `mailto:${contact.email}`,
     },
-    {
+    contact.whatsapp && {
       icon: MessageCircle,
-      title: "Live chat / WhatsApp",
+      title: "WhatsApp",
       subtitle: "Chat with our team",
-      href: "https://wa.me/2348000000000",
+      href: `https://wa.me/${contact.whatsapp.replace(/[^\d]/g, "")}`,
     },
-    {
+    contact.phone && {
       icon: Phone,
       title: "Call us",
-      subtitle: "+234 800 000 0000",
-      href: "tel:+2348000000000",
+      subtitle: contact.phone,
+      href: `tel:${contact.phone.replace(/\s/g, "")}`,
     },
-  ];
+  ].filter(Boolean) as Channel[];
 
   return (
     <InfoPage title="Help & Support" subtitle="We're here to help, 24/7.">

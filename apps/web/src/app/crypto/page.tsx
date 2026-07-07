@@ -18,6 +18,7 @@ import { api, ApiError, type LedgerTransaction } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
 import TxnRow from "@/components/TxnRow";
 import KycBanner from "@/components/KycBanner";
+import NotificationsSheet from "@/components/NotificationsSheet";
 
 const BAL_CACHE = "cheqpay:crypto:bal";
 const NGN_CACHE = "cheqpay:crypto:ngn";
@@ -45,6 +46,7 @@ export default function CryptoPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { showBalance, toggleBalance } = useUIStore();
+  const [notifOpen, setNotifOpen] = useState(false);
   // Paint last-known balances instantly from cache, then refresh in the
   // background so the screen never blocks on the network.
   const [bal, setBal] = useState<Record<string, string>>(
@@ -122,7 +124,7 @@ export default function CryptoPage() {
         icons={[
           { icon: Search, onClick: () => router.push("/transactions") },
           { icon: showBalance ? Eye : EyeOff, onClick: toggleBalance },
-          { icon: Bell, onClick: () => toast.show("No new notifications") },
+          { icon: Bell, onClick: () => setNotifOpen(true) },
         ]}
       />
 
@@ -186,6 +188,7 @@ export default function CryptoPage() {
         )}
       </div>
       {toast.node}
+      <NotificationsSheet open={notifOpen} onClose={() => setNotifOpen(false)} />
     </AppShell>
   );
 }

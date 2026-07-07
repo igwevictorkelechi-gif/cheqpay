@@ -16,6 +16,7 @@ import {
 } from "@/components/MobileUI";
 import TxnRow from "@/components/TxnRow";
 import KycBanner from "@/components/KycBanner";
+import NotificationsSheet from "@/components/NotificationsSheet";
 import { authService } from "@/services/auth";
 import { useAuthStore, useUIStore } from "@/store";
 import { api, ApiError, type LedgerTransaction } from "@/services/api";
@@ -29,6 +30,7 @@ export default function HomePage() {
   const { user, setUser } = useAuthStore();
   const { showBalance, toggleBalance } = useUIStore();
   const toast = useToast();
+  const [notifOpen, setNotifOpen] = useState(false);
 
   // NGN cash balance from the custody ledger (where deposits + crypto sells land).
   const [ngn, setNgn] = useState<number>(() => readCache<number>(CASH_CACHE) ?? 0);
@@ -91,13 +93,33 @@ export default function HomePage() {
         icons={[
           { icon: Search, onClick: () => router.push("/transactions") },
           { icon: showBalance ? Eye : EyeOff, onClick: toggleBalance },
-          { icon: Bell, onClick: () => toast.show("No new notifications") },
+          { icon: Bell, onClick: () => setNotifOpen(true) },
         ]}
       />
 
       <BalanceBlock label="Total Cash Balance" amount={formattedBalance} />
 
       <KycBanner />
+
+      {/* First-run nudge: no money and no history yet. */}
+      {ngn === 0 && txns.length === 0 && (
+        <div className="mb-6 px-5">
+          <button
+            onClick={() => router.push("/deposit")}
+            className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-r from-brand to-brand-light p-5 text-left active:scale-[0.99]"
+          >
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20">
+              <ArrowDown className="h-6 w-6 text-white" />
+            </span>
+            <div className="flex-1">
+              <p className="text-base font-bold text-white">Add money to get started</p>
+              <p className="mt-0.5 text-sm text-white/80">
+                Fund your wallet by bank transfer to buy crypto and pay bills.
+              </p>
+            </div>
+          </button>
+        </div>
+      )}
 
       <ActionRow>
         <CircleAction icon={ArrowDown} label="Deposit" onClick={() => router.push("/deposit")} />
@@ -143,6 +165,7 @@ export default function HomePage() {
         )}
       </div>
       {toast.node}
+      <NotificationsSheet open={notifOpen} onClose={() => setNotifOpen(false)} />
     </AppShell>
   );
 }
