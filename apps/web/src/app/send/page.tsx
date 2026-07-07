@@ -95,8 +95,9 @@ export default function SendMoneyPage() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="label">Recipient Phone Number</label>
+              <label htmlFor="recipientPhone" className="label">Recipient Phone Number</label>
               <input
+                id="recipientPhone"
                 type="tel"
                 name="recipientPhone"
                 value={formData.recipientPhone}
@@ -105,14 +106,15 @@ export default function SendMoneyPage() {
                 className="input"
                 disabled={loading}
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-muted">
                 Recipient must be a CheqPay user
               </p>
             </div>
 
             <div>
-              <label className="label">Amount (₦)</label>
+              <label htmlFor="amount" className="label">Amount (₦)</label>
               <input
+                id="amount"
                 type="number"
                 name="amount"
                 value={formData.amount}
@@ -121,14 +123,15 @@ export default function SendMoneyPage() {
                 className="input"
                 disabled={loading}
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-muted">
                 Min: ₦50 | Max: ₦5,000,000
               </p>
             </div>
 
             <div>
-              <label className="label">Narration (Optional)</label>
+              <label htmlFor="narration" className="label">Narration (Optional)</label>
               <textarea
+                id="narration"
                 name="narration"
                 value={formData.narration}
                 onChange={handleChange}
@@ -140,20 +143,20 @@ export default function SendMoneyPage() {
             </div>
 
             {/* Balance Info */}
-            <div className="rounded-lg bg-blue-50 p-4 border border-blue-200">
-              <p className="text-sm text-blue-900">
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <p className="text-sm text-ink">
                 Available Balance: <strong>₦{(wallet?.balance || 0).toLocaleString()}</strong>
               </p>
             </div>
 
             {error && (
-              <div className="rounded-lg bg-red-50 p-4 text-sm text-red-800 border border-red-200">
+              <div className="rounded-lg bg-red-500/10 p-4 text-sm text-red-400">
                 {error}
               </div>
             )}
 
             {success && (
-              <div className="rounded-lg bg-green-50 p-4 text-sm text-green-800 border border-green-200">
+              <div className="rounded-lg bg-green-500/10 p-4 text-sm text-green-400">
                 {success}
               </div>
             )}

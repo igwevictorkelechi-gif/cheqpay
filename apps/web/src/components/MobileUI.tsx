@@ -36,15 +36,18 @@ export function Avatar({ name }: { name?: string | null }) {
 /** Round white icon button used in the top bar. */
 export function TopIcon({
   icon: Icon,
+  label,
   onClick,
 }: {
   icon: LucideIcon;
+  label: string;
   onClick?: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className="ml-3 flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink shadow-sm transition hover:opacity-80"
+      aria-label={label}
+      className="ml-3 flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink shadow-sm transition hover:opacity-80"
     >
       <Icon className="h-[18px] w-[18px]" />
     </button>
@@ -58,7 +61,7 @@ export function TopBar({
   onAvatar,
 }: {
   name?: string | null;
-  icons: { icon: LucideIcon; onClick?: () => void }[];
+  icons: { icon: LucideIcon; label: string; onClick?: () => void }[];
   onAvatar?: () => void;
 }) {
   return (
@@ -72,7 +75,7 @@ export function TopBar({
       )}
       <div className="flex items-center">
         {icons.map((it, i) => (
-          <TopIcon key={i} icon={it.icon} onClick={it.onClick} />
+          <TopIcon key={i} icon={it.icon} label={it.label} onClick={it.onClick} />
         ))}
       </div>
     </div>

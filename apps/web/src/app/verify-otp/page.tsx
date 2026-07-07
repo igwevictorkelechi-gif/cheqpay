@@ -91,8 +91,9 @@ function VerifyOTPForm() {
 
         <form onSubmit={handleVerifyOTP} className="mt-6 space-y-4">
           <div>
-            <label className="label">OTP Code</label>
+            <label htmlFor="otp" className="label">OTP Code</label>
             <input
+              id="otp"
               type="text"
               value={otp}
               onChange={(e) => {
@@ -105,13 +106,13 @@ function VerifyOTPForm() {
               className="input text-center text-2xl font-bold tracking-widest"
               disabled={loading}
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted">
               Enter the code you received via email
             </p>
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
+            <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-400">
               {error}
             </div>
           )}
@@ -125,12 +126,12 @@ function VerifyOTPForm() {
           </button>
         </form>
 
-        <div className="mt-6 border-t border-gray-200 pt-6 text-center">
-          <p className="text-sm text-gray-600">Didn&apos;t receive the code?</p>
+        <div className="mt-6 border-t border-border pt-6 text-center">
+          <p className="text-sm text-muted">Didn&apos;t receive the code?</p>
           <button
             onClick={handleResendOTP}
             disabled={resendTimer > 0}
-            className="mt-2 font-medium text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+            className="mt-2 font-medium text-brand-light hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend OTP"}
           </button>

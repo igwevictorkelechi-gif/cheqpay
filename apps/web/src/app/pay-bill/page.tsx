@@ -45,8 +45,8 @@ export default function PayBillPage() {
         name={user?.full_name}
         onAvatar={() => router.push("/profile")}
         icons={[
-          { icon: Search, onClick: () => router.push("/transactions") },
-          { icon: Bell, onClick: () => toast.show("No new notifications") },
+          { icon: Search, label: "View transactions", onClick: () => router.push("/transactions") },
+          { icon: Bell, label: "Notifications", onClick: () => toast.show("No new notifications") },
         ]}
       />
 

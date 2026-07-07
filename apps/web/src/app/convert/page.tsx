@@ -194,6 +194,7 @@ export default function ConvertPage() {
         <button
           onClick={() => router.back()}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink"
+          aria-label="Go back"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -273,7 +274,8 @@ export default function ConvertPage() {
               <h2 className="text-lg font-bold text-ink">Select asset</h2>
               <button
                 onClick={() => setPicker(null)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-card text-muted"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-muted"
+                aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>

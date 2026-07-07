@@ -116,6 +116,7 @@ export default function BankAccountsPage() {
         <button
           onClick={() => (mode === "add" ? (resetForm(), setMode("list")) : router.back())}
           className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink"
+          aria-label="Go back"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>

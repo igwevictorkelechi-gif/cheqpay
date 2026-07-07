@@ -155,6 +155,7 @@ export default function ProfilePage() {
         <button
           onClick={() => router.back()}
           className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink"
+          aria-label="Close"
         >
           <X className="h-5 w-5" />
         </button>

@@ -38,6 +38,7 @@ export default function AddMoneyPage() {
         <button
           onClick={() => router.back()}
           className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink"
+          aria-label="Go back"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
