@@ -27,6 +27,7 @@ const CRYPTO_TYPES = new Set(["BUY", "SELL", "CONVERT"]);
 const assetMeta = [
   { symbol: "BTC" as const, name: "Bitcoin", bg: "#F7931A", glyph: "₿" },
   { symbol: "USDT" as const, name: "Tether", bg: "#26A17B", glyph: "₮" },
+  { symbol: "USDC" as const, name: "USD Coin", bg: "#2775CA", glyph: "$" },
 ];
 
 function CoinIcon({ bg, glyph }: { bg: string; glyph: string }) {
@@ -60,10 +61,11 @@ export default function CryptoPage() {
     let active = true;
 
     async function refresh() {
-      const [{ balances }, btc, usdt, txRes] = await Promise.all([
+      const [{ balances }, btc, usdt, usdc, txRes] = await Promise.all([
         api.getBalances(),
         api.getPrice("BTC").catch(() => null),
         api.getPrice("USDT").catch(() => null),
+        api.getPrice("USDC").catch(() => null),
         api.getTransactions(20).catch(() => ({ transactions: [] as LedgerTransaction[] })),
       ]);
       if (!active) return;
@@ -72,11 +74,12 @@ export default function CryptoPage() {
       const prices: Record<string, number> = {
         BTC: btc?.priceNgn ? Number(btc.priceNgn) : 0,
         USDT: usdt?.priceNgn ? Number(usdt.priceNgn) : 0,
+        USDC: usdc?.priceNgn ? Number(usdc.priceNgn) : 0,
       };
       const value: Record<string, number> = {};
-      for (const a of ["BTC", "USDT"]) value[a] = Number(map[a] ?? 0) * prices[a];
+      for (const a of ["BTC", "USDT", "USDC"]) value[a] = Number(map[a] ?? 0) * prices[a];
       const cryptoTx = txRes.transactions.filter(
-        (t) => CRYPTO_TYPES.has(t.type) || t.asset === "BTC" || t.asset === "USDT"
+        (t) => CRYPTO_TYPES.has(t.type) || t.asset !== "NGN"
       );
       setBal(map);
       setNgn(value);
@@ -106,7 +109,7 @@ export default function CryptoPage() {
     };
   }, []);
 
-  const totalNgn = (ngn.BTC ?? 0) + (ngn.USDT ?? 0);
+  const totalNgn = (ngn.BTC ?? 0) + (ngn.USDT ?? 0) + (ngn.USDC ?? 0);
   const fmtNgn = (n: number) =>
     "₦" + n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const toast = useToast();

@@ -55,10 +55,11 @@ function AssetCard({
 }
 
 /** Resolve which API call a from/to pair uses. */
+type CryptoLeg = Exclude<ConvertSymbol, "NGN">;
 function resolveMode(fromSym: ConvertSymbol, toSym: ConvertSymbol) {
-  if (fromSym === "NGN") return { kind: "buy" as const, crypto: toSym as "BTC" | "USDT" };
-  if (toSym === "NGN") return { kind: "sell" as const, crypto: fromSym as "BTC" | "USDT" };
-  return { kind: "convert" as const, crypto: fromSym as "BTC" | "USDT" };
+  if (fromSym === "NGN") return { kind: "buy" as const, crypto: toSym as CryptoLeg };
+  if (toSym === "NGN") return { kind: "sell" as const, crypto: fromSym as CryptoLeg };
+  return { kind: "convert" as const, crypto: fromSym as CryptoLeg };
 }
 
 export default function ConvertPage() {
@@ -135,7 +136,7 @@ export default function ConvertPage() {
           const m = resolveMode(f, t);
           const q =
             m.kind === "convert"
-              ? await api.createConvertQuote(f as "BTC" | "USDT", t as "BTC" | "USDT", amt)
+              ? await api.createConvertQuote(f as CryptoLeg, t as CryptoLeg, amt)
               : await api.createQuote(m.kind, m.crypto, amt);
           setOut(formatMinor(q.amountOut, t));
           setRate(q.rate);

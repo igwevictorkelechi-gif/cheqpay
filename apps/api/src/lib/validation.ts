@@ -86,7 +86,7 @@ export type CryptoWithdrawalInput = z.infer<typeof cryptoWithdrawalSchema>;
 /** Create a swap quote. `amount` is a decimal string in the FROM asset. */
 export const quoteCreateSchema = z.object({
   side: z.enum(["buy", "sell"]),
-  asset: z.enum(["BTC", "USDT"]), // the crypto leg
+  asset: z.enum(["BTC", "USDT", "USDC"]), // the crypto leg
   amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount"),
 });
 export type QuoteCreateInput = z.infer<typeof quoteCreateSchema>;
@@ -98,8 +98,8 @@ export type QuoteCreateInput = z.infer<typeof quoteCreateSchema>;
  */
 export const convertQuoteSchema = z
   .object({
-    fromAsset: z.enum(["BTC", "USDT"]),
-    toAsset: z.enum(["BTC", "USDT"]),
+    fromAsset: z.enum(["BTC", "USDT", "USDC"]),
+    toAsset: z.enum(["BTC", "USDT", "USDC"]),
     amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount"),
   })
   .refine((v) => v.fromAsset !== v.toAsset, {

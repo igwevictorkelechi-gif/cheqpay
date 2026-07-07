@@ -123,9 +123,9 @@ export default function AssetPage() {
 
   const values = useMemo(() => {
     if (candles.length > 0) return candles.map((c) => Number(c.close));
-    // USDT is a stablecoin with no candle history — render a flat line at its
+    // Stablecoins may have no candle history — render a flat line at the
     // current NGN value so the chart shows instead of "unavailable".
-    if (symbol === "USDT" && priceNgn) {
+    if ((symbol === "USDT" || symbol === "USDC") && priceNgn) {
       const p = Number(priceNgn);
       return Array.from({ length: 24 }, () => p);
     }

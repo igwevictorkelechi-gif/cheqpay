@@ -66,20 +66,22 @@ export function isAssetEnabled(symbol: string): boolean {
 }
 
 /** All assets the convert/swap flow can switch between. NGN is the fiat leg. */
-export type ConvertSymbol = "NGN" | "BTC" | "USDT";
+export type ConvertSymbol = "NGN" | "BTC" | "USDT" | "USDC";
 
-export const CONVERT_ASSETS: ConvertSymbol[] = ["NGN", "BTC", "USDT"];
+export const CONVERT_ASSETS: ConvertSymbol[] = ["NGN", "BTC", "USDT", "USDC"];
 
 export const ASSET_DECIMALS: Record<ConvertSymbol, number> = {
   NGN: 2,
   BTC: 8,
   USDT: 6,
+  USDC: 6,
 };
 
 export const ASSET_NAMES: Record<ConvertSymbol, string> = {
   NGN: "Nigerian Naira",
   BTC: "Bitcoin",
   USDT: "Tether",
+  USDC: "USD Coin",
 };
 
 /** Format a minor-unit string/bigint into a human decimal string for display. */
