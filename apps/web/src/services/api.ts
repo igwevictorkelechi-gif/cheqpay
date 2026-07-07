@@ -389,6 +389,11 @@ export const api = {
     return apiFetch(`/api/beneficiaries/${id}`, { method: "DELETE" });
   },
 
+  /** Public support contact details (admin-editable). */
+  getSupportContact(): Promise<{ email: string; phone: string; whatsapp: string }> {
+    return apiFetch("/api/support/contact");
+  },
+
   /** Ask the AI support agent a question (FAQ-grounded). */
   supportChat(
     messages: { role: "user" | "assistant"; content: string }[]

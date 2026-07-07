@@ -16,6 +16,7 @@ import { getTierLimits, MAX_TIER } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { sendPush } from "@/lib/push";
+import { notifyAdminAlert } from "@/lib/adminAlert";
 import { cryptoToNgnKobo } from "@/lib/rates";
 import { getUsdtNgnRate } from "@/lib/settings";
 import {
@@ -162,6 +163,10 @@ export async function POST(req: Request) {
         body: `Your ${asset} withdrawal is being reviewed by our compliance team.`,
         data: { transactionId: tx.id },
       });
+      await notifyAdminAlert(
+        `⚠️ ${asset} withdrawal held for compliance review: ${fromMinorUnits(amountMinor, asset)} ${asset}. Reasons: ${aml.reasons.join(", ")}. Review it on the Withdrawals Review page.`,
+        { asset, amount: `${fromMinorUnits(amountMinor, asset)} ${asset}`, transactionId: tx.id }
+      );
       return jsonOk({ transactionId: tx.id, status: "under_review", reasons: aml.reasons });
     }
 
@@ -182,6 +187,17 @@ export async function POST(req: Request) {
         body: `Your ${fromMinorUnits(amountMinor, asset)} ${asset} withdrawal is being processed. You'll be notified when it's sent.`,
         data: { transactionId: tx.id },
       });
+      // Alert the operations team — a manual payout is waiting for approval.
+      await notifyAdminAlert(
+        `🔔 Manual ${asset} withdrawal queued: ${fromMinorUnits(amountMinor, asset)} ${asset} to ${body.toAddress}. Approve it on the Withdrawals Review page.`,
+        {
+          asset,
+          network,
+          amount: `${fromMinorUnits(amountMinor, asset)} ${asset}`,
+          toAddress: body.toAddress,
+          transactionId: tx.id,
+        }
+      );
       return jsonOk({ transactionId: tx.id, status: "processing" });
     }
 

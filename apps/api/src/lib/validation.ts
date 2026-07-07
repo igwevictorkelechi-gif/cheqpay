@@ -151,6 +151,19 @@ export const platformSettingsUpdateSchema = z
   });
 export type PlatformSettingsUpdate = z.infer<typeof platformSettingsUpdateSchema>;
 
+/** Admin update of the public support contact details. */
+export const supportContactUpdateSchema = z
+  .object({
+    email: z.string().trim().email("Enter a valid email").max(120).optional(),
+    // Phone/WhatsApp are free-form (may be blank to hide the channel).
+    phone: z.string().trim().max(30).optional(),
+    whatsapp: z.string().trim().max(30).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, {
+    message: "Provide at least one field to update",
+  });
+export type SupportContactUpdate = z.infer<typeof supportContactUpdateSchema>;
+
 /** Update per-category notification opt-ins (any subset of booleans). */
 export const notificationPrefsSchema = z
   .object({

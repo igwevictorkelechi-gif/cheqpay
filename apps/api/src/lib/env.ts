@@ -111,6 +111,12 @@ const envSchema = z.object({
   // degrades to a "contact human support" reply instead of erroring.
   ANTHROPIC_API_KEY: z.string().optional(),
 
+  // Optional operations alerting. When set, a JSON message is POSTed here
+  // whenever a withdrawal needs the operations team (e.g. a manual crypto
+  // payout queues, or a payout is held for review). Works with Slack /
+  // Discord / Zapier "incoming webhook" URLs — no extra service required.
+  ADMIN_ALERT_WEBHOOK: z.string().url().optional(),
+
   // Scheduled jobs. CRON_SECRET gates the /api/cron/* endpoints (Vercel Cron
   // sends it automatically as `Authorization: Bearer <secret>`).
   CRON_SECRET: z.string().min(16).optional(),

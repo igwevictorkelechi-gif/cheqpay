@@ -9,7 +9,17 @@ export const SETTING_KEYS = {
   DEPOSIT_FEE_BPS: "deposit_fee_bps", // % of each NGN deposit, in basis points
   WITHDRAWAL_FEE_NGN: "withdrawal_fee_ngn", // flat NGN fee per bank payout
   BILL_MARGIN_BPS: "bill_margin_bps", // markup on bill payments, in basis points
+  // Public support contact details, shown on the app's Help & Support page.
+  SUPPORT_EMAIL: "support_email",
+  SUPPORT_PHONE: "support_phone",
+  SUPPORT_WHATSAPP: "support_whatsapp",
 } as const;
+
+export interface SupportContact {
+  email: string;
+  phone: string;
+  whatsapp: string;
+}
 
 // --- Pure parsers/validators (unit-tested, no DB) ---------------------------
 
@@ -107,6 +117,43 @@ export async function setBillMarginBps(bps: number, updatedBy?: string) {
 export function feeFromBps(amountMinor: bigint, bps: number): bigint {
   if (bps <= 0) return 0n;
   return (amountMinor * BigInt(Math.trunc(bps))) / 10_000n;
+}
+
+// --- Support contact (public, admin-editable) --------------------------------
+
+/** Public support contact details. Unset phone/whatsapp render as empty. */
+export async function getSupportContact(): Promise<SupportContact> {
+  const rows = await prisma.platformSetting.findMany({
+    where: {
+      key: {
+        in: [
+          SETTING_KEYS.SUPPORT_EMAIL,
+          SETTING_KEYS.SUPPORT_PHONE,
+          SETTING_KEYS.SUPPORT_WHATSAPP,
+        ],
+      },
+    },
+  });
+  const byKey = new Map(rows.map((r) => [r.key, r.value.trim()]));
+  return {
+    // Email defaults to the brand address; phone/whatsapp stay empty until set
+    // so the app never shows a placeholder number.
+    email: byKey.get(SETTING_KEYS.SUPPORT_EMAIL) || "support@cheqpay.com",
+    phone: byKey.get(SETTING_KEYS.SUPPORT_PHONE) || "",
+    whatsapp: byKey.get(SETTING_KEYS.SUPPORT_WHATSAPP) || "",
+  };
+}
+
+export async function setSupportContact(
+  patch: Partial<SupportContact>,
+  updatedBy?: string
+): Promise<void> {
+  if (patch.email !== undefined)
+    await upsertSetting(SETTING_KEYS.SUPPORT_EMAIL, patch.email.trim(), updatedBy);
+  if (patch.phone !== undefined)
+    await upsertSetting(SETTING_KEYS.SUPPORT_PHONE, patch.phone.trim(), updatedBy);
+  if (patch.whatsapp !== undefined)
+    await upsertSetting(SETTING_KEYS.SUPPORT_WHATSAPP, patch.whatsapp.trim(), updatedBy);
 }
 
 async function upsertSetting(key: string, value: string, updatedBy?: string) {
