@@ -30,11 +30,10 @@ const items: Item[] = [
     subtitle: "Personal details, account limits, statements, delete account",
     href: "/account",
   },
-  { title: "Recipients", subtitle: "Bank accounts, Mobile money", href: "/send" },
   {
     title: "Connected bank accounts",
-    subtitle: "Manage your payment accounts",
-    href: "/settings",
+    subtitle: "Bank accounts saved for withdrawals",
+    href: "/bank-accounts",
   },
   {
     title: "Security",
