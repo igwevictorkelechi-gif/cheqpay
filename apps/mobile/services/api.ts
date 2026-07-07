@@ -137,6 +137,7 @@ export interface LedgerTransaction {
   billerName: string | null;
   planName: string | null;
   customer: string | null;
+  token: string | null;
 }
 
 // ---- Endpoints ----
@@ -338,11 +339,72 @@ export const api = {
     customer: string;
     planId?: string;
     amount?: string;
-  }): Promise<{ transactionId: string; status: string; providerRef?: string }> {
+  }): Promise<{ transactionId: string; status: string; providerRef?: string; token?: string | null }> {
     return apiFetch('/api/bills/pay', {
       method: 'POST',
       headers: { 'idempotency-key': idemKey() },
       body: JSON.stringify(input),
     });
   },
+
+  // ---- NGN payout (bank accounts / beneficiaries) ----
+  getBanks(): Promise<{ banks: Bank[] }> {
+    return apiFetch('/api/banks');
+  },
+
+  resolveBankAccount(input: {
+    accountNumber: string;
+    bankCode: string;
+  }): Promise<{ accountName: string }> {
+    return apiFetch('/api/banks/resolve', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+
+  getBeneficiaries(): Promise<{ beneficiaries: Beneficiary[] }> {
+    return apiFetch('/api/beneficiaries');
+  },
+
+  addBeneficiary(input: {
+    bankCode: string;
+    bankName: string;
+    accountNumber: string;
+  }): Promise<{ beneficiary: Beneficiary }> {
+    return apiFetch('/api/beneficiaries', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+
+  deleteBeneficiary(id: string): Promise<{ deleted: boolean }> {
+    return apiFetch(`/api/beneficiaries/${id}`, { method: 'DELETE' });
+  },
+
+  // ---- Support ----
+  getSupportContact(): Promise<{ email: string; phone: string; whatsapp: string }> {
+    return apiFetch('/api/support/contact');
+  },
+
+  supportChat(
+    messages: { role: 'user' | 'assistant'; content: string }[]
+  ): Promise<{ reply: string; agent: boolean }> {
+    return apiFetch('/api/support/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages }),
+    });
+  },
 };
+
+export interface Bank {
+  code: string;
+  name: string;
+}
+
+export interface Beneficiary {
+  id: string;
+  bankCode: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}

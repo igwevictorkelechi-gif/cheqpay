@@ -17,8 +17,7 @@ const items: Item[] = [
     subtitle: 'Personal details, account limits, statements, delete account',
     route: '/(app)/account',
   },
-  { title: 'Recipients', subtitle: 'Bank accounts, Mobile money', route: '/(app)/send-money' },
-  { title: 'Connected bank accounts', subtitle: 'Manage your payment accounts', route: '/(app)/settings' },
+  { title: 'Connected bank accounts', subtitle: 'Bank accounts saved for withdrawals', route: '/(app)/bank-accounts' },
   { title: 'Security', subtitle: '2FA, app lock, passcode, biometrics, instant withdrawal', route: '/(app)/security' },
   { title: 'Preferences', subtitle: 'Notifications, display currency & app themes', route: '/(app)/preferences' },
   { title: 'About us', subtitle: 'FAQs, privacy policy, our blog, contact us', route: '/(app)/settings' },
@@ -30,15 +29,23 @@ function FeatureCard({
   subtitle,
   cardBg,
   iconBg,
+  onPress,
 }: {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   title: string;
   subtitle: string;
   cardBg: string;
   iconBg: string;
+  onPress?: () => void;
 }) {
   return (
-    <View className="flex-1 rounded-3xl p-4 justify-between" style={{ minHeight: 130, backgroundColor: cardBg }}>
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onPress}
+      disabled={!onPress}
+      className="flex-1 rounded-3xl p-4 justify-between"
+      style={{ minHeight: 130, backgroundColor: cardBg }}
+    >
       <View className="w-9 h-9 rounded-full items-center justify-center" style={{ backgroundColor: iconBg }}>
         <Ionicons name={icon} size={18} color="#FFFFFF" />
       </View>
@@ -46,7 +53,7 @@ function FeatureCard({
         <Text className="text-ink text-base font-bold">{title}</Text>
         <Text className="text-muted text-xs mt-0.5">{subtitle}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -206,6 +213,7 @@ export default function ProfileScreen() {
             subtitle="Chat with us"
             cardBg="#161320"
             iconBg={colors.circle}
+            onPress={() => router.push('/(app)/support')}
           />
         </View>
 
