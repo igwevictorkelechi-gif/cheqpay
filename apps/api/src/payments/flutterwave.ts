@@ -1,18 +1,19 @@
 import { timingSafeEqual } from "node:crypto";
-import type {
-  Bank,
-  BillPayInput,
-  BillPayResult,
-  BillValidateInput,
-  BillValidateResult,
-  CreateVirtualAccountInput,
-  NgnChargeEvent,
-  NgnTransferEvent,
-  PaymentProvider,
-  ResolveAccountInput,
-  ResolveAccountResult,
-  TransferResult,
-  VirtualAccountResult,
+import {
+  BillPaymentError,
+  type Bank,
+  type BillPayInput,
+  type BillPayResult,
+  type BillValidateInput,
+  type BillValidateResult,
+  type CreateVirtualAccountInput,
+  type NgnChargeEvent,
+  type NgnTransferEvent,
+  type PaymentProvider,
+  type ResolveAccountInput,
+  type ResolveAccountResult,
+  type TransferResult,
+  type VirtualAccountResult,
 } from "./types";
 
 const FLW_BASE = "https://api.flutterwave.com/v3";
@@ -227,11 +228,25 @@ export class FlutterwaveProvider implements PaymentProvider {
   }
 
   async payBill(input: BillPayInput): Promise<BillPayResult> {
-    // Preferred: the per-biller item payment endpoint (current FLW bills API).
-    // Fallback: the legacy /bills endpoint by bill type (no item code known).
-    const useItem = !!(input.flwBillerCode && input.flwItemCode);
+    // Flutterwave pays a bill against a specific biller ITEM (e.g. a disco's
+    // "prepaid" product, a data bundle, a cable package). Airtime is the one
+    // service that also works via the simple type-based /v3/bills endpoint.
+    //
+    // Item codes + amounts are provider-managed and change over time, so we
+    // resolve a valid item code live from Flutterwave rather than hard-coding
+    // it. Falls back to /v3/bills (type-based) only when we can't resolve one.
+    let itemCode = input.flwItemCode;
+    if (!itemCode && input.flwBillerCode && input.service !== "airtime") {
+      itemCode = await this.resolveItemCode(
+        input.flwBillerCode,
+        input.service,
+        input.amount
+      );
+    }
+
+    const useItem = !!(input.flwBillerCode && itemCode);
     const url = useItem
-      ? `${FLW_BASE}/billers/${input.flwBillerCode}/items/${input.flwItemCode}/payment`
+      ? `${FLW_BASE}/billers/${input.flwBillerCode}/items/${itemCode}/payment`
       : `${FLW_BASE}/bills`;
     const body = useItem
       ? {
@@ -262,8 +277,21 @@ export class FlutterwaveProvider implements PaymentProvider {
       data?: Record<string, unknown>;
     };
     if (!res.ok || json.status !== "success" || !json.data) {
-      throw new Error(
-        `Flutterwave bill payment failed: ${res.status} ${json.message ?? ""}`.trim()
+      // Surface Flutterwave's own reason (safe: it carries no credentials) so
+      // the app can tell the user *why* — e.g. insufficient Flutterwave
+      // balance, biller unavailable, invalid customer.
+      console.error("[flutterwave] payBill failed", {
+        endpoint: useItem ? "biller-item" : "bills",
+        billerCode: input.flwBillerCode,
+        itemCode,
+        httpStatus: res.status,
+        providerStatus: json.status,
+        providerMessage: json.message,
+      });
+      throw new BillPaymentError(
+        `Flutterwave bill payment failed (HTTP ${res.status})`,
+        typeof json.message === "string" ? json.message : undefined,
+        res.status
       );
     }
     const d = json.data;
@@ -283,6 +311,64 @@ export class FlutterwaveProvider implements PaymentProvider {
       token = await this.requeryBillToken(input.reference);
     }
     return { providerRef, status, token };
+  }
+
+  /**
+   * Resolve a valid Flutterwave item code for a biller. For fixed-price
+   * services (data bundles, cable packages) we match the item whose amount
+   * equals the plan amount; for variable services (electricity) we prefer the
+   * "prepaid" item, falling back to the first item. Returns undefined if the
+   * biller has no items or the lookup fails — the caller then uses /v3/bills.
+   */
+  private async resolveItemCode(
+    billerCode: string,
+    service: string,
+    amount: string
+  ): Promise<string | undefined> {
+    try {
+      const res = await fetch(`${FLW_BASE}/billers/${billerCode}/items`, {
+        headers: { authorization: `Bearer ${this.secretKey}` },
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        status?: string;
+        data?: Array<Record<string, unknown>>;
+      };
+      if (!res.ok || json.status !== "success" || !Array.isArray(json.data) || json.data.length === 0) {
+        console.error("[flutterwave] biller items lookup failed", {
+          billerCode,
+          httpStatus: res.status,
+          providerStatus: json.status,
+        });
+        return undefined;
+      }
+      const items = json.data;
+      const codeOf = (it: Record<string, unknown>): string | undefined => {
+        const c = it.item_code ?? it.itemCode ?? it.biller_code;
+        return typeof c === "string" && c ? c : undefined;
+      };
+
+      // Fixed-price services: match the item priced at the plan amount.
+      const want = Number(amount);
+      const byAmount = items.find((it) => Number(it.amount) === want);
+      if (byAmount) return codeOf(byAmount);
+
+      // Variable services (electricity): prefer a prepaid item.
+      if (service === "electricity") {
+        const prepaid = items.find((it) =>
+          String(it.name ?? "").toLowerCase().includes("prepaid")
+        );
+        if (prepaid) return codeOf(prepaid);
+      }
+
+      // Otherwise a variable/first item.
+      const variable = items.find(
+        (it) => it.is_amount_fixed === 0 || it.is_amount_fixed === false || it.amount === 0
+      );
+      return codeOf(variable ?? items[0]);
+    } catch (err) {
+      console.error("[flutterwave] biller items lookup error", billerCode, err);
+      return undefined;
+    }
   }
 
   /** Requery a bill payment to pick up the prepaid token once processed. */
