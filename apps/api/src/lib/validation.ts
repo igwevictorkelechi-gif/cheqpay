@@ -139,9 +139,15 @@ export const platformSettingsUpdateSchema = z
   .object({
     spreadBps: z.number().int().min(0).max(10_000).optional(),
     usdtNgnRate: z.number().positive().max(1_000_000).optional(),
+    /** Deposit fee in basis points (max 5%). */
+    depositFeeBps: z.number().int().min(0).max(500).optional(),
+    /** Flat withdrawal fee in NGN (max ₦10,000). */
+    withdrawalFeeNgn: z.number().min(0).max(10_000).optional(),
+    /** Bill-payment profit margin in basis points (max 20%). */
+    billMarginBps: z.number().int().min(0).max(2_000).optional(),
   })
-  .refine((v) => v.spreadBps !== undefined || v.usdtNgnRate !== undefined, {
-    message: "Provide at least one of spreadBps or usdtNgnRate",
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message: "Provide at least one setting to update",
   });
 export type PlatformSettingsUpdate = z.infer<typeof platformSettingsUpdateSchema>;
 

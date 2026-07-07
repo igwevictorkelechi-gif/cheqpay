@@ -8,6 +8,7 @@ import { getBiller, getPlan, getServiceConfig } from "@/lib/bills";
 import { billPaySchema } from "@/lib/validation";
 import { sendPush } from "@/lib/push";
 import { BillPaymentError } from "@/payments/types";
+import { feeFromBps, getBillMarginBps } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,11 @@ export async function POST(req: Request) {
     // throws here, safely, rather than after the user's balance is debited.
     const psp = getPaymentProvider();
 
+    // Business profit margin on bills (admin-set bps, default 0): the user is
+    // debited amount + margin; the biller receives the bill amount.
+    const marginMinor = feeFromBps(amountMinor, await getBillMarginBps());
+    const totalMinor = amountMinor + marginMinor;
+
     // Idempotent replay.
     const existing = await prisma.transaction.findUnique({
       where: { idempotencyKey },
@@ -78,8 +84,8 @@ export async function POST(req: Request) {
     // Atomic debit + record. Rolls back on insufficient funds.
     const tx = await prisma.$transaction(async (db) => {
       const debit = await db.balance.updateMany({
-        where: { userId: auth.id, asset: Asset.NGN, available: { gte: amountMinor } },
-        data: { available: { decrement: amountMinor } },
+        where: { userId: auth.id, asset: Asset.NGN, available: { gte: totalMinor } },
+        data: { available: { decrement: totalMinor } },
       });
       if (debit.count !== 1) {
         throw new ApiError(422, "Insufficient NGN balance", "insufficient_funds");
@@ -90,6 +96,7 @@ export async function POST(req: Request) {
           type: TransactionType.BILL,
           asset: Asset.NGN,
           amount: amountMinor,
+          fee: marginMinor,
           status: TransactionStatus.PROCESSING,
           idempotencyKey,
           metadata: {
@@ -123,7 +130,7 @@ export async function POST(req: Request) {
             : TransactionStatus.PROCESSING;
 
       if (status === TransactionStatus.FAILED) {
-        await refund(auth.id, amountMinor, tx.id);
+        await refund(auth.id, totalMinor, tx.id);
         throw new ApiError(502, "Bill payment was declined; funds refunded", "bill_failed");
       }
 
@@ -186,7 +193,7 @@ export async function POST(req: Request) {
         error: err instanceof Error ? err.message : String(err),
         providerMessage: err instanceof BillPaymentError ? err.providerMessage : undefined,
       });
-      await refund(auth.id, amountMinor, tx.id);
+      await refund(auth.id, totalMinor, tx.id);
       // Surface the PSP's own reason so the user knows *why* it failed and that
       // their money was returned.
       const reason =

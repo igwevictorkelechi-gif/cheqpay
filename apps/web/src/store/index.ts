@@ -65,11 +65,33 @@ interface UIStore {
   setSidebarOpen: (sidebarOpen: boolean) => void;
 }
 
+const THEME_KEY = "cheqpay:theme";
+
+/** Apply the theme to <html data-theme>. Dark is the default (no attribute). */
+function applyTheme(dark: boolean) {
+  if (typeof document === "undefined") return;
+  if (dark) document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", "light");
+}
+
+function initialDarkMode(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(THEME_KEY) !== "light";
+}
+
 export const useUIStore = create<UIStore>((set) => ({
   showBalance: true,
-  darkMode: false,
+  darkMode: initialDarkMode(),
   sidebarOpen: true,
   toggleBalance: () => set((state) => ({ showBalance: !state.showBalance })),
-  setDarkMode: (darkMode) => set({ darkMode }),
+  setDarkMode: (darkMode) => {
+    try {
+      window.localStorage.setItem(THEME_KEY, darkMode ? "dark" : "light");
+    } catch {
+      /* storage unavailable */
+    }
+    applyTheme(darkMode);
+    set({ darkMode });
+  },
   setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
 }));

@@ -8,6 +8,7 @@ import { MAX_TIER } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { ngnWithdrawalSchema } from "@/lib/validation";
+import { getWithdrawalFeeNgn } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -49,14 +50,25 @@ export async function POST(req: Request) {
     const effectiveTier = getEnv().RELAX_WITHDRAWAL_GUARDS ? MAX_TIER : user.kycTier;
     assertWithdrawalAllowed(effectiveTier, amountMinor, usedToday);
 
+    // Business withdrawal fee (admin-set flat NGN, default 0). The user is
+    // debited amount + fee; the bank receives the requested amount.
+    const feeMinor = BigInt(Math.round((await getWithdrawalFeeNgn()) * 100));
+    const totalMinor = amountMinor + feeMinor;
+
     // Atomic debit + record. Throws (rolls back) on insufficient funds.
     const tx = await prisma.$transaction(async (db) => {
       const debit = await db.balance.updateMany({
-        where: { userId: auth.id, asset: Asset.NGN, available: { gte: amountMinor } },
-        data: { available: { decrement: amountMinor } },
+        where: { userId: auth.id, asset: Asset.NGN, available: { gte: totalMinor } },
+        data: { available: { decrement: totalMinor } },
       });
       if (debit.count !== 1) {
-        throw new ApiError(422, "Insufficient NGN balance", "insufficient_funds");
+        throw new ApiError(
+          422,
+          feeMinor > 0n
+            ? "Insufficient NGN balance (amount + withdrawal fee)"
+            : "Insufficient NGN balance",
+          "insufficient_funds"
+        );
       }
       return db.transaction.create({
         data: {
@@ -64,6 +76,7 @@ export async function POST(req: Request) {
           type: TransactionType.WITHDRAWAL,
           asset: Asset.NGN,
           amount: amountMinor,
+          fee: feeMinor,
           status: TransactionStatus.PROCESSING,
           idempotencyKey,
           metadata: {
@@ -100,11 +113,11 @@ export async function POST(req: Request) {
       });
       return jsonOk({ transactionId: tx.id, status: "processing" });
     } catch {
-      // PSP rejected the transfer — refund and fail the transaction.
+      // PSP rejected the transfer — refund (amount + fee) and fail.
       await prisma.$transaction([
         prisma.balance.update({
           where: { userId_asset: { userId: auth.id, asset: Asset.NGN } },
-          data: { available: { increment: amountMinor } },
+          data: { available: { increment: totalMinor } },
         }),
         prisma.transaction.update({
           where: { id: tx.id },

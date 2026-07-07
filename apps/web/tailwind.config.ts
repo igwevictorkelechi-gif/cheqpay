@@ -9,17 +9,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // CheqPay brand palette (dark theme)
+        // CheqPay brand palette. Brand hues are fixed; the neutral tokens are
+        // CSS-variable driven (RGB channels in globals.css) so the app can
+        // switch between dark and light themes at runtime via
+        // <html data-theme="light">.
         brand: "#6B5B95",
         "brand-dark": "#574A7A",
         "brand-light": "#8A7BB5",
-        surface: "#14121A",
-        "surface-soft": "#1F1B29",
-        card: "#1F1B29",
-        circle: "#2C2738",
-        border: "#2A2535",
-        ink: "#F4F3F7",
-        muted: "#9A93AD",
+        surface: "rgb(var(--c-surface) / <alpha-value>)",
+        "surface-soft": "rgb(var(--c-surface-soft) / <alpha-value>)",
+        card: "rgb(var(--c-card) / <alpha-value>)",
+        circle: "rgb(var(--c-circle) / <alpha-value>)",
+        border: "rgb(var(--c-border) / <alpha-value>)",
+        ink: "rgb(var(--c-ink) / <alpha-value>)",
+        muted: "rgb(var(--c-muted) / <alpha-value>)",
         // legacy aliases
         primary: "#6B5B95",
         "primary-dark": "#574A7A",

@@ -35,7 +35,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <div className="flex-1 overflow-y-auto pb-28">{children}</div>
 
         {/* Floating glass tab bar — pinned to the viewport so it never scrolls */}
-        <nav className="fixed bottom-5 left-1/2 z-30 w-[calc(100%-2.5rem)] max-w-[440px] -translate-x-1/2 rounded-full border border-white/10 bg-card/60 px-2 py-2 shadow-2xl shadow-black/50 backdrop-blur-xl">
+        <nav className="fixed bottom-5 left-1/2 z-30 w-[calc(100%-2.5rem)] max-w-[440px] -translate-x-1/2 rounded-full border border-border/70 bg-card/60 px-2 py-2 shadow-2xl shadow-black/50 backdrop-blur-xl">
           <div className="relative flex items-center">
             {/* Liquid-glass capsule behind the active tab */}
             {activeIndex >= 0 && (
@@ -61,8 +61,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   key={tab.href}
                   href={tab.href}
                   aria-current={active ? "page" : undefined}
-                  className="relative z-10 flex flex-1 flex-col items-center gap-0.5 py-2 transition-colors duration-300"
-                  style={{ color: active ? "#F4F3F7" : "#6E6880" }}
+                  className={`relative z-10 flex flex-1 flex-col items-center gap-0.5 py-2 transition-colors duration-300 ${
+                    active ? "text-ink" : "text-muted"
+                  }`}
                 >
                   <Icon
                     className={`h-6 w-6 transition-transform duration-300 ${
