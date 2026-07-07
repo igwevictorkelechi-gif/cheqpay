@@ -91,6 +91,23 @@ export interface BillPayResult {
   token?: string | null;
 }
 
+/**
+ * Raised when a bill payment is rejected by the PSP. `providerMessage` carries
+ * the PSP's own human-readable reason (safe to surface to the user — it never
+ * contains credentials) so the app can explain *why* a payment failed instead
+ * of a generic error.
+ */
+export class BillPaymentError extends Error {
+  constructor(
+    message: string,
+    public readonly providerMessage?: string,
+    public readonly providerStatus?: number
+  ) {
+    super(message);
+    this.name = "BillPaymentError";
+  }
+}
+
 export interface PaymentProvider {
   readonly name: string;
 

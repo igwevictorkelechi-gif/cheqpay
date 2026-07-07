@@ -7,6 +7,7 @@ import { enforceRateLimit } from "@/lib/ratelimit";
 import { getBiller, getPlan, getServiceConfig } from "@/lib/bills";
 import { billPaySchema } from "@/lib/validation";
 import { sendPush } from "@/lib/push";
+import { BillPaymentError } from "@/payments/types";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,10 @@ export async function POST(req: Request) {
       throw new ApiError(422, "Amount must be positive", "bad_amount");
     }
 
+    // Resolve the PSP up front (before any debit). A misconfigured provider
+    // throws here, safely, rather than after the user's balance is debited.
+    const psp = getPaymentProvider();
+
     // Idempotent replay.
     const existing = await prisma.transaction.findUnique({
       where: { idempotencyKey },
@@ -101,7 +106,7 @@ export async function POST(req: Request) {
 
     // Submit to the PSP. Refund + fail on error.
     try {
-      const result = await getPaymentProvider().payBill({
+      const result = await psp.payBill({
         service: body.service,
         flwType: config.flwType,
         flwBillerCode: biller.flwBillerCode,
@@ -172,8 +177,23 @@ export async function POST(req: Request) {
       });
     } catch (err) {
       if (err instanceof ApiError) throw err;
+      // Log the real cause (invisible to the client otherwise) and refund.
+      console.error("[bills/pay] provider error", {
+        transactionId: tx.id,
+        service: body.service,
+        billerId: biller.id,
+        provider: psp.name,
+        error: err instanceof Error ? err.message : String(err),
+        providerMessage: err instanceof BillPaymentError ? err.providerMessage : undefined,
+      });
       await refund(auth.id, amountMinor, tx.id);
-      throw new ApiError(502, "Bill payment could not be processed; funds refunded", "bill_error");
+      // Surface the PSP's own reason so the user knows *why* it failed and that
+      // their money was returned.
+      const reason =
+        err instanceof BillPaymentError && err.providerMessage
+          ? `Bill payment failed: ${err.providerMessage}. Your funds were refunded.`
+          : "Bill payment could not be processed; funds refunded";
+      throw new ApiError(502, reason, "bill_error");
     }
   } catch (err) {
     return toErrorResponse(err);
