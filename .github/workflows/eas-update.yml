@@ -1,0 +1,71 @@
+name: EAS Update (mobile OTA)
+
+# Publishes an over-the-air EAS Update for the mobile app on every push that
+# touches apps/mobile, so testers on a `preview` build always get the latest
+# JS bundle without anyone running a command locally.
+#
+# One-time setup (do this once, from a browser is fine):
+#   1. cd apps/mobile && npx eas-cli login && npx eas-cli init
+#      (this stamps the real projectId into app.json — commit that change)
+#   2. Create an Expo access token at https://expo.dev/accounts/[you]/settings/access-tokens
+#   3. GitHub repo -> Settings -> Secrets and variables -> Actions ->
+#      New repository secret:  Name: EXPO_TOKEN   Value: <the token>
+#
+# Until EXPO_TOKEN is set the job self-skips (no failed runs). The update is
+# published to the `preview` channel/branch, matching eas.json's preview build.
+
+on:
+  push:
+    branches:
+      - main
+      - claude/cheq-pay-rebrand-kjehub
+    paths:
+      - "apps/mobile/**"
+      - "packages/shared/**"
+      - ".github/workflows/eas-update.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: eas-update-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      # Secrets can't be read in `if:` directly, so surface presence via env.
+      HAS_EXPO_TOKEN: ${{ secrets.EXPO_TOKEN != '' }}
+    steps:
+      - name: Skip notice
+        if: env.HAS_EXPO_TOKEN != 'true'
+        run: echo "EXPO_TOKEN not set — skipping EAS Update. See workflow header for setup."
+
+      - name: Checkout
+        if: env.HAS_EXPO_TOKEN == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        if: env.HAS_EXPO_TOKEN == 'true'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Set up Node
+        if: env.HAS_EXPO_TOKEN == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up EAS
+        if: env.HAS_EXPO_TOKEN == 'true'
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        if: env.HAS_EXPO_TOKEN == 'true'
+        run: bun install
+
+      - name: Publish update
+        if: env.HAS_EXPO_TOKEN == 'true'
+        working-directory: apps/mobile
+        run: eas update --branch preview --message "${{ github.event.head_commit.message || github.sha }}" --non-interactive

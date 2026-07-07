@@ -47,3 +47,19 @@ production-like test.
 `eas.json` maps build profiles to update channels
 (`development` / `preview` / `production`), so an `eas update --branch preview`
 reaches any `preview` build you've distributed.
+
+## Automatic OTA on every push (CI)
+
+`.github/workflows/eas-update.yml` publishes an `eas update` to the `preview`
+channel automatically whenever `apps/mobile/**` changes on `main` or the
+feature branch — so testers always get the latest JS without anyone running a
+command. To enable it (one time):
+
+1. `cd apps/mobile && npx eas-cli login && npx eas-cli init` (sets the project id).
+2. Create an Expo access token: https://expo.dev/settings/access-tokens
+3. GitHub repo → Settings → Secrets and variables → Actions → new secret
+   `EXPO_TOKEN` = the token.
+
+Until `EXPO_TOKEN` exists the workflow self-skips (no failed runs). It only
+pushes the JS bundle — a new native binary (Option 1 build) is still needed
+when you change native config or dependencies.
