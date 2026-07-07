@@ -48,7 +48,9 @@ export async function POST(req: Request) {
     const client = new Anthropic({ apiKey });
     try {
       const response = await client.messages.create({
-        model: "claude-opus-4-8",
+        // Haiku 4.5 — fast and low-cost, ample for FAQ-grounded support
+        // replies. Override with SUPPORT_MODEL if a stronger model is wanted.
+        model: process.env.SUPPORT_MODEL || "claude-haiku-4-5",
         max_tokens: 600,
         system: buildSupportSystemPrompt(),
         messages: body.messages,
