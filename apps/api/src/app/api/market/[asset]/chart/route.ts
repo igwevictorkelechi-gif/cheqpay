@@ -5,7 +5,7 @@ import { CHART_RANGES, type ChartRange, getPriceFeed } from "@/market";
 
 export const dynamic = "force-dynamic";
 
-const SUPPORTED = new Set<string>([Asset.BTC, Asset.USDT]);
+const SUPPORTED = new Set<string>([Asset.BTC, Asset.USDT, Asset.USDC]);
 
 /** Candle series for the asset page chart (Day / Week / Month / Year / All). */
 export async function GET(
