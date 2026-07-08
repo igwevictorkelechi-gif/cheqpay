@@ -79,10 +79,16 @@ const envSchema = z.object({
   COBO_CALLBACK_PUBKEY: z.string().optional(),
   COBO_ENV: z.enum(["dev", "prod"]).default("dev"),
 
-  // Phase 3 (Naira rails)
-  PAYMENT_PROVIDER: providerEnum("PAYMENT_PROVIDER", ["mock", "flutterwave"], "mock"),
+  // Phase 3 (Naira rails). Paystack is the primary rail for virtual accounts
+  // and payouts; Flutterwave remains the bills rail (getBillsProvider).
+  PAYMENT_PROVIDER: providerEnum(
+    "PAYMENT_PROVIDER",
+    ["mock", "flutterwave", "paystack"],
+    "mock"
+  ),
   FLUTTERWAVE_SECRET_KEY: z.string().optional(),
   FLUTTERWAVE_WEBHOOK_HASH: z.string().optional(),
+  PAYSTACK_SECRET_KEY: z.string().optional(),
 
   // Phase 4 (rates / market data)
   PRICE_FEED: providerEnum("PRICE_FEED", ["live", "mock"], "live"),

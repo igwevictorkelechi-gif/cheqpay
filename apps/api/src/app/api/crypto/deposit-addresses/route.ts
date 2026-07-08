@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { getManualWallets, MANUAL_ASSETS } from "@/lib/manualCrypto";
+import { getFeatureFlags } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,12 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     await requireUser(req);
+    // Kill switch: with crypto deposits off, every asset reads as
+    // "Coming soon" in the apps (empty list) rather than erroring.
+    const flags = await getFeatureFlags();
+    if (!flags.crypto_deposits) {
+      return jsonOk({ addresses: [] });
+    }
     const wallets = await getManualWallets();
     const addresses = MANUAL_ASSETS.filter((a) => wallets[a]).map((a) => ({
       asset: a,

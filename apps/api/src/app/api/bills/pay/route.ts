@@ -1,6 +1,6 @@
 import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
-import { getPaymentProvider } from "@/payments";
+import { getBillsProvider } from "@/payments";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { enforceRateLimit } from "@/lib/ratelimit";
@@ -9,6 +9,8 @@ import { billPaySchema } from "@/lib/validation";
 import { sendPush } from "@/lib/push";
 import { BillPaymentError } from "@/payments/types";
 import { feeFromBps, getBillMarginBps } from "@/lib/settings";
+
+import { assertFeatureEnabled } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
+    await assertFeatureEnabled("bill_payments");
     enforceRateLimit(`bill:pay:${auth.id}`, 10, 60_000);
 
     const idempotencyKey = req.headers.get("idempotency-key");
@@ -66,7 +69,7 @@ export async function POST(req: Request) {
 
     // Resolve the PSP up front (before any debit). A misconfigured provider
     // throws here, safely, rather than after the user's balance is debited.
-    const psp = getPaymentProvider();
+    const psp = getBillsProvider();
 
     // Business profit margin on bills (admin-set bps, default 0): the user is
     // debited amount + margin; the biller receives the bill amount.

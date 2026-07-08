@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { createVirtualAccountSchema } from "@/lib/validation";
 import { createVirtualAccount, getVirtualAccount } from "@/lib/virtualAccounts";
+import { assertFeatureEnabled } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
+    await assertFeatureEnabled("ngn_deposits");
     const user = await prisma.user.findUnique({ where: { id: auth.id } });
     if (!user) {
       throw new ApiError(404, "Profile not provisioned; POST /api/me first", "no_profile");

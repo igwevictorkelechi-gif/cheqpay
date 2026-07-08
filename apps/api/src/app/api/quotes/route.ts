@@ -6,12 +6,15 @@ import { createQuote } from "@/lib/swap";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { quoteCreateSchema } from "@/lib/validation";
 
+import { assertFeatureEnabled } from "@/lib/features";
+
 export const dynamic = "force-dynamic";
 
 /** Issue a server-side swap quote (short TTL). */
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
+    await assertFeatureEnabled("crypto_trading");
     enforceRateLimit(`quote:${auth.id}`, 30, 60_000);
     const user = await prisma.user.findUnique({ where: { id: auth.id } });
     if (!user) {

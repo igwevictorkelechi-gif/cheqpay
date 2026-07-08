@@ -34,8 +34,21 @@ export async function GET(req: Request) {
       },
       payments: {
         provider: env.PAYMENT_PROVIDER,
-        secretKeyConfigured: has("FLUTTERWAVE_SECRET_KEY"),
-        webhookConfigured: has("FLUTTERWAVE_WEBHOOK_HASH"),
+        secretKeyConfigured:
+          env.PAYMENT_PROVIDER === "paystack"
+            ? has("PAYSTACK_SECRET_KEY")
+            : has("FLUTTERWAVE_SECRET_KEY"),
+        // Paystack signs webhooks with the secret key itself; Flutterwave
+        // uses a separate verif-hash.
+        webhookConfigured:
+          env.PAYMENT_PROVIDER === "paystack"
+            ? has("PAYSTACK_SECRET_KEY")
+            : has("FLUTTERWAVE_WEBHOOK_HASH"),
+      },
+      bills: {
+        // Bills always prefer Flutterwave (Paystack has no bills product).
+        provider: has("FLUTTERWAVE_SECRET_KEY") ? "flutterwave" : env.PAYMENT_PROVIDER,
+        configured: has("FLUTTERWAVE_SECRET_KEY") && has("FLUTTERWAVE_WEBHOOK_HASH"),
       },
       priceFeed: env.PRICE_FEED,
       relaxWithdrawalGuards: env.RELAX_WITHDRAWAL_GUARDS,

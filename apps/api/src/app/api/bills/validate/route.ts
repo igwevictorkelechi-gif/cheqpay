@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
-import { getPaymentProvider } from "@/payments";
+import { getBillsProvider } from "@/payments";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { getBiller, getServiceConfig } from "@/lib/bills";
 import { billValidateSchema } from "@/lib/validation";
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       throw new ApiError(422, "Unknown service or biller", "bad_biller");
     }
 
-    const result = await getPaymentProvider().validateBillCustomer({
+    const result = await getBillsProvider().validateBillCustomer({
       flwBillerCode: biller.flwBillerCode,
       customer: body.customer,
     });

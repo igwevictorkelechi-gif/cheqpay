@@ -28,6 +28,8 @@ import { amlConfigFromEnv, assessWithdrawal } from "@/lib/aml";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { cryptoWithdrawalSchema } from "@/lib/validation";
 
+import { assertFeatureEnabled } from "@/lib/features";
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -41,6 +43,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
+    await assertFeatureEnabled("crypto_withdrawals");
     const relaxGuards = getEnv().RELAX_WITHDRAWAL_GUARDS;
     enforceRateLimit(`wd:crypto:${auth.id}`, 5, 60_000);
 

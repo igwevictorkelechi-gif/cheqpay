@@ -7,6 +7,8 @@ import { toMinorUnits } from "@/lib/money";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { depositInitSchema } from "@/lib/validation";
 
+import { assertFeatureEnabled } from "@/lib/features";
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -17,6 +19,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
+    await assertFeatureEnabled("ngn_deposits");
     enforceRateLimit(`dep:${auth.id}`, 10, 60_000);
 
     const idempotencyKey = req.headers.get("idempotency-key");
