@@ -131,8 +131,8 @@ export default function ReceiveDetailPage() {
               {meta.name} deposits are coming soon
             </h1>
             <p className="mt-2 max-w-[300px] text-sm text-muted">
-              We&apos;re upgrading to secure stablecoin rails. {meta.symbol} deposits will be
-              available shortly — your Naira wallet works as usual.
+              {meta.symbol} deposits are being enabled and will be available shortly —
+              your Naira wallet works as usual.
             </p>
             <button
               onClick={() => router.push("/")}

@@ -8,10 +8,12 @@ import {
   ShieldCheck,
   Loader2,
   CheckCircle2,
+  ClipboardPaste,
 } from "lucide-react";
 import { api, ApiError } from "@/services/api";
 import { invalidateMoneyCaches } from "@/lib/cache";
 import { getAssetMeta } from "@/lib/cryptoAssets";
+import { isAddressForNetwork, shortAddress } from "@/lib/address";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -43,6 +45,22 @@ export default function SendCryptoDetailPage() {
   const [avail, setAvail] = useState<"loading" | "live" | "notlive">("loading");
   const [liveNetwork, setLiveNetwork] = useState<string | null>(null);
   const [liveNetLabel, setLiveNetLabel] = useState<string | null>(null);
+  // A wallet address detected on the clipboard, offered as a one-tap paste.
+  const [clipSuggest, setClipSuggest] = useState<string | null>(null);
+
+  async function readClipboardSuggestion(net: string) {
+    try {
+      const text = await navigator.clipboard.readText();
+      const candidate = text.trim();
+      if (candidate && isAddressForNetwork(candidate, net)) {
+        setClipSuggest(candidate);
+        return candidate;
+      }
+    } catch {
+      /* clipboard unavailable or permission denied — silent */
+    }
+    return null;
+  }
 
   useEffect(() => {
     if (!meta) return;
@@ -73,6 +91,15 @@ export default function SendCryptoDetailPage() {
       active = false;
     };
   }, [meta]);
+
+  // When the form is live and the address is still empty, check the clipboard
+  // for a copied wallet address on the right network and offer to paste it.
+  useEffect(() => {
+    if (avail !== "live" || !meta || toAddress) return;
+    const net = liveNetwork ?? meta.network;
+    readClipboardSuggestion(net);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avail, liveNetwork]);
 
   if (!meta) {
     return (
@@ -105,8 +132,8 @@ export default function SendCryptoDetailPage() {
               Sending {meta.symbol} is coming soon
             </h1>
             <p className="mt-2 max-w-[300px] text-sm text-muted">
-              We&apos;re upgrading to secure stablecoin rails. {meta.symbol} transfers will be
-              available shortly — your Naira wallet works as usual.
+              {meta.symbol} transfers are being enabled and will be available shortly —
+              your Naira wallet works as usual.
             </p>
             <button
               onClick={() => router.push("/")}
@@ -198,16 +225,53 @@ export default function SendCryptoDetailPage() {
               </p>
             </div>
 
-            <label className="mb-2 mt-7 block text-sm font-semibold text-muted">
-              Destination wallet address
-            </label>
+            <div className="mb-2 mt-7 flex items-center justify-between">
+              <label className="text-sm font-semibold text-muted">
+                Destination wallet address
+              </label>
+              <button
+                onClick={async () => {
+                  const found = await readClipboardSuggestion(liveNetwork ?? meta.network);
+                  if (found) {
+                    setToAddress(found);
+                    setClipSuggest(null);
+                  } else {
+                    setError("No valid wallet address found on your clipboard.");
+                  }
+                }}
+                className="flex items-center gap-1 rounded-full bg-card px-3 py-1.5 text-xs font-bold text-brand-light active:scale-95"
+              >
+                <ClipboardPaste className="h-3.5 w-3.5" /> Paste
+              </button>
+            </div>
             <textarea
               value={toAddress}
-              onChange={(e) => setToAddress(e.target.value)}
+              onChange={(e) => {
+                setToAddress(e.target.value);
+                if (clipSuggest) setClipSuggest(null);
+              }}
               rows={2}
               placeholder={`Paste ${meta.symbol} (${liveNetLabel ?? meta.networkLabel}) address`}
               className="w-full resize-none rounded-2xl border border-border bg-card px-4 py-3.5 text-sm text-ink placeholder-muted outline-none focus:border-brand"
             />
+            {clipSuggest && !toAddress && (
+              <button
+                onClick={() => {
+                  setToAddress(clipSuggest);
+                  setClipSuggest(null);
+                }}
+                className="mt-2 flex w-full items-center gap-2 rounded-2xl border border-brand/40 bg-brand/10 px-4 py-3 text-left active:scale-[0.99]"
+              >
+                <ClipboardPaste className="h-4 w-4 shrink-0 text-brand-light" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs text-muted">Wallet address on your clipboard</span>
+                  <span className="block truncate text-sm font-semibold text-ink">
+                    {shortAddress(clipSuggest, 14, 10)}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs font-bold text-brand-light">Tap to paste</span>
+              </button>
+            )}
 
             <label className="mb-2 mt-5 block text-sm font-semibold text-muted">Amount</label>
             <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 focus-within:border-brand">

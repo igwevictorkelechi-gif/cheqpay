@@ -47,6 +47,7 @@
         "next-auth": "^4.24.0",
         "papaparse": "^5.4.1",
         "postcss": "^8.4.31",
+        "qrcode.react": "^4.2.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "recharts": "^2.10.0",

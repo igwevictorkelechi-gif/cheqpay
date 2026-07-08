@@ -3,9 +3,11 @@ import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { colors } from '@/components/brand';
 import { api, ApiError } from '@/services/api';
 import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
+import { isAddressForNetwork, shortAddress } from '@/lib/address';
 
 type Sym = 'BTC' | 'USDT' | 'USDC';
 const ASSETS: Sym[] = ['BTC', 'USDT', 'USDC'];
@@ -20,9 +22,34 @@ export default function SendCryptoScreen() {
   const [stage, setStage] = useState<Stage>('pick');
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | undefined>();
+  // A wallet address detected on the clipboard, offered as a one-tap paste.
+  const [clipSuggest, setClipSuggest] = useState<string | null>(null);
 
   // Manual custody: live assets + their admin-configured network.
   const [live, setLive] = useState<Record<string, { network: string; networkLabel: string }>>({});
+
+  async function readClipboardSuggestion(network: string): Promise<string | null> {
+    try {
+      const text = await Clipboard.getStringAsync();
+      const candidate = (text ?? '').trim();
+      if (candidate && isAddressForNetwork(candidate, network)) {
+        setClipSuggest(candidate);
+        return candidate;
+      }
+    } catch {
+      /* clipboard unavailable — silent */
+    }
+    return null;
+  }
+
+  // When a coin is picked and the address is empty, check the clipboard for a
+  // copied wallet address on the right network and offer to paste it.
+  useEffect(() => {
+    if (stage !== 'form' || !sym || toAddress) return;
+    const network = live[sym]?.network ?? CRYPTO_SEND[sym].network;
+    readClipboardSuggestion(network);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, sym]);
 
   useEffect(() => {
     (async () => {
@@ -151,16 +178,58 @@ export default function SendCryptoScreen() {
               <Text className="text-ink text-lg font-bold">{available} {sym}</Text>
             </View>
 
-            <Text className="text-muted text-sm font-semibold mt-6 mb-2">Destination wallet address</Text>
+            <View className="flex-row items-center justify-between mt-6 mb-2">
+              <Text className="text-muted text-sm font-semibold">Destination wallet address</Text>
+              <TouchableOpacity
+                onPress={async () => {
+                  const network = live[sym!]?.network ?? info.network;
+                  const found = await readClipboardSuggestion(network);
+                  if (found) {
+                    setToAddress(found);
+                    setClipSuggest(null);
+                  } else {
+                    setError('No valid wallet address found on your clipboard.');
+                  }
+                }}
+                className="flex-row items-center rounded-full px-3 py-1.5 bg-card"
+              >
+                <Ionicons name="clipboard-outline" size={13} color={colors.brandLight} />
+                <Text style={{ color: colors.brandLight, fontWeight: '700', fontSize: 12 }} className="ml-1">
+                  Paste
+                </Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
               value={toAddress}
-              onChangeText={setToAddress}
+              onChangeText={(t) => {
+                setToAddress(t);
+                if (clipSuggest) setClipSuggest(null);
+              }}
               placeholder={`Paste ${sym} (${info.networkLabel}) address`}
               placeholderTextColor={colors.muted}
               multiline
               className="rounded-2xl px-4 py-3 text-ink"
               style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, minHeight: 64 }}
             />
+            {clipSuggest && !toAddress && (
+              <TouchableOpacity
+                onPress={() => {
+                  setToAddress(clipSuggest);
+                  setClipSuggest(null);
+                }}
+                className="flex-row items-center rounded-2xl px-4 py-3 mt-2"
+                style={{ backgroundColor: 'rgba(107,91,149,0.12)', borderWidth: 1, borderColor: 'rgba(107,91,149,0.4)' }}
+              >
+                <Ionicons name="clipboard" size={16} color={colors.brandLight} />
+                <View className="flex-1 ml-2">
+                  <Text className="text-muted text-xs">Wallet address on your clipboard</Text>
+                  <Text className="text-ink text-sm font-semibold" numberOfLines={1}>
+                    {shortAddress(clipSuggest, 14, 10)}
+                  </Text>
+                </View>
+                <Text style={{ color: colors.brandLight, fontWeight: '700', fontSize: 12 }}>Tap to paste</Text>
+              </TouchableOpacity>
+            )}
 
             <Text className="text-muted text-sm font-semibold mt-5 mb-2">Amount</Text>
             <View className="flex-row items-center rounded-2xl px-4 py-3" style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}>

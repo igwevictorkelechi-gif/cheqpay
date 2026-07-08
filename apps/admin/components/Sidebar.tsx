@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
-  Banknote, MessageSquare, type LucideIcon,
+  Banknote, MessageSquare, KeyRound, type LucideIcon,
 } from 'lucide-react';
 
 type Item = { label: string; href: string; icon: LucideIcon };
@@ -46,6 +46,7 @@ const categories: Category[] = [
     items: [
       { label: 'Fees & Trading', href: '/trading-settings', icon: TrendingUp },
       { label: 'Crypto Wallets', href: '/crypto-wallets', icon: Wallet },
+      { label: 'Adjust Balance', href: '/adjust-balance', icon: KeyRound },
     ],
   },
   {
