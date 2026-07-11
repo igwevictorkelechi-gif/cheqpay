@@ -95,6 +95,8 @@ export interface BillBiller {
   short: string;
   color: string;
   logo: string | null;
+  /** True when the biller isn't payable yet (no provider code). */
+  comingSoon?: boolean;
 }
 export interface BillPlan {
   id: string;
@@ -386,6 +388,11 @@ export const api = {
     return apiFetch('/api/support/contact');
   },
 
+  /** Admin feature switches — used to hide disabled features in the UI. */
+  getFeatures(): Promise<{ features: FeatureFlags }> {
+    return apiFetch('/api/features');
+  },
+
   supportChat(
     messages: { role: 'user' | 'assistant'; content: string }[]
   ): Promise<{ reply: string; agent: boolean }> {
@@ -395,6 +402,15 @@ export const api = {
     });
   },
 };
+
+export interface FeatureFlags {
+  ngn_deposits: boolean;
+  ngn_withdrawals: boolean;
+  crypto_trading: boolean;
+  crypto_deposits: boolean;
+  crypto_withdrawals: boolean;
+  bill_payments: boolean;
+}
 
 export interface Bank {
   code: string;

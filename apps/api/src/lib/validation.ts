@@ -114,7 +114,7 @@ export const swapExecuteSchema = z.object({
 });
 export type SwapExecuteInput = z.infer<typeof swapExecuteSchema>;
 
-const billService = z.enum(["airtime", "data", "electricity", "cabletv", "betting"]);
+const billService = z.enum(["airtime", "data", "electricity", "cabletv", "betting", "food"]);
 
 /** Validate a bill customer (meter/smartcard) before paying. */
 export const billValidateSchema = z.object({

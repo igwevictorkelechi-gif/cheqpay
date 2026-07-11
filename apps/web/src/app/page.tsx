@@ -17,6 +17,7 @@ import {
 import TxnRow from "@/components/TxnRow";
 import KycBanner from "@/components/KycBanner";
 import NotificationsSheet from "@/components/NotificationsSheet";
+import { useFeatures } from "@/lib/useFeatures";
 import { authService } from "@/services/auth";
 import { useAuthStore, useUIStore } from "@/store";
 import { api, ApiError, type LedgerTransaction } from "@/services/api";
@@ -29,6 +30,7 @@ export default function HomePage() {
   const router = useRouter();
   const { user, setUser } = useAuthStore();
   const { showBalance, toggleBalance } = useUIStore();
+  const features = useFeatures();
   const toast = useToast();
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -102,7 +104,7 @@ export default function HomePage() {
       <KycBanner />
 
       {/* First-run nudge: no money and no history yet. */}
-      {ngn === 0 && txns.length === 0 && (
+      {features.ngn_deposits && ngn === 0 && txns.length === 0 && (
         <div className="mb-6 px-5">
           <button
             onClick={() => router.push("/deposit")}
@@ -122,9 +124,15 @@ export default function HomePage() {
       )}
 
       <ActionRow>
-        <CircleAction icon={ArrowDown} label="Deposit" onClick={() => router.push("/deposit")} />
-        <CircleAction icon={ArrowRight} label="Withdraw" onClick={() => router.push("/withdraw")} />
-        <CircleAction icon={RefreshCw} label="Convert" onClick={() => router.push("/convert")} />
+        {features.ngn_deposits && (
+          <CircleAction icon={ArrowDown} label="Deposit" onClick={() => router.push("/deposit")} />
+        )}
+        {features.ngn_withdrawals && (
+          <CircleAction icon={ArrowRight} label="Withdraw" onClick={() => router.push("/withdraw")} />
+        )}
+        {features.crypto_trading && (
+          <CircleAction icon={RefreshCw} label="Convert" onClick={() => router.push("/convert")} />
+        )}
       </ActionRow>
 
       {/* Cash account */}

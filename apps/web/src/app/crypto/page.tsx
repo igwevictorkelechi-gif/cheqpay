@@ -19,6 +19,7 @@ import { readCache, writeCache } from "@/lib/cache";
 import TxnRow from "@/components/TxnRow";
 import KycBanner from "@/components/KycBanner";
 import NotificationsSheet from "@/components/NotificationsSheet";
+import { useFeatures } from "@/lib/useFeatures";
 
 const BAL_CACHE = "cheqpay:crypto:bal";
 const NGN_CACHE = "cheqpay:crypto:ngn";
@@ -46,6 +47,7 @@ export default function CryptoPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { showBalance, toggleBalance } = useUIStore();
+  const features = useFeatures();
   const [notifOpen, setNotifOpen] = useState(false);
   // Paint last-known balances instantly from cache, then refresh in the
   // background so the screen never blocks on the network.
@@ -136,9 +138,15 @@ export default function CryptoPage() {
       <KycBanner />
 
       <ActionRow>
-        <CircleAction icon={TrendingUp} label="Trade" onClick={() => router.push("/asset/BTC")} />
-        <CircleAction icon={ArrowDown} label="Receive" onClick={() => router.push("/receive")} />
-        <CircleAction icon={ArrowRight} label="Send" onClick={() => router.push("/send-crypto")} />
+        {features.crypto_trading && (
+          <CircleAction icon={TrendingUp} label="Trade" onClick={() => router.push("/asset/BTC")} />
+        )}
+        {features.crypto_deposits && (
+          <CircleAction icon={ArrowDown} label="Receive" onClick={() => router.push("/receive")} />
+        )}
+        {features.crypto_withdrawals && (
+          <CircleAction icon={ArrowRight} label="Send" onClick={() => router.push("/send-crypto")} />
+        )}
       </ActionRow>
 
       {/* Assets — tap to open the asset page */}

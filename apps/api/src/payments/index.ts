@@ -60,10 +60,14 @@ export function getPaymentProvider(): PaymentProvider {
 }
 
 /**
- * The bills rail. Paystack has no bills product, so bill payments always
- * prefer Flutterwave when its keys exist — even when the main rail is
- * Paystack — and otherwise fall back to the main provider (mock in dev).
+ * The bills rail, selected by BILLS_PROVIDER:
+ *  - "auto" (default): Flutterwave when its keys exist (Paystack has no bills
+ *    product today), otherwise the main provider (mock in dev)
+ *  - "flutterwave": force Flutterwave (falls back to main if unconfigured)
+ *  - "main": force the PAYMENT_PROVIDER rail
  */
 export function getBillsProvider(): PaymentProvider {
+  const mode = getEnv().BILLS_PROVIDER;
+  if (mode === "main") return getPaymentProvider();
   return flutterwaveIfConfigured() ?? getPaymentProvider();
 }

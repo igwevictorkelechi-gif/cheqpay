@@ -11,6 +11,7 @@ import {
   type Candle,
   type ChartRange,
 } from "@/services/api";
+import { useFeatures } from "@/lib/useFeatures";
 import { readCache, writeCache, invalidateMoneyCaches } from "@/lib/cache";
 
 interface AssetSnapshot {
@@ -44,6 +45,7 @@ export default function AssetPage() {
   const params = useParams<{ symbol: string }>();
   const symbol = (params.symbol || "").toUpperCase() as AssetSymbol;
   const meta = META[symbol];
+  const features = useFeatures();
 
   const cacheKey = `cheqpay:asset:${symbol}`;
   const cached = readCache<AssetSnapshot>(cacheKey);
@@ -259,8 +261,8 @@ export default function AssetPage() {
         </>
       )}
 
-      {/* Buy / Sell action bar */}
-      {!error && (
+      {/* Buy / Sell action bar — hidden when trading is switched off */}
+      {!error && features.crypto_trading && (
         <div className="fixed inset-x-0 bottom-5 z-30 mx-auto flex max-w-[480px] gap-3 px-5">
           <button
             onClick={() => setShowTrade("sell")}

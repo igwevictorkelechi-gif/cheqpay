@@ -89,6 +89,11 @@ const envSchema = z.object({
   FLUTTERWAVE_SECRET_KEY: z.string().optional(),
   FLUTTERWAVE_WEBHOOK_HASH: z.string().optional(),
   PAYSTACK_SECRET_KEY: z.string().optional(),
+  // Which rail executes bill payments. "auto" prefers Flutterwave when its
+  // keys exist (Paystack has no bills product today), else the main provider.
+  // "main" forces the PAYMENT_PROVIDER rail — flip to this if Paystack ever
+  // ships bills and this codebase adds support.
+  BILLS_PROVIDER: providerEnum("BILLS_PROVIDER", ["auto", "flutterwave", "main"], "auto"),
 
   // Phase 4 (rates / market data)
   PRICE_FEED: providerEnum("PRICE_FEED", ["live", "mock"], "live"),

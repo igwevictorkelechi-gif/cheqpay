@@ -26,6 +26,8 @@ export async function GET() {
         short: b.short,
         color: b.color,
         logo: logoById.get(b.id) ?? b.logo ?? null,
+        // No provider biller code yet -> shown as "Coming soon" in the apps.
+        comingSoon: !b.flwBillerCode,
       })),
       plans: s.plans.map((p) => ({
         id: p.id,

@@ -11,7 +11,8 @@ export type BillService =
   | "data"
   | "electricity"
   | "cabletv"
-  | "betting";
+  | "betting"
+  | "food";
 
 export interface Biller {
   id: string;
@@ -111,6 +112,20 @@ function cablePlans(billerId: string): BillPlan[] {
   ];
 }
 
+// Food / delivery wallet top-ups. Chowdeck has no public top-up API today; the
+// tile ships as "Coming soon" and goes LIVE the moment a Flutterwave biller
+// code exists for it — set CHOWDECK_FLW_BILLER_CODE on the API project (check
+// your Flutterwave dashboard's biller catalog), no code change needed.
+const FOOD: Biller[] = [
+  {
+    id: "chowdeck",
+    name: "Chowdeck",
+    short: "Chowdeck",
+    color: "#0AA859",
+    flwBillerCode: process.env.CHOWDECK_FLW_BILLER_CODE || undefined,
+  },
+];
+
 const BETTING: Biller[] = [
   { id: "bet9ja", name: "Bet9ja", short: "Bet9ja", color: "#16723A", flwBillerCode: "BIL310" },
   { id: "sportybet", name: "SportyBet", short: "SportyBet", color: "#D6001C", flwBillerCode: "BIL311" },
@@ -177,6 +192,18 @@ export const BILL_CATALOG: ServiceConfig[] = [
     variableAmount: true,
     requiresValidation: false,
     billers: BETTING,
+    plans: [],
+  },
+  {
+    service: "food",
+    label: "Food delivery",
+    emoji: "🛵",
+    flwType: "FOOD",
+    customerLabel: "Chowdeck phone number",
+    customerPlaceholder: "0801 234 5678",
+    variableAmount: true,
+    requiresValidation: false,
+    billers: FOOD,
     plans: [],
   },
 ];

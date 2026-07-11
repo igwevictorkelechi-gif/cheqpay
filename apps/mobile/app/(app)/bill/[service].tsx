@@ -41,7 +41,7 @@ export default function BillServiceScreen() {
         const { services } = await api.getBillCatalog();
         const c = services.find((s) => s.service === service) ?? null;
         setConfig(c);
-        if (c) setBillerId(c.billers[0]?.id ?? '');
+        if (c) setBillerId(c.billers.find((b) => !b.comingSoon)?.id ?? '');
         await api.ensureProvisioned();
         const { balances } = await api.getBalances();
         setBalance(Number(balances.find((b) => b.asset === 'NGN')?.availableFormatted ?? 0));
@@ -160,6 +160,7 @@ export default function BillServiceScreen() {
                 return (
                   <TouchableOpacity
                     key={b.id}
+                    disabled={b.comingSoon}
                     onPress={() => {
                       setBillerId(b.id);
                       setPlanId('');
@@ -170,9 +171,24 @@ export default function BillServiceScreen() {
                       backgroundColor: colors.card,
                       borderWidth: 1,
                       borderColor: active ? colors.brand : colors.border,
+                      opacity: b.comingSoon ? 0.5 : 1,
                     }}
                     activeOpacity={0.8}
                   >
+                    {b.comingSoon && (
+                      <Text
+                        style={{
+                          position: 'absolute',
+                          top: 6,
+                          right: 6,
+                          color: '#FBBF24',
+                          fontSize: 9,
+                          fontWeight: '800',
+                        }}
+                      >
+                        SOON
+                      </Text>
+                    )}
                     <View
                       className="w-12 h-12 rounded-xl items-center justify-center"
                       style={{ backgroundColor: b.color }}

@@ -3,8 +3,12 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/components/brand';
 import { registerForPushNotifications } from '@/services/push';
+import { useFeatures } from '@/lib/useFeatures';
 
 export default function AppLayout() {
+  const features = useFeatures();
+  const cryptoVisible =
+    features.crypto_trading || features.crypto_deposits || features.crypto_withdrawals;
   useEffect(() => {
     registerForPushNotifications();
   }, []);
@@ -36,6 +40,8 @@ export default function AppLayout() {
       <Tabs.Screen
         name="crypto"
         options={{
+          // Hidden entirely when every crypto feature is switched off.
+          href: cryptoVisible ? '/crypto' : null,
           title: 'Crypto',
           tabBarIcon: ({ color }) => <Ionicons name="logo-bitcoin" size={24} color={color} />,
         }}
@@ -43,6 +49,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="pay-bill"
         options={{
+          href: features.bill_payments ? '/pay-bill' : null,
           title: 'Pay Bill',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'pricetag' : 'pricetag-outline'} size={24} color={color} />

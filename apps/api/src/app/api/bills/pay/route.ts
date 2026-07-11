@@ -71,6 +71,16 @@ export async function POST(req: Request) {
     // throws here, safely, rather than after the user's balance is debited.
     const psp = getBillsProvider();
 
+    // Billers without a provider code (e.g. Chowdeck pending its Flutterwave
+    // listing) are "Coming soon" — refuse before any money moves.
+    if (!biller.flwBillerCode && psp.name !== "mock") {
+      throw new ApiError(
+        503,
+        `${biller.name} payments are coming soon. Please check back shortly.`,
+        "biller_coming_soon"
+      );
+    }
+
     // Business profit margin on bills (admin-set bps, default 0): the user is
     // debited amount + margin; the biller receives the bill amount.
     const marginMinor = feeFromBps(amountMinor, await getBillMarginBps());

@@ -43,7 +43,7 @@ export default function BillServicePage() {
         const { services } = await api.getBillCatalog();
         const c = services.find((s) => s.service === service) ?? null;
         setConfig(c);
-        if (c) setBillerId(c.billers[0]?.id ?? "");
+        if (c) setBillerId(c.billers.find((b) => !b.comingSoon)?.id ?? "");
         const token = await getAccessToken();
         if (token) {
           await api.ensureProvisioned();
@@ -168,16 +168,22 @@ export default function BillServicePage() {
             {config.billers.map((b) => (
               <button
                 key={b.id}
+                disabled={b.comingSoon}
                 onClick={() => {
                   setBillerId(b.id);
                   setPlanId("");
                 }}
-                className={`flex flex-col items-center gap-2 rounded-2xl border p-3 transition active:scale-95 ${
+                className={`relative flex flex-col items-center gap-2 rounded-2xl border p-3 transition active:scale-95 ${
                   billerId === b.id
                     ? "border-brand bg-brand/10 ring-1 ring-brand"
                     : "border-border bg-card"
-                }`}
+                } ${b.comingSoon ? "opacity-50" : ""}`}
               >
+                {b.comingSoon && (
+                  <span className="absolute right-1.5 top-1.5 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+                    Soon
+                  </span>
+                )}
                 <BillerLogo brand={b} size={48} />
                 <span className="text-xs font-semibold text-ink">{b.name}</span>
               </button>

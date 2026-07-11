@@ -14,10 +14,12 @@ import {
   SectionHeader,
 } from '@/components/brand';
 import { TxnRow } from '@/components/TxnRow';
+import { useFeatures } from '@/lib/useFeatures';
 
 const META = [
   { symbol: 'BTC', name: 'Bitcoin', bg: '#F7931A', glyph: '₿' },
   { symbol: 'USDT', name: 'Tether', bg: '#26A17B', glyph: '₮' },
+  { symbol: 'USDC', name: 'USD Coin', bg: '#2775CA', glyph: '$' },
 ];
 const CRYPTO_TYPES = new Set(['BUY', 'SELL', 'CONVERT']);
 
@@ -33,6 +35,7 @@ export default function CryptoScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const { showBalance, toggleBalance } = useUIStore();
+  const features = useFeatures();
   const [bal, setBal] = useState<Record<string, string>>({});
   const [ngn, setNgn] = useState<Record<string, number>>({});
   const [txns, setTxns] = useState<LedgerTransaction[]>([]);
@@ -111,9 +114,15 @@ export default function CryptoScreen() {
         <BalanceBlock label="Total Crypto Balance" amount={showBalance ? fmtNgn(totalNgn) : '₦••••'} />
 
         <ActionRow>
-          <CircleAction icon="trending-up" label="Trade" onPress={() => router.push('/(app)/convert')} />
-          <CircleAction icon="arrow-down" label="Receive" onPress={() => router.push('/(app)/receive')} />
-          <CircleAction icon="arrow-forward" label="Send" onPress={() => router.push('/(app)/send-crypto')} />
+          {features.crypto_trading && (
+            <CircleAction icon="trending-up" label="Trade" onPress={() => router.push('/(app)/convert')} />
+          )}
+          {features.crypto_deposits && (
+            <CircleAction icon="arrow-down" label="Receive" onPress={() => router.push('/(app)/receive')} />
+          )}
+          {features.crypto_withdrawals && (
+            <CircleAction icon="arrow-forward" label="Send" onPress={() => router.push('/(app)/send-crypto')} />
+          )}
         </ActionRow>
 
         {/* Assets */}

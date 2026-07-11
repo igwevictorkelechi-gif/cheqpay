@@ -17,11 +17,13 @@ import {
 } from '@/components/brand';
 import { TxnRow } from '@/components/TxnRow';
 import { KycBanner } from '@/components/KycBanner';
+import { useFeatures } from '@/lib/useFeatures';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const { showBalance, toggleBalance } = useUIStore();
+  const features = useFeatures();
   const [ngn, setNgn] = useState(0);
   const [txns, setTxns] = useState<LedgerTransaction[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -85,7 +87,7 @@ export default function HomeScreen() {
 
         <KycBanner />
 
-        {ngn === 0 && txns.length === 0 && (
+        {features.ngn_deposits && ngn === 0 && txns.length === 0 && (
           <View className="px-5 mb-6">
             <TouchableOpacity
               activeOpacity={0.9}
@@ -107,9 +109,15 @@ export default function HomeScreen() {
         )}
 
         <ActionRow>
-          <CircleAction icon="arrow-down" label="Deposit" onPress={() => router.push('/(app)/deposit')} />
-          <CircleAction icon="arrow-forward" label="Withdraw" onPress={() => router.push('/(app)/withdraw')} />
-          <CircleAction icon="sync" label="Convert" onPress={() => router.push('/(app)/convert')} />
+          {features.ngn_deposits && (
+            <CircleAction icon="arrow-down" label="Deposit" onPress={() => router.push('/(app)/deposit')} />
+          )}
+          {features.ngn_withdrawals && (
+            <CircleAction icon="arrow-forward" label="Withdraw" onPress={() => router.push('/(app)/withdraw')} />
+          )}
+          {features.crypto_trading && (
+            <CircleAction icon="sync" label="Convert" onPress={() => router.push('/(app)/convert')} />
+          )}
         </ActionRow>
 
         {/* Cash account */}

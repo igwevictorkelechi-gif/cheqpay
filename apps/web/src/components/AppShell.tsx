@@ -4,8 +4,9 @@ import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Bitcoin, Tag, LucideIcon } from "lucide-react";
+import { useFeatures } from "@/lib/useFeatures";
 
-const tabs: { href: string; label: string; icon: LucideIcon }[] = [
+const ALL_TABS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/", label: "Home", icon: Home },
   { href: "/crypto", label: "Crypto", icon: Bitcoin },
   { href: "/pay-bill", label: "Pay Bill", icon: Tag },
@@ -27,6 +28,16 @@ function isTabActive(href: string, pathname: string): boolean {
  */
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const features = useFeatures();
+
+  // Tabs for switched-off features disappear entirely (server enforces too).
+  const cryptoVisible =
+    features.crypto_trading || features.crypto_deposits || features.crypto_withdrawals;
+  const tabs = ALL_TABS.filter((t) => {
+    if (t.href === "/crypto") return cryptoVisible;
+    if (t.href === "/pay-bill") return features.bill_payments;
+    return true;
+  });
   const activeIndex = tabs.findIndex((t) => isTabActive(t.href, pathname));
 
   return (
@@ -41,8 +52,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
             {activeIndex >= 0 && (
               <span
                 aria-hidden
-                className="pointer-events-none absolute inset-y-0 left-0 w-1/3 p-0.5"
+                className="pointer-events-none absolute inset-y-0 left-0 p-0.5"
                 style={{
+                  width: `${100 / tabs.length}%`,
                   transform: `translateX(${activeIndex * 100}%)`,
                   transition: "transform 0.45s cubic-bezier(0.34, 1.4, 0.64, 1)",
                 }}
