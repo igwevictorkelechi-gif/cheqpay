@@ -17,6 +17,7 @@ Maplerad, so prices can never drift.
 
 | Feature | Flag | Blocker |
 | --- | --- | --- |
+| Bill payments | `bill_payments` | **Sandbox key** — bills would debit the user and deliver nothing. Turn ON in admin for a supervised test window, then OFF. Leave ON only after the LIVE key is in |
 | NGN deposits (virtual accounts) | `ngn_deposits` | Maplerad hasn't enabled NGN collections on the business — support ticket |
 | Stablecoin deposits (USDT/USDC ERC-20) | `crypto_deposits` | Maplerad `POST /crypto` fails with THEIR SQL bug (`column supported_chains does not exist`) — support ticket; **plus** VASP/Play compliance |
 | Stablecoin withdrawals | `crypto_withdrawals` | Same, **plus** withdrawal amount units are UNVERIFIED — run one sandbox withdrawal before flipping |
