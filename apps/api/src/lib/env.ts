@@ -89,11 +89,22 @@ const envSchema = z.object({
   FLUTTERWAVE_SECRET_KEY: z.string().optional(),
   FLUTTERWAVE_WEBHOOK_HASH: z.string().optional(),
   PAYSTACK_SECRET_KEY: z.string().optional(),
+  // Maplerad — the bills rail when BILLS_PROVIDER=maplerad. Bills-only
+  // (data/electricity/cable); money-in/out stays on the main rail.
+  MAPLERAD_SECRET_KEY: z.string().optional(),
+  MAPLERAD_BASE_URL: z.string().url().default("https://api.maplerad.com/v1"),
+  MAPLERAD_WEBHOOK_SECRET: z.string().optional(),
   // Which rail executes bill payments. "auto" prefers Flutterwave when its
   // keys exist (Paystack has no bills product today), else the main provider.
+  // "maplerad" routes only the services Maplerad offers (data/electricity/
+  // cabletv) to it, leaving airtime/betting/food on Flutterwave.
   // "main" forces the PAYMENT_PROVIDER rail — flip to this if Paystack ever
   // ships bills and this codebase adds support.
-  BILLS_PROVIDER: providerEnum("BILLS_PROVIDER", ["auto", "flutterwave", "main"], "auto"),
+  BILLS_PROVIDER: providerEnum(
+    "BILLS_PROVIDER",
+    ["auto", "flutterwave", "maplerad", "main"],
+    "auto"
+  ),
 
   // Phase 4 (rates / market data)
   PRICE_FEED: providerEnum("PRICE_FEED", ["live", "mock"], "live"),

@@ -3,12 +3,14 @@ import type { PaymentProvider } from "./types";
 import { MockPaymentProvider } from "./mock";
 import { FlutterwaveProvider } from "./flutterwave";
 import { PaystackProvider } from "./paystack";
+import { MapleradProvider } from "./maplerad";
 
 export * from "./types";
 
 let cached: PaymentProvider | null = null;
 let cachedFlw: FlutterwaveProvider | null = null;
 let cachedPaystack: PaystackProvider | null = null;
+let cachedMaplerad: MapleradProvider | null = null;
 
 /** Flutterwave instance when its keys are configured, else null. */
 export function flutterwaveIfConfigured(): FlutterwaveProvider | null {
@@ -29,6 +31,19 @@ export function paystackIfConfigured(): PaystackProvider | null {
   if (!env.PAYSTACK_SECRET_KEY) return null;
   if (!cachedPaystack) cachedPaystack = new PaystackProvider(env.PAYSTACK_SECRET_KEY);
   return cachedPaystack;
+}
+
+/** Maplerad instance when its key is configured, else null. */
+export function mapleradIfConfigured(): MapleradProvider | null {
+  const env = getEnv();
+  if (!env.MAPLERAD_SECRET_KEY) return null;
+  if (!cachedMaplerad) {
+    cachedMaplerad = new MapleradProvider(
+      env.MAPLERAD_SECRET_KEY,
+      env.MAPLERAD_BASE_URL
+    );
+  }
+  return cachedMaplerad;
 }
 
 /**
@@ -60,14 +75,29 @@ export function getPaymentProvider(): PaymentProvider {
 }
 
 /**
+ * The bill services Maplerad's bills API actually offers. Airtime, betting and
+ * food have no Maplerad equivalent, so they stay on Flutterwave even when
+ * BILLS_PROVIDER=maplerad — routing them to Maplerad would fail every purchase.
+ */
+const MAPLERAD_BILL_SERVICES = new Set(["data", "electricity", "cabletv"]);
+
+/**
  * The bills rail, selected by BILLS_PROVIDER:
  *  - "auto" (default): Flutterwave when its keys exist (Paystack has no bills
  *    product today), otherwise the main provider (mock in dev)
  *  - "flutterwave": force Flutterwave (falls back to main if unconfigured)
+ *  - "maplerad": Maplerad for the services it supports (see
+ *    MAPLERAD_BILL_SERVICES); every other service falls back to Flutterwave
  *  - "main": force the PAYMENT_PROVIDER rail
+ *
+ * `service` is the bill service being paid (e.g. "data"). It is what makes the
+ * Maplerad split per-service; omit it and Maplerad is never selected.
  */
-export function getBillsProvider(): PaymentProvider {
+export function getBillsProvider(service?: string): PaymentProvider {
   const mode = getEnv().BILLS_PROVIDER;
   if (mode === "main") return getPaymentProvider();
+  if (mode === "maplerad" && service && MAPLERAD_BILL_SERVICES.has(service)) {
+    return mapleradIfConfigured() ?? flutterwaveIfConfigured() ?? getPaymentProvider();
+  }
   return flutterwaveIfConfigured() ?? getPaymentProvider();
 }
