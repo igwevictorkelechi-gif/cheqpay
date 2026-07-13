@@ -4,6 +4,7 @@ import { MockCustodyProvider } from "./mock";
 import { TatumCustodyProvider } from "./tatum";
 import { CryptoApisCustodyProvider } from "./cryptoapis";
 import { CoboCustodyProvider } from "./cobo";
+import { MapleradCustodyProvider } from "./maplerad";
 
 export * from "./types";
 
@@ -21,7 +22,12 @@ export function getCustodyProvider(): CustodyProvider {
   if (cached) return cached;
 
   const env = getEnv();
-  if (env.CUSTODY_PROVIDER === "cobo") {
+  if (env.CUSTODY_PROVIDER === "maplerad") {
+    if (!env.MAPLERAD_SECRET_KEY) {
+      throw new Error("CUSTODY_PROVIDER=maplerad requires MAPLERAD_SECRET_KEY");
+    }
+    cached = new MapleradCustodyProvider();
+  } else if (env.CUSTODY_PROVIDER === "cobo") {
     if (!env.COBO_API_PRIVATE_KEY || !env.COBO_WALLET_ID || !env.COBO_CALLBACK_PUBKEY) {
       throw new Error(
         "CUSTODY_PROVIDER=cobo requires COBO_API_PRIVATE_KEY, COBO_WALLET_ID and COBO_CALLBACK_PUBKEY"

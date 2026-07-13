@@ -21,12 +21,20 @@ const FLAGS_KEY = "feature_flags";
 
 /**
  * Features that default OFF because no provider can currently serve them.
- * NGN deposits need Maplerad to enable collections on the business; until then
- * virtual-account creation fails for every bank, so we hide the deposit entry
- * points rather than let users chase a payment that cannot land. Flip this in
- * the admin dashboard the day collections go live.
+ * Flip these in the admin dashboard when their blocker clears — no deploy needed.
+ *
+ * - ngn_deposits: Maplerad hasn't enabled NGN collections on the business, so
+ *   virtual-account creation fails for every bank.
+ * - crypto_deposits / crypto_withdrawals: two blockers. Maplerad's address
+ *   endpoint currently fails on their side (SQL error, ticket open), AND the
+ *   CBN/SEC VASP registration + Google Play Financial Features Declaration are
+ *   compliance prerequisites that switching providers does not waive.
  */
-const DEFAULT_OFF: readonly FeatureKey[] = ["ngn_deposits"];
+const DEFAULT_OFF: readonly FeatureKey[] = [
+  "ngn_deposits",
+  "crypto_deposits",
+  "crypto_withdrawals",
+];
 
 const DEFAULTS: Record<FeatureKey, boolean> = Object.fromEntries(
   FEATURE_DEFS.map((f) => [f.key, !DEFAULT_OFF.includes(f.key)])

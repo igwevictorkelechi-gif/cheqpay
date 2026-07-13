@@ -101,6 +101,21 @@ export async function POST(req: Request): Promise<Response> {
       return NextResponse.json({ status: "unhandled", eventId: svix.id });
     }
 
+    if (name.startsWith("crypto.")) {
+      // Stablecoin deposit/transfer events. Their exact names and payloads
+      // cannot be confirmed yet — Maplerad's sandbox address endpoint is broken
+      // (their SQL bug), so no test deposit has ever been observed. Log the
+      // full shape loudly; crediting gets wired from a real captured event, not
+      // a guess. crypto_deposits stays OFF until then, so nothing is lost.
+      console.error("[maplerad webhook] crypto event received but crediting is not wired", {
+        id: svix.id,
+        name,
+        payload: JSON.stringify(event).slice(0, 2000),
+      });
+      await markProcessed(SOURCE, svix.id);
+      return NextResponse.json({ status: "unhandled", eventId: svix.id });
+    }
+
     // Authentic but not an event we consume — acknowledge so Maplerad stops retrying.
     await markProcessed(SOURCE, svix.id);
     return NextResponse.json({ status: "ignored", eventId: svix.id });

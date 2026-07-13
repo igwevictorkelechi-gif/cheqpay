@@ -12,6 +12,18 @@ export const kycTier1Schema = z.object({
   country: z.string().length(2).default("NG"),
   bvn: z.string().regex(/^\d{11}$/, "Expected an 11-digit BVN").optional(),
   documentRefs: z.array(z.string().min(1)).max(10).default([]),
+  // Optional today: needed only to enroll the user with Maplerad, whose tier 1
+  // requires a phone and street address (verified against their sandbox). Old
+  // clients omit them — enrollment is skipped and retried on the next submit.
+  phone: z.string().min(7).max(20).optional(),
+  address: z
+    .object({
+      street: z.string().min(3).max(120),
+      city: z.string().min(2).max(60),
+      state: z.string().min(2).max(60),
+      postalCode: z.string().min(3).max(12),
+    })
+    .optional(),
 });
 export type KycTier1Input = z.infer<typeof kycTier1Schema>;
 

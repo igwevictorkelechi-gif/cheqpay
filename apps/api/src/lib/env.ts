@@ -58,11 +58,12 @@ const envSchema = z.object({
   // trailing slash.
   API_PUBLIC_URL: z.string().url().optional(),
 
-  // Phase 2 (custody). Cobo WaaS is the current live provider (Tatum's Virtual
-  // Accounts closed; Crypto APIs' WaaS migrated to Vaultody).
+  // Phase 2 (custody). Maplerad stablecoin (USDT/USDC) is the target provider;
+  // Cobo/Tatum/CryptoAPIs are legacy. No provider offers BTC — it stays
+  // "coming soon" until a BTC custodian is wired.
   CUSTODY_PROVIDER: providerEnum(
     "CUSTODY_PROVIDER",
-    ["mock", "tatum", "cryptoapis", "cobo"],
+    ["mock", "tatum", "cryptoapis", "cobo", "maplerad"],
     "mock"
   ),
   TATUM_API_KEY: z.string().optional(),
