@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     }
 
     const result = await getBillsProvider().validateBillCustomer({
-      flwBillerCode: biller.flwBillerCode,
+      billerCode: biller.mapleradId,
       customer: body.customer,
     });
     if (!result.valid) {

@@ -1,8 +1,7 @@
 /**
- * Naira payment-rail abstraction (PSP). Flutterwave is primary; Paystack slots
- * in behind the same interface as the swappable secondary. Amounts crossing
- * this boundary are human decimal strings in NGN; they're converted to minor
- * units (kobo) on our side.
+ * Naira payment-rail abstraction (PSP). Maplerad is the live rail; MockPaymentProvider
+ * stands in for local dev and tests. Amounts crossing this boundary are human
+ * decimal strings in NGN; each provider converts to minor units (kobo) itself.
  */
 
 export interface NgnChargeEvent {
@@ -66,8 +65,8 @@ export interface ResolveAccountResult {
 }
 
 export interface BillValidateInput {
-  flwBillerCode?: string;
-  flwItemCode?: string;
+  /** The provider's exact biller identifier (see lib/bills.ts `mapleradId`). */
+  billerCode?: string;
   customer: string;
 }
 export interface BillValidateResult {
@@ -76,10 +75,9 @@ export interface BillValidateResult {
 }
 
 export interface BillPayInput {
-  service: string; // airtime | data | electricity | cabletv | betting
-  flwType: string; // Flutterwave bill `type`
-  flwBillerCode?: string;
-  flwItemCode?: string;
+  service: string; // airtime | data | electricity | cabletv
+  /** The provider's exact biller identifier (see lib/bills.ts `mapleradId`). */
+  billerCode?: string;
   customer: string;
   amount: string; // NGN decimal string
   reference: string;

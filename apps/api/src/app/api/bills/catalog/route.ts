@@ -11,7 +11,7 @@ export async function GET() {
     const assets = await prisma.billerAsset.findMany();
     const logoById = new Map(assets.map((a) => [a.billerId, a.logo]));
 
-    // Strip Flutterwave-internal codes from the public payload.
+    // Strip provider-internal biller codes from the public payload.
     const services = BILL_CATALOG.map((s) => ({
       service: s.service,
       label: s.label,
@@ -26,8 +26,8 @@ export async function GET() {
         short: b.short,
         color: b.color,
         logo: logoById.get(b.id) ?? b.logo ?? null,
-        // No provider biller code yet -> shown as "Coming soon" in the apps.
-        comingSoon: !b.flwBillerCode,
+        // No provider biller code -> shown as "Coming soon" in the apps.
+        comingSoon: !b.mapleradId,
       })),
       plans: s.plans.map((p) => ({
         id: p.id,

@@ -47,7 +47,6 @@ export async function POST(req: Request) {
     // Resolve the amount: variable services take `amount`; fixed take a plan.
     let amount: string;
     let planName: string | null = null;
-    let flwItemCode: string | undefined;
     if (config.variableAmount) {
       if (!body.amount) throw new ApiError(422, "Amount is required", "no_amount");
       amount = body.amount;
@@ -59,7 +58,6 @@ export async function POST(req: Request) {
       }
       amount = plan.amount;
       planName = plan.name;
-      flwItemCode = plan.flwItemCode;
     }
 
     const amountMinor = toMinorUnits(amount, Asset.NGN);
@@ -71,9 +69,9 @@ export async function POST(req: Request) {
     // throws here, safely, rather than after the user's balance is debited.
     const psp = getBillsProvider();
 
-    // Billers without a provider code (e.g. Chowdeck pending its Flutterwave
-    // listing) are "Coming soon" — refuse before any money moves.
-    if (!biller.flwBillerCode && psp.name !== "mock") {
+    // Billers with no provider identifier (betting, Chowdeck) are "Coming soon"
+    // — refuse before any money moves.
+    if (!biller.mapleradId && psp.name !== "mock") {
       throw new ApiError(
         503,
         `${biller.name} payments are coming soon. Please check back shortly.`,
@@ -128,9 +126,7 @@ export async function POST(req: Request) {
     try {
       const result = await psp.payBill({
         service: body.service,
-        flwType: config.flwType,
-        flwBillerCode: biller.flwBillerCode,
-        flwItemCode,
+        billerCode: biller.mapleradId,
         customer: body.customer,
         amount,
         reference: tx.id,

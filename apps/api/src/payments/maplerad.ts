@@ -40,36 +40,6 @@ function toKobo(amount: string): number {
   return Math.round(parseFloat(amount) * 100);
 }
 
-/**
- * Map a Flutterwave biller code (used in our catalog) to a brand token we can
- * match against Maplerad's biller identifiers at runtime. Extend as the catalog
- * grows. Airtime/betting/food have no Maplerad equivalent and are omitted.
- */
-const FLW_TO_BRAND: Record<string, string> = {
-  // data networks
-  BIL099: "mtn",
-  BIL100: "airtel",
-  BIL102: "glo",
-  BIL103: "9mobile",
-  // electricity discos
-  BIL113: "ikeja",
-  BIL112: "eko",
-  BIL115: "abuja",
-  BIL117: "port", // Port Harcourt
-  BIL116: "kano",
-  BIL118: "ibadan",
-  // cable
-  BIL121: "dstv",
-  BIL122: "gotv",
-  BIL123: "startimes",
-};
-
-interface MapleradBiller {
-  name: string;
-  identifier: string;
-  commission?: number;
-}
-
 export class MapleradProvider implements PaymentProvider {
   readonly name = "maplerad";
 
@@ -100,27 +70,20 @@ export class MapleradProvider implements PaymentProvider {
     return (json.data ?? json) as T;
   }
 
-  private async billers(type: "data" | "cable" | "electricity"): Promise<MapleradBiller[]> {
-    return this.req<MapleradBiller[]>(`/bills/${type}/billers/NG`);
-  }
-
-  /** Find the Maplerad biller whose identifier matches a catalog brand. */
-  private async matchBiller(
-    type: "data" | "cable" | "electricity",
-    flwBillerCode: string | undefined,
-  ): Promise<MapleradBiller> {
-    const brand = flwBillerCode ? FLW_TO_BRAND[flwBillerCode] : undefined;
-    if (!brand) {
-      throw new BillPaymentError("Unmapped biller for Maplerad rail", `No Maplerad mapping for ${flwBillerCode ?? "unknown biller"}`);
+  /**
+   * The catalog stores Maplerad's exact biller identifier, so there is nothing
+   * to look up or guess. This used to fuzzy-match a brand token against the
+   * biller list, which silently picked the wrong meter type (prepaid vs postpaid
+   * are separate billers) and could not find Kano's disco at all.
+   */
+  private identifier(input: { billerCode?: string }): string {
+    if (!input.billerCode) {
+      throw new BillPaymentError(
+        "Biller is not available",
+        "This biller has no Maplerad identifier, so it cannot be paid.",
+      );
     }
-    const list = await this.billers(type);
-    const hit =
-      list.find((b) => b.identifier.toLowerCase().includes(brand)) ??
-      list.find((b) => b.name.toLowerCase().includes(brand));
-    if (!hit) {
-      throw new BillPaymentError("Biller not available on Maplerad", `${brand} not found in Maplerad ${type} billers`);
-    }
-    return hit;
+    return input.billerCode;
   }
 
   // ---- Bills (SUPPORTED) --------------------------------------------------
@@ -150,14 +113,10 @@ export class MapleradProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Nigerian airtime. Unlike data/cable there is no biller lookup or plan to
-   * match: Maplerad takes a single `ng-airtime` identifier and infers the
-   * network from the phone number, and the amount is whatever the user typed.
-   */
+  /** Airtime: no plan to resolve — the amount is whatever the user typed. */
   private async payAirtime(input: BillPayInput, kobo: number): Promise<BillPayResult> {
     const r = await this.req<{ id: string; status: string }>("/bills/airtime", "POST", {
-      identifier: "ng-airtime",
+      identifier: this.identifier(input), // e.g. "mtn-ng"
       phone_number: input.customer,
       amount: kobo,
     });
@@ -165,21 +124,22 @@ export class MapleradProvider implements PaymentProvider {
   }
 
   private async payData(input: BillPayInput, kobo: number): Promise<BillPayResult> {
-    const biller = await this.matchBiller("data", input.flwBillerCode);
+    const identifier = this.identifier(input);
     const bundles = await this.req<Array<{ name: string; price: number; code: string }>>(
-      `/bills/data/bundle/${biller.identifier}`,
+      `/bills/data/bundle/${identifier}`,
     );
-    // Match the plan by price (kobo). Require an exact match to avoid selling
-    // the wrong bundle; if none matches, the catalog plan needs aligning.
+    // Match the plan by exact price (kobo). Requiring an exact match means a
+    // catalog price with no real bundle behind it is refused rather than
+    // silently selling the customer a different bundle.
     const bundle = bundles.find((b) => b.price === kobo);
     if (!bundle) {
       throw new BillPaymentError(
         "No matching data bundle",
-        `No Maplerad ${biller.name} bundle priced at ₦${(kobo / 100).toFixed(2)}. Align the catalog plan to a Maplerad bundle.`,
+        `No ${identifier} bundle priced at ₦${(kobo / 100).toFixed(2)}. Align the catalog plan to a real Maplerad bundle.`,
       );
     }
     const r = await this.req<{ id: string; status: string }>("/bills/data", "POST", {
-      identifier: biller.identifier,
+      identifier,
       bundle_identifier: bundle.code,
       phone_number: input.customer,
       amount: kobo,
@@ -188,13 +148,13 @@ export class MapleradProvider implements PaymentProvider {
   }
 
   private async payElectricity(input: BillPayInput, kobo: number): Promise<BillPayResult> {
-    const biller = await this.matchBiller("electricity", input.flwBillerCode);
+    // The identifier already encodes prepaid vs postpaid — the customer picked it.
     const r = await this.req<{ id: string; status: string; token?: string }>(
       "/bills/electricity",
       "POST",
       {
         meter_number: input.customer,
-        identifier: biller.identifier,
+        identifier: this.identifier(input),
         amount: kobo,
         phone_number: input.customer,
       },
@@ -203,22 +163,28 @@ export class MapleradProvider implements PaymentProvider {
   }
 
   private async payCable(input: BillPayInput, kobo: number): Promise<BillPayResult> {
-    const biller = await this.matchBiller("cable", input.flwBillerCode);
-    // Maplerad cable needs a subscription_id; resolve it by matching the plan price.
-    const groups = await this.req<Array<{ subscription_plans: Array<{ subscription_id: string; price: number }> }>>(
-      `/bills/cable/subscriptions/${biller.identifier}`,
-    );
-    const plan = groups
-      .flatMap((g) => g.subscription_plans)
+    const identifier = this.identifier(input);
+    // Cable needs a subscription_id. Maplerad groups plans by bouquet, each with
+    // `payment_options` (one per duration) carrying the id and price.
+    const bouquets = await this.req<
+      Array<{
+        title: string;
+        plan_id: string;
+        payment_options?: Array<{ subscription_id: string; price: number }>;
+      }>
+    >(`/bills/cable/subscriptions/${identifier}`);
+
+    const plan = bouquets
+      .flatMap((b) => b.payment_options ?? [])
       .find((p) => p.price === kobo);
     if (!plan) {
       throw new BillPaymentError(
         "No matching cable plan",
-        `No Maplerad ${biller.name} plan priced at ₦${(kobo / 100).toFixed(2)}. Align the catalog plan to a Maplerad subscription.`,
+        `No ${identifier} plan priced at ₦${(kobo / 100).toFixed(2)}. Align the catalog plan to a real Maplerad subscription.`,
       );
     }
     const r = await this.req<{ id: string; status: string }>("/bills/cable", "POST", {
-      identifier: biller.identifier,
+      identifier,
       serial_number: input.customer,
       amount: kobo,
       subscription_id: plan.subscription_id,
@@ -226,21 +192,23 @@ export class MapleradProvider implements PaymentProvider {
     return { providerRef: r.id, status: normalizeStatus(r.status) };
   }
 
+  /**
+   * Resolve an electricity meter to its owner's name. Maplerad exposes this for
+   * electricity only; cable smartcards cannot be resolved, so we let those pass
+   * and let the purchase itself reject a bad card. Never blocks on a provider
+   * hiccup — a failed lookup must not stop a valid payment.
+   */
   async validateBillCustomer(input: BillValidateInput): Promise<BillValidateResult> {
-    // Only electricity meters can be resolved on Maplerad. Cable smartcard
-    // validation isn't exposed, so we optimistically pass it (the purchase
-    // call will reject a bad smartcard).
-    const brand = input.flwBillerCode ? FLW_TO_BRAND[input.flwBillerCode] : undefined;
-    if (!brand) return { valid: true };
+    if (!input.billerCode?.includes("electricity") && !input.billerCode?.includes("electric")) {
+      return { valid: true };
+    }
     try {
-      const biller = await this.matchBiller("electricity", input.flwBillerCode);
       const r = await this.req<{ name: string }>("/bills/electricity/resolve-account", "POST", {
         meter_number: input.customer,
-        identifier: biller.identifier,
+        identifier: input.billerCode,
       });
       return { valid: Boolean(r.name), customerName: r.name };
     } catch {
-      // Not an electricity biller (or resolve unsupported) — don't block.
       return { valid: true };
     }
   }
