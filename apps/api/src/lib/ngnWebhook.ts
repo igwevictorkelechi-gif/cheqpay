@@ -6,114 +6,94 @@ import {
   TransactionType,
   prisma,
 } from "@cheqpay/db";
-import type { NgnChargeEvent, PaymentProvider } from "@/payments/types";
-import { jsonOk, toErrorResponse } from "@/lib/http";
+import type { NgnChargeEvent } from "@/payments/types";
 import { creditBalance } from "@/lib/ledger";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { sendPush } from "@/lib/push";
 import { feeFromBps, getDepositFeeBps } from "@/lib/settings";
 
 /**
- * Shared NGN webhook pipeline, provider-agnostic. Each PSP route (Flutterwave,
- * Paystack) verifies + parses with its own provider instance and this module
- * applies the money changes: verify signature on the raw body -> parse ->
+ * NGN settlement — the money changes an inbound payment webhook applies:
  * idempotency gate -> atomic ledger update -> push notification.
+ *
+ * Provider-agnostic on purpose: signature verification and event parsing differ
+ * per PSP (Maplerad signs with Svix) and live in the provider's own route, which
+ * then calls into these functions to move the money.
  */
-export async function handleNgnWebhook(
-  provider: PaymentProvider,
-  req: Request,
-  signatureHeaders: string[]
-): Promise<Response> {
+
+/** The shape every finalize* function returns; `notifySettlement` reads it. */
+export interface SettlementResult {
+  status: string;
+  transactionId?: string;
+  userId?: string;
+  amountMinor?: string;
+}
+
+/**
+ * Record an event before acting on it. Returns false when this event was
+ * already seen, so the caller can no-op instead of double-crediting a replay.
+ */
+export async function claimWebhookEvent(
+  source: string,
+  eventId: string,
+  payload: unknown
+): Promise<boolean> {
   try {
-    const rawBody = await req.text();
-    let signature: string | null = null;
-    for (const h of signatureHeaders) {
-      signature = req.headers.get(h);
-      if (signature) break;
-    }
-
-    if (!provider.verifyWebhookSignature(rawBody, signature)) {
-      return jsonOk({ error: "Invalid signature", code: "bad_signature" }, 401);
-    }
-
-    let payload: unknown;
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      return jsonOk({ error: "Invalid JSON", code: "bad_json" }, 400);
-    }
-
-    const charge = provider.parseChargeEvent(payload);
-    const transfer = charge ? null : provider.parseTransferEvent(payload);
-    const event = charge ?? transfer;
-    if (!event) {
-      // Unrecognized-but-authentic events are acknowledged so the PSP stops
-      // retrying (Paystack sends many event types we don't consume).
-      return jsonOk({ status: "ignored" });
-    }
-
-    // Idempotency gate (first writer wins).
-    try {
-      await prisma.webhookEvent.create({
-        data: {
-          source: provider.name,
-          eventId: event.eventId,
-          payload: payload as Prisma.InputJsonValue,
-          signatureValid: true,
-        },
-      });
-    } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-        return jsonOk({ status: "duplicate", eventId: event.eventId });
-      }
-      throw err;
-    }
-
-    let result = charge
-      ? await finalizeDeposit(charge.txRef, charge.amount, charge.status)
-      : await finalizeWithdrawal(transfer!.reference, transfer!.status);
-
-    // Transfers into a STATIC virtual account have no pre-created PENDING
-    // transaction, so an "unmatched" successful charge is credited to the
-    // VA's owner directly.
-    if (charge && result.status === "unmatched" && charge.status === "successful") {
-      result = await creditStaticVaDeposit(provider.name, charge);
-    }
-
-    await markProcessed(provider.name, event.eventId);
-
-    // Fire notifications after the ledger has committed (best-effort).
-    if (result.status === "credited" && result.userId) {
-      await sendPush(result.userId, {
-        category: "deposits",
-        title: "Deposit received",
-        body: `₦${fromMinorUnits(BigInt(result.amountMinor!), Asset.NGN)} has landed in your CheqPay wallet.`,
-        data: { transactionId: result.transactionId },
-      });
-    } else if (result.status === "reversed" && result.userId) {
-      await sendPush(result.userId, {
-        category: "withdrawals",
-        title: "Withdrawal reversed",
-        body: `Your payout of ₦${fromMinorUnits(BigInt(result.amountMinor!), Asset.NGN)} failed and was refunded.`,
-        data: { transactionId: result.transactionId },
-      });
-    } else if (result.status === "completed" && result.userId) {
-      await sendPush(result.userId, {
-        category: "withdrawals",
-        title: "Withdrawal sent",
-        body: "Your payout was completed successfully.",
-        data: { transactionId: result.transactionId },
-      });
-    }
-
-    return jsonOk({ ...result, eventId: event.eventId });
+    await prisma.webhookEvent.create({
+      data: {
+        source,
+        eventId,
+        payload: payload as Prisma.InputJsonValue,
+        signatureValid: true,
+      },
+    });
+    return true;
   } catch (err) {
-    return toErrorResponse(err);
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return false; // already handled
+    }
+    throw err;
   }
 }
 
+/** Tell the user their money moved. Best-effort — never blocks settlement. */
+export async function notifySettlement(result: SettlementResult): Promise<void> {
+  if (!result.userId) return;
+  const naira = () => fromMinorUnits(BigInt(result.amountMinor!), Asset.NGN);
+
+  if (result.status === "credited") {
+    await sendPush(result.userId, {
+      category: "deposits",
+      title: "Deposit received",
+      body: `₦${naira()} has landed in your CheqPay wallet.`,
+      data: { transactionId: result.transactionId },
+    });
+  } else if (result.status === "reversed") {
+    await sendPush(result.userId, {
+      category: "withdrawals",
+      title: "Withdrawal reversed",
+      body: `Your payout of ₦${naira()} failed and was refunded.`,
+      data: { transactionId: result.transactionId },
+    });
+  } else if (result.status === "completed") {
+    await sendPush(result.userId, {
+      category: "withdrawals",
+      title: "Withdrawal sent",
+      body: "Your payout was completed successfully.",
+      data: { transactionId: result.transactionId },
+    });
+  }
+}
+
+export function markProcessed(source: string, eventId: string) {
+  return prisma.webhookEvent.update({
+    where: { source_eventId: { source, eventId } },
+    data: { processedAt: new Date() },
+  });
+}
+
 /** Credit a PENDING deposit on a successful charge (atomic + idempotent). */
-async function finalizeDeposit(
+export async function finalizeDeposit(
   txRef: string,
   amount: string,
   status: "successful" | "failed" | "pending"
@@ -167,7 +147,7 @@ async function finalizeDeposit(
 }
 
 /** Complete or reverse a PROCESSING withdrawal based on the payout result. */
-async function finalizeWithdrawal(
+export async function finalizeWithdrawal(
   reference: string,
   status: "successful" | "failed" | "pending"
 ) {
@@ -227,13 +207,6 @@ async function finalizeWithdrawal(
   });
 }
 
-function markProcessed(source: string, eventId: string) {
-  return prisma.webhookEvent.update({
-    where: { source_eventId: { source, eventId } },
-    data: { processedAt: new Date() },
-  });
-}
-
 /**
  * Credit a successful charge that arrived via the user's STATIC virtual
  * account. Resolution order:
@@ -242,7 +215,7 @@ function markProcessed(source: string, eventId: string) {
  *      owns an NGN virtual account (conservative — we never guess with money)
  * The credit is idempotent on the provider event id, so replays can't double-credit.
  */
-async function creditStaticVaDeposit(source: string, charge: NgnChargeEvent) {
+export async function creditStaticVaDeposit(source: string, charge: NgnChargeEvent) {
   if (charge.currency.toUpperCase() !== "NGN") {
     return { status: "unmatched" as const };
   }

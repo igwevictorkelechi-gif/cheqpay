@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       throw new ApiError(422, "Unknown service or biller", "bad_biller");
     }
 
-    const result = await getBillsProvider(body.service).validateBillCustomer({
+    const result = await getBillsProvider().validateBillCustomer({
       flwBillerCode: biller.flwBillerCode,
       customer: body.customer,
     });

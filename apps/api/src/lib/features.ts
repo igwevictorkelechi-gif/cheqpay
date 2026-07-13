@@ -3,9 +3,8 @@ import { ApiError } from "./http";
 
 /**
  * Admin-controlled feature switches (kill switches). Stored as one JSON blob
- * in platform_settings under "feature_flags"; anything missing defaults to ON.
- * Server routes enforce these — turning a feature off blocks it for every
- * client immediately, no deploy needed.
+ * in platform_settings under "feature_flags". Server routes enforce these —
+ * turning a feature off blocks it for every client immediately, no deploy needed.
  */
 export const FEATURE_DEFS = [
   { key: "ngn_deposits", label: "Naira deposits", description: "Virtual accounts & bank-transfer funding" },
@@ -13,15 +12,24 @@ export const FEATURE_DEFS = [
   { key: "crypto_trading", label: "Crypto trading", description: "Buy, sell and convert (quotes + swaps)" },
   { key: "crypto_deposits", label: "Crypto deposits", description: "Receive screens & deposit addresses" },
   { key: "crypto_withdrawals", label: "Crypto withdrawals", description: "Sending crypto to external wallets" },
-  { key: "bill_payments", label: "Bill payments", description: "Airtime, data, electricity, cable, betting" },
+  { key: "bill_payments", label: "Bill payments", description: "Airtime, data, electricity and cable" },
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_DEFS)[number]["key"];
 
 const FLAGS_KEY = "feature_flags";
 
+/**
+ * Features that default OFF because no provider can currently serve them.
+ * NGN deposits need Maplerad to enable collections on the business; until then
+ * virtual-account creation fails for every bank, so we hide the deposit entry
+ * points rather than let users chase a payment that cannot land. Flip this in
+ * the admin dashboard the day collections go live.
+ */
+const DEFAULT_OFF: readonly FeatureKey[] = ["ngn_deposits"];
+
 const DEFAULTS: Record<FeatureKey, boolean> = Object.fromEntries(
-  FEATURE_DEFS.map((f) => [f.key, true])
+  FEATURE_DEFS.map((f) => [f.key, !DEFAULT_OFF.includes(f.key)])
 ) as Record<FeatureKey, boolean>;
 
 /** Current flags: stored values merged over all-on defaults. */

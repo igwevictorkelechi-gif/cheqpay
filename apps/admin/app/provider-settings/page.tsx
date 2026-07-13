@@ -116,7 +116,7 @@ export default function ProviderSettingsPage() {
               <div className="p-2 rounded-lg bg-blue-100 text-blue-600"><CreditCard size={20} /></div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Payments (NGN)</h2>
-                <p className="text-sm text-gray-500">NGN deposits, payouts &amp; bill payments (Flutterwave)</p>
+                <p className="text-sm text-gray-500">Bill payments &amp; bank payouts (Maplerad)</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -124,15 +124,23 @@ export default function ProviderSettingsPage() {
                 <p className="text-xs text-gray-500 mb-1">Provider mode</p>
                 <span className={'px-2.5 py-1 rounded-full text-xs font-medium ' + (isLive(data.payments.provider) ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>{data.payments.provider}</span>
               </div>
-              <div><p className="text-xs text-gray-500 mb-1">Flutterwave secret key</p><StatusPill ok={data.payments.secretKeyConfigured} /></div>
-              <div><p className="text-xs text-gray-500 mb-1">Webhook hash</p><StatusPill ok={data.payments.webhookConfigured} /></div>
+              <div><p className="text-xs text-gray-500 mb-1">Maplerad secret key</p><StatusPill ok={data.payments.secretKeyConfigured} /></div>
+              <div><p className="text-xs text-gray-500 mb-1">Webhook secret</p><StatusPill ok={data.payments.webhookConfigured} /></div>
             </div>
             {!isLive(data.payments.provider) && (
               <div className="mt-4 flex items-start gap-2 rounded-lg bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
                 <ShieldAlert size={16} className="mt-0.5 shrink-0" />
-                <span>Payments are in <b>mock</b> mode. To go live set <code className="font-mono">PAYMENT_PROVIDER=flutterwave</code>, <code className="font-mono">FLUTTERWAVE_SECRET_KEY</code> and <code className="font-mono">FLUTTERWAVE_WEBHOOK_HASH</code>, then redeploy.</span>
+                <span>Payments are in <b>mock</b> mode. To go live set <code className="font-mono">PAYMENT_PROVIDER=maplerad</code>, <code className="font-mono">MAPLERAD_SECRET_KEY</code> and <code className="font-mono">MAPLERAD_WEBHOOK_SECRET</code>, then redeploy.</span>
               </div>
             )}
+            <div className="mt-4 flex items-start gap-2 rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm text-gray-700">
+              <ShieldAlert size={16} className="mt-0.5 shrink-0" />
+              <span>
+                <b>Naira deposits are off.</b> Maplerad has not enabled collections on this
+                business, so virtual accounts cannot be created. The deposit feature is switched
+                off until they do.
+              </span>
+            </div>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

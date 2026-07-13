@@ -126,11 +126,14 @@ const FOOD: Biller[] = [
   },
 ];
 
+// Betting wallet top-ups. Maplerad — our only rail — has no betting biller, so
+// these ship as "Coming soon": with no provider code the pay route refuses
+// before any money moves. Restore the codes here the day a rail can settle them.
 const BETTING: Biller[] = [
-  { id: "bet9ja", name: "Bet9ja", short: "Bet9ja", color: "#16723A", flwBillerCode: "BIL310" },
-  { id: "sportybet", name: "SportyBet", short: "SportyBet", color: "#D6001C", flwBillerCode: "BIL311" },
-  { id: "betking", name: "BetKing", short: "BetKing", color: "#00A859", flwBillerCode: "BIL312" },
-  { id: "1xbet", name: "1xBet", short: "1xBet", color: "#1A5CB0", flwBillerCode: "BIL313" },
+  { id: "bet9ja", name: "Bet9ja", short: "Bet9ja", color: "#16723A" },
+  { id: "sportybet", name: "SportyBet", short: "SportyBet", color: "#D6001C" },
+  { id: "betking", name: "BetKing", short: "BetKing", color: "#00A859" },
+  { id: "1xbet", name: "1xBet", short: "1xBet", color: "#1A5CB0" },
 ];
 
 export const BILL_CATALOG: ServiceConfig[] = [

@@ -72,15 +72,39 @@ describe("MapleradProvider", () => {
     ).rejects.toThrow(/No matching data bundle/);
   });
 
+  it("buys airtime without a biller lookup — the network comes from the number", async () => {
+    const sent = stubMaplerad({
+      ...ROUTES,
+      "POST /bills/airtime": { id: "mp_air_1", status: "SUCCESS" },
+    });
+    const r = await psp.payBill({
+      service: "airtime",
+      flwType: "AIRTIME",
+      flwBillerCode: "BIL099",
+      customer: "08030000000",
+      amount: "500",
+      reference: "tx-air",
+    });
+
+    expect(r).toEqual({ providerRef: "mp_air_1", status: "successful" });
+    // A single ng-airtime identifier, amount in kobo, and no billers/bundle lookup.
+    expect(sent).toEqual([
+      {
+        key: "POST /bills/airtime",
+        body: { identifier: "ng-airtime", phone_number: "08030000000", amount: 50_000 },
+      },
+    ]);
+  });
+
   it("rejects the services Maplerad has no billers for", async () => {
     stubMaplerad();
-    for (const service of ["airtime", "betting", "food"]) {
+    for (const service of ["betting", "food"]) {
       const err = await psp
         .payBill({
           service,
-          flwType: "AIRTIME",
-          flwBillerCode: "BIL099",
-          customer: "08030000000",
+          flwType: "BETTING",
+          flwBillerCode: "BIL310",
+          customer: "user-1",
           amount: "100",
           reference: "tx-3",
         })
@@ -140,9 +164,57 @@ describe("MapleradProvider", () => {
     }
   });
 
-  it("refuses money-in/out — it is a bills-only rail", async () => {
-    expect(() => psp.verifyWebhookSignature()).toThrow(/bills-only/);
-    await expect(psp.initiateTransfer()).rejects.toThrow(/bills-only/);
+  it("sends a payout in kobo, keyed by our transaction id for idempotency", async () => {
+    const sent = stubMaplerad({
+      "POST /transfers": { id: "mp_tr_1", status: "PENDING" },
+    });
+    const r = await psp.initiateTransfer({
+      amount: "2500.50",
+      bankCode: "044",
+      accountNumber: "0690000031",
+      reference: "tx-payout-1",
+      narration: "Cheqpay withdrawal",
+    });
+
+    expect(r).toEqual({ providerRef: "mp_tr_1", status: "pending" });
+    expect(sent).toEqual([
+      {
+        key: "POST /transfers",
+        body: {
+          bank_code: "044",
+          account_number: "0690000031",
+          amount: 250_050, // ₦2 500.50 -> kobo, never naira
+          currency: "NGN",
+          reason: "Cheqpay withdrawal",
+          reference: "tx-payout-1",
+        },
+      },
+    ]);
+  });
+
+  it("resolves an account name before we send money to it", async () => {
+    stubMaplerad({ "POST /institutions/resolve": { account_name: "ADA OKAFOR" } });
+    await expect(
+      psp.resolveBankAccount({ accountNumber: "0690000031", bankCode: "044" })
+    ).resolves.toEqual({ accountName: "ADA OKAFOR" });
+  });
+
+  it("refuses to mint a virtual account while Maplerad collections are disabled", async () => {
+    // Deposits are dark by design until Maplerad enables collections; failing
+    // loudly beats creating Maplerad customers we cannot collect against.
+    await expect(
+      psp.createVirtualAccount({
+        email: "a@b.com",
+        firstName: "Ada",
+        lastName: "Okafor",
+        permanent: true,
+        txRef: "va_1",
+      })
+    ).rejects.toThrow(/deposits are temporarily unavailable/i);
+  });
+
+  it("defers webhook verification to the Svix route", () => {
+    expect(() => psp.verifyWebhookSignature()).toThrow(/Svix/);
     expect(psp.parseChargeEvent()).toBeNull();
     expect(psp.parseTransferEvent()).toBeNull();
   });

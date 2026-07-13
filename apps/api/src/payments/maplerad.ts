@@ -1,13 +1,16 @@
 // apps/api/src/payments/maplerad.ts
 //
-// Maplerad as a BILLS-ONLY payment rail, implementing the existing
-// PaymentProvider interface (see ./types). It handles data, electricity and
-// cable TV. Airtime / betting / food are NOT offered by Maplerad's bills API,
-// so those methods throw and the caller (getBillsProvider) should keep
-// Flutterwave for them. The money-in/out rail (virtual accounts, payouts,
-// name enquiry) stays on Paystack/Flutterwave — those methods here throw a
-// clear "bills-only" error and are never reached while Maplerad is only the
-// BILLS_PROVIDER.
+// Maplerad is the NGN rail, implementing PaymentProvider (see ./types).
+//
+// Supported: bills (airtime, data, electricity, cable TV), bank payouts, name
+// enquiry and the bank list.
+//
+// NOT supported yet: NGN deposits. Maplerad has not enabled collections on the
+// business, so virtual-account creation fails for every bank; createVirtualAccount
+// throws a clear error until that is switched on.
+//
+// Betting and food have no Maplerad biller at all — they are marked "coming soon"
+// in the catalog (lib/bills.ts) and never reach this rail.
 //
 // Amounts crossing the PaymentProvider boundary are NGN decimal strings; we
 // convert to kobo (integer) for Maplerad and back.
@@ -29,7 +32,8 @@ import {
   type VirtualAccountResult,
 } from "./types";
 
-const BILLS_ONLY = "Maplerad is configured as a bills-only rail; use PAYMENT_PROVIDER (Paystack/Flutterwave) for this operation.";
+const DEPOSITS_UNAVAILABLE =
+  "NGN deposits are temporarily unavailable: Maplerad has not enabled collections on this business yet.";
 
 /** NGN decimal string -> kobo integer. "100" -> 10000. */
 function toKobo(amount: string): number {
@@ -128,21 +132,36 @@ export class MapleradProvider implements PaymentProvider {
     }
 
     switch (input.service) {
+      case "airtime":
+        return this.payAirtime(input, kobo);
       case "data":
         return this.payData(input, kobo);
       case "electricity":
         return this.payElectricity(input, kobo);
       case "cabletv":
         return this.payCable(input, kobo);
-      case "airtime":
       case "betting":
       case "food":
       default:
         throw new BillPaymentError(
           `${input.service} is not supported on the Maplerad rail`,
-          `Maplerad bills does not offer ${input.service}; route it to Flutterwave.`,
+          `Maplerad does not offer ${input.service}.`,
         );
     }
+  }
+
+  /**
+   * Nigerian airtime. Unlike data/cable there is no biller lookup or plan to
+   * match: Maplerad takes a single `ng-airtime` identifier and infers the
+   * network from the phone number, and the amount is whatever the user typed.
+   */
+  private async payAirtime(input: BillPayInput, kobo: number): Promise<BillPayResult> {
+    const r = await this.req<{ id: string; status: string }>("/bills/airtime", "POST", {
+      identifier: "ng-airtime",
+      phone_number: input.customer,
+      amount: kobo,
+    });
+    return { providerRef: r.id, status: normalizeStatus(r.status) };
   }
 
   private async payData(input: BillPayInput, kobo: number): Promise<BillPayResult> {
@@ -226,27 +245,82 @@ export class MapleradProvider implements PaymentProvider {
     }
   }
 
-  // ---- Money-in/out (NOT on this rail) ------------------------------------
+  // ---- Payouts (money out) ------------------------------------------------
 
   async listBanks(): Promise<Bank[]> {
-    // Institutions are available on Maplerad, but payouts run on the main rail.
     const banks = await this.req<Array<{ name: string; code: string }>>(
       "/institutions?type=NUBAN&country=NG&page=1&page_size=100",
     );
     return banks.map((b) => ({ code: b.code, name: b.name }));
   }
 
+  async resolveBankAccount(input: ResolveAccountInput): Promise<ResolveAccountResult> {
+    const r = await this.req<{ account_name: string }>("/institutions/resolve", "POST", {
+      bank_code: input.bankCode,
+      account_number: input.accountNumber,
+      currency: "NGN",
+    });
+    return { accountName: r.account_name };
+  }
+
+  /**
+   * NGN bank payout. `reference` is our transaction id and doubles as the
+   * idempotency key, so a retry after a network blip cannot double-send.
+   * The final status arrives asynchronously on the transfer.* webhook.
+   */
+  async initiateTransfer(input: {
+    amount: string;
+    bankCode: string;
+    accountNumber: string;
+    reference: string;
+    narration?: string;
+  }): Promise<TransferResult> {
+    const r = await this.req<{ id: string; status?: string }>("/transfers", "POST", {
+      bank_code: input.bankCode,
+      account_number: input.accountNumber,
+      amount: toKobo(input.amount),
+      currency: "NGN",
+      reason: input.narration,
+      reference: input.reference,
+    });
+    return {
+      providerRef: r.id,
+      status: r.status ? normalizeStatus(r.status) : "pending",
+    };
+  }
+
+  // ---- Deposits (money in) — BLOCKED --------------------------------------
+
+  /**
+   * Maplerad NGN virtual accounts are not yet usable: collections are not
+   * enabled on the business, so POST /collections/virtual-account returns 400
+   * for every bank, even at KYC tier 2. Rather than half-create Maplerad
+   * customers we cannot collect against, we fail loudly and explain why.
+   *
+   * To finish this once Maplerad enables collections: enroll the user as a
+   * Maplerad customer (lib/maplerad/customers.ts), persist the customer id on
+   * the User record, create a static account (lib/maplerad/accounts.ts), and
+   * credit on the `collection.successful` webhook.
+   */
+  async createVirtualAccount(_i: CreateVirtualAccountInput): Promise<VirtualAccountResult> {
+    throw new Error(DEPOSITS_UNAVAILABLE);
+  }
+
+  // ---- Webhooks -----------------------------------------------------------
+
+  /**
+   * Maplerad signs with Svix (svix-id / svix-timestamp / svix-signature), which
+   * needs three headers — more than this single-signature interface carries.
+   * Verification therefore lives in the dedicated route
+   * (app/api/webhooks/maplerad/route.ts), which has the raw body and headers.
+   */
   verifyWebhookSignature(): boolean {
-    // Maplerad uses Svix (svix-id/svix-timestamp/svix-signature) — a different
-    // shape than this single-signature interface. If you later run collections
-    // on Maplerad, handle its webhooks in a dedicated route, not here.
-    throw new Error(BILLS_ONLY);
+    throw new Error(
+      "Maplerad webhooks are Svix-signed; verify them in app/api/webhooks/maplerad/route.ts.",
+    );
   }
   parseChargeEvent(): NgnChargeEvent | null { return null; }
   parseTransferEvent(): NgnTransferEvent | null { return null; }
-  async initiateTransfer(): Promise<TransferResult> { throw new Error(BILLS_ONLY); }
-  async createVirtualAccount(_i: CreateVirtualAccountInput): Promise<VirtualAccountResult> { throw new Error(BILLS_ONLY); }
-  async resolveBankAccount(_i: ResolveAccountInput): Promise<ResolveAccountResult> { throw new Error(BILLS_ONLY); }
 }
 
 function normalizeStatus(s: string): "successful" | "pending" | "failed" {

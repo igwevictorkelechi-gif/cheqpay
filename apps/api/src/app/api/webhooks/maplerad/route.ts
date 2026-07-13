@@ -1,27 +1,46 @@
 // apps/api/src/app/api/webhooks/maplerad/route.ts
 //
-// Raw-body webhook endpoint for Maplerad (Next.js App Router).
-// We read the raw text FIRST and verify the Svix signature against it before
-// parsing — App Router route handlers don't pre-parse the body, so `req.text()`
-// gives us the exact bytes Maplerad signed.
+// Maplerad's webhook endpoint — how a payout learns its fate. We read the raw
+// body FIRST and verify the Svix signature against it before parsing: App Router
+// handlers don't pre-parse the body, so `req.text()` gives us the exact bytes
+// Maplerad signed, and any re-serialization would break the signature.
+//
+// Today this settles PAYOUTS (transfer.*). Deposits (collection.*) cannot happen
+// yet — Maplerad has not enabled collections on the business, so no user has a
+// virtual account to be paid into. We acknowledge and log those instead of
+// guessing at a credit; see payments/maplerad.ts createVirtualAccount.
 
 import { NextResponse } from "next/server";
+import { readSvixHeaders, verifyWebhook } from "@/lib/maplerad/webhooks";
 import {
-  readSvixHeaders,
-  verifyWebhook,
-  routeWebhookEvent,
-} from "@/lib/maplerad/webhooks";
-import { handleCollectionEvent } from "@/lib/maplerad/deposits";
-import type {
-  CollectionEventData,
-  MapleradWebhookEvent,
-} from "@/lib/maplerad/types";
-// Implement LedgerPort against your DB (Prisma/Supabase) and export it here.
-// e.g. import { mapleradLedger } from "@/lib/maplerad/ledger";
+  claimWebhookEvent,
+  finalizeWithdrawal,
+  markProcessed,
+  notifySettlement,
+} from "@/lib/ngnWebhook";
+import type { MapleradWebhookEvent } from "@/lib/maplerad/types";
 
-// Ensure Node.js runtime (crypto + raw body), never the edge runtime.
+// Node.js runtime: we need crypto + the raw body. Never the edge runtime.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const SOURCE = "maplerad";
+
+/** Maplerad payout states -> the three states our ledger settles on. */
+function payoutStatus(event: string, raw?: string): "successful" | "failed" | "pending" {
+  const s = (raw ?? "").toUpperCase();
+  if (event.endsWith(".failed") || s === "FAILED" || s === "DECLINED") return "failed";
+  if (event.endsWith(".successful") || s === "SUCCESS" || s === "SUCCESSFUL") {
+    return "successful";
+  }
+  return "pending";
+}
+
+interface TransferEventData {
+  id?: string;
+  reference?: string;
+  status?: string;
+}
 
 export async function POST(req: Request): Promise<Response> {
   const rawBody = await req.text();
@@ -30,58 +49,64 @@ export async function POST(req: Request): Promise<Response> {
   if (!svix) {
     return NextResponse.json({ error: "missing signature headers" }, { status: 400 });
   }
-
   if (!verifyWebhook(rawBody, svix)) {
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
-  let event: MapleradWebhookEvent;
+  let event: MapleradWebhookEvent<TransferEventData>;
   try {
-    event = JSON.parse(rawBody) as MapleradWebhookEvent;
+    event = JSON.parse(rawBody) as MapleradWebhookEvent<TransferEventData>;
   } catch {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  // Idempotency: use svix.id as the dedupe key so retried deliveries are no-ops.
-  // TODO(phase-2): persist svix.id and short-circuit if already processed.
+  const name = event.event ?? event.type ?? "";
 
   try {
-    await routeWebhookEvent(event, {
-      // Deposit into a customer virtual account -> credit Cheqpay ledger.
-      // Confirm the exact event name against a sandbox webhook and add any
-      // aliases Maplerad uses (e.g. "collection.success").
-      "collection.successful": async (e) => {
-        const result = await handleCollectionEvent(
-          e as MapleradWebhookEvent<CollectionEventData>,
-          // mapleradLedger, // <- inject your LedgerPort implementation
-          throwUntilLedgerWired(),
-        );
-        if (result.outcome === "unmatched") {
-          console.warn("maplerad deposit unmatched", { id: svix.id, result });
-        }
-      },
-      // Card issuing result (async). Wire a CardStorePort (see issuing.ts).
-      // "issuing.created": async (e) =>
-      //   handleIssuingEvent(e as MapleradWebhookEvent<IssuingEventData>, cardStore),
+    // Idempotency: svix-id is unique per delivery, so a retried delivery is a
+    // no-op rather than a second credit/reversal.
+    if (!(await claimWebhookEvent(SOURCE, svix.id, event))) {
+      return NextResponse.json({ status: "duplicate", eventId: svix.id });
+    }
 
-      // Payout settlement. On success mark the payout settled; on failure
-      // reverse the user-side hold/debit in your ledger. Idempotent by tx id.
-      // "transfer.successful": async (e) => markPayoutSettled(e),
-      // "transfer.failed":     async (e) => reversePayout(e),
-    });
+    if (name.startsWith("transfer.")) {
+      // We set `reference` to our transaction id when initiating the payout.
+      const reference = event.data?.reference ?? event.reference;
+      if (!reference) {
+        console.warn("[maplerad webhook] transfer event without a reference", {
+          id: svix.id,
+          name,
+        });
+        await markProcessed(SOURCE, svix.id);
+        return NextResponse.json({ status: "ignored", reason: "no_reference" });
+      }
+
+      const result = await finalizeWithdrawal(
+        reference,
+        payoutStatus(name, event.data?.status)
+      );
+      await markProcessed(SOURCE, svix.id);
+      await notifySettlement(result);
+      return NextResponse.json({ ...result, eventId: svix.id });
+    }
+
+    if (name.startsWith("collection.")) {
+      // Unreachable until Maplerad enables collections. Loud, because a real
+      // collection event means someone's money arrived and we are not crediting it.
+      console.error("[maplerad webhook] collection event but deposits are not wired", {
+        id: svix.id,
+        name,
+      });
+      await markProcessed(SOURCE, svix.id);
+      return NextResponse.json({ status: "unhandled", eventId: svix.id });
+    }
+
+    // Authentic but not an event we consume — acknowledge so Maplerad stops retrying.
+    await markProcessed(SOURCE, svix.id);
+    return NextResponse.json({ status: "ignored", eventId: svix.id });
   } catch (err) {
-    // Return 500 so Maplerad retries; log for investigation.
-    console.error("maplerad webhook handler error", { id: svix.id, err });
+    // 500 so Maplerad retries the delivery.
+    console.error("[maplerad webhook] handler error", { id: svix.id, name, err });
     return NextResponse.json({ error: "handler error" }, { status: 500 });
   }
-
-  return NextResponse.json({ received: true }, { status: 200 });
-}
-
-// Remove this once you inject a real LedgerPort above. It exists so the route
-// fails loudly (rather than silently dropping deposits) until wiring is done.
-function throwUntilLedgerWired(): never {
-  throw new Error(
-    "Maplerad LedgerPort not wired: implement LedgerPort and pass it to handleCollectionEvent",
-  );
 }

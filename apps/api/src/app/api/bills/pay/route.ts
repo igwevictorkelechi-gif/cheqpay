@@ -69,7 +69,7 @@ export async function POST(req: Request) {
 
     // Resolve the PSP up front (before any debit). A misconfigured provider
     // throws here, safely, rather than after the user's balance is debited.
-    const psp = getBillsProvider(body.service);
+    const psp = getBillsProvider();
 
     // Billers without a provider code (e.g. Chowdeck pending its Flutterwave
     // listing) are "Coming soon" — refuse before any money moves.
