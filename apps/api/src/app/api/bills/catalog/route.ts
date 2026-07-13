@@ -1,18 +1,24 @@
 import { prisma } from "@cheqpay/db";
 import { jsonOk, toErrorResponse } from "@/lib/http";
-import { BILL_CATALOG } from "@/lib/bills";
+import { getBillCatalog } from "@/lib/billCatalog";
 
 export const dynamic = "force-dynamic";
 
-/** Public catalog of bill services, billers and plans the app offers. */
+/**
+ * Public catalog of bill services, billers and plans the app offers. Data and
+ * cable plans are the provider's live lists, so every price shown here is one
+ * the provider will actually honour.
+ */
 export async function GET() {
   try {
     // Admin-uploaded logos override the default wordmark tiles.
     const assets = await prisma.billerAsset.findMany();
     const logoById = new Map(assets.map((a) => [a.billerId, a.logo]));
 
-    // Strip provider-internal biller codes from the public payload.
-    const services = BILL_CATALOG.map((s) => ({
+    const catalog = await getBillCatalog();
+
+    // Strip provider-internal biller/plan codes from the public payload.
+    const services = catalog.map((s) => ({
       service: s.service,
       label: s.label,
       emoji: s.emoji,

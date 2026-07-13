@@ -70,54 +70,66 @@ describe("MapleradProvider — bills", () => {
     ]);
   });
 
-  it("buys the data bundle whose price matches the catalog plan exactly", async () => {
+  it("buys exactly the data bundle the user picked, by its code", async () => {
     const sent = stubMaplerad();
     const r = await psp.payBill({
       ...base,
       service: "data",
       billerCode: "mtn-data-ng",
-      amount: "100", // -> 10 000 kobo -> BUNDLE-1GB
+      planCode: "BUNDLE-1GB",
+      amount: "100",
     });
 
     expect(r).toEqual({ providerRef: "mp_tx_1", status: "successful" });
-    expect(sent.at(-1)).toEqual({
-      key: "POST /bills/data",
-      body: {
-        identifier: "mtn-data-ng",
-        bundle_identifier: "BUNDLE-1GB",
-        phone_number: "08030000000",
-        amount: 10_000,
+    // One call: the bundle is named outright, never inferred from the price.
+    expect(sent).toEqual([
+      {
+        key: "POST /bills/data",
+        body: {
+          identifier: "mtn-data-ng",
+          bundle_identifier: "BUNDLE-1GB",
+          phone_number: "08030000000",
+          amount: 10_000,
+        },
       },
-    });
+    ]);
   });
 
-  it("refuses to buy data when no bundle matches, rather than selling the wrong one", async () => {
-    stubMaplerad();
-    await expect(
-      psp.payBill({ ...base, service: "data", billerCode: "mtn-data-ng", amount: "600" })
-    ).rejects.toThrow(/No matching data bundle/);
-  });
-
-  it("pays a cable plan by resolving its subscription_id from payment_options", async () => {
+  it("buys exactly the cable subscription the user picked", async () => {
     const sent = stubMaplerad();
     const r = await psp.payBill({
       ...base,
       service: "cabletv",
       billerCode: "dstv-ng",
+      planCode: "sub-2-month",
       customer: "1234567890",
-      amount: "100", // -> 10 000 kobo -> the 2-month option
+      amount: "100",
     });
 
     expect(r).toEqual({ providerRef: "mp_cab_1", status: "successful" });
-    expect(sent.at(-1)).toEqual({
-      key: "POST /bills/cable",
-      body: {
-        identifier: "dstv-ng",
-        serial_number: "1234567890",
-        amount: 10_000,
-        subscription_id: "sub-2-month",
+    expect(sent).toEqual([
+      {
+        key: "POST /bills/cable",
+        body: {
+          identifier: "dstv-ng",
+          serial_number: "1234567890",
+          amount: 10_000,
+          subscription_id: "sub-2-month",
+        },
       },
-    });
+    ]);
+  });
+
+  it("refuses a fixed-price purchase with no plan code instead of guessing by price", async () => {
+    const sent = stubMaplerad();
+    for (const service of ["data", "cabletv"]) {
+      const err = await psp
+        .payBill({ ...base, service, billerCode: "mtn-data-ng", amount: "100" })
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(BillPaymentError);
+      expect(err.providerMessage).toMatch(/no longer offered/);
+    }
+    expect(sent).toHaveLength(0); // nothing reached the provider
   });
 
   it("pays electricity on the exact meter type chosen, and returns the token", async () => {
@@ -192,6 +204,25 @@ describe("MapleradProvider — bills", () => {
       expect(r.status).toBe(expected);
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("MapleradProvider — live plan lists", () => {
+  it("lists real data bundles with their codes and kobo prices", async () => {
+    stubMaplerad();
+    await expect(psp.listBillPlans("data", "mtn-data-ng")).resolves.toEqual([
+      { code: "BUNDLE-1GB", name: "1GB · 30 days", amountMinor: 10_000 },
+    ]);
+  });
+
+  it("flattens cable bouquets into one plan per duration", async () => {
+    stubMaplerad();
+    // A bouquet sells at several durations; each is a separately buyable plan
+    // with its own subscription id, so they must not collapse into one.
+    await expect(psp.listBillPlans("cabletv", "dstv-ng")).resolves.toEqual([
+      { code: "sub-1-month", name: "Dstv Jinja Bouquet", amountMinor: 5_000 },
+      { code: "sub-2-month", name: "Dstv Jinja Bouquet · 2 months", amountMinor: 10_000 },
+    ]);
   });
 });
 

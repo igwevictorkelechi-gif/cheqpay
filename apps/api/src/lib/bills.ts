@@ -7,11 +7,11 @@
  * against Maplerad's live biller lists. A biller with no identifier cannot be
  * paid and is served to clients as "Coming soon".
  *
- * CAUTION — plan prices: the rail matches data bundles and cable plans by exact
- * price, so every `amount` below must equal a real Maplerad bundle/plan price or
- * the purchase is refused. The prices here are NOT yet verified against
- * production (Maplerad's sandbox only exposes ₦100/₦200 test bundles), so
- * reconcile them against the live bundle lists before enabling data or cable.
+ * BILLERS are curated here (they change rarely, and we choose which to offer).
+ * PLANS are not: data bundles and cable bouquets are fetched live from the
+ * provider by lib/billCatalog.ts, so the prices users see are always prices the
+ * provider will honour. The plan lists below are a mock fallback for local dev
+ * only — their prices are invented.
  */
 
 export type BillService =
@@ -47,6 +47,12 @@ export interface BillPlan {
   billerId: string;
   name: string;
   amount: string; // NGN decimal string
+  /**
+   * The provider's own plan code (Maplerad data-bundle code / cable
+   * subscription id), passed verbatim at purchase. Present on plans fetched
+   * live; absent on the mock fallback plans below.
+   */
+  providerCode?: string;
 }
 
 export interface ServiceConfig {
@@ -80,7 +86,13 @@ const DATA_NETWORKS: Biller[] = [
   { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", mapleradId: "9mobile-data-ng" },
 ];
 
-function dataPlans(billerId: string): BillPlan[] {
+/**
+ * MOCK-ONLY data plans. These prices are invented and match no real Maplerad
+ * bundle — they exist so local dev (PAYMENT_PROVIDER=mock) has something to
+ * render. The live catalog replaces them with Maplerad's real bundles; see
+ * lib/billCatalog.ts.
+ */
+function mockDataPlans(billerId: string): BillPlan[] {
   return [
     { id: `${billerId}-500mb`, billerId, name: "500MB · 30 days", amount: "350" },
     { id: `${billerId}-1gb`, billerId, name: "1GB · 30 days", amount: "600" },
@@ -121,7 +133,8 @@ const CABLE: Biller[] = [
   { id: "startimes", name: "StarTimes", short: "StarTimes", color: "#E60012", mapleradId: "startimes-ng" },
 ];
 
-function cablePlans(billerId: string): BillPlan[] {
+/** MOCK-ONLY cable plans — see mockDataPlans. Invented prices, dev rendering only. */
+function mockCablePlans(billerId: string): BillPlan[] {
   if (billerId === "gotv") {
     return [
       { id: "gotv-smallie", billerId, name: "GOtv Smallie", amount: "1575" },
@@ -184,7 +197,9 @@ export const BILL_CATALOG: ServiceConfig[] = [
     variableAmount: false,
     requiresValidation: false,
     billers: DATA_NETWORKS,
-    plans: DATA_NETWORKS.flatMap((n) => dataPlans(n.id)),
+    // Replaced with Maplerad's live bundles by getBillCatalog(); these are the
+    // mock fallback for local dev.
+    plans: DATA_NETWORKS.flatMap((n) => mockDataPlans(n.id)),
   },
   {
     service: "electricity",
@@ -206,7 +221,8 @@ export const BILL_CATALOG: ServiceConfig[] = [
     variableAmount: false,
     requiresValidation: true,
     billers: CABLE,
-    plans: CABLE.flatMap((c) => cablePlans(c.id)),
+    // Replaced with Maplerad's live bouquets by getBillCatalog().
+    plans: CABLE.flatMap((c) => mockCablePlans(c.id)),
   },
   {
     service: "betting",

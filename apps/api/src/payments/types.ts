@@ -78,9 +78,24 @@ export interface BillPayInput {
   service: string; // airtime | data | electricity | cabletv
   /** The provider's exact biller identifier (see lib/bills.ts `mapleradId`). */
   billerCode?: string;
+  /**
+   * The provider's own plan code, taken from listBillPlans — a data bundle code
+   * or a cable subscription id. Fixed-price services (data, cable) send this so
+   * the exact plan the user saw is the one bought; without it the provider would
+   * have to guess from the price, which is how you sell someone the wrong bundle.
+   */
+  planCode?: string;
   customer: string;
   amount: string; // NGN decimal string
   reference: string;
+}
+
+/** A plan the provider actually sells today, priced in minor units (kobo). */
+export interface ProviderBillPlan {
+  /** The provider's own code — passed back verbatim as BillPayInput.planCode. */
+  code: string;
+  name: string;
+  amountMinor: number;
 }
 export interface BillPayResult {
   providerRef: string;
@@ -141,4 +156,18 @@ export interface PaymentProvider {
 
   /** Pay a bill (airtime, data, electricity, cable TV, betting). */
   payBill(input: BillPayInput): Promise<BillPayResult>;
+
+  /**
+   * The plans a biller currently sells (data bundles, cable bouquets), straight
+   * from the provider. Optional: a provider that publishes no plan list simply
+   * omits it and the catalog falls back to its static plans.
+   *
+   * This is what keeps the catalog honest. Plan prices used to be hardcoded and
+   * matched by price at purchase, so any drift between our list and the
+   * provider's made the plan unbuyable.
+   */
+  listBillPlans?(
+    service: "data" | "cabletv",
+    billerCode: string
+  ): Promise<ProviderBillPlan[]>;
 }

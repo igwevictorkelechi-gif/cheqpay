@@ -26,6 +26,7 @@ import {
   type NgnChargeEvent,
   type NgnTransferEvent,
   type PaymentProvider,
+  type ProviderBillPlan,
   type ResolveAccountInput,
   type ResolveAccountResult,
   type TransferResult,
@@ -86,6 +87,21 @@ export class MapleradProvider implements PaymentProvider {
     return input.billerCode;
   }
 
+  /**
+   * The exact plan the user picked, as published by listBillPlans. We refuse to
+   * fall back to price-matching: two plans can share a price, and a stale price
+   * would silently buy the wrong bundle.
+   */
+  private planCode(input: BillPayInput): string {
+    if (!input.planCode) {
+      throw new BillPaymentError(
+        "Plan is not available",
+        "This plan is no longer offered by Maplerad. Please pick another.",
+      );
+    }
+    return input.planCode;
+  }
+
   // ---- Bills (SUPPORTED) --------------------------------------------------
 
   async payBill(input: BillPayInput): Promise<BillPayResult> {
@@ -123,24 +139,50 @@ export class MapleradProvider implements PaymentProvider {
     return { providerRef: r.id, status: normalizeStatus(r.status) };
   }
 
-  private async payData(input: BillPayInput, kobo: number): Promise<BillPayResult> {
-    const identifier = this.identifier(input);
-    const bundles = await this.req<Array<{ name: string; price: number; code: string }>>(
-      `/bills/data/bundle/${identifier}`,
-    );
-    // Match the plan by exact price (kobo). Requiring an exact match means a
-    // catalog price with no real bundle behind it is refused rather than
-    // silently selling the customer a different bundle.
-    const bundle = bundles.find((b) => b.price === kobo);
-    if (!bundle) {
-      throw new BillPaymentError(
-        "No matching data bundle",
-        `No ${identifier} bundle priced at ₦${(kobo / 100).toFixed(2)}. Align the catalog plan to a real Maplerad bundle.`,
+  /**
+   * The plans a biller sells right now. The catalog calls this so users only
+   * ever see bundles Maplerad can actually deliver, and each plan carries the
+   * code we hand back at purchase — no price matching anywhere.
+   */
+  async listBillPlans(
+    service: "data" | "cabletv",
+    billerCode: string,
+  ): Promise<ProviderBillPlan[]> {
+    if (service === "data") {
+      const bundles = await this.req<Array<{ name: string; price: number; code: string }>>(
+        `/bills/data/bundle/${billerCode}`,
       );
+      return bundles.map((b) => ({ code: b.code, name: b.name, amountMinor: b.price }));
     }
+
+    // Cable plans are grouped by bouquet; each `payment_options` entry is one
+    // duration (1 month, 2 months, ...) with its own subscription id and price.
+    const bouquets = await this.req<
+      Array<{
+        title: string;
+        payment_options?: Array<{
+          subscription_id: string;
+          price: number;
+          duration?: { value: number; type: string };
+        }>;
+      }>
+    >(`/bills/cable/subscriptions/${billerCode}`);
+
+    return bouquets.flatMap((b) =>
+      (b.payment_options ?? []).map((o) => ({
+        code: o.subscription_id,
+        name: o.duration && o.duration.value > 1
+          ? `${b.title} · ${o.duration.value} ${o.duration.type === "monthly" ? "months" : o.duration.type}`
+          : b.title,
+        amountMinor: o.price,
+      })),
+    );
+  }
+
+  private async payData(input: BillPayInput, kobo: number): Promise<BillPayResult> {
     const r = await this.req<{ id: string; status: string }>("/bills/data", "POST", {
-      identifier,
-      bundle_identifier: bundle.code,
+      identifier: this.identifier(input),
+      bundle_identifier: this.planCode(input),
       phone_number: input.customer,
       amount: kobo,
     });
@@ -163,31 +205,11 @@ export class MapleradProvider implements PaymentProvider {
   }
 
   private async payCable(input: BillPayInput, kobo: number): Promise<BillPayResult> {
-    const identifier = this.identifier(input);
-    // Cable needs a subscription_id. Maplerad groups plans by bouquet, each with
-    // `payment_options` (one per duration) carrying the id and price.
-    const bouquets = await this.req<
-      Array<{
-        title: string;
-        plan_id: string;
-        payment_options?: Array<{ subscription_id: string; price: number }>;
-      }>
-    >(`/bills/cable/subscriptions/${identifier}`);
-
-    const plan = bouquets
-      .flatMap((b) => b.payment_options ?? [])
-      .find((p) => p.price === kobo);
-    if (!plan) {
-      throw new BillPaymentError(
-        "No matching cable plan",
-        `No ${identifier} plan priced at ₦${(kobo / 100).toFixed(2)}. Align the catalog plan to a real Maplerad subscription.`,
-      );
-    }
     const r = await this.req<{ id: string; status: string }>("/bills/cable", "POST", {
-      identifier,
+      identifier: this.identifier(input),
       serial_number: input.customer,
       amount: kobo,
-      subscription_id: plan.subscription_id,
+      subscription_id: this.planCode(input),
     });
     return { providerRef: r.id, status: normalizeStatus(r.status) };
   }
