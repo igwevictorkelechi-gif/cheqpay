@@ -149,11 +149,12 @@ export default function VirtualAccountsPage() {
         </div>
       </div>
 
-      <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm text-blue-900">
-          <strong>Note:</strong> A permanent account is minted after the user completes BVN
-          verification (KYC). Bank transfers into these accounts are credited to the user&apos;s
-          Naira balance automatically via the Flutterwave webhook.
+      <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <p className="text-sm text-yellow-900">
+          <strong>Naira deposits are currently off.</strong> Maplerad has not enabled collections
+          on this business, so no new virtual accounts can be minted. Any accounts listed here were
+          issued by a previous provider and are no longer monitored — money sent to them will not be
+          credited. Deposits resume once Maplerad enables collections.
         </p>
       </div>
     </DashboardLayout>

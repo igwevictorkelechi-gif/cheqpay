@@ -24,8 +24,9 @@ export const CRYPTO_ASSETS: CryptoAssetMeta[] = [
   {
     symbol: "USDT",
     name: "Tether",
-    network: "TRON",
-    networkLabel: "Tron (TRC-20)",
+    // Maplerad custody mints ERC-20 addresses; it has no TRON product.
+    network: "ETHEREUM",
+    networkLabel: "Ethereum (ERC-20)",
     color: "#26A17B",
     glyph: "₮",
     minSend: "2",
@@ -48,11 +49,12 @@ export function getAssetMeta(symbol: string): CryptoAssetMeta | undefined {
 }
 
 /**
- * Which crypto assets are live for deposits/sends. Crypto custody is moving to
- * Flutterwave's stablecoin rails (StableRails); until an asset's rail is
- * enabled on our account, it shows as "Coming soon" and its receive/send flows
- * are blocked. Flip an asset on by setting NEXT_PUBLIC_ENABLED_CRYPTO (comma
- * list, e.g. "USDT") on the web project and redeploying.
+ * Which crypto assets are live for deposits/sends. Custody is Maplerad
+ * stablecoin (USDT/USDC on ERC-20); BTC has no custodian and stays "Coming
+ * soon". Until an asset is enabled it shows as "Coming soon" and its
+ * receive/send flows are blocked. Flip an asset on by setting
+ * NEXT_PUBLIC_ENABLED_CRYPTO (comma list, e.g. "USDT,USDC") on the web project
+ * and redeploying — but only after the server-side crypto feature flags are on.
  */
 const ENABLED_CRYPTO = new Set(
   (process.env.NEXT_PUBLIC_ENABLED_CRYPTO ?? "")

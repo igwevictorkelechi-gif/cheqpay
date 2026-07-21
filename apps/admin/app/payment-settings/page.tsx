@@ -41,14 +41,11 @@ export default function PaymentSettingsPage() {
   }, []);
 
   const provider = (data?.payments.provider ?? 'mock').toLowerCase();
-  const isPaystack = provider === 'paystack';
   const live = Boolean(data && provider !== 'mock');
   const apiBase = data?.apiBaseUrl ?? 'https://cheqpay-admin453.vercel.app';
-  const webhookUrl = apiBase + (isPaystack ? '/api/webhooks/paystack' : '/api/webhooks/flutterwave');
-  const providerName = isPaystack ? 'Paystack' : 'Flutterwave';
-  const dashUrl = isPaystack
-    ? 'https://dashboard.paystack.com/#/settings/developers'
-    : 'https://app.flutterwave.com/dashboard/settings/apis';
+  const webhookUrl = apiBase + '/api/webhooks/maplerad';
+  const providerName = 'Maplerad';
+  const dashUrl = 'https://app.maplerad.com';
 
   const copyWebhook = async () => {
     try {
@@ -63,9 +60,8 @@ export default function PaymentSettingsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Payment Gateway</h1>
         <p className="text-gray-600 mt-2">
-          {isPaystack
-            ? 'Paystack powers NGN virtual accounts and bank payouts; Flutterwave handles bill payments'
-            : 'Flutterwave powers NGN deposits, bank payouts and bill payments'}
+          Maplerad powers bill payments and bank payouts. Naira deposits are not live yet —
+          Maplerad must enable collections on the business first.
         </p>
       </div>
 
@@ -75,13 +71,12 @@ export default function PaymentSettingsPage() {
           <p className="font-semibold text-blue-900">Keys live in Vercel, not here</p>
           <p className="text-sm text-blue-800 mt-1">
             For security, API keys are set as environment variables on the backend API project and
-            never pass through this dashboard. To use Paystack set{' '}
-            <code className="font-mono">PAYMENT_PROVIDER=paystack</code> +{' '}
-            <code className="font-mono">PAYSTACK_SECRET_KEY</code>; for Flutterwave set{' '}
-            <code className="font-mono">PAYMENT_PROVIDER=flutterwave</code> +{' '}
-            <code className="font-mono">FLUTTERWAVE_SECRET_KEY</code> +{' '}
-            <code className="font-mono">FLUTTERWAVE_WEBHOOK_HASH</code>. Update in Vercel → API
-            project → Settings → Environment Variables, then redeploy.
+            never pass through this dashboard. To go live set{' '}
+            <code className="font-mono">PAYMENT_PROVIDER=maplerad</code> +{' '}
+            <code className="font-mono">MAPLERAD_SECRET_KEY</code> +{' '}
+            <code className="font-mono">MAPLERAD_WEBHOOK_SECRET</code>. Update in Vercel → API
+            project → Settings → Environment Variables, then redeploy. Live keys also require the
+            server&apos;s egress IP to be whitelisted in the Maplerad dashboard.
           </p>
         </div>
       </div>
@@ -98,9 +93,7 @@ export default function PaymentSettingsPage() {
               <div className="p-2 rounded-lg bg-orange-100 text-orange-600"><CreditCard size={20} /></div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">{providerName}</h2>
-                <p className="text-sm text-gray-500">
-                  {isPaystack ? 'Virtual accounts · transfers' : 'Virtual accounts · transfers · bills'}
-                </p>
+                <p className="text-sm text-gray-500">Bills · transfers · name enquiry</p>
               </div>
               <span className={'ml-auto px-3 py-1 rounded-full text-xs font-semibold ' + (live ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>
                 {live ? 'LIVE' : 'MOCK MODE'}
@@ -116,7 +109,7 @@ export default function PaymentSettingsPage() {
                 <Pill ok={data.payments.secretKeyConfigured} okLabel="Configured" badLabel="Not set" />
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-1">Webhook hash</p>
+                <p className="text-xs text-gray-500 mb-1">Webhook secret</p>
                 <Pill ok={data.payments.webhookConfigured} okLabel="Configured" badLabel="Not set" />
               </div>
             </div>
@@ -124,9 +117,9 @@ export default function PaymentSettingsPage() {
               <div className="mt-4 flex items-start gap-2 rounded-lg bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
                 <AlertCircle size={16} className="mt-0.5 shrink-0" />
                 <span>
-                  Payments are in <b>mock</b> mode — deposits and payouts are simulated. Set{' '}
-                  <code className="font-mono">PAYMENT_PROVIDER=paystack</code> (or flutterwave) plus
-                  its keys and redeploy to go live.
+                  Payments are in <b>mock</b> mode — bills and payouts are simulated. Set{' '}
+                  <code className="font-mono">PAYMENT_PROVIDER=maplerad</code> plus its keys and
+                  redeploy to go live.
                 </span>
               </div>
             )}
@@ -143,19 +136,11 @@ export default function PaymentSettingsPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-bold text-gray-900 mb-2">Webhook URL</h2>
             <p className="text-sm text-gray-500 mb-4">
-              {isPaystack ? (
-                <>
-                  Paste this in Paystack → Settings → API Keys &amp; Webhooks. Paystack signs
-                  webhooks with your secret key automatically — no separate hash needed. It
-                  confirms deposits into virtual accounts and finalizes transfers.
-                </>
-              ) : (
-                <>
-                  Paste this in Flutterwave → Settings → Webhooks, and set the same secret hash
-                  there as <code className="font-mono">FLUTTERWAVE_WEBHOOK_HASH</code> on the API
-                  project. It confirms deposits into virtual accounts and finalizes transfers.
-                </>
-              )}
+              Paste this in the Maplerad dashboard → Webhooks, and set the signing secret it gives
+              you (<code className="font-mono">whsec_…</code>) as{' '}
+              <code className="font-mono">MAPLERAD_WEBHOOK_SECRET</code> on the API project. This is
+              how a bank payout learns whether it succeeded — without it, withdrawals never settle
+              or reverse.
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 block bg-gray-900 text-green-400 p-3 rounded-lg text-sm overflow-x-auto">

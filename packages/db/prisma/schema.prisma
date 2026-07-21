@@ -92,6 +92,10 @@ model User {
   notificationPrefs Json? @map("notification_prefs")
   // Registered Expo push tokens for this user's devices.
   pushTokens   String[]   @default([]) @map("push_tokens")
+  // Maplerad customer id — the foreign key every Maplerad resource (stablecoin
+  // deposit addresses, cards) hangs off. Enrolled best-effort at KYC approval,
+  // the one moment the BVN is in hand; null until then.
+  mapleradCustomerId String? @unique @map("maplerad_customer_id")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
@@ -130,15 +134,21 @@ model Beneficiary {
 // reference and safe display metadata — never full PAN, CVV or expiry. The
 // sensitive card details are fetched on demand from the provider when the user
 // reveals them.
+// A Maplerad virtual card. Issuing is ASYNC: create returns a `reference`, and
+// the real card id + final status arrive by the issuing webhook. So a card is
+// born `pending` with only its reference, then reconciled to `active`/`failed`.
 model Card {
   id             String   @id @default(uuid()) @db.Uuid
   userId         String   @map("user_id") @db.Uuid
   provider       String   @default("maplerad")
-  providerCardId String   @map("provider_card_id")
+  /// Creation reference from POST /issuing — how the webhook reconciles.
+  reference      String?  @unique
+  /// Provider card id, filled in once the issuing webhook confirms.
+  providerCardId String?  @map("provider_card_id")
   currency       String   @default("USD")
   brand          String?
   maskedPan      String?  @map("masked_pan")
-  status         String   @default("active")
+  status         String   @default("pending")
   createdAt      DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -34,22 +34,18 @@ export async function GET(req: Request) {
       },
       payments: {
         provider: env.PAYMENT_PROVIDER,
-        secretKeyConfigured:
-          env.PAYMENT_PROVIDER === "paystack"
-            ? has("PAYSTACK_SECRET_KEY")
-            : has("FLUTTERWAVE_SECRET_KEY"),
-        // Paystack signs webhooks with the secret key itself; Flutterwave
-        // uses a separate verif-hash.
-        webhookConfigured:
-          env.PAYMENT_PROVIDER === "paystack"
-            ? has("PAYSTACK_SECRET_KEY")
-            : has("FLUTTERWAVE_WEBHOOK_HASH"),
+        secretKeyConfigured: has("MAPLERAD_SECRET_KEY"),
+        // Maplerad signs webhooks with Svix, using a separate whsec_ secret.
+        webhookConfigured: has("MAPLERAD_WEBHOOK_SECRET"),
       },
       bills: {
-        // Bills always prefer Flutterwave (Paystack has no bills product).
-        provider: has("FLUTTERWAVE_SECRET_KEY") ? "flutterwave" : env.PAYMENT_PROVIDER,
-        configured: has("FLUTTERWAVE_SECRET_KEY") && has("FLUTTERWAVE_WEBHOOK_HASH"),
+        // Bills run on the same rail as everything else (Maplerad).
+        provider: env.PAYMENT_PROVIDER,
+        configured: has("MAPLERAD_SECRET_KEY"),
       },
+      // NGN deposits need Maplerad to enable collections on the business; until
+      // then virtual-account creation fails and the deposit path stays dark.
+      deposits: { available: false, reason: "maplerad_collections_not_enabled" },
       priceFeed: env.PRICE_FEED,
       relaxWithdrawalGuards: env.RELAX_WITHDRAWAL_GUARDS,
       adminSecretConfigured: has("ADMIN_API_SECRET"),

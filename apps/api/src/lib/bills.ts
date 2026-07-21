@@ -1,9 +1,17 @@
 /**
- * Curated Nigerian bill-payment catalog. This is the single source of truth for
- * services, billers and plans the app offers; the web client fetches it via
- * GET /api/bills/catalog. Flutterwave codes (`flwBillerCode` / `flwItemCode`)
- * and `flwType` are wired in provider-correct shape — validate against current
- * Flutterwave docs before enabling live billing.
+ * Curated Nigerian bill-payment catalog. The single source of truth for the
+ * services, billers and plans the app offers; clients fetch it via
+ * GET /api/bills/catalog (which strips the provider codes below).
+ *
+ * Each biller carries the provider's EXACT identifier (`mapleradId`) — verified
+ * against Maplerad's live biller lists. A biller with no identifier cannot be
+ * paid and is served to clients as "Coming soon".
+ *
+ * BILLERS are curated here (they change rarely, and we choose which to offer).
+ * PLANS are not: data bundles and cable bouquets are fetched live from the
+ * provider by lib/billCatalog.ts, so the prices users see are always prices the
+ * provider will honour. The plan lists below are a mock fallback for local dev
+ * only — their prices are invented.
  */
 
 export type BillService =
@@ -25,8 +33,13 @@ export interface Biller {
    * when present. Drop official assets in apps/web/public/billers/ and set this
    * to e.g. "/billers/mtn.svg". */
   logo?: string | null;
-  /** Flutterwave biller code, where known. */
-  flwBillerCode?: string;
+  /**
+   * The provider's exact biller identifier (Maplerad), e.g. "mtn-data-ng".
+   * Passed straight through at purchase — never fuzzy-matched, because the
+   * wrong match here bills the wrong biller. A biller without one cannot be
+   * paid and ships as "Coming soon".
+   */
+  mapleradId?: string;
 }
 
 export interface BillPlan {
@@ -34,15 +47,18 @@ export interface BillPlan {
   billerId: string;
   name: string;
   amount: string; // NGN decimal string
-  flwItemCode?: string;
+  /**
+   * The provider's own plan code (Maplerad data-bundle code / cable
+   * subscription id), passed verbatim at purchase. Present on plans fetched
+   * live; absent on the mock fallback plans below.
+   */
+  providerCode?: string;
 }
 
 export interface ServiceConfig {
   service: BillService;
   label: string;
   emoji: string;
-  /** Flutterwave bill `type` for POST /v3/bills. */
-  flwType: string;
   /** Label + placeholder for the customer identifier field. */
   customerLabel: string;
   customerPlaceholder: string;
@@ -54,14 +70,29 @@ export interface ServiceConfig {
   plans: BillPlan[];
 }
 
-const NETWORKS: Biller[] = [
-  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", flwBillerCode: "BIL099" },
-  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", flwBillerCode: "BIL100" },
-  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", flwBillerCode: "BIL102" },
-  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", flwBillerCode: "BIL103" },
+/** Airtime: Maplerad has a per-network identifier, so we honour the user's pick
+ *  rather than relying on its number-sniffing "ng-airtime" catch-all. */
+const AIRTIME_NETWORKS: Biller[] = [
+  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", mapleradId: "mtn-ng" },
+  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", mapleradId: "airtel-ng" },
+  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", mapleradId: "glo-ng" },
+  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", mapleradId: "9mobile-ng" },
 ];
 
-function dataPlans(billerId: string): BillPlan[] {
+const DATA_NETWORKS: Biller[] = [
+  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", mapleradId: "mtn-data-ng" },
+  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", mapleradId: "airtel-data-ng" },
+  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", mapleradId: "glo-data-ng" },
+  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", mapleradId: "9mobile-data-ng" },
+];
+
+/**
+ * MOCK-ONLY data plans. These prices are invented and match no real Maplerad
+ * bundle — they exist so local dev (PAYMENT_PROVIDER=mock) has something to
+ * render. The live catalog replaces them with Maplerad's real bundles; see
+ * lib/billCatalog.ts.
+ */
+function mockDataPlans(billerId: string): BillPlan[] {
   return [
     { id: `${billerId}-500mb`, billerId, name: "500MB · 30 days", amount: "350" },
     { id: `${billerId}-1gb`, billerId, name: "1GB · 30 days", amount: "600" },
@@ -71,22 +102,39 @@ function dataPlans(billerId: string): BillPlan[] {
   ];
 }
 
+/**
+ * Electricity. Maplerad bills PREPAID and POSTPAID meters as separate billers,
+ * so the customer must pick their meter type — we cannot infer it, and paying a
+ * prepaid meter through the postpaid biller does not deliver a token. Each entry
+ * therefore maps to exactly one Maplerad identifier.
+ *
+ * Maplerad also carries Enugu, Benin, Aba, Jos and Kaduna if we want to add them.
+ */
 const DISCOS: Biller[] = [
-  { id: "ikedc", name: "Ikeja Electric", short: "IKEDC", color: "#C8102E", flwBillerCode: "BIL113" },
-  { id: "ekedc", name: "Eko Electric", short: "EKEDC", color: "#0033A0", flwBillerCode: "BIL112" },
-  { id: "aedc", name: "Abuja Electric", short: "AEDC", color: "#0066B3", flwBillerCode: "BIL115" },
-  { id: "phed", name: "Port Harcourt Electric", short: "PHED", color: "#00833E", flwBillerCode: "BIL117" },
-  { id: "kedco", name: "Kano Electric", short: "KEDCO", color: "#1A8A3B", flwBillerCode: "BIL116" },
-  { id: "ibedc", name: "Ibadan Electric", short: "IBEDC", color: "#E2231A", flwBillerCode: "BIL118" },
+  { id: "ikedc-prepaid", name: "Ikeja Electric — Prepaid", short: "IKEDC", color: "#C8102E", mapleradId: "ikeja-electricity-prepaid-ng" },
+  { id: "ikedc-postpaid", name: "Ikeja Electric — Postpaid", short: "IKEDC", color: "#C8102E", mapleradId: "ikeja-electricity-postpaid-ng" },
+  { id: "ekedc-prepaid", name: "Eko Electric — Prepaid", short: "EKEDC", color: "#0033A0", mapleradId: "eko-electricity-prepaid-ng" },
+  { id: "ekedc-postpaid", name: "Eko Electric — Postpaid", short: "EKEDC", color: "#0033A0", mapleradId: "eko-electricity-postpaid-ng" },
+  { id: "aedc-prepaid", name: "Abuja Electric — Prepaid", short: "AEDC", color: "#0066B3", mapleradId: "abuja-electric-prepaid-ng" },
+  { id: "aedc-postpaid", name: "Abuja Electric — Postpaid", short: "AEDC", color: "#0066B3", mapleradId: "abuja-electric-postpaid-ng" },
+  { id: "phed-prepaid", name: "Port Harcourt Electric — Prepaid", short: "PHED", color: "#00833E", mapleradId: "portharcourt-electric-prepaid-ng" },
+  { id: "phed-postpaid", name: "Port Harcourt Electric — Postpaid", short: "PHED", color: "#00833E", mapleradId: "portharcourt-electric-postpaid-ng" },
+  // Kano's disco is KEDCO — the old brand-matching looked for "kano" and would
+  // never have found it.
+  { id: "kedco-prepaid", name: "Kano Electric — Prepaid", short: "KEDCO", color: "#1A8A3B", mapleradId: "kedco-electricity-prepaid-ng" },
+  { id: "kedco-postpaid", name: "Kano Electric — Postpaid", short: "KEDCO", color: "#1A8A3B", mapleradId: "kedco-electricity-postpaid-ng" },
+  { id: "ibedc-prepaid", name: "Ibadan Electric — Prepaid", short: "IBEDC", color: "#E2231A", mapleradId: "ibadan-electricity-prepaid-ng" },
+  { id: "ibedc-postpaid", name: "Ibadan Electric — Postpaid", short: "IBEDC", color: "#E2231A", mapleradId: "ibadan-electricity-postpaid-ng" },
 ];
 
 const CABLE: Biller[] = [
-  { id: "dstv", name: "DStv", short: "DStv", color: "#0072CE", flwBillerCode: "BIL121" },
-  { id: "gotv", name: "GOtv", short: "GOtv", color: "#74AA50", flwBillerCode: "BIL122" },
-  { id: "startimes", name: "StarTimes", short: "StarTimes", color: "#E60012", flwBillerCode: "BIL123" },
+  { id: "dstv", name: "DStv", short: "DStv", color: "#0072CE", mapleradId: "dstv-ng" },
+  { id: "gotv", name: "GOtv", short: "GOtv", color: "#74AA50", mapleradId: "gotv-ng" },
+  { id: "startimes", name: "StarTimes", short: "StarTimes", color: "#E60012", mapleradId: "startimes-ng" },
 ];
 
-function cablePlans(billerId: string): BillPlan[] {
+/** MOCK-ONLY cable plans — see mockDataPlans. Invented prices, dev rendering only. */
+function mockCablePlans(billerId: string): BillPlan[] {
   if (billerId === "gotv") {
     return [
       { id: "gotv-smallie", billerId, name: "GOtv Smallie", amount: "1575" },
@@ -112,25 +160,20 @@ function cablePlans(billerId: string): BillPlan[] {
   ];
 }
 
-// Food / delivery wallet top-ups. Chowdeck has no public top-up API today; the
-// tile ships as "Coming soon" and goes LIVE the moment a Flutterwave biller
-// code exists for it — set CHOWDECK_FLW_BILLER_CODE on the API project (check
-// your Flutterwave dashboard's biller catalog), no code change needed.
+// Food / delivery wallet top-ups. Chowdeck has no public top-up API, and no rail
+// we use can settle one, so the tile ships as "Coming soon".
 const FOOD: Biller[] = [
-  {
-    id: "chowdeck",
-    name: "Chowdeck",
-    short: "Chowdeck",
-    color: "#0AA859",
-    flwBillerCode: process.env.CHOWDECK_FLW_BILLER_CODE || undefined,
-  },
+  { id: "chowdeck", name: "Chowdeck", short: "Chowdeck", color: "#0AA859" },
 ];
 
+// Betting wallet top-ups. Maplerad — our only rail — has no betting biller, so
+// these ship as "Coming soon": with no provider code the pay route refuses
+// before any money moves. Restore the codes here the day a rail can settle them.
 const BETTING: Biller[] = [
-  { id: "bet9ja", name: "Bet9ja", short: "Bet9ja", color: "#16723A", flwBillerCode: "BIL310" },
-  { id: "sportybet", name: "SportyBet", short: "SportyBet", color: "#D6001C", flwBillerCode: "BIL311" },
-  { id: "betking", name: "BetKing", short: "BetKing", color: "#00A859", flwBillerCode: "BIL312" },
-  { id: "1xbet", name: "1xBet", short: "1xBet", color: "#1A5CB0", flwBillerCode: "BIL313" },
+  { id: "bet9ja", name: "Bet9ja", short: "Bet9ja", color: "#16723A" },
+  { id: "sportybet", name: "SportyBet", short: "SportyBet", color: "#D6001C" },
+  { id: "betking", name: "BetKing", short: "BetKing", color: "#00A859" },
+  { id: "1xbet", name: "1xBet", short: "1xBet", color: "#1A5CB0" },
 ];
 
 export const BILL_CATALOG: ServiceConfig[] = [
@@ -138,31 +181,30 @@ export const BILL_CATALOG: ServiceConfig[] = [
     service: "airtime",
     label: "Airtime",
     emoji: "📲",
-    flwType: "AIRTIME",
     customerLabel: "Phone number",
     customerPlaceholder: "0801 234 5678",
     variableAmount: true,
     requiresValidation: false,
-    billers: NETWORKS,
+    billers: AIRTIME_NETWORKS,
     plans: [],
   },
   {
     service: "data",
     label: "Data",
     emoji: "📶",
-    flwType: "DATA BUNDLE",
     customerLabel: "Phone number",
     customerPlaceholder: "0801 234 5678",
     variableAmount: false,
     requiresValidation: false,
-    billers: NETWORKS,
-    plans: NETWORKS.flatMap((n) => dataPlans(n.id)),
+    billers: DATA_NETWORKS,
+    // Replaced with Maplerad's live bundles by getBillCatalog(); these are the
+    // mock fallback for local dev.
+    plans: DATA_NETWORKS.flatMap((n) => mockDataPlans(n.id)),
   },
   {
     service: "electricity",
     label: "Electricity",
     emoji: "💡",
-    flwType: "ELECTRICITY BILL",
     customerLabel: "Meter number",
     customerPlaceholder: "Enter meter number",
     variableAmount: true,
@@ -174,19 +216,18 @@ export const BILL_CATALOG: ServiceConfig[] = [
     service: "cabletv",
     label: "Cable TV",
     emoji: "📺",
-    flwType: "CABLEBILLS",
     customerLabel: "Smartcard / IUC number",
     customerPlaceholder: "Enter smartcard number",
     variableAmount: false,
     requiresValidation: true,
     billers: CABLE,
-    plans: CABLE.flatMap((c) => cablePlans(c.id)),
+    // Replaced with Maplerad's live bouquets by getBillCatalog().
+    plans: CABLE.flatMap((c) => mockCablePlans(c.id)),
   },
   {
     service: "betting",
     label: "Betting",
     emoji: "🎰",
-    flwType: "BETTING",
     customerLabel: "User ID",
     customerPlaceholder: "Enter your account/user ID",
     variableAmount: true,
@@ -198,7 +239,6 @@ export const BILL_CATALOG: ServiceConfig[] = [
     service: "food",
     label: "Food delivery",
     emoji: "🛵",
-    flwType: "FOOD",
     customerLabel: "Chowdeck phone number",
     customerPlaceholder: "0801 234 5678",
     variableAmount: true,

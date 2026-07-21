@@ -58,11 +58,12 @@ const envSchema = z.object({
   // trailing slash.
   API_PUBLIC_URL: z.string().url().optional(),
 
-  // Phase 2 (custody). Cobo WaaS is the current live provider (Tatum's Virtual
-  // Accounts closed; Crypto APIs' WaaS migrated to Vaultody).
+  // Phase 2 (custody). Maplerad stablecoin (USDT/USDC) is the target provider;
+  // Cobo/Tatum/CryptoAPIs are legacy. No provider offers BTC — it stays
+  // "coming soon" until a BTC custodian is wired.
   CUSTODY_PROVIDER: providerEnum(
     "CUSTODY_PROVIDER",
-    ["mock", "tatum", "cryptoapis", "cobo"],
+    ["mock", "tatum", "cryptoapis", "cobo", "maplerad"],
     "mock"
   ),
   TATUM_API_KEY: z.string().optional(),
@@ -79,21 +80,14 @@ const envSchema = z.object({
   COBO_CALLBACK_PUBKEY: z.string().optional(),
   COBO_ENV: z.enum(["dev", "prod"]).default("dev"),
 
-  // Phase 3 (Naira rails). Paystack is the primary rail for virtual accounts
-  // and payouts; Flutterwave remains the bills rail (getBillsProvider).
-  PAYMENT_PROVIDER: providerEnum(
-    "PAYMENT_PROVIDER",
-    ["mock", "flutterwave", "paystack"],
-    "mock"
-  ),
-  FLUTTERWAVE_SECRET_KEY: z.string().optional(),
-  FLUTTERWAVE_WEBHOOK_HASH: z.string().optional(),
-  PAYSTACK_SECRET_KEY: z.string().optional(),
-  // Which rail executes bill payments. "auto" prefers Flutterwave when its
-  // keys exist (Paystack has no bills product today), else the main provider.
-  // "main" forces the PAYMENT_PROVIDER rail — flip to this if Paystack ever
-  // ships bills and this codebase adds support.
-  BILLS_PROVIDER: providerEnum("BILLS_PROVIDER", ["auto", "flutterwave", "main"], "auto"),
+  // Phase 3 (Naira rails). Maplerad is the rail: bills, payouts, name enquiry
+  // and banks. "mock" (the default) keeps dev and tests free of external calls.
+  PAYMENT_PROVIDER: providerEnum("PAYMENT_PROVIDER", ["mock", "maplerad"], "mock"),
+  MAPLERAD_SECRET_KEY: z.string().optional(),
+  MAPLERAD_BASE_URL: z.string().url().default("https://api.maplerad.com/v1"),
+  // Svix signing secret — verifies inbound Maplerad webhooks (payout settlement
+  // today; deposits once Maplerad enables collections).
+  MAPLERAD_WEBHOOK_SECRET: z.string().optional(),
 
   // Phase 4 (rates / market data)
   PRICE_FEED: providerEnum("PRICE_FEED", ["live", "mock"], "live"),

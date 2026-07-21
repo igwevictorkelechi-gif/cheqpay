@@ -4,7 +4,8 @@ import { getBillsProvider } from "@/payments";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { enforceRateLimit } from "@/lib/ratelimit";
-import { getBiller, getPlan, getServiceConfig } from "@/lib/bills";
+import { getBiller, getServiceConfig } from "@/lib/bills";
+import { getLivePlan } from "@/lib/billCatalog";
 import { billPaySchema } from "@/lib/validation";
 import { sendPush } from "@/lib/push";
 import { BillPaymentError } from "@/payments/types";
@@ -45,21 +46,23 @@ export async function POST(req: Request) {
     }
 
     // Resolve the amount: variable services take `amount`; fixed take a plan.
+    // Plan price and code come from the provider's live list, so the user is
+    // charged exactly what the provider quoted and we buy exactly what they saw.
     let amount: string;
     let planName: string | null = null;
-    let flwItemCode: string | undefined;
+    let planCode: string | undefined;
     if (config.variableAmount) {
       if (!body.amount) throw new ApiError(422, "Amount is required", "no_amount");
       amount = body.amount;
     } else {
       if (!body.planId) throw new ApiError(422, "Plan is required", "no_plan");
-      const plan = getPlan(body.service, body.planId);
+      const plan = await getLivePlan(body.service, body.planId);
       if (!plan || plan.billerId !== body.billerId) {
         throw new ApiError(422, "Unknown plan for this biller", "bad_plan");
       }
       amount = plan.amount;
       planName = plan.name;
-      flwItemCode = plan.flwItemCode;
+      planCode = plan.providerCode;
     }
 
     const amountMinor = toMinorUnits(amount, Asset.NGN);
@@ -71,9 +74,9 @@ export async function POST(req: Request) {
     // throws here, safely, rather than after the user's balance is debited.
     const psp = getBillsProvider();
 
-    // Billers without a provider code (e.g. Chowdeck pending its Flutterwave
-    // listing) are "Coming soon" — refuse before any money moves.
-    if (!biller.flwBillerCode && psp.name !== "mock") {
+    // Billers with no provider identifier (betting, Chowdeck) are "Coming soon"
+    // — refuse before any money moves.
+    if (!biller.mapleradId && psp.name !== "mock") {
       throw new ApiError(
         503,
         `${biller.name} payments are coming soon. Please check back shortly.`,
@@ -128,9 +131,8 @@ export async function POST(req: Request) {
     try {
       const result = await psp.payBill({
         service: body.service,
-        flwType: config.flwType,
-        flwBillerCode: biller.flwBillerCode,
-        flwItemCode,
+        billerCode: biller.mapleradId,
+        planCode,
         customer: body.customer,
         amount,
         reference: tx.id,

@@ -7,6 +7,56 @@ Sections 1–8 are the launch gate; section 0 records what's already built.
 
 ---
 
+## ⚡ Launch plan (July 2026) — Maplerad is the only provider
+
+**What is LIVE at launch:** bills (airtime, data, electricity, cable TV) and
+NGN bank payouts, all on Maplerad. Data/cable plans are fetched live from
+Maplerad, so prices can never drift.
+
+**What ships DARK (feature-flagged off, flip in admin when unblocked):**
+
+| Feature | Flag | Blocker |
+| --- | --- | --- |
+| Bill payments | `bill_payments` | **Sandbox key** — bills would debit the user and deliver nothing. Turn ON in admin for a supervised test window, then OFF. Leave ON only after the LIVE key is in |
+| NGN deposits (virtual accounts) | `ngn_deposits` | Maplerad hasn't enabled NGN collections on the business — support ticket |
+| Stablecoin deposits (USDT/USDC ERC-20) | `crypto_deposits` | Maplerad `POST /crypto` fails with THEIR SQL bug (`column supported_chains does not exist`) — support ticket; **plus** VASP/Play compliance |
+| Stablecoin withdrawals | `crypto_withdrawals` | Same, **plus** withdrawal amount units are UNVERIFIED — run one sandbox withdrawal before flipping |
+| Betting / food bills | (no biller code) | No Maplerad biller — shows "Coming soon" |
+| BTC | (not in `*_ENABLED_CRYPTO`) | No custodian anywhere — "Coming soon" |
+
+**Phase 1 — test on the deployed web app with the SANDBOX key (now):**
+
+API project env (Vercel → cheqpay API → Settings → Environment Variables):
+
+```
+PAYMENT_PROVIDER=maplerad
+CUSTODY_PROVIDER=maplerad
+MAPLERAD_SECRET_KEY=<sandbox key>
+MAPLERAD_BASE_URL=https://api.maplerad.com/v1
+MAPLERAD_WEBHOOK_SECRET=<whsec_... from Maplerad dashboard → Webhooks>
+```
+
+Then: register `https://<api-domain>/api/webhooks/maplerad` in the Maplerad
+dashboard, run `prisma migrate deploy` (0008), redeploy, and test bills +
+payouts end to end with sandbox money.
+
+**Phase 2 — rotate to the LIVE key:**
+
+1. In the Maplerad dashboard, **whitelist the server egress IP** first — live
+   keys 403 from non-whitelisted IPs, and Vercel rotates IPs, so this needs a
+   static-IP proxy/NAT (e.g. Fixie, QuotaGuard, or a small VM proxy).
+2. Swap `MAPLERAD_SECRET_KEY` to the live key; new `MAPLERAD_WEBHOOK_SECRET`
+   for the live webhook endpoint; redeploy.
+3. QA with small real amounts (section 9).
+4. Rotate the sandbox key (it appeared in a chat transcript).
+
+**Chasing Maplerad support (the critical path for the dark features):**
+ask them to (a) enable NGN virtual-account collections on the business, and
+(b) fix `POST /crypto` returning `ERROR: column "supported_chains" of relation
+"blockchain_wallets" does not exist` for every valid coin/chain pair.
+
+---
+
 ## 0. Product build status (done in code, deployed to `main`)
 
 Authentication & onboarding
@@ -72,15 +122,25 @@ Database migrations applied to prod
 - ☐ Set `CRON_SECRET` on the API project (gates the price-alert cron).
 - ☐ Consider Vercel Pro (Hobby caps crons at once/day and 100 deploys/day).
 
-## 3. Provider integrations — move OFF mock
+## 3. Provider integrations — move OFF mock (Maplerad is the only rail)
 
-- ☐ **Custody (Tatum)**: `CUSTODY_PROVIDER=tatum` + fresh `TATUM_API_KEY` /
-      `TATUM_WEBHOOK_SECRET`. Verify wallet creation, deposit webhook, withdrawal.
-- ☐ **Payments (Flutterwave)**: `PAYMENT_PROVIDER=flutterwave` +
-      `FLUTTERWAVE_SECRET_KEY` + `FLUTTERWAVE_WEBHOOK_HASH`. Verify NGN deposit,
-      payout, and bill payments against the live Bills API.
+- ☑ **Payments (Maplerad)**: bills + payouts implemented and sandbox-verified
+      (airtime purchase, live plan lists, payout paths, Svix settlement webhook).
+      Set `PAYMENT_PROVIDER=maplerad` + `MAPLERAD_SECRET_KEY` +
+      `MAPLERAD_WEBHOOK_SECRET`; register the webhook URL.
+- ◐ **NGN deposits**: code ready, blocked on Maplerad enabling collections
+      (`ngn_deposits` flag off). When enabled: wire `collection.successful`
+      crediting from a captured real event, then flip the flag.
+- ◐ **Custody (Maplerad stablecoin)**: USDT/USDC ERC-20 implemented
+      (`CUSTODY_PROVIDER=maplerad`); blocked on Maplerad's `/crypto` SQL bug +
+      compliance. Before flipping `crypto_withdrawals`: verify ONE sandbox
+      withdrawal's debited amount (units documented as USD cents, unverified).
+      Deposit crediting must be wired from a captured `crypto.*` webhook event.
 - ☐ **KYC (Dojah)**: `KYC_PROVIDER=dojah` + `DOJAH_APP_ID` / `DOJAH_API_KEY`
       (enable BVN). Verify auto-approve to tier 2; mismatches → admin review queue.
+      NOTE: KYC submissions with phone + address also enroll the user as a
+      Maplerad customer (needed for stablecoin addresses) — add those fields to
+      the KYC forms when stablecoins go live.
 - ☐ **Price feed**: confirm `PRICE_FEED=live` reachable from Vercel.
 - ☐ Set business rate + spread in admin **Trading Settings**.
 
@@ -130,10 +190,16 @@ Database migrations applied to prod
 
 ## 9. Pre-launch QA (production, small real amounts)
 
-- ☐ Sign up → KYC → deposit NGN → buy BTC → sell BTC → balance updates.
-- ☐ Convert BTC↔USDT; receive + send crypto; pay each bill type.
+- ☐ Sign up → KYC (auto-approve) → admin credit NGN (deposits are dark) →
+      pay each LIVE bill type: airtime, data, electricity (token received),
+      cable — confirm refund-on-failure by paying an invalid customer.
+- ☐ NGN bank payout → confirm the Maplerad webhook settles it (COMPLETED),
+      and a failed payout reverses + refunds.
+- ☐ Confirm the dark features actually refuse: NGN deposit, crypto
+      receive/send, betting/food/BTC show "Coming soon" and cannot move money.
 - ☐ 2FA enrol + withdraw with MFA; app lock; delete account.
-- ☐ Admin: log in, analytics, trading settings, users/transactions, KYC review.
+- ☐ Admin: log in, analytics, trading settings, users/transactions, KYC review,
+      feature flags page shows deposits/crypto OFF.
 
 ---
 

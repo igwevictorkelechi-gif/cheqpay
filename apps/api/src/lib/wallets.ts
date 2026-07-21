@@ -1,5 +1,6 @@
 import { Asset, Network, Prisma, prisma } from "@cheqpay/db";
 import { getCustodyProvider } from "@/custody";
+import { getFeatureFlags } from "./features";
 import { SUPPORTED_WALLETS } from "./assets";
 
 export interface WalletView {
@@ -14,6 +15,12 @@ export interface WalletView {
  * only called for missing asset/network pairs. Safe to call on every login.
  */
 export async function provisionWallets(userId: string): Promise<WalletView[]> {
+  // While crypto deposits are switched off (compliance / provider blockers),
+  // don't create on-chain addresses at all — an address nobody may use is
+  // pure liability, and retry logging on every login is noise.
+  const flags = await getFeatureFlags().catch(() => null);
+  if (flags && !flags.crypto_deposits) return listWallets(userId);
+
   // A custody misconfiguration/outage must not fail the whole provisioning
   // pass — that would break every flow that bootstraps via ensureProvisioned
   // (NGN deposits included). Crypto wallets are simply retried on the next

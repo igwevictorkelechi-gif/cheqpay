@@ -27,15 +27,17 @@ export function formatMinor(minor: string | bigint, symbol: ConvertSymbol): stri
 /** Crypto send/receive metadata (networks + minimums) for the launch set. */
 export const CRYPTO_SEND = {
   BTC: { network: 'BITCOIN' as const, networkLabel: 'Bitcoin', minSend: '0.0001' },
-  USDT: { network: 'TRON' as const, networkLabel: 'Tron (TRC-20)', minSend: '2' },
+  // Maplerad custody mints ERC-20 addresses; it has no TRON product.
+  USDT: { network: 'ETHEREUM' as const, networkLabel: 'Ethereum (ERC-20)', minSend: '2' },
   USDC: { network: 'ETHEREUM' as const, networkLabel: 'Ethereum (ERC-20)', minSend: '2' },
 };
 
 /**
- * Which crypto assets are live for deposits/sends. Crypto custody is moving to
- * Flutterwave's stablecoin rails; until an asset's rail is enabled, it shows
- * "Coming soon" and its receive/send flows are blocked. Flip an asset on with
- * EXPO_PUBLIC_ENABLED_CRYPTO (comma list, e.g. "USDT") and rebuild.
+ * Which crypto assets are live for deposits/sends. Custody is Maplerad
+ * stablecoin (USDT/USDC on ERC-20); BTC has no custodian and stays "Coming
+ * soon". Until an asset's rail is enabled it shows "Coming soon" and its
+ * receive/send flows are blocked. Flip an asset on with
+ * EXPO_PUBLIC_ENABLED_CRYPTO (comma list, e.g. "USDT,USDC") and rebuild.
  */
 const ENABLED_CRYPTO = new Set(
   (process.env.EXPO_PUBLIC_ENABLED_CRYPTO ?? '')

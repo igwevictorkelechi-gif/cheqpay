@@ -4,6 +4,9 @@ import { prisma } from "@cheqpay/db";
 // itself (idempotent DDL, memoized per runtime) so it works without the
 // Supabase migration tooling. Can be removed once a proper migration is
 // recorded.
+//
+// Issuing is asynchronous: a card is created `pending` with only its
+// reference, then reconciled to active/failed by the issuing webhook.
 let ensured: Promise<void> | null = null;
 
 export function ensureCardsTable(): Promise<void> {
@@ -14,11 +17,12 @@ export function ensureCardsTable(): Promise<void> {
           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
           user_id uuid NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
           provider text NOT NULL DEFAULT 'maplerad',
-          provider_card_id text NOT NULL,
+          reference text UNIQUE,
+          provider_card_id text,
           currency text NOT NULL DEFAULT 'USD',
           brand text,
           masked_pan text,
-          status text NOT NULL DEFAULT 'active',
+          status text NOT NULL DEFAULT 'pending',
           created_at timestamptz NOT NULL DEFAULT now()
         )
       `);

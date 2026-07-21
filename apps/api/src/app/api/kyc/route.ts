@@ -5,6 +5,7 @@ import { getTierLimits } from "@/lib/kyc";
 import { getKycProvider } from "@/kyc";
 import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
+import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
 import { kycTier1Schema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -104,6 +105,18 @@ export async function POST(req: Request) {
       } catch (e) {
         console.error("[kyc] virtual account provisioning failed (will retry on deposit)", e);
       }
+
+      // Enroll the user with Maplerad while the BVN is still in hand — the
+      // stablecoin API only serves tier-1+ Maplerad customers. Best-effort:
+      // skipped when the submission lacks phone/address, retried next submit.
+      await ensureMapleradCustomer(auth.id, user.email, {
+        firstName: body.firstName,
+        lastName: body.lastName,
+        bvn: body.bvn,
+        dateOfBirth: body.dateOfBirth,
+        phone: body.phone ?? user.phone,
+        address: body.address,
+      });
 
       await sendPush(auth.id, {
         category: "security",

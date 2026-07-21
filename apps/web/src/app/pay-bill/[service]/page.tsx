@@ -300,7 +300,7 @@ export default function BillServicePage() {
 
           <div className="mt-6 flex items-center gap-2 text-xs text-muted">
             <ShieldCheck className="h-4 w-4 text-brand-light" />
-            Paid securely from your NGN balance via Flutterwave.
+            Paid securely from your NGN balance.
           </div>
 
           <button
