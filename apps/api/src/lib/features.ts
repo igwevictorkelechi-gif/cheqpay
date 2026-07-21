@@ -14,6 +14,7 @@ export const FEATURE_DEFS = [
   { key: "crypto_deposits", label: "Crypto deposits", description: "Receive screens & deposit addresses" },
   { key: "crypto_withdrawals", label: "Crypto withdrawals", description: "Sending crypto to external wallets" },
   { key: "bill_payments", label: "Bill payments", description: "Airtime, data, electricity, cable, betting" },
+  { key: "virtual_cards", label: "Virtual cards", description: "USD virtual cards (requires Maplerad keys)" },
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_DEFS)[number]["key"];

@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { NIGERIAN_BANKS } from '@cheqpay/shared';
 import { colors } from '@/components/brand';
+import { SuccessAnimation } from '@/components/Lottie';
 import { api, ApiError, type Bank, type Beneficiary } from '@/services/api';
 
 // Amount -> choose/add a verified own-name beneficiary -> payout -> done.
@@ -157,7 +158,7 @@ export default function WithdrawScreen() {
   if (stage === 'done') {
     return (
       <View className="flex-1 px-5 items-center" style={{ backgroundColor: colors.surface, paddingTop: insets.top + 40 }}>
-        <Ionicons name="checkmark-circle" size={72} color={colors.positive} />
+        <SuccessAnimation />
         <Text className="text-ink text-2xl font-extrabold mt-6">Withdrawal submitted</Text>
         <Text className="text-muted text-sm mt-2 text-center">
           ₦{amt.toLocaleString()} is on its way to {selected?.accountName} · {selected?.bankName}.

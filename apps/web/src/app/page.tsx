@@ -17,6 +17,7 @@ import {
 import TxnRow from "@/components/TxnRow";
 import KycBanner from "@/components/KycBanner";
 import NotificationsSheet from "@/components/NotificationsSheet";
+import PromoPopup from "@/components/PromoPopup";
 import { useFeatures } from "@/lib/useFeatures";
 import { authService } from "@/services/auth";
 import { useAuthStore, useUIStore } from "@/store";
@@ -174,6 +175,7 @@ export default function HomePage() {
       </div>
       {toast.node}
       <NotificationsSheet open={notifOpen} onClose={() => setNotifOpen(false)} />
+      <PromoPopup />
     </AppShell>
   );
 }

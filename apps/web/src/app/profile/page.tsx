@@ -17,11 +17,14 @@ import { useAuthStore } from "@/store";
 import { api, getAccessToken } from "@/services/api";
 import { tierInfo } from "@/lib/tier";
 import { readCache, writeCache } from "@/lib/cache";
+import { useFeatures } from "@/lib/useFeatures";
 
 type Item = {
   title: string;
   subtitle: string;
   href?: string;
+  /** When set, this entry is hidden while the admin feature flag is off. */
+  feature?: "virtual_cards";
 };
 
 const items: Item[] = [
@@ -34,6 +37,12 @@ const items: Item[] = [
     title: "Connected bank accounts",
     subtitle: "Bank accounts saved for withdrawals",
     href: "/bank-accounts",
+  },
+  {
+    title: "Virtual cards",
+    subtitle: "USD cards for online payments",
+    href: "/cards",
+    feature: "virtual_cards",
   },
   {
     title: "Security",
@@ -116,6 +125,8 @@ export default function ProfilePage() {
     () => readCache<number>("cheqpay:kyctier")
   );
   const [limits, setLimits] = useState<Limits | null>(null);
+  const features = useFeatures();
+  const menuItems = items.filter((i) => !i.feature || features[i.feature]);
 
   useEffect(() => {
     (async () => {
@@ -266,7 +277,7 @@ export default function ProfilePage() {
 
         {/* Menu */}
         <div className="mt-6 space-y-3">
-          {items.map((item) => (
+          {menuItems.map((item) => (
             <button
               key={item.title}
               onClick={() => item.href && router.push(item.href)}

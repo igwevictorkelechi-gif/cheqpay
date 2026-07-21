@@ -11,6 +11,7 @@ import {
   ClipboardPaste,
 } from "lucide-react";
 import { api, ApiError } from "@/services/api";
+import { SuccessAnimation } from "@/components/Lottie";
 import { invalidateMoneyCaches } from "@/lib/cache";
 import { getAssetMeta } from "@/lib/cryptoAssets";
 import { isAddressForNetwork, shortAddress } from "@/lib/address";
@@ -372,7 +373,7 @@ export default function SendCryptoDetailPage() {
         {/* DONE */}
         {stage === "done" && (
           <div className="mt-16 flex flex-col items-center text-center">
-            <CheckCircle2 className="h-20 w-20 text-green-400" />
+            <SuccessAnimation />
             <p className="mt-6 text-2xl font-extrabold text-ink">Transfer submitted</p>
             <p className="mt-2 text-sm text-muted">
               {amount} {meta.symbol} is on its way to your destination address.

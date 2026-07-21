@@ -17,6 +17,7 @@ import {
 } from '@/components/brand';
 import { TxnRow } from '@/components/TxnRow';
 import { KycBanner } from '@/components/KycBanner';
+import PromoPopup from '@/components/PromoPopup';
 import { useFeatures } from '@/lib/useFeatures';
 
 export default function HomeScreen() {
@@ -162,6 +163,7 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
+      <PromoPopup />
     </View>
   );
 }

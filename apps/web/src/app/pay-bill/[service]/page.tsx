@@ -11,6 +11,7 @@ import {
 import AppShell from "@/components/AppShell";
 import BillerLogo from "@/components/BillerLogo";
 import { api, ApiError, getAccessToken, type BillServiceConfig } from "@/services/api";
+import { SuccessAnimation } from "@/components/Lottie";
 import { invalidateMoneyCaches } from "@/lib/cache";
 
 type Stage = "form" | "review" | "done";
@@ -321,7 +322,7 @@ export default function BillServicePage() {
 
       {stage === "done" && (
         <div className="flex flex-col items-center px-5 pb-6 pt-10 text-center">
-          <CheckCircle2 className="h-20 w-20 text-green-400" />
+          <SuccessAnimation />
           <p className="mt-6 text-2xl font-extrabold text-ink">Payment successful</p>
           <p className="mt-2 text-sm text-muted">
             ₦{payAmount.toLocaleString()} {config.label} for {customer.trim()}.

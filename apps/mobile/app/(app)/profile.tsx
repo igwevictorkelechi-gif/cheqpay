@@ -8,8 +8,9 @@ import { useAuthStore } from '@/store';
 import { authService } from '@/services/auth';
 import { api, getAccessToken } from '@/services/api';
 import { tierInfo } from '@/lib/tier';
+import { useFeatures } from '@/lib/useFeatures';
 
-type Item = { title: string; subtitle: string; route?: string };
+type Item = { title: string; subtitle: string; route?: string; feature?: 'virtual_cards' };
 
 const items: Item[] = [
   {
@@ -18,6 +19,7 @@ const items: Item[] = [
     route: '/(app)/account',
   },
   { title: 'Connected bank accounts', subtitle: 'Bank accounts saved for withdrawals', route: '/(app)/bank-accounts' },
+  { title: 'Virtual cards', subtitle: 'USD cards for online payments', route: '/(app)/cards', feature: 'virtual_cards' },
   { title: 'Security', subtitle: '2FA, app lock, passcode, biometrics, instant withdrawal', route: '/(app)/security' },
   { title: 'Preferences', subtitle: 'Notifications, display currency & app themes', route: '/(app)/preferences' },
   { title: 'About us', subtitle: 'FAQs, privacy policy, our blog, contact us', route: '/(app)/settings' },
@@ -73,6 +75,8 @@ export default function ProfileScreen() {
   const { user, logout } = useAuthStore();
   const [tier, setTier] = useState<number | null>(null);
   const [limits, setLimits] = useState<Limits | null>(null);
+  const features = useFeatures();
+  const menuItems = items.filter((i) => !i.feature || features[i.feature]);
 
   useEffect(() => {
     (async () => {
@@ -219,7 +223,7 @@ export default function ProfileScreen() {
 
         {/* Menu */}
         <View className="mt-6" style={{ gap: 12 }}>
-          {items.map((item) => (
+          {menuItems.map((item) => (
             <TouchableOpacity
               key={item.title}
               onPress={() => item.route && router.push(item.route as never)}

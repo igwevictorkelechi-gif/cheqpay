@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
-  Banknote, MessageSquare, KeyRound, ToggleLeft, type LucideIcon,
+  Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, type LucideIcon,
 } from 'lucide-react';
 
 type Item = { label: string; href: string; icon: LucideIcon };
@@ -61,6 +61,7 @@ const categories: Category[] = [
     icon: Settings,
     items: [
       { label: 'Feature Toggles', href: '/features', icon: ToggleLeft },
+      { label: 'In-App Popup', href: '/features/popup', icon: Megaphone },
       { label: 'Payment Settings', href: '/payment-settings', icon: CreditCard },
       { label: 'Provider Settings', href: '/provider-settings', icon: Server },
       { label: 'Support Contact', href: '/support-contact', icon: MessageSquare },

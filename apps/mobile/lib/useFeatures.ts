@@ -9,6 +9,7 @@ export const ALL_ON: FeatureFlags = {
   crypto_deposits: true,
   crypto_withdrawals: true,
   bill_payments: true,
+  virtual_cards: true,
 };
 
 /** Admin feature switches for hiding disabled features in the app UI. */

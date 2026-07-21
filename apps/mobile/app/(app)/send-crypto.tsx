@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { colors } from '@/components/brand';
+import { SuccessAnimation } from '@/components/Lottie';
 import { api, ApiError } from '@/services/api';
 import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
 import { isAddressForNetwork, shortAddress } from '@/lib/address';
@@ -298,7 +299,7 @@ export default function SendCryptoScreen() {
 
         {stage === 'done' && (
           <View className="items-center pt-10">
-            <Ionicons name="checkmark-circle" size={72} color={colors.positive} />
+            <SuccessAnimation />
             <Text className="text-ink text-2xl font-extrabold mt-6">Transfer submitted</Text>
             <Text className="text-muted text-sm mt-2 text-center">
               {amount} {sym} is on its way to your destination address.

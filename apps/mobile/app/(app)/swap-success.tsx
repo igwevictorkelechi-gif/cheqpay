@@ -3,6 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/components/brand';
+import { SuccessAnimation } from '@/components/Lottie';
 
 function CoinBadge({ symbol, size = 36 }: { symbol: string; size?: number }) {
   const map: Record<string, { bg: string; glyph: string }> = {
@@ -33,18 +34,9 @@ export default function SwapSuccessScreen() {
       style={{ backgroundColor: colors.surface, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }}
     >
       <View className="flex-1 items-center justify-center">
-        {/* Success check */}
-        <View
-          className="w-24 h-24 rounded-full items-center justify-center"
-          style={{ backgroundColor: 'rgba(52,199,89,0.15)' }}
-        >
-          <View
-            className="w-16 h-16 rounded-full items-center justify-center"
-            style={{ backgroundColor: colors.positive }}
-          >
-            <Ionicons name="checkmark" size={36} color="#FFFFFF" />
-          </View>
-        </View>
+        {/* Success animation */}
+        <SuccessAnimation />
+
 
         <Text className="text-ink text-2xl font-extrabold mt-6">Swap Successful</Text>
         <Text className="text-muted text-sm mt-2 text-center">

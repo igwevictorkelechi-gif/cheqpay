@@ -93,6 +93,7 @@ export default function AppLayout() {
       <Tabs.Screen name="support-chat" options={{ href: null }} />
       <Tabs.Screen name="activity" options={{ href: null }} />
       <Tabs.Screen name="bank-accounts" options={{ href: null }} />
+      <Tabs.Screen name="cards" options={{ href: null }} />
     </Tabs>
   );
 }

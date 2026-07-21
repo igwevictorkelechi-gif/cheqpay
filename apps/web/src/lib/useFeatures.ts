@@ -15,6 +15,7 @@ export const ALL_ON: FeatureFlags = {
   crypto_deposits: true,
   crypto_withdrawals: true,
   bill_payments: true,
+  virtual_cards: true,
 };
 
 /**

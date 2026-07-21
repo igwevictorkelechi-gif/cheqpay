@@ -115,6 +115,7 @@
         "expo-status-bar": "^1.11.0",
         "expo-updates": "~0.24.12",
         "lodash": "^4.17.21",
+        "lottie-react-native": "6.5.1",
         "nativewind": "^2.0.11",
         "react": "^18.2.0",
         "react-native": "^0.73.0",
@@ -151,6 +152,7 @@
         "caniuse-lite": "^1.0.30001792",
         "clsx": "^2.0.0",
         "date-fns": "^2.30.0",
+        "lottie-react": "^2.4.1",
         "lucide-react": "^0.263.1",
         "next": "^15.0.0",
         "postcss": "^8.4.31",
@@ -2431,6 +2433,12 @@
     "logkitty": ["logkitty@0.7.1", "", { "dependencies": { "ansi-fragments": "^0.2.1", "dayjs": "^1.8.15", "yargs": "^15.1.0" }, "bin": "bin/logkitty.js" }, "sha512-/3ER20CTTbahrCrpYfPn7Xavv9diBROZpoXGVZDWMw4b/X4uuUwAC0ki85tgsdMRONURyIJbcOvS94QsUBYPbQ=="],
 
     "loose-envify": ["loose-envify@1.4.0", "", { "dependencies": { "js-tokens": "^3.0.0 || ^4.0.0" }, "bin": "cli.js" }, "sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q=="],
+
+    "lottie-react": ["lottie-react@2.4.1", "", { "dependencies": { "lottie-web": "^5.10.2" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-LQrH7jlkigIIv++wIyrOYFLHSKQpEY4zehPicL9bQsrt1rnoKRYCYgpCUe5maqylNtacy58/sQDZTkwMcTRxZw=="],
+
+    "lottie-react-native": ["lottie-react-native@6.5.1", "", { "peerDependencies": { "@dotlottie/react-player": "^1.6.1", "@lottiefiles/react-lottie-player": "^3.5.3", "react": "*", "react-native": ">=0.46", "react-native-windows": ">=0.63.x" }, "optionalPeers": ["@dotlottie/react-player", "@lottiefiles/react-lottie-player", "react-native-windows"] }, "sha512-pjih71P6qX6Ax5ucUBA+YJO7+fnveI581Bd8LmYeARm3spq3AnoGzEkrWaieM8odnK6WI4d5dwEJsxge/QjFPw=="],
+
+    "lottie-web": ["lottie-web@5.13.0", "", {}, "sha512-+gfBXl6sxXMPe8tKQm7qzLnUy5DUPJPKIyRHwtpCpyUEYjHYRJC/5gjUvdkuO2c3JllrPtHXH5UJJK8LRYl5yQ=="],
 
     "loupe": ["loupe@2.3.7", "", { "dependencies": { "get-func-name": "^2.0.1" } }, "sha512-zSMINGVYkdpYSOBmLi0D1Uo7JU9nVdQKrHxC8eYlV+9YKK9WePqAlL7lSlorG/U2Fw1w0hTBmaa/jrQ3UbPHtA=="],
 

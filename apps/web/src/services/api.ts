@@ -401,6 +401,29 @@ export const api = {
     return apiFetch("/api/features");
   },
 
+  /** The user's virtual cards + whether issuing is currently available. */
+  getCards(): Promise<{ cards: VirtualCard[]; available: boolean }> {
+    return apiFetch("/api/cards");
+  },
+
+  createCard(): Promise<{ card: VirtualCard }> {
+    return apiFetch("/api/cards", { method: "POST" });
+  },
+
+  /** Admin-published in-app popup (null when none is live). */
+  getPopup(): Promise<{
+    popup: {
+      id: string;
+      title: string;
+      message: string;
+      imageUrl: string | null;
+      buttonText: string | null;
+      buttonUrl: string | null;
+    } | null;
+  }> {
+    return apiFetch("/api/popup");
+  },
+
   /** Ask the AI support agent a question (FAQ-grounded). */
   supportChat(
     messages: { role: "user" | "assistant"; content: string }[]
@@ -432,6 +455,16 @@ export interface FeatureFlags {
   crypto_deposits: boolean;
   crypto_withdrawals: boolean;
   bill_payments: boolean;
+  virtual_cards: boolean;
+}
+
+export interface VirtualCard {
+  id: string;
+  currency: string;
+  brand: string | null;
+  maskedPan: string | null;
+  status: string;
+  createdAt: string;
 }
 
 export interface Bank {

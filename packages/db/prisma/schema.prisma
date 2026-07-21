@@ -102,6 +102,7 @@ model User {
   kycRecords    KycRecord[]
   auditLogs     AuditLog[]
   beneficiaries Beneficiary[]
+  cards         Card[]
 
   @@map("app_users")
 }
@@ -123,6 +124,27 @@ model Beneficiary {
   @@unique([userId, bankCode, accountNumber])
   @@index([userId])
   @@map("beneficiaries")
+}
+
+// A provider-issued virtual card (Maplerad). We store only the provider's card
+// reference and safe display metadata — never full PAN, CVV or expiry. The
+// sensitive card details are fetched on demand from the provider when the user
+// reveals them.
+model Card {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  provider       String   @default("maplerad")
+  providerCardId String   @map("provider_card_id")
+  currency       String   @default("USD")
+  brand          String?
+  maskedPan      String?  @map("masked_pan")
+  status         String   @default("active")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("cards")
 }
 
 // One immutable on-chain deposit address per asset/network, backed by a
