@@ -1,72 +1,26 @@
 import { useEffect } from 'react';
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/components/brand';
 import { registerForPushNotifications } from '@/services/push';
-import { useFeatures } from '@/lib/useFeatures';
+import TabBar from '@/components/TabBar';
 
 export default function AppLayout() {
-  const features = useFeatures();
-  const cryptoVisible =
-    features.crypto_trading || features.crypto_deposits || features.crypto_withdrawals;
   useEffect(() => {
     registerForPushNotifications();
   }, []);
 
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.ink,
-        tabBarInactiveTintColor: '#6E6880',
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
-        tabBarStyle: {
-          borderTopColor: colors.border,
-          backgroundColor: colors.card,
-          height: 88,
-          paddingTop: 8,
-        },
-      }}
+      // Floating glass tab bar. It owns which tabs are visible, their icons
+      // and their feature gating — see components/TabBar.tsx. The per-screen
+      // `href`/`tabBarIcon` options below would be ignored, so the four tab
+      // screens are registered here without them.
+      tabBar={(props) => <TabBar {...props} />}
+      screenOptions={{ headerShown: false }}
     >
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="crypto"
-        options={{
-          // Hidden entirely when every crypto feature is switched off.
-          href: cryptoVisible ? '/crypto' : null,
-          title: 'Crypto',
-          tabBarIcon: ({ color }) => <Ionicons name="logo-bitcoin" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="pay-bill"
-        options={{
-          href: features.bill_payments ? '/pay-bill' : null,
-          title: 'Pay Bill',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'pricetag' : 'pricetag-outline'} size={24} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="cards"
-        options={{
-          // Hidden until the admin switches virtual cards on.
-          href: features.virtual_cards ? '/cards' : null,
-          title: 'Cards',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'card' : 'card-outline'} size={24} color={color} />
-          ),
-        }}
-      />
+      <Tabs.Screen name="home" />
+      <Tabs.Screen name="crypto" />
+      <Tabs.Screen name="pay-bill" />
+      <Tabs.Screen name="cards" />
 
       {/* Secondary screens — reachable via navigation but hidden from the tab bar */}
       <Tabs.Screen name="deposit" options={{ href: null }} />
