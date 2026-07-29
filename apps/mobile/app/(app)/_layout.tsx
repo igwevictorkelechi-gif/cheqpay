@@ -56,6 +56,17 @@ export default function AppLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="cards"
+        options={{
+          // Hidden until the admin switches virtual cards on.
+          href: features.virtual_cards ? '/cards' : null,
+          title: 'Cards',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'card' : 'card-outline'} size={24} color={color} />
+          ),
+        }}
+      />
 
       {/* Secondary screens — reachable via navigation but hidden from the tab bar */}
       <Tabs.Screen name="deposit" options={{ href: null }} />
@@ -93,7 +104,6 @@ export default function AppLayout() {
       <Tabs.Screen name="support-chat" options={{ href: null }} />
       <Tabs.Screen name="activity" options={{ href: null }} />
       <Tabs.Screen name="bank-accounts" options={{ href: null }} />
-      <Tabs.Screen name="cards" options={{ href: null }} />
     </Tabs>
   );
 }

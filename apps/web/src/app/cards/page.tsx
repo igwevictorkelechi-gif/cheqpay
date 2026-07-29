@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, CreditCard, Loader2, Plus, Snowflake } from "lucide-react";
+import { Bell, CreditCard, Loader2, Plus, Search, Snowflake } from "lucide-react";
+import AppShell from "@/components/AppShell";
+import { TopBar, useToast } from "@/components/MobileUI";
+import { useAuthStore } from "@/store";
 import { api, ApiError, type VirtualCard } from "@/services/api";
 import { useFeatures } from "@/lib/useFeatures";
 
@@ -15,6 +18,8 @@ import { useFeatures } from "@/lib/useFeatures";
 export default function CardsPage() {
   const router = useRouter();
   const features = useFeatures();
+  const { user } = useAuthStore();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [cards, setCards] = useState<VirtualCard[]>([]);
   const [available, setAvailable] = useState(false);
@@ -55,17 +60,18 @@ export default function CardsPage() {
   const comingSoon = !features.virtual_cards || !available;
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-6 pt-3">
-        <button
-          onClick={() => router.back()}
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink"
-          aria-label="Go back"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
+    <AppShell>
+      <TopBar
+        name={user?.full_name}
+        onAvatar={() => router.push("/profile")}
+        icons={[
+          { icon: Search, label: "View transactions", onClick: () => router.push("/transactions") },
+          { icon: Bell, label: "Notifications", onClick: () => toast.show("No new notifications") },
+        ]}
+      />
 
-        <h1 className="mt-4 text-3xl font-extrabold text-ink">Virtual cards</h1>
+      <div className="flex flex-col px-5 pb-6">
+        <h1 className="mt-3 text-[32px] font-extrabold text-ink">Virtual cards</h1>
         <p className="mt-1 text-sm text-muted">
           Dollar cards for online payments, subscriptions and shopping.
         </p>
@@ -136,6 +142,6 @@ export default function CardsPage() {
           </>
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }

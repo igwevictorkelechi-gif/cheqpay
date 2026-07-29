@@ -3,7 +3,8 @@ import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { colors } from '@/components/brand';
+import { colors, TopBar } from '@/components/brand';
+import { useAuthStore } from '@/store';
 import { api, ApiError, type VirtualCard } from '@/services/api';
 import { useFeatures } from '@/lib/useFeatures';
 
@@ -15,6 +16,7 @@ import { useFeatures } from '@/lib/useFeatures';
 export default function CardsScreen() {
   const insets = useSafeAreaInsets();
   const features = useFeatures();
+  const { user } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [cards, setCards] = useState<VirtualCard[]>([]);
   const [available, setAvailable] = useState(false);
@@ -52,15 +54,15 @@ export default function CardsScreen() {
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
-      <View className="flex-row items-center px-5 pt-3 pb-2">
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="w-10 h-10 rounded-full bg-card items-center justify-center"
-        >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
-        </TouchableOpacity>
-        <Text className="text-ink text-lg font-bold ml-3">Virtual cards</Text>
-      </View>
+      <TopBar
+        name={user?.full_name}
+        onAvatarPress={() => router.push('/(app)/profile')}
+        icons={[{ name: 'search-outline' }, { name: 'notifications-outline' }]}
+      />
+
+      <Text className="text-ink font-extrabold px-5 mt-3" style={{ fontSize: 32 }}>
+        Virtual cards
+      </Text>
 
       {loading ? (
         <ActivityIndicator color={colors.muted} style={{ marginTop: 40 }} />

@@ -3,13 +3,15 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Bitcoin, Tag, LucideIcon } from "lucide-react";
+import { Home, Bitcoin, Tag, CreditCard, LucideIcon } from "lucide-react";
 import { useFeatures } from "@/lib/useFeatures";
 
-const ALL_TABS: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/", label: "Home", icon: Home },
+/** `filled` icons get a solid fill when active; outline-style ones stay hollow. */
+const ALL_TABS: { href: string; label: string; icon: LucideIcon; filled?: boolean }[] = [
+  { href: "/", label: "Home", icon: Home, filled: true },
   { href: "/crypto", label: "Crypto", icon: Bitcoin },
-  { href: "/pay-bill", label: "Pay Bill", icon: Tag },
+  { href: "/pay-bill", label: "Pay Bill", icon: Tag, filled: true },
+  { href: "/cards", label: "Cards", icon: CreditCard },
 ];
 
 /** Active when on the tab itself or any of its sub-pages. */
@@ -36,6 +38,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const tabs = ALL_TABS.filter((t) => {
     if (t.href === "/crypto") return cryptoVisible;
     if (t.href === "/pay-bill") return features.bill_payments;
+    if (t.href === "/cards") return features.virtual_cards;
     return true;
   });
   const activeIndex = tabs.findIndex((t) => isTabActive(t.href, pathname));
@@ -81,7 +84,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                     className={`h-6 w-6 transition-transform duration-300 ${
                       active ? "scale-110 drop-shadow-[0_0_8px_rgba(138,123,181,0.6)]" : ""
                     }`}
-                    fill={active && tab.label !== "Crypto" ? "currentColor" : "none"}
+                    fill={active && tab.filled ? "currentColor" : "none"}
                   />
                   <span className="text-xs font-semibold">{tab.label}</span>
                 </Link>
