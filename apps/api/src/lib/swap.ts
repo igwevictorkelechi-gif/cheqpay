@@ -16,6 +16,7 @@ import {
   type SwapSide,
 } from "./rates";
 import { getSwapSpreadBps, getUsdtNgnRate } from "./settings";
+import { awardCashback } from "./cashback";
 import { getPriceFeed } from "@/market";
 
 export const QUOTE_TTL_MS = 45_000;
@@ -235,6 +236,18 @@ export async function executeSwap(params: {
 
     return { transactionId: record.id, status: record.status };
   });
+
+  // Cashback on the NGN leg of a buy/sell. A crypto→crypto convert has no NGN
+  // leg, so it earns nothing. Runs after commit — it opens its own transaction.
+  if (!isConvert) {
+    const ngnLeg = quote.fromAsset === Asset.NGN ? quote.amountIn : quote.amountOut;
+    await awardCashback({
+      userId: params.userId,
+      source: "trade",
+      baseNgnMinor: ngnLeg,
+      sourceTransactionId: result.transactionId,
+    });
+  }
 
   // Trade confirmation (best-effort, after commit).
   const fmtNgn = (m: bigint) => `₦${fromMinorUnits(m, Asset.NGN)}`;

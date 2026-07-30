@@ -157,6 +157,18 @@ export const platformSettingsUpdateSchema = z
     withdrawalFeeNgn: z.number().min(0).max(10_000).optional(),
     /** Bill-payment profit margin in basis points (max 20%). */
     billMarginBps: z.number().int().min(0).max(2_000).optional(),
+    /**
+     * Cashback. Rates are capped at 10% each — a slip of the decimal point
+     * here pays real money out of the treasury on every transaction, so the
+     * bound is deliberately tight and the per-transaction cap is separate.
+     */
+    cashbackEnabled: z.boolean().optional(),
+    cashbackDepositBps: z.number().int().min(0).max(1_000).optional(),
+    cashbackWithdrawalBps: z.number().int().min(0).max(1_000).optional(),
+    cashbackBillBps: z.number().int().min(0).max(1_000).optional(),
+    cashbackTradeBps: z.number().int().min(0).max(1_000).optional(),
+    /** Per-transaction cashback ceiling in NGN (max ₦100,000). 0 = uncapped. */
+    cashbackMaxNgn: z.number().min(0).max(100_000).optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: "Provide at least one setting to update",

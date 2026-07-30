@@ -115,7 +115,14 @@ export interface BillServiceConfig {
   billers: BillBiller[];
   plans: BillPlan[];
 }
-export type LedgerTxType = 'DEPOSIT' | 'WITHDRAWAL' | 'BUY' | 'SELL' | 'CONVERT' | 'BILL';
+export type LedgerTxType =
+  | 'DEPOSIT'
+  | 'WITHDRAWAL'
+  | 'BUY'
+  | 'SELL'
+  | 'CONVERT'
+  | 'BILL'
+  | 'CASHBACK';
 export type LedgerTxStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
 export interface LedgerTransaction {
   id: string;

@@ -9,6 +9,15 @@ export const SETTING_KEYS = {
   DEPOSIT_FEE_BPS: "deposit_fee_bps", // % of each NGN deposit, in basis points
   WITHDRAWAL_FEE_NGN: "withdrawal_fee_ngn", // flat NGN fee per bank payout
   BILL_MARGIN_BPS: "bill_margin_bps", // markup on bill payments, in basis points
+  // Cashback rewards, paid in NGN. Rates are per transaction kind because the
+  // economics differ (a bill carries margin, a deposit carries a fee, a payout
+  // carries neither), and all default to 0 so nothing pays out until set.
+  CASHBACK_ENABLED: "cashback_enabled", // "1" | "0" master switch
+  CASHBACK_DEPOSIT_BPS: "cashback_deposit_bps",
+  CASHBACK_WITHDRAWAL_BPS: "cashback_withdrawal_bps",
+  CASHBACK_BILL_BPS: "cashback_bill_bps",
+  CASHBACK_TRADE_BPS: "cashback_trade_bps", // buy/sell, on the NGN leg
+  CASHBACK_MAX_NGN: "cashback_max_ngn", // per-transaction cap; 0 = uncapped
   // Public support contact details, shown on the app's Help & Support page.
   SUPPORT_EMAIL: "support_email",
   SUPPORT_PHONE: "support_phone",
@@ -111,6 +120,60 @@ export async function setWithdrawalFeeNgn(ngn: number, updatedBy?: string) {
 }
 export async function setBillMarginBps(bps: number, updatedBy?: string) {
   await upsertSetting(SETTING_KEYS.BILL_MARGIN_BPS, String(bps), updatedBy);
+}
+
+// --- Cashback ---------------------------------------------------------------
+
+/** Admin-controlled cashback rates. All rates are basis points (100 = 1%). */
+export interface CashbackConfig {
+  enabled: boolean;
+  depositBps: number;
+  withdrawalBps: number;
+  billBps: number;
+  tradeBps: number;
+  /** Per-transaction ceiling in whole NGN. 0 means no cap. */
+  maxNgn: number;
+}
+
+export async function getCashbackConfig(): Promise<CashbackConfig> {
+  const [enabledRow, depositBps, withdrawalBps, billBps, tradeBps, maxNgn] = await Promise.all([
+    prisma.platformSetting.findUnique({ where: { key: SETTING_KEYS.CASHBACK_ENABLED } }),
+    getNumberSetting(SETTING_KEYS.CASHBACK_DEPOSIT_BPS, 0),
+    getNumberSetting(SETTING_KEYS.CASHBACK_WITHDRAWAL_BPS, 0),
+    getNumberSetting(SETTING_KEYS.CASHBACK_BILL_BPS, 0),
+    getNumberSetting(SETTING_KEYS.CASHBACK_TRADE_BPS, 0),
+    getNumberSetting(SETTING_KEYS.CASHBACK_MAX_NGN, 0),
+  ]);
+  return {
+    enabled: enabledRow?.value === "1",
+    depositBps,
+    withdrawalBps,
+    billBps,
+    tradeBps,
+    maxNgn,
+  };
+}
+
+export async function setCashbackConfig(
+  patch: Partial<CashbackConfig>,
+  updatedBy?: string
+): Promise<void> {
+  const writes: Promise<unknown>[] = [];
+  if (patch.enabled !== undefined)
+    writes.push(upsertSetting(SETTING_KEYS.CASHBACK_ENABLED, patch.enabled ? "1" : "0", updatedBy));
+  if (patch.depositBps !== undefined)
+    writes.push(upsertSetting(SETTING_KEYS.CASHBACK_DEPOSIT_BPS, String(patch.depositBps), updatedBy));
+  if (patch.withdrawalBps !== undefined)
+    writes.push(
+      upsertSetting(SETTING_KEYS.CASHBACK_WITHDRAWAL_BPS, String(patch.withdrawalBps), updatedBy)
+    );
+  if (patch.billBps !== undefined)
+    writes.push(upsertSetting(SETTING_KEYS.CASHBACK_BILL_BPS, String(patch.billBps), updatedBy));
+  if (patch.tradeBps !== undefined)
+    writes.push(upsertSetting(SETTING_KEYS.CASHBACK_TRADE_BPS, String(patch.tradeBps), updatedBy));
+  if (patch.maxNgn !== undefined)
+    writes.push(upsertSetting(SETTING_KEYS.CASHBACK_MAX_NGN, String(patch.maxNgn), updatedBy));
+  await Promise.all(writes);
 }
 
 /** Fee in minor units for a given amount at `bps` basis points (floor). */

@@ -6,6 +6,7 @@ import {
   ArrowDownUp,
   RefreshCw,
   Zap,
+  Gift,
 } from "lucide-react";
 import type { LedgerTransaction } from "@/services/api";
 
@@ -19,6 +20,8 @@ export function txnIcon(type: LedgerTransaction["type"]) {
       return { Icon: RefreshCw, color: "#A78BFA", bg: "rgba(167,139,250,0.15)" };
     case "BILL":
       return { Icon: Zap, color: "#FBBF24", bg: "rgba(251,191,36,0.15)" };
+    case "CASHBACK":
+      return { Icon: Gift, color: "#34C759", bg: "rgba(52,199,89,0.15)" };
     case "BUY":
     case "SELL":
     default:
@@ -42,6 +45,8 @@ export function txnTitle(t: LedgerTransaction): string {
       const svc = t.billerName ?? t.service ?? "Bill";
       return t.planName ? `${svc} · ${t.planName}` : svc;
     }
+    case "CASHBACK":
+      return "Cashback reward";
     default:
       return t.type;
   }
@@ -59,6 +64,8 @@ export function txnAmount(t: LedgerTransaction): { text: string; positive: boole
     return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
   if (t.type === "BILL")
     return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
+  if (t.type === "CASHBACK")
+    return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   // BUY / SELL / CONVERT show the received leg as the headline.
   if (t.toAsset && t.toFormatted)
     return { text: `+${fmt(t.toFormatted)} ${t.toAsset}`, positive: true };

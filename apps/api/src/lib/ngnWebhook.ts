@@ -11,6 +11,7 @@ import { creditBalance } from "@/lib/ledger";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { sendPush } from "@/lib/push";
 import { feeFromBps, getDepositFeeBps } from "@/lib/settings";
+import { awardCashback } from "@/lib/cashback";
 
 /**
  * NGN settlement — the money changes an inbound payment webhook applies:
@@ -98,7 +99,7 @@ export async function finalizeDeposit(
   amount: string,
   status: "successful" | "failed" | "pending"
 ) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const dep = await tx.transaction.findFirst({
       where: { externalRef: txRef, type: TransactionType.DEPOSIT, asset: Asset.NGN },
     });
@@ -142,8 +143,22 @@ export async function finalizeDeposit(
       userId: dep.userId,
       // Net figure — used for the "landed in your wallet" notification.
       amountMinor: netMinor.toString(),
+      // Gross figure — cashback is earned on what the user actually paid in.
+      grossMinor: amountMinor.toString(),
     };
   });
+
+  // Cashback runs after the credit commits: it opens its own transaction, and
+  // a reward problem must never unwind a deposit that already landed.
+  if (result.status === "credited") {
+    await awardCashback({
+      userId: result.userId,
+      source: "deposit",
+      baseNgnMinor: BigInt(result.grossMinor),
+      sourceTransactionId: result.transactionId,
+    });
+  }
+  return result;
 }
 
 /** Complete or reverse a PROCESSING withdrawal based on the payout result. */
@@ -151,7 +166,7 @@ export async function finalizeWithdrawal(
   reference: string,
   status: "successful" | "failed" | "pending"
 ) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const wd = await tx.transaction.findFirst({
       where: { id: reference, type: TransactionType.WITHDRAWAL, asset: Asset.NGN },
     });
@@ -205,6 +220,17 @@ export async function finalizeWithdrawal(
 
     return { status: "pending" as const, transactionId: wd.id };
   });
+
+  // Only a payout that actually landed earns cashback — never a reversal.
+  if (result.status === "completed") {
+    await awardCashback({
+      userId: result.userId,
+      source: "withdrawal",
+      baseNgnMinor: BigInt(result.amountMinor),
+      sourceTransactionId: result.transactionId,
+    });
+  }
+  return result;
 }
 
 /**

@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Percent, DollarSign, Save, Banknote, Receipt, ArrowDownToLine } from 'lucide-react';
+import {
+  Percent,
+  DollarSign,
+  Save,
+  Banknote,
+  Receipt,
+  ArrowDownToLine,
+  Gift,
+} from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
 interface Settings {
@@ -10,6 +18,12 @@ interface Settings {
   depositFeeBps: number;
   withdrawalFeeNgn: number;
   billMarginBps: number;
+  cashbackEnabled: boolean;
+  cashbackDepositBps: number;
+  cashbackWithdrawalBps: number;
+  cashbackBillBps: number;
+  cashbackTradeBps: number;
+  cashbackMaxNgn: number;
 }
 
 export default function TradingSettingsPage() {
@@ -18,6 +32,12 @@ export default function TradingSettingsPage() {
   const [depositFeeBps, setDepositFeeBps] = useState('');
   const [withdrawalFeeNgn, setWithdrawalFeeNgn] = useState('');
   const [billMarginBps, setBillMarginBps] = useState('');
+  const [cashbackEnabled, setCashbackEnabled] = useState(false);
+  const [cashbackDepositBps, setCashbackDepositBps] = useState('');
+  const [cashbackWithdrawalBps, setCashbackWithdrawalBps] = useState('');
+  const [cashbackBillBps, setCashbackBillBps] = useState('');
+  const [cashbackTradeBps, setCashbackTradeBps] = useState('');
+  const [cashbackMaxNgn, setCashbackMaxNgn] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
@@ -28,6 +48,12 @@ export default function TradingSettingsPage() {
     setDepositFeeBps(String(data.depositFeeBps ?? 0));
     setWithdrawalFeeNgn(String(data.withdrawalFeeNgn ?? 0));
     setBillMarginBps(String(data.billMarginBps ?? 0));
+    setCashbackEnabled(Boolean(data.cashbackEnabled));
+    setCashbackDepositBps(String(data.cashbackDepositBps ?? 0));
+    setCashbackWithdrawalBps(String(data.cashbackWithdrawalBps ?? 0));
+    setCashbackBillBps(String(data.cashbackBillBps ?? 0));
+    setCashbackTradeBps(String(data.cashbackTradeBps ?? 0));
+    setCashbackMaxNgn(String(data.cashbackMaxNgn ?? 0));
   }
 
   async function load() {
@@ -53,12 +79,19 @@ export default function TradingSettingsPage() {
     setSaving(true);
     setMessage(null);
     try {
-      const payload: Record<string, number> = {};
+      const payload: Record<string, number | boolean> = {};
       if (spreadBps !== '') payload.spreadBps = Number(spreadBps);
       if (usdtNgnRate !== '') payload.usdtNgnRate = Number(usdtNgnRate);
       if (depositFeeBps !== '') payload.depositFeeBps = Number(depositFeeBps);
       if (withdrawalFeeNgn !== '') payload.withdrawalFeeNgn = Number(withdrawalFeeNgn);
       if (billMarginBps !== '') payload.billMarginBps = Number(billMarginBps);
+      payload.cashbackEnabled = cashbackEnabled;
+      if (cashbackDepositBps !== '') payload.cashbackDepositBps = Number(cashbackDepositBps);
+      if (cashbackWithdrawalBps !== '')
+        payload.cashbackWithdrawalBps = Number(cashbackWithdrawalBps);
+      if (cashbackBillBps !== '') payload.cashbackBillBps = Number(cashbackBillBps);
+      if (cashbackTradeBps !== '') payload.cashbackTradeBps = Number(cashbackTradeBps);
+      if (cashbackMaxNgn !== '') payload.cashbackMaxNgn = Number(cashbackMaxNgn);
 
       const res = await fetch('/api/platform-settings', {
         method: 'PUT',
@@ -212,6 +245,94 @@ export default function TradingSettingsPage() {
             Profit added on airtime, data, electricity, cable &amp; betting ({pct(billMarginBps)}%).
             The biller receives the bill amount; the user pays amount + margin. Max 2000 bps (20%).
           </p>
+        </div>
+
+        {/* Cashback rewards */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-1">
+            <span className="flex items-center gap-2 text-gray-700 font-semibold">
+              <Gift size={18} className="text-brand-600" />
+              Cashback rewards
+            </span>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className="text-sm font-semibold text-gray-700">
+                {cashbackEnabled ? 'On' : 'Off'}
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={cashbackEnabled}
+                onClick={() => setCashbackEnabled((v) => !v)}
+                disabled={loading || saving}
+                className={
+                  'relative h-7 w-12 rounded-full transition-colors ' +
+                  (cashbackEnabled ? 'bg-brand-600' : 'bg-gray-300')
+                }
+              >
+                <span
+                  className={
+                    'absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ' +
+                    (cashbackEnabled ? 'translate-x-5' : 'translate-x-0.5')
+                  }
+                />
+              </button>
+            </label>
+          </div>
+          <p className="text-sm text-gray-500 mb-5">
+            Paid in Naira into the user&rsquo;s wallet as its own transaction, right after the
+            earning one succeeds. Rates are per kind because the economics differ. Every rate
+            defaults to 0, so nothing pays out until you set it.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {(
+              [
+                ['Deposits', cashbackDepositBps, setCashbackDepositBps],
+                ['Withdrawals', cashbackWithdrawalBps, setCashbackWithdrawalBps],
+                ['Bill payments', cashbackBillBps, setCashbackBillBps],
+                ['Buy / sell trades', cashbackTradeBps, setCashbackTradeBps],
+              ] as const
+            ).map(([label, value, setter]) => (
+              <div key={label}>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  {label} (basis points)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={1000}
+                  step={1}
+                  value={value}
+                  onChange={(e) => setter(e.target.value)}
+                  disabled={loading || saving || !cashbackEnabled}
+                  className={inputCls}
+                  placeholder="0"
+                />
+                <p className="text-xs text-gray-500 mt-1">{pct(value)}% back</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              Maximum per transaction (NGN)
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={100000}
+              step={1}
+              value={cashbackMaxNgn}
+              onChange={(e) => setCashbackMaxNgn(e.target.value)}
+              disabled={loading || saving || !cashbackEnabled}
+              className={inputCls}
+              placeholder="0"
+            />
+            <p className="text-sm text-gray-500 mt-2">
+              Caps a single reward, so one very large transaction cannot pay out an unbounded
+              amount. 0 means uncapped. Max 1000 bps (10%) on any rate.
+            </p>
+          </div>
         </div>
 
         <button

@@ -18,6 +18,8 @@ export function txnIcon(type: LedgerTransaction['type']): {
       return { name: 'sync', color: '#A78BFA', bg: 'rgba(167,139,250,0.15)' };
     case 'BILL':
       return { name: 'flash', color: '#FBBF24', bg: 'rgba(251,191,36,0.15)' };
+    case 'CASHBACK':
+      return { name: 'gift', color: '#34C759', bg: 'rgba(52,199,89,0.15)' };
     default:
       return { name: 'swap-horizontal', color: '#A78BFA', bg: 'rgba(167,139,250,0.15)' };
   }
@@ -39,6 +41,8 @@ export function txnTitle(t: LedgerTransaction): string {
       return t.planName
         ? `${t.billerName ?? t.service ?? 'Bill'} · ${t.planName}`
         : t.billerName ?? t.service ?? 'Bill';
+    case 'CASHBACK':
+      return 'Cashback reward';
     default:
       return t.type;
   }
@@ -53,6 +57,7 @@ export function txnAmount(t: LedgerTransaction): { text: string; positive: boole
   if (t.type === 'DEPOSIT') return { text: `+${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
   if (t.type === 'WITHDRAWAL') return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
   if (t.type === 'BILL') return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
+  if (t.type === 'CASHBACK') return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   if (t.toAsset && t.toFormatted) return { text: `+${fmt(t.toFormatted)} ${t.toAsset}`, positive: true };
   return { text: `${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
 }

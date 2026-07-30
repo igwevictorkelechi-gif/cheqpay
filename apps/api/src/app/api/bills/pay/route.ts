@@ -4,6 +4,7 @@ import { getBillsProvider } from "@/payments";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { enforceRateLimit } from "@/lib/ratelimit";
+import { awardCashback } from "@/lib/cashback";
 import { getBiller, getServiceConfig } from "@/lib/bills";
 import { getLivePlan } from "@/lib/billCatalog";
 import { billPaySchema } from "@/lib/validation";
@@ -181,6 +182,13 @@ export async function POST(req: Request) {
         },
       });
       if (status === TransactionStatus.COMPLETED) {
+        // Earned on the bill face value, not the margin-inclusive total.
+        await awardCashback({
+          userId: auth.id,
+          source: "bill",
+          baseNgnMinor: amountMinor,
+          sourceTransactionId: tx.id,
+        });
         await sendPush(auth.id, {
           category: "bills",
           title: "Bill paid",

@@ -97,7 +97,8 @@ export type LedgerTxType =
   | "BUY"
   | "SELL"
   | "CONVERT"
-  | "BILL";
+  | "BILL"
+  | "CASHBACK";
 export type LedgerTxStatus =
   | "PENDING"
   | "PROCESSING"
