@@ -41,6 +41,14 @@ const rows: Row[] = [
     route: '/(app)/wallet-statement',
   },
   {
+    icon: 'mail',
+    iconColor: '#8A7BB5',
+    iconBg: 'rgba(138,123,181,0.15)',
+    title: 'Request a statement',
+    subtitle: 'Get a PDF or CSV for any period by email',
+    route: '/(app)/statement',
+  },
+  {
     icon: 'trash',
     iconColor: '#EF4444',
     iconBg: 'rgba(239,68,68,0.15)',

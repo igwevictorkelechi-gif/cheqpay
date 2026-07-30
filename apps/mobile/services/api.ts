@@ -393,6 +393,23 @@ export const api = {
     return apiFetch('/api/features');
   },
 
+  /** Whether emailed statements are available (email delivery configured). */
+  getStatementAvailability(): Promise<{ available: boolean; maxRangeDays: number }> {
+    return apiFetch('/api/statements/request');
+  },
+
+  /** Generate a statement for the range and email it to the account address. */
+  requestStatement(input: {
+    from: string;
+    to: string;
+    format: 'pdf' | 'csv';
+  }): Promise<{ sent: boolean; email: string; count: number }> {
+    return apiFetch('/api/statements/request', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+
   /** The user's virtual cards + whether issuing is currently available. */
   getCards(): Promise<{ cards: VirtualCard[]; available: boolean }> {
     return apiFetch('/api/cards');

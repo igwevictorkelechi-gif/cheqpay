@@ -41,6 +41,7 @@ export default function AppLayout() {
       <Tabs.Screen name="personal-details" options={{ href: null }} />
       <Tabs.Screen name="account-limits" options={{ href: null }} />
       <Tabs.Screen name="wallet-statement" options={{ href: null }} />
+      <Tabs.Screen name="statement" options={{ href: null }} />
       <Tabs.Screen name="delete-account" options={{ href: null }} />
       <Tabs.Screen name="security" options={{ href: null }} />
       <Tabs.Screen name="two-factor" options={{ href: null }} />

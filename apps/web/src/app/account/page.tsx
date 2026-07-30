@@ -6,6 +6,7 @@ import {
   User,
   TrendingUp,
   FileText,
+  Mail,
   Trash2,
   ChevronRight,
   LucideIcon,
@@ -45,6 +46,14 @@ const rows: Row[] = [
     title: "Wallet statement",
     subtitle: "Your financial history readily available",
     href: "/wallet-statement",
+  },
+  {
+    icon: Mail,
+    iconColor: "#8A7BB5",
+    iconBg: "rgba(138,123,181,0.15)",
+    title: "Request a statement",
+    subtitle: "Get a PDF or CSV for any period by email",
+    href: "/statement",
   },
   {
     icon: Trash2,
