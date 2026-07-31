@@ -6,9 +6,19 @@ import { usePathname } from "next/navigation";
 import { Home, Bitcoin, Tag, CreditCard, LucideIcon } from "lucide-react";
 import { useFeatures } from "@/lib/useFeatures";
 
-const ALL_TABS: { href: string; label: string; icon: LucideIcon }[] = [
+/**
+ * `outlineOnly` marks glyph-style icons that have no closed silhouette — the
+ * Bitcoin ₿ is drawn as strokes, so filling it and knocking the detail out in
+ * the bar colour erases the glyph. Those tabs take the brand tint alone.
+ */
+const ALL_TABS: {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  outlineOnly?: boolean;
+}[] = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/crypto", label: "Crypto", icon: Bitcoin },
+  { href: "/crypto", label: "Crypto", icon: Bitcoin, outlineOnly: true },
   { href: "/pay-bill", label: "Pay Bill", icon: Tag },
   { href: "/cards", label: "Cards", icon: CreditCard },
 ];
@@ -64,7 +74,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   transition: "transform 0.22s cubic-bezier(0.22, 1, 0.36, 1)",
                 }}
               >
-                <span className="absolute inset-0 rounded-full bg-white/[0.09] shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] ring-1 ring-inset ring-white/10" />
+                {/* Tinted with the ink token rather than white: white reads as
+                    glass on the dark bar but disappears on the light one. */}
+                <span className="absolute inset-0 rounded-full bg-ink/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] ring-1 ring-inset ring-ink/10" />
               </span>
             )}
 
@@ -85,9 +97,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
                     className={`h-[22px] w-[22px] transition-[transform,color] duration-200 ${
                       active ? "scale-105 text-brand-light" : "text-muted"
                     }`}
-                    fill={active ? "currentColor" : "none"}
-                    stroke={active ? "rgb(var(--c-card))" : "currentColor"}
-                    strokeWidth={active ? 1.75 : 1.9}
+                    fill={active && !tab.outlineOnly ? "currentColor" : "none"}
+                    stroke={
+                      active && !tab.outlineOnly ? "rgb(var(--c-card))" : "currentColor"
+                    }
+                    strokeWidth={active && !tab.outlineOnly ? 1.75 : 1.9}
                   />
                   <span
                     className={`text-[11px] leading-none transition-colors duration-200 ${

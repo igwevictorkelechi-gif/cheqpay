@@ -34,7 +34,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the pre-paint script below sets data-theme on
+    // <html> before React hydrates, so the server markup and the client tree
+    // intentionally differ on this one element.
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Apply the saved theme before first paint to avoid a flash. */}
         <script
