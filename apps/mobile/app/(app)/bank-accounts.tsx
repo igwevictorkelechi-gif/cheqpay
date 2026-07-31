@@ -112,11 +112,11 @@ export default function BankAccountsScreen() {
         <View className="flex-row items-center px-5 pt-3 pb-2">
           <TouchableOpacity
             onPress={() => (mode === 'add' ? (resetForm(), setMode('list')) : router.back())}
-            className="w-10 h-10 rounded-full bg-card items-center justify-center"
+            className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center"
           >
             <Ionicons name="chevron-back" size={22} color={colors.ink} />
           </TouchableOpacity>
-          <Text className="text-ink text-lg font-bold ml-3">
+          <Text className="text-ink dark:text-ink-dark text-lg font-bold ml-3">
             {mode === 'add' ? 'Add bank account' : 'Bank accounts'}
           </Text>
         </View>
@@ -125,28 +125,28 @@ export default function BankAccountsScreen() {
           <ActivityIndicator color={colors.muted} style={{ marginTop: 40 }} />
         ) : mode === 'list' ? (
           <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 32 }}>
-            <Text className="text-muted text-sm mt-1 mb-4">Accounts saved for your Naira withdrawals.</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm mt-1 mb-4">Accounts saved for your Naira withdrawals.</Text>
 
             {beneficiaries.length === 0 ? (
               <View className="items-center py-10">
                 <View className="w-16 h-16 rounded-full items-center justify-center" style={{ backgroundColor: colors.card }}>
                   <Ionicons name="business" size={26} color={colors.muted} />
                 </View>
-                <Text className="text-ink font-bold mt-4">No bank accounts yet</Text>
-                <Text className="text-muted text-sm mt-1 text-center px-6">
+                <Text className="text-ink dark:text-ink-dark font-bold mt-4">No bank accounts yet</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm mt-1 text-center px-6">
                   Add a bank account in your name to withdraw your Naira balance.
                 </Text>
               </View>
             ) : (
               <View style={{ gap: 12 }}>
                 {beneficiaries.map((b) => (
-                  <View key={b.id} className="flex-row items-center bg-card rounded-2xl p-4" style={{ borderWidth: 1, borderColor: colors.border }}>
+                  <View key={b.id} className="flex-row items-center bg-card dark:bg-card-dark rounded-2xl p-4" style={{ borderWidth: 1, borderColor: colors.border }}>
                     <View className="w-11 h-11 rounded-full items-center justify-center" style={{ backgroundColor: colors.surfaceSoft }}>
                       <Ionicons name="business" size={20} color={colors.ink} />
                     </View>
                     <View className="flex-1 ml-3">
-                      <Text className="text-ink font-bold" numberOfLines={1}>{b.accountName}</Text>
-                      <Text className="text-muted text-sm" numberOfLines={1}>{b.bankName} · {b.accountNumber}</Text>
+                      <Text className="text-ink dark:text-ink-dark font-bold" numberOfLines={1}>{b.accountName}</Text>
+                      <Text className="text-muted dark:text-muted-dark text-sm" numberOfLines={1}>{b.bankName} · {b.accountNumber}</Text>
                     </View>
                     <TouchableOpacity onPress={() => remove(b.id)} hitSlop={10} className="w-9 h-9 rounded-full items-center justify-center" style={{ backgroundColor: colors.surfaceSoft }}>
                       <Ionicons name="trash-outline" size={16} color={colors.muted} />
@@ -167,14 +167,14 @@ export default function BankAccountsScreen() {
 
             <View className="flex-row items-start mt-5" style={{ gap: 6 }}>
               <Ionicons name="shield-checkmark" size={16} color={colors.brandLight} style={{ marginTop: 2 }} />
-              <Text className="text-muted text-xs flex-1">
+              <Text className="text-muted dark:text-muted-dark text-xs flex-1">
                 For your security, you can only withdraw to a bank account in your own name.
               </Text>
             </View>
           </ScrollView>
         ) : (
           <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 32 }}>
-            <Text className="text-muted text-sm font-semibold mt-4 mb-2">Bank</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-4 mb-2">Bank</Text>
             <TouchableOpacity
               onPress={() => setShowBanks(true)}
               className="flex-row items-center justify-between rounded-2xl px-4 py-3.5"
@@ -184,7 +184,7 @@ export default function BankAccountsScreen() {
               <Ionicons name="chevron-down" size={20} color={colors.muted} />
             </TouchableOpacity>
 
-            <Text className="text-muted text-sm font-semibold mt-5 mb-2">Account number</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-5 mb-2">Account number</Text>
             <TextInput
               value={accountNumber}
               onChangeText={(t) => { setAccountNumber(t.replace(/\D/g, '').slice(0, 10)); setResolvedName(null); }}
@@ -192,14 +192,14 @@ export default function BankAccountsScreen() {
               maxLength={10}
               placeholder="10-digit NUBAN"
               placeholderTextColor={colors.muted}
-              className="rounded-2xl px-4 py-3.5 text-ink"
+              className="rounded-2xl px-4 py-3.5 text-ink dark:text-ink-dark"
               style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}
             />
 
             {resolvedName ? (
               <View className="flex-row items-center rounded-2xl p-4 mt-4" style={{ backgroundColor: 'rgba(52,199,89,0.1)', borderWidth: 1, borderColor: 'rgba(52,199,89,0.3)' }}>
                 <Ionicons name="shield-checkmark" size={20} color={colors.positive} />
-                <Text className="text-ink font-bold ml-2">{resolvedName}</Text>
+                <Text className="text-ink dark:text-ink-dark font-bold ml-2">{resolvedName}</Text>
               </View>
             ) : (
               <TouchableOpacity
@@ -208,7 +208,7 @@ export default function BankAccountsScreen() {
                 className="rounded-2xl py-3.5 items-center mt-4"
                 style={{ backgroundColor: colors.card, opacity: canResolve ? 1 : 0.4 }}
               >
-                <Text className="text-ink font-bold">{resolving ? 'Verifying…' : 'Verify account'}</Text>
+                <Text className="text-ink dark:text-ink-dark font-bold">{resolving ? 'Verifying…' : 'Verify account'}</Text>
               </TouchableOpacity>
             )}
 
@@ -229,8 +229,8 @@ export default function BankAccountsScreen() {
 
         <Modal visible={showBanks} transparent animationType="slide" onRequestClose={() => setShowBanks(false)}>
           <TouchableOpacity className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} activeOpacity={1} onPress={() => setShowBanks(false)}>
-            <View className="bg-surface rounded-t-3xl" style={{ maxHeight: '70%', paddingBottom: insets.bottom + 8 }}>
-              <Text className="text-ink text-lg font-bold p-5">Select bank</Text>
+            <View className="bg-surface dark:bg-surface-dark rounded-t-3xl" style={{ maxHeight: '70%', paddingBottom: insets.bottom + 8 }}>
+              <Text className="text-ink dark:text-ink-dark text-lg font-bold p-5">Select bank</Text>
               <ScrollView>
                 {banks.map((bank) => (
                   <TouchableOpacity
@@ -239,7 +239,7 @@ export default function BankAccountsScreen() {
                     className="flex-row items-center justify-between px-5 py-3.5"
                     style={{ borderTopWidth: 1, borderTopColor: colors.border }}
                   >
-                    <Text className="text-ink">{bank.name}</Text>
+                    <Text className="text-ink dark:text-ink-dark">{bank.name}</Text>
                     {bankCode === bank.code && <Ionicons name="checkmark" size={20} color={colors.positive} />}
                   </TouchableOpacity>
                 ))}

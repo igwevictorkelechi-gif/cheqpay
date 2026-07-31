@@ -20,8 +20,8 @@ function Leg({ caption, amount, symbol }: { caption: string; amount: string; sym
   return (
     <View className="flex-row items-center justify-between">
       <View style={{ flexShrink: 1 }}>
-        <Text className="text-muted text-sm">{caption}</Text>
-        <Text className="text-ink text-2xl font-extrabold mt-1" numberOfLines={1}>
+        <Text className="text-muted dark:text-muted-dark text-sm">{caption}</Text>
+        <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold mt-1" numberOfLines={1}>
           {amount} <Text className="text-lg">{symbol}</Text>
         </Text>
       </View>
@@ -33,8 +33,8 @@ function Leg({ caption, amount, symbol }: { caption: string; amount: string; sym
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row items-center justify-between py-2">
-      <Text className="text-muted text-sm">{label}</Text>
-      <Text className="text-ink text-sm font-semibold">{value}</Text>
+      <Text className="text-muted dark:text-muted-dark text-sm">{label}</Text>
+      <Text className="text-ink dark:text-ink-dark text-sm font-semibold">{value}</Text>
     </View>
   );
 }
@@ -110,16 +110,16 @@ export default function SwapConfirmScreen() {
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
         <View className="flex-row items-center px-5 pt-3 pb-2">
-          <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 rounded-full bg-card items-center justify-center">
+          <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center">
             <Ionicons name="chevron-back" size={22} color={colors.ink} />
           </TouchableOpacity>
-          <Text className="flex-1 text-center text-ink text-lg font-bold" style={{ paddingRight: 40 }}>
+          <Text className="flex-1 text-center text-ink dark:text-ink-dark text-lg font-bold" style={{ paddingRight: 40 }}>
             Confirm Swap
           </Text>
         </View>
 
         <View className="px-5">
-          <View className="bg-card rounded-3xl p-5">
+          <View className="bg-card dark:bg-card-dark rounded-3xl p-5">
             <Leg caption="You pay" amount={String(amount)} symbol={String(fromSym)} />
             <View className="items-center my-4">
               <View className="w-9 h-9 rounded-full items-center justify-center" style={{ backgroundColor: colors.brand }}>
@@ -131,7 +131,7 @@ export default function SwapConfirmScreen() {
         </View>
 
         <View className="px-5 mt-4">
-          <View className="bg-card rounded-3xl p-5">
+          <View className="bg-card dark:bg-card-dark rounded-3xl p-5">
             <Row label="Rate" value={rateValue} />
             <Row label="Estimated time" value="~ instant" />
             <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 4 }} />
@@ -154,7 +154,7 @@ export default function SwapConfirmScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.back()} disabled={processing} className="py-3 items-center mt-1">
-            <Text className="text-muted text-base font-semibold">Cancel</Text>
+            <Text className="text-muted dark:text-muted-dark text-base font-semibold">Cancel</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

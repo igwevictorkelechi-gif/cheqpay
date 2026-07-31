@@ -76,15 +76,15 @@ export default function SupportChatScreen() {
     >
       <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
         <View className="flex-row items-center px-5 pt-3 pb-3" style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
-          <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 rounded-full bg-card items-center justify-center">
+          <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center">
             <Ionicons name="chevron-back" size={22} color={colors.ink} />
           </TouchableOpacity>
           <View className="w-10 h-10 rounded-full items-center justify-center ml-3" style={{ backgroundColor: colors.brand }}>
             <Ionicons name="sparkles" size={20} color="#FFFFFF" />
           </View>
           <View className="ml-3">
-            <Text className="text-ink font-bold">Cheq · AI assistant</Text>
-            <Text className="text-muted text-xs">Answers from our help center</Text>
+            <Text className="text-ink dark:text-ink-dark font-bold">Cheq · AI assistant</Text>
+            <Text className="text-muted dark:text-muted-dark text-xs">Answers from our help center</Text>
           </View>
         </View>
 
@@ -122,7 +122,7 @@ export default function SupportChatScreen() {
                   className="rounded-full px-3.5 py-2"
                   style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}
                 >
-                  <Text className="text-ink text-xs font-semibold">{s}</Text>
+                  <Text className="text-ink dark:text-ink-dark text-xs font-semibold">{s}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -141,7 +141,7 @@ export default function SupportChatScreen() {
             maxLength={2000}
             onSubmitEditing={() => send(input)}
             returnKeyType="send"
-            className="flex-1 rounded-2xl px-4 text-ink"
+            className="flex-1 rounded-2xl px-4 text-ink dark:text-ink-dark"
             style={{ height: 48, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}
           />
           <TouchableOpacity

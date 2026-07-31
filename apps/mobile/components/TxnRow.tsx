@@ -102,10 +102,10 @@ export function TxnRow({
         <Ionicons name={ic.name} size={20} color={ic.color} />
       </View>
       <View className="ml-3 flex-1">
-        <Text className="text-ink font-bold" numberOfLines={1}>
+        <Text className="text-ink dark:text-ink-dark font-bold" numberOfLines={1}>
           {txnTitle(t)}
         </Text>
-        <Text className="text-muted text-xs mt-0.5">
+        <Text className="text-muted dark:text-muted-dark text-xs mt-0.5">
           {new Date(t.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}
         </Text>
       </View>

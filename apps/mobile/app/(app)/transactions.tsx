@@ -47,7 +47,7 @@ export default function TransactionsScreen() {
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
       <View className="px-5 py-4 flex-row items-center">
-        <Text className="text-ink text-2xl font-extrabold flex-1">Transactions</Text>
+        <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold flex-1">Transactions</Text>
       </View>
 
       <FlatList
@@ -63,7 +63,7 @@ export default function TransactionsScreen() {
         ListEmptyComponent={
           <View className="items-center justify-center py-20">
             <Ionicons name="receipt-outline" size={44} color={colors.muted} />
-            <Text className="text-muted mt-4 text-center">
+            <Text className="text-muted dark:text-muted-dark mt-4 text-center">
               No transactions yet.{'\n'}Start by funding your wallet.
             </Text>
           </View>

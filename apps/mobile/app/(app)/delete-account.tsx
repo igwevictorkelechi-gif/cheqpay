@@ -65,7 +65,7 @@ export default function DeleteAccountScreen() {
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="arrow-back" size={22} color={colors.ink} />
         </TouchableOpacity>
@@ -74,22 +74,22 @@ export default function DeleteAccountScreen() {
           <Ionicons name="trash" size={30} color="#EF4444" />
         </View>
 
-        <Text className="text-ink text-4xl font-extrabold mt-5 mb-2">Delete account</Text>
-        <Text className="text-muted text-base mb-6">
+        <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-5 mb-2">Delete account</Text>
+        <Text className="text-muted dark:text-muted-dark text-base mb-6">
           We’re sorry to see you go. Deleting your account is permanent.
         </Text>
 
-        <View className="bg-card rounded-3xl p-5" style={{ gap: 14 }}>
+        <View className="bg-card dark:bg-card-dark rounded-3xl p-5" style={{ gap: 14 }}>
           {consequences.map((c) => (
             <View key={c} className="flex-row items-start">
               <Ionicons name="close-circle" size={18} color="#EF4444" style={{ marginTop: 2 }} />
-              <Text className="text-ink text-sm ml-3 flex-1">{c}</Text>
+              <Text className="text-ink dark:text-ink-dark text-sm ml-3 flex-1">{c}</Text>
             </View>
           ))}
         </View>
 
-        <Text className="text-muted text-sm mt-6 mb-2">
-          Type <Text className="text-ink font-bold">DELETE</Text> to confirm
+        <Text className="text-muted dark:text-muted-dark text-sm mt-6 mb-2">
+          Type <Text className="text-ink dark:text-ink-dark font-bold">DELETE</Text> to confirm
         </Text>
         <TextInput
           value={confirm}
@@ -97,7 +97,7 @@ export default function DeleteAccountScreen() {
           autoCapitalize="characters"
           placeholder="DELETE"
           placeholderTextColor={colors.muted}
-          className="rounded-2xl px-4 py-3.5 text-ink text-base bg-card"
+          className="rounded-2xl px-4 py-3.5 text-ink dark:text-ink-dark text-base bg-card dark:bg-card-dark"
           style={{ borderWidth: 1, borderColor: colors.border }}
         />
 

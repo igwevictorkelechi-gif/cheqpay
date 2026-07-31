@@ -7,20 +7,13 @@ import { Ionicons } from '@expo/vector-icons';
  * Centralises the colours and layout pieces that repeat across the
  * Home, Crypto and Pay Bill tabs so the look stays consistent.
  */
-export const colors = {
-  brand: '#6B5B95',
-  brandDark: '#574A7A',
-  brandLight: '#8A7BB5',
-  surface: '#14121A',
-  surfaceSoft: '#1F1B29',
-  card: '#1F1B29',
-  circle: '#2C2738',
-  border: '#2A2535',
-  ink: '#F4F3F7',
-  muted: '#9A93AD',
-  positive: '#34C759',
-  white: '#FFFFFF',
-};
+// The palette lives in ./theme so it can be swapped at runtime for light mode.
+// Re-exported here because 40-odd screens already import { colors } from
+// '@/components/brand' — they keep working and pick up the active theme.
+export { colors, applyPalette, darkPalette, lightPalette } from './theme';
+export type { Palette } from './theme';
+
+import { colors } from './theme';
 
 /** Horizontal CheqPay wordmark logo. */
 export function Logo({ width = 200 }: { width?: number }) {
@@ -63,7 +56,7 @@ export function TopIcon({
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="w-10 h-10 rounded-full bg-card items-center justify-center ml-3"
+      className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center ml-3"
       activeOpacity={0.7}
     >
       <Ionicons name={name} size={18} color={colors.ink} />
@@ -101,8 +94,8 @@ export function TopBar({
 export function BalanceBlock({ label, amount }: { label: string; amount: string }) {
   return (
     <View className="items-center mt-4 mb-7">
-      <Text className="text-muted text-base">{label}</Text>
-      <Text className="text-ink font-extrabold mt-2" style={{ fontSize: 40 }}>
+      <Text className="text-muted dark:text-muted-dark text-base">{label}</Text>
+      <Text className="text-ink dark:text-ink-dark font-extrabold mt-2" style={{ fontSize: 40 }}>
         {amount}
       </Text>
     </View>
@@ -127,7 +120,7 @@ export function CircleAction({
       >
         <Ionicons name={icon} size={24} color={colors.ink} />
       </View>
-      <Text className="text-ink font-semibold text-sm mt-2">{label}</Text>
+      <Text className="text-ink dark:text-ink-dark font-semibold text-sm mt-2">{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -184,6 +177,6 @@ export function Card({
   className?: string;
 }) {
   return (
-    <View className={`bg-card rounded-3xl p-5 ${className}`}>{children}</View>
+    <View className={`bg-card dark:bg-card-dark rounded-3xl p-5 ${className}`}>{children}</View>
   );
 }

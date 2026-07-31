@@ -118,11 +118,11 @@ export default function BillServiceScreen() {
     <View className="flex-row items-center px-5 pt-3 pb-2">
       <TouchableOpacity
         onPress={() => (stage === 'review' ? setStage('form') : router.back())}
-        className="w-10 h-10 rounded-full bg-card items-center justify-center"
+        className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center"
       >
         <Ionicons name="chevron-back" size={22} color={colors.ink} />
       </TouchableOpacity>
-      <Text className="text-ink text-lg font-bold ml-3">{config ? config.label : 'Pay bill'}</Text>
+      <Text className="text-ink dark:text-ink-dark text-lg font-bold ml-3">{config ? config.label : 'Pay bill'}</Text>
     </View>
   );
 
@@ -138,7 +138,7 @@ export default function BillServiceScreen() {
     return (
       <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
         {Header}
-        <Text className="text-muted text-center mt-10 px-5">This service is unavailable.</Text>
+        <Text className="text-muted dark:text-muted-dark text-center mt-10 px-5">This service is unavailable.</Text>
       </View>
     );
   }
@@ -149,11 +149,11 @@ export default function BillServiceScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
         {stage === 'form' && (
           <View className="px-5">
-            <Text className="text-muted text-sm">
-              NGN balance: <Text className="text-ink font-semibold">₦{balance.toLocaleString()}</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm">
+              NGN balance: <Text className="text-ink dark:text-ink-dark font-semibold">₦{balance.toLocaleString()}</Text>
             </Text>
 
-            <Text className="text-muted text-sm font-semibold mt-5 mb-2">Select provider</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-5 mb-2">Select provider</Text>
             <View className="flex-row flex-wrap" style={{ gap: 8 }}>
               {config.billers.map((b) => {
                 const active = billerId === b.id;
@@ -197,7 +197,7 @@ export default function BillServiceScreen() {
                         {b.short}
                       </Text>
                     </View>
-                    <Text className="text-ink text-xs font-semibold mt-2" numberOfLines={1}>
+                    <Text className="text-ink dark:text-ink-dark text-xs font-semibold mt-2" numberOfLines={1}>
                       {b.name}
                     </Text>
                   </TouchableOpacity>
@@ -205,14 +205,14 @@ export default function BillServiceScreen() {
               })}
             </View>
 
-            <Text className="text-muted text-sm font-semibold mt-6 mb-2">{config.customerLabel}</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-2">{config.customerLabel}</Text>
             <View className="flex-row" style={{ gap: 8 }}>
               <TextInput
                 value={customer}
                 onChangeText={setCustomer}
                 placeholder={config.customerPlaceholder}
                 placeholderTextColor={colors.muted}
-                className="flex-1 rounded-2xl px-4 py-3 text-ink"
+                className="flex-1 rounded-2xl px-4 py-3 text-ink dark:text-ink-dark"
                 style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}
               />
               {config.requiresValidation && (
@@ -238,19 +238,19 @@ export default function BillServiceScreen() {
 
             {config.variableAmount ? (
               <>
-                <Text className="text-muted text-sm font-semibold mt-6 mb-2">Amount</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-2">Amount</Text>
                 <View
                   className="flex-row items-center rounded-2xl px-4 py-3"
                   style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}
                 >
-                  <Text className="text-muted text-lg font-bold mr-1">₦</Text>
+                  <Text className="text-muted dark:text-muted-dark text-lg font-bold mr-1">₦</Text>
                   <TextInput
                     value={amount}
                     onChangeText={(t) => setAmount(t.replace(/[^\d.]/g, ''))}
                     keyboardType="decimal-pad"
                     placeholder="0"
                     placeholderTextColor={colors.muted}
-                    className="flex-1 text-ink text-lg font-bold"
+                    className="flex-1 text-ink dark:text-ink-dark text-lg font-bold"
                   />
                 </View>
                 <View className="flex-row flex-wrap mt-3" style={{ gap: 8 }}>
@@ -261,14 +261,14 @@ export default function BillServiceScreen() {
                       className="rounded-full px-4 py-2"
                       style={{ backgroundColor: colors.card }}
                     >
-                      <Text className="text-ink text-sm font-semibold">₦{v.toLocaleString()}</Text>
+                      <Text className="text-ink dark:text-ink-dark text-sm font-semibold">₦{v.toLocaleString()}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </>
             ) : (
               <>
-                <Text className="text-muted text-sm font-semibold mt-6 mb-2">Select plan</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-2">Select plan</Text>
                 {plans.map((p) => {
                   const active = planId === p.id;
                   return (
@@ -282,8 +282,8 @@ export default function BillServiceScreen() {
                         borderColor: active ? colors.brand : colors.border,
                       }}
                     >
-                      <Text className="text-ink font-semibold">{p.name}</Text>
-                      <Text className="text-ink font-bold">₦{Number(p.amount).toLocaleString()}</Text>
+                      <Text className="text-ink dark:text-ink-dark font-semibold">{p.name}</Text>
+                      <Text className="text-ink dark:text-ink-dark font-bold">₦{Number(p.amount).toLocaleString()}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -313,8 +313,8 @@ export default function BillServiceScreen() {
                   <Text style={{ color: contrast(biller.color), fontWeight: '800' }}>{biller.short}</Text>
                 </View>
               )}
-              <Text className="text-ink text-lg font-bold mt-3">{biller?.name}</Text>
-              <Text className="text-muted text-sm">{config.label}</Text>
+              <Text className="text-ink dark:text-ink-dark text-lg font-bold mt-3">{biller?.name}</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm">{config.label}</Text>
             </View>
             <View className="rounded-2xl overflow-hidden" style={{ backgroundColor: colors.card }}>
               <ReviewRow label={config.customerLabel} value={customer.trim()} />
@@ -346,12 +346,12 @@ export default function BillServiceScreen() {
             >
               <Ionicons name="checkmark-circle" size={64} color={colors.positive} />
             </View>
-            <Text className="text-ink text-2xl font-extrabold mt-6">Payment successful</Text>
-            <Text className="text-muted text-sm mt-2 text-center">
+            <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold mt-6">Payment successful</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm mt-2 text-center">
               ₦{payAmount.toLocaleString()} {config.label} for {customer.trim()}.
             </Text>
             {providerRef ? (
-              <Text className="text-muted text-xs mt-3">Ref: {providerRef}</Text>
+              <Text className="text-muted dark:text-muted-dark text-xs mt-3">Ref: {providerRef}</Text>
             ) : null}
             <TouchableOpacity
               onPress={() => router.replace('/(app)/pay-bill')}
@@ -373,8 +373,8 @@ function ReviewRow({ label, value, bordered }: { label: string; value: string; b
       className="flex-row items-center justify-between px-4 py-4"
       style={bordered ? { borderTopWidth: 1, borderTopColor: colors.border } : undefined}
     >
-      <Text className="text-muted text-sm">{label}</Text>
-      <Text className="text-ink text-sm font-semibold" style={{ maxWidth: '60%' }} numberOfLines={1}>
+      <Text className="text-muted dark:text-muted-dark text-sm">{label}</Text>
+      <Text className="text-ink dark:text-ink-dark text-sm font-semibold" style={{ maxWidth: '60%' }} numberOfLines={1}>
         {value}
       </Text>
     </View>

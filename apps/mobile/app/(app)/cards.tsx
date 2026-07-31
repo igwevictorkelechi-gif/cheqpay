@@ -60,7 +60,7 @@ export default function CardsScreen() {
         icons={[{ name: 'search-outline' }, { name: 'notifications-outline' }]}
       />
 
-      <Text className="text-ink font-extrabold px-5 mt-3" style={{ fontSize: 32 }}>
+      <Text className="text-ink dark:text-ink-dark font-extrabold px-5 mt-3" style={{ fontSize: 32 }}>
         Virtual cards
       </Text>
 
@@ -68,7 +68,7 @@ export default function CardsScreen() {
         <ActivityIndicator color={colors.muted} style={{ marginTop: 40 }} />
       ) : (
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 32 }}>
-          <Text className="text-muted text-sm mt-1 mb-4">
+          <Text className="text-muted dark:text-muted-dark text-sm mt-1 mb-4">
             Dollar cards for online payments, subscriptions and shopping.
           </Text>
 
@@ -80,8 +80,8 @@ export default function CardsScreen() {
               >
                 <Ionicons name="card" size={26} color={colors.brandLight} />
               </View>
-              <Text className="text-ink text-lg font-bold mt-4">Coming soon</Text>
-              <Text className="text-muted text-sm mt-1 text-center px-6">
+              <Text className="text-ink dark:text-ink-dark text-lg font-bold mt-4">Coming soon</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm mt-1 text-center px-6">
                 USD virtual cards are on the way. We’ll let you know the moment they’re ready.
               </Text>
             </View>
@@ -95,8 +95,8 @@ export default function CardsScreen() {
                   >
                     <Ionicons name="card-outline" size={26} color={colors.muted} />
                   </View>
-                  <Text className="text-ink font-bold mt-4">No cards yet</Text>
-                  <Text className="text-muted text-sm mt-1 text-center px-6">
+                  <Text className="text-ink dark:text-ink-dark font-bold mt-4">No cards yet</Text>
+                  <Text className="text-muted dark:text-muted-dark text-sm mt-1 text-center px-6">
                     Create a virtual dollar card to pay online.
                   </Text>
                 </View>

@@ -127,16 +127,16 @@ export default function HomeScreen() {
         {/* Cash account */}
         <View className="px-5 mb-4">
           <Card>
-            <Text className="text-muted text-base font-medium mb-4">Cash</Text>
+            <Text className="text-muted dark:text-muted-dark text-base font-medium mb-4">Cash</Text>
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center">
                 <NairaFlag />
                 <View className="ml-3">
-                  <Text className="text-ink text-lg font-bold">NGN</Text>
-                  <Text className="text-muted text-sm">Naira</Text>
+                  <Text className="text-ink dark:text-ink-dark text-lg font-bold">NGN</Text>
+                  <Text className="text-muted dark:text-muted-dark text-sm">Naira</Text>
                 </View>
               </View>
-              <Text className="text-ink text-lg font-bold">
+              <Text className="text-ink dark:text-ink-dark text-lg font-bold">
                 {showBalance
                   ? `${ngn.toLocaleString('en-NG', { maximumFractionDigits: 2 })} NGN`
                   : '•••• NGN'}
@@ -150,7 +150,7 @@ export default function HomeScreen() {
           <SectionHeader title="Transactions" onPress={() => router.push('/(app)/transactions')} />
           {txns.length === 0 ? (
             <Card>
-              <Text className="text-muted text-sm text-center py-2">No transactions yet.</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm text-center py-2">No transactions yet.</Text>
             </Card>
           ) : (
             <Card>

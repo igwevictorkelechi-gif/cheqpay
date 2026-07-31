@@ -1,14 +1,24 @@
 import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useAuthStore } from '@/store';
+import { NativeWindStyleSheet } from 'nativewind';
+import { useAuthStore, useUIStore } from '@/store';
 import { authService } from '@/services/auth';
 import { LockGate } from '@/components/LockGate';
+import { applyPalette } from '@/components/brand';
 
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const { isAuthenticated, loading, setUser, setLoading, setIsAuthenticated } = useAuthStore();
+  const darkMode = useUIStore((s) => s.darkMode);
+
+  // Two halves of the theme, applied before children render:
+  //  - inline styles read the mutable `colors` palette (components/theme.ts)
+  //  - Tailwind classes use dark: variants, switched by NativeWind
+  // Both are idempotent, so running them each render is harmless.
+  applyPalette(darkMode);
+  NativeWindStyleSheet.setColorScheme(darkMode ? 'dark' : 'light');
 
   useEffect(() => {
     // Check if user is already logged in
@@ -40,11 +50,16 @@ export default function RootLayout() {
 
   return (
     <LockGate>
-      <Stack screenOptions={{ headerShown: false }}>
+      {/* Keyed on the theme so switching remounts the navigator and every
+          screen re-reads the palette. Screens react-navigation is holding in
+          the background would otherwise keep the old colours until refocused,
+          which looks broken; a nav reset on a deliberate, rare action is the
+          better trade. */}
+      <Stack key={darkMode ? 'dark' : 'light'} screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(app)" options={{ headerShown: false }} />
       </Stack>
-      <StatusBar style="light" />
+      <StatusBar style={darkMode ? 'light' : 'dark'} />
     </LockGate>
   );
 }

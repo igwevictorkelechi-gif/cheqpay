@@ -60,13 +60,13 @@ export default function AppIconScreen() {
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="arrow-back" size={22} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text className="text-ink text-4xl font-extrabold mt-6">App Icon</Text>
-        <Text className="text-muted text-sm mt-2 mb-5">
+        <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-6">App Icon</Text>
+        <Text className="text-muted dark:text-muted-dark text-sm mt-2 mb-5">
           Change the CheqPay app icon to match your style.
         </Text>
 
@@ -78,7 +78,7 @@ export default function AppIconScreen() {
                 key={o.key}
                 activeOpacity={0.85}
                 onPress={() => choose(o)}
-                className="items-center bg-card rounded-3xl p-4"
+                className="items-center bg-card dark:bg-card-dark rounded-3xl p-4"
                 style={{
                   width: '47%',
                   borderWidth: 1.5,
@@ -94,7 +94,7 @@ export default function AppIconScreen() {
                   </Text>
                 </View>
                 <View className="flex-row items-center mt-3">
-                  <Text className="text-ink text-base font-semibold">{o.label}</Text>
+                  <Text className="text-ink dark:text-ink-dark text-base font-semibold">{o.label}</Text>
                   {isSel && (
                     <Ionicons name="checkmark-circle" size={18} color={colors.brand} style={{ marginLeft: 6 }} />
                   )}
@@ -104,7 +104,7 @@ export default function AppIconScreen() {
           })}
         </View>
 
-        <Text className="text-muted text-xs text-center mt-6">
+        <Text className="text-muted dark:text-muted-dark text-xs text-center mt-6">
           Your selection is applied to your home screen.
         </Text>
       </ScrollView>

@@ -22,6 +22,7 @@ const DISMISSED_KEY = 'cheqpay:popup:dismissed';
  * dismissing stores the id, and a newly published popup (fresh id) shows again.
  */
 export default function PromoPopup() {
+  const styles = makeStyles();
   const router = useRouter();
   const [popup, setPopup] = useState<Popup | null>(null);
 
@@ -83,7 +84,10 @@ export default function PromoPopup() {
   );
 }
 
-const styles = StyleSheet.create({
+// Built per call, not at module scope: the palette is swapped at runtime
+// for light mode, and StyleSheet.create would freeze the dark values.
+const makeStyles = () =>
+  StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
@@ -124,4 +128,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   buttonText: { color: colors.white, fontSize: 14, fontWeight: '700' },
-});
+  });

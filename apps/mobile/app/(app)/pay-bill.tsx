@@ -27,7 +27,9 @@ function ServiceTile({ service }: { service: Service }) {
       activeOpacity={0.8}
       onPress={() => service.route && router.push(service.route as never)}
       className="rounded-2xl p-4 mb-3"
-      style={{ width: '48%', height: 96, backgroundColor: '#2A2440' }}
+      // colors.circle, not a fixed dark hex: the label is text-ink, so a
+      // hardcoded dark tile turns dark-on-dark in light mode.
+      style={{ width: '48%', height: 96, backgroundColor: colors.circle }}
     >
       <View className="flex-row items-start justify-between">
         <Text style={{ fontSize: 26 }}>{service.emoji}</Text>
@@ -40,7 +42,7 @@ function ServiceTile({ service }: { service: Service }) {
           </View>
         ) : null}
       </View>
-      <Text className="text-ink font-bold text-base mt-auto">{service.label}</Text>
+      <Text className="text-ink dark:text-ink-dark font-bold text-base mt-auto">{service.label}</Text>
     </TouchableOpacity>
   );
 }
@@ -61,7 +63,7 @@ export default function PayBillScreen() {
           icons={[{ name: 'search-outline' }, { name: 'notifications-outline' }]}
         />
 
-        <Text className="text-ink font-extrabold px-5 mt-3 mb-5" style={{ fontSize: 32 }}>
+        <Text className="text-ink dark:text-ink-dark font-extrabold px-5 mt-3 mb-5" style={{ fontSize: 32 }}>
           Quick payments
         </Text>
 
@@ -69,15 +71,15 @@ export default function PayBillScreen() {
         <View className="px-5 mb-5">
           <Card>
             <View className="flex-row items-center justify-between mb-5">
-              <Text className="text-ink font-bold text-base">Showing services in</Text>
+              <Text className="text-ink dark:text-ink-dark font-bold text-base">Showing services in</Text>
               <TouchableOpacity
                 className="flex-row items-center rounded-full px-3 py-1.5"
                 style={{ backgroundColor: colors.circle }}
                 activeOpacity={0.7}
               >
                 <Text style={{ fontSize: 14 }}>🇳🇬</Text>
-                <Text className="text-ink font-semibold text-sm ml-1.5">Nigeria</Text>
-                <Text className="text-muted ml-1">▾</Text>
+                <Text className="text-ink dark:text-ink-dark font-semibold text-sm ml-1.5">Nigeria</Text>
+                <Text className="text-muted dark:text-muted-dark ml-1">▾</Text>
               </TouchableOpacity>
             </View>
 
@@ -95,8 +97,8 @@ export default function PayBillScreen() {
             <View className="flex-row items-center">
               <Text style={{ fontSize: 26 }}>🧾</Text>
               <View className="ml-4 flex-1">
-                <Text className="text-ink font-bold text-lg">No transactions yet</Text>
-                <Text className="text-muted text-sm mt-1">
+                <Text className="text-ink dark:text-ink-dark font-bold text-lg">No transactions yet</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm mt-1">
                   Your first transaction will show up here, make it count!
                 </Text>
               </View>

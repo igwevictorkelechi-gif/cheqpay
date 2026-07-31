@@ -102,8 +102,8 @@ export default function SendToUserScreen() {
       <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
         <View className="flex-1 items-center justify-center px-8">
           <SuccessAnimation />
-          <Text className="text-ink text-2xl font-extrabold mt-6">Money sent</Text>
-          <Text className="text-muted text-sm mt-2 text-center">
+          <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold mt-6">Money sent</Text>
+          <Text className="text-muted dark:text-muted-dark text-sm mt-2 text-center">
             {sent.asset === 'NGN' ? '₦' : ''}
             {sent.amount}
             {sent.asset === 'NGN' ? '' : ` ${sent.asset}`} is now in @{sent.to}’s wallet.
@@ -131,11 +131,11 @@ export default function SendToUserScreen() {
         <View className="flex-row items-center px-5 pt-3 pb-2">
           <TouchableOpacity
             onPress={() => router.back()}
-            className="w-10 h-10 rounded-full bg-card items-center justify-center"
+            className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center"
           >
             <Ionicons name="chevron-back" size={22} color={colors.ink} />
           </TouchableOpacity>
-          <Text className="text-ink text-lg font-bold ml-3">Send to a user</Text>
+          <Text className="text-ink dark:text-ink-dark text-lg font-bold ml-3">Send to a user</Text>
         </View>
 
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}>
@@ -147,18 +147,18 @@ export default function SendToUserScreen() {
               >
                 <Ionicons name="paper-plane" size={26} color={colors.brandLight} />
               </View>
-              <Text className="text-ink text-lg font-bold mt-4">Coming soon</Text>
-              <Text className="text-muted text-sm mt-1 text-center px-6">
+              <Text className="text-ink dark:text-ink-dark text-lg font-bold mt-4">Coming soon</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm mt-1 text-center px-6">
                 Sending to other CheqPay users isn’t switched on yet.
               </Text>
             </View>
           ) : (
             <>
-              <Text className="text-muted text-sm mt-1 mb-5">
+              <Text className="text-muted dark:text-muted-dark text-sm mt-1 mb-5">
                 Instant and free between CheqPay accounts.
               </Text>
 
-              <Text className="text-muted text-sm font-semibold mb-1.5">Recipient username</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm font-semibold mb-1.5">Recipient username</Text>
               <View className="flex-row" style={{ gap: 8 }}>
                 <TextInput
                   value={username}
@@ -185,7 +185,7 @@ export default function SendToUserScreen() {
                   {checking ? (
                     <ActivityIndicator color={colors.ink} />
                   ) : (
-                    <Text className="text-ink font-bold">Check</Text>
+                    <Text className="text-ink dark:text-ink-dark font-bold">Check</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -196,11 +196,11 @@ export default function SendToUserScreen() {
                   style={{ backgroundColor: 'rgba(52,199,89,0.10)', borderWidth: 1, borderColor: 'rgba(52,199,89,0.3)' }}
                 >
                   <Ionicons name="checkmark-circle" size={20} color={colors.positive} />
-                  <Text className="text-ink font-bold ml-2">Sending to @{confirmed}</Text>
+                  <Text className="text-ink dark:text-ink-dark font-bold ml-2">Sending to @{confirmed}</Text>
                 </View>
               )}
 
-              <Text className="text-muted text-sm font-semibold mt-6 mb-2">Asset</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-2">Asset</Text>
               <View className="flex-row flex-wrap" style={{ gap: 8 }}>
                 {ASSETS.map((a) => (
                   <TouchableOpacity
@@ -225,7 +225,7 @@ export default function SendToUserScreen() {
                 ))}
               </View>
 
-              <Text className="text-muted text-sm font-semibold mt-6 mb-1.5">Amount</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-1.5">Amount</Text>
               <TextInput
                 value={amount}
                 onChangeText={(t) => {
@@ -237,13 +237,13 @@ export default function SendToUserScreen() {
                 placeholderTextColor={colors.muted}
                 style={inputStyle}
               />
-              <Text className="text-muted text-xs mt-1.5">
+              <Text className="text-muted dark:text-muted-dark text-xs mt-1.5">
                 Available: {asset === 'NGN' ? '₦' : ''}
                 {available.toLocaleString('en-NG', { maximumFractionDigits: 8 })}
                 {asset === 'NGN' ? '' : ` ${asset}`}
               </Text>
 
-              <Text className="text-muted text-sm font-semibold mt-5 mb-1.5">Note (optional)</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-5 mb-1.5">Note (optional)</Text>
               <TextInput
                 value={note}
                 onChangeText={setNote}

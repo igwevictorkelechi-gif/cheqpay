@@ -50,49 +50,49 @@ export default function AddMoneyScreen() {
       {/* Header */}
       <TouchableOpacity
         onPress={() => router.back()}
-        className="w-11 h-11 rounded-full bg-card items-center justify-center"
+        className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
       >
         <Ionicons name="arrow-back" size={22} color={colors.ink} />
       </TouchableOpacity>
 
       <View className="flex-row items-center justify-between mt-5">
-        <Text className="text-ink text-4xl font-extrabold">Add money</Text>
+        <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold">Add money</Text>
         <NairaFlag size={48} />
       </View>
 
       {/* Amount */}
-      <View className="bg-card rounded-3xl p-5 mt-6">
+      <View className="bg-card dark:bg-card-dark rounded-3xl p-5 mt-6">
         <View className="flex-row items-center justify-between">
           <View className="flex-1">
-            <Text className="text-muted text-sm">Enter amount</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm">Enter amount</Text>
             <TextInput
               value={display}
               onChangeText={(t) => setAmount(t.replace(/\D/g, ''))}
               keyboardType="number-pad"
-              className="text-ink text-4xl font-extrabold mt-1"
+              className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-1"
               style={{ padding: 0 }}
               placeholderTextColor={colors.muted}
             />
           </View>
           <View className="flex-row items-center" style={{ gap: 8 }}>
             <NairaFlag size={28} />
-            <Text className="text-ink text-xl font-bold">NGN</Text>
+            <Text className="text-ink dark:text-ink-dark text-xl font-bold">NGN</Text>
           </View>
         </View>
       </View>
-      <Text className="text-muted text-sm mt-3">
+      <Text className="text-muted dark:text-muted-dark text-sm mt-3">
         Available: {balance.toLocaleString('en-NG', { maximumFractionDigits: 2 })} NGN
       </Text>
 
       {/* Pay with */}
-      <Text className="text-ink text-base font-bold mt-8">Pay with</Text>
-      <View className="flex-row items-center bg-card rounded-3xl p-5 mt-3" style={{ gap: 16 }}>
+      <Text className="text-ink dark:text-ink-dark text-base font-bold mt-8">Pay with</Text>
+      <View className="flex-row items-center bg-card dark:bg-card-dark rounded-3xl p-5 mt-3" style={{ gap: 16 }}>
         <View className="w-14 h-14 rounded-full items-center justify-center" style={{ backgroundColor: colors.circle }}>
           <Ionicons name="business-outline" size={24} color={colors.ink} />
         </View>
         <View className="flex-1">
-          <Text className="text-ink text-lg font-bold">Bank Transfer</Text>
-          <Text className="text-muted text-sm mt-0.5">150 NGN Fees. Usually arrives in seconds</Text>
+          <Text className="text-ink dark:text-ink-dark text-lg font-bold">Bank Transfer</Text>
+          <Text className="text-muted dark:text-muted-dark text-sm mt-0.5">150 NGN Fees. Usually arrives in seconds</Text>
         </View>
       </View>
 

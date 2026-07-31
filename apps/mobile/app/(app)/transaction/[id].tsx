@@ -19,9 +19,9 @@ const STATUS_COLOR: Record<string, string> = {
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <View className="flex-row items-start justify-between py-3" style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
-      <Text className="text-muted text-sm">{label}</Text>
+      <Text className="text-muted dark:text-muted-dark text-sm">{label}</Text>
       <Text
-        className="text-ink text-sm font-semibold text-right flex-1 ml-4"
+        className="text-ink dark:text-ink-dark text-sm font-semibold text-right flex-1 ml-4"
         style={mono ? { fontFamily: 'monospace' } : undefined}
         numberOfLines={mono ? 1 : undefined}
       >
@@ -73,23 +73,23 @@ export default function TransactionDetailScreen() {
         <View className="flex-row items-center justify-between">
           <TouchableOpacity
             onPress={() => router.back()}
-            className="w-11 h-11 rounded-full bg-card items-center justify-center"
+            className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
           >
             <Ionicons name="arrow-back" size={22} color={colors.ink} />
           </TouchableOpacity>
           {tx && (
             <TouchableOpacity
               onPress={share}
-              className="flex-row items-center rounded-full px-4 py-2.5 bg-card"
+              className="flex-row items-center rounded-full px-4 py-2.5 bg-card dark:bg-card-dark"
             >
               <Ionicons name="share-outline" size={18} color={colors.ink} />
-              <Text className="text-ink text-sm font-semibold ml-2">Share</Text>
+              <Text className="text-ink dark:text-ink-dark text-sm font-semibold ml-2">Share</Text>
             </TouchableOpacity>
           )}
         </View>
 
         {notFound ? (
-          <Text className="text-muted text-center mt-20">Transaction not found.</Text>
+          <Text className="text-muted dark:text-muted-dark text-center mt-20">Transaction not found.</Text>
         ) : !tx ? (
           <View className="py-24 items-center">
             <ActivityIndicator color={colors.brand} />
@@ -104,20 +104,20 @@ export default function TransactionDetailScreen() {
               >
                 <Ionicons name={txnIcon(tx.type).name} size={30} color={txnIcon(tx.type).color} />
               </View>
-              <Text className="text-ink text-3xl font-extrabold mt-4" style={{ color: txnAmount(tx).positive ? colors.positive : colors.ink }}>
+              <Text className="text-ink dark:text-ink-dark text-3xl font-extrabold mt-4" style={{ color: txnAmount(tx).positive ? colors.positive : colors.ink }}>
                 {txnAmount(tx).text}
               </Text>
-              <Text className="text-muted text-base mt-1">{txnTitle(tx)}</Text>
+              <Text className="text-muted dark:text-muted-dark text-base mt-1">{txnTitle(tx)}</Text>
               <View className="rounded-full px-3 py-1 mt-3" style={{ backgroundColor: statusColor + '22' }}>
                 <Text className="text-xs font-bold" style={{ color: statusColor }}>{tx.status}</Text>
               </View>
             </View>
 
             {/* Details */}
-            <View className="bg-card rounded-3xl px-4 mt-6">
+            <View className="bg-card dark:bg-card-dark rounded-3xl px-4 mt-6">
               <View className="flex-row items-start justify-between py-3">
-                <Text className="text-muted text-sm">Type</Text>
-                <Text className="text-ink text-sm font-semibold">{tx.type}</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm">Type</Text>
+                <Text className="text-ink dark:text-ink-dark text-sm font-semibold">{tx.type}</Text>
               </View>
               <Row label="Date" value={new Date(tx.createdAt).toLocaleString('en-NG')} />
               {tx.fromFormatted && tx.toFormatted && (

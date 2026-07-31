@@ -13,7 +13,7 @@ function LockedField({ label, value }: { label: string; value: string }) {
       className="rounded-2xl px-4 py-3"
       style={{ borderWidth: 1, borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)' }}
     >
-      <Text className="text-muted text-xs">{label}</Text>
+      <Text className="text-muted dark:text-muted-dark text-xs">{label}</Text>
       <Text className="text-base mt-1" style={{ color: colors.muted }}>
         {value || '—'}
       </Text>
@@ -33,14 +33,14 @@ function EditField({
   placeholder?: string;
 }) {
   return (
-    <View className="rounded-2xl px-4 py-3 bg-card" style={{ borderWidth: 1, borderColor: colors.border }}>
-      {!!value && <Text className="text-muted text-xs">{label}</Text>}
+    <View className="rounded-2xl px-4 py-3 bg-card dark:bg-card-dark" style={{ borderWidth: 1, borderColor: colors.border }}>
+      {!!value && <Text className="text-muted dark:text-muted-dark text-xs">{label}</Text>}
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder ?? label}
         placeholderTextColor={colors.muted}
-        className="text-ink text-base"
+        className="text-ink dark:text-ink-dark text-base"
         style={{ marginTop: value ? 4 : 0, padding: 0 }}
         autoCapitalize="none"
       />
@@ -116,12 +116,12 @@ export default function PersonalDetailsScreen() {
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="arrow-back" size={22} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text className="text-ink text-4xl font-extrabold mt-6 mb-5">Personal details</Text>
+        <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-6 mb-5">Personal details</Text>
 
         {!me ? (
           <View className="py-12 items-center">
@@ -154,13 +154,13 @@ export default function PersonalDetailsScreen() {
 
             {verified && (
               <View
-                className="flex-row items-center rounded-2xl p-4 mt-6 bg-card"
+                className="flex-row items-center rounded-2xl p-4 mt-6 bg-card dark:bg-card-dark"
                 style={{ borderWidth: 1.5, borderColor: colors.ink }}
               >
                 <View className="w-7 h-7 rounded-full items-center justify-center" style={{ backgroundColor: colors.ink }}>
                   <Ionicons name="alert" size={16} color={colors.surface} />
                 </View>
-                <Text className="text-muted text-sm ml-3 flex-1">
+                <Text className="text-muted dark:text-muted-dark text-sm ml-3 flex-1">
                   You cannot edit some fields because your account has been verified.{' '}
                   <Text style={{ color: colors.positive, fontWeight: '600' }} onPress={() => router.push('/(app)/settings')}>
                     Contact support

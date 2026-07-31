@@ -109,10 +109,10 @@ export default function SendCryptoScreen() {
 
   const Header = (title: string, onBack: () => void) => (
     <View className="flex-row items-center px-5 pt-3 pb-2">
-      <TouchableOpacity onPress={onBack} className="w-10 h-10 rounded-full bg-card items-center justify-center">
+      <TouchableOpacity onPress={onBack} className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center">
         <Ionicons name="chevron-back" size={22} color={colors.ink} />
       </TouchableOpacity>
-      <Text className="text-ink text-lg font-bold ml-3">{title}</Text>
+      <Text className="text-ink dark:text-ink-dark text-lg font-bold ml-3">{title}</Text>
     </View>
   );
 
@@ -122,7 +122,7 @@ export default function SendCryptoScreen() {
       <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
         {Header('Send crypto', () => router.back())}
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}>
-          <Text className="text-muted text-sm mt-2 mb-2">Choose the crypto you want to send.</Text>
+          <Text className="text-muted dark:text-muted-dark text-sm mt-2 mb-2">Choose the crypto you want to send.</Text>
           <View className="rounded-3xl overflow-hidden" style={{ backgroundColor: colors.card }}>
             {ASSETS.map((s, i) => {
               const m = ASSET_META[s];
@@ -146,11 +146,11 @@ export default function SendCryptoScreen() {
                     <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700' }}>{m.glyph}</Text>
                   </View>
                   <View className="ml-3 flex-1">
-                    <Text className="text-ink text-lg font-bold">{s}</Text>
-                    <Text className="text-muted text-sm">{m.name}</Text>
+                    <Text className="text-ink dark:text-ink-dark text-lg font-bold">{s}</Text>
+                    <Text className="text-muted dark:text-muted-dark text-sm">{m.name}</Text>
                   </View>
                   {enabled ? (
-                    <Text className="text-ink font-bold">{bal[s] ?? '0'} {s}</Text>
+                    <Text className="text-ink dark:text-ink-dark font-bold">{bal[s] ?? '0'} {s}</Text>
                   ) : (
                     <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: 'rgba(107,91,149,0.15)' }}>
                       <Text style={{ color: colors.brandLight, fontSize: 11, fontWeight: '700' }}>Coming soon</Text>
@@ -175,12 +175,12 @@ export default function SendCryptoScreen() {
               <View className="rounded-full items-center justify-center" style={{ width: 56, height: 56, backgroundColor: meta.bg }}>
                 <Text style={{ color: '#fff', fontSize: 26, fontWeight: '700' }}>{meta.glyph}</Text>
               </View>
-              <Text className="text-muted text-sm mt-3">Available balance</Text>
-              <Text className="text-ink text-lg font-bold">{available} {sym}</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm mt-3">Available balance</Text>
+              <Text className="text-ink dark:text-ink-dark text-lg font-bold">{available} {sym}</Text>
             </View>
 
             <View className="flex-row items-center justify-between mt-6 mb-2">
-              <Text className="text-muted text-sm font-semibold">Destination wallet address</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm font-semibold">Destination wallet address</Text>
               <TouchableOpacity
                 onPress={async () => {
                   const network = live[sym!]?.network ?? info.network;
@@ -192,7 +192,7 @@ export default function SendCryptoScreen() {
                     setError('No valid wallet address found on your clipboard.');
                   }
                 }}
-                className="flex-row items-center rounded-full px-3 py-1.5 bg-card"
+                className="flex-row items-center rounded-full px-3 py-1.5 bg-card dark:bg-card-dark"
               >
                 <Ionicons name="clipboard-outline" size={13} color={colors.brandLight} />
                 <Text style={{ color: colors.brandLight, fontWeight: '700', fontSize: 12 }} className="ml-1">
@@ -209,7 +209,7 @@ export default function SendCryptoScreen() {
               placeholder={`Paste ${sym} (${info.networkLabel}) address`}
               placeholderTextColor={colors.muted}
               multiline
-              className="rounded-2xl px-4 py-3 text-ink"
+              className="rounded-2xl px-4 py-3 text-ink dark:text-ink-dark"
               style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, minHeight: 64 }}
             />
             {clipSuggest && !toAddress && (
@@ -223,8 +223,8 @@ export default function SendCryptoScreen() {
               >
                 <Ionicons name="clipboard" size={16} color={colors.brandLight} />
                 <View className="flex-1 ml-2">
-                  <Text className="text-muted text-xs">Wallet address on your clipboard</Text>
-                  <Text className="text-ink text-sm font-semibold" numberOfLines={1}>
+                  <Text className="text-muted dark:text-muted-dark text-xs">Wallet address on your clipboard</Text>
+                  <Text className="text-ink dark:text-ink-dark text-sm font-semibold" numberOfLines={1}>
                     {shortAddress(clipSuggest, 14, 10)}
                   </Text>
                 </View>
@@ -232,7 +232,7 @@ export default function SendCryptoScreen() {
               </TouchableOpacity>
             )}
 
-            <Text className="text-muted text-sm font-semibold mt-5 mb-2">Amount</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-5 mb-2">Amount</Text>
             <View className="flex-row items-center rounded-2xl px-4 py-3" style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}>
               <TextInput
                 value={amount}
@@ -240,14 +240,14 @@ export default function SendCryptoScreen() {
                 keyboardType="decimal-pad"
                 placeholder="0.00"
                 placeholderTextColor={colors.muted}
-                className="flex-1 text-ink text-lg font-bold"
+                className="flex-1 text-ink dark:text-ink-dark text-lg font-bold"
               />
-              <Text className="text-muted font-bold mr-2">{sym}</Text>
+              <Text className="text-muted dark:text-muted-dark font-bold mr-2">{sym}</Text>
               <TouchableOpacity onPress={() => setAmount(String(available))} className="rounded-full px-3 py-1" style={{ backgroundColor: 'rgba(107,91,149,0.25)' }}>
                 <Text style={{ color: colors.brandLight, fontWeight: '700', fontSize: 12 }}>MAX</Text>
               </TouchableOpacity>
             </View>
-            <Text className="text-muted text-xs mt-2">Minimum {info.minSend} {sym} · Network {info.networkLabel}</Text>
+            <Text className="text-muted dark:text-muted-dark text-xs mt-2">Minimum {info.minSend} {sym} · Network {info.networkLabel}</Text>
 
             {error && <Text style={{ color: '#FF6B6B' }} className="text-sm mt-4">{error}</Text>}
 
@@ -267,20 +267,20 @@ export default function SendCryptoScreen() {
 
         {stage === 'review' && (
           <>
-            <Text className="text-muted text-sm font-semibold mt-4 mb-2">Review transfer</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-4 mb-2">Review transfer</Text>
             <View className="rounded-2xl overflow-hidden" style={{ backgroundColor: colors.card }}>
               <ReviewRow label="Asset" value={`${meta?.name} (${sym})`} />
               <ReviewRow label="Network" value={info!.networkLabel} bordered />
               <ReviewRow label="Amount" value={`${amount} ${sym}`} bordered />
               <View className="px-4 py-4" style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
-                <Text className="text-muted text-sm">To address</Text>
-                <Text className="text-ink text-sm font-semibold mt-1">{toAddress.trim()}</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm">To address</Text>
+                <Text className="text-ink dark:text-ink-dark text-sm font-semibold mt-1">{toAddress.trim()}</Text>
               </View>
             </View>
             {error && <Text style={{ color: '#FF6B6B' }} className="text-sm mt-4">{error}</Text>}
             <View className="flex-row items-center mt-6">
               <Ionicons name="shield-checkmark-outline" size={16} color={colors.brandLight} />
-              <Text className="text-muted text-xs ml-2">Your transfer passes an authentication & security check before approval.</Text>
+              <Text className="text-muted dark:text-muted-dark text-xs ml-2">Your transfer passes an authentication & security check before approval.</Text>
             </View>
             <TouchableOpacity onPress={confirmSend} className="rounded-full py-4 items-center mt-4" style={{ backgroundColor: colors.brand }}>
               <Text className="text-white font-bold text-base">Confirm & send</Text>
@@ -292,19 +292,19 @@ export default function SendCryptoScreen() {
           <View className="items-center mt-16">
             <Ionicons name="shield-checkmark" size={64} color={colors.brandLight} />
             <ActivityIndicator color={colors.brand} style={{ marginTop: 16 }} />
-            <Text className="text-ink text-lg font-bold mt-6">Security check</Text>
-            <Text className="text-muted text-sm mt-2">Verifying identity · screening address · approving</Text>
+            <Text className="text-ink dark:text-ink-dark text-lg font-bold mt-6">Security check</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm mt-2">Verifying identity · screening address · approving</Text>
           </View>
         )}
 
         {stage === 'done' && (
           <View className="items-center pt-10">
             <SuccessAnimation />
-            <Text className="text-ink text-2xl font-extrabold mt-6">Transfer submitted</Text>
-            <Text className="text-muted text-sm mt-2 text-center">
+            <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold mt-6">Transfer submitted</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm mt-2 text-center">
               {amount} {sym} is on its way to your destination address.
             </Text>
-            {txHash ? <Text className="text-muted text-xs mt-3">Tx: {txHash}</Text> : null}
+            {txHash ? <Text className="text-muted dark:text-muted-dark text-xs mt-3">Tx: {txHash}</Text> : null}
             <TouchableOpacity onPress={() => router.replace('/(app)/crypto')} className="rounded-full py-4 items-center mt-8 w-full" style={{ backgroundColor: colors.brand }}>
               <Text className="text-white font-bold text-base">Done</Text>
             </TouchableOpacity>
@@ -318,8 +318,8 @@ export default function SendCryptoScreen() {
 function ReviewRow({ label, value, bordered }: { label: string; value: string; bordered?: boolean }) {
   return (
     <View className="flex-row items-center justify-between px-4 py-4" style={bordered ? { borderTopWidth: 1, borderTopColor: colors.border } : undefined}>
-      <Text className="text-muted text-sm">{label}</Text>
-      <Text className="text-ink text-sm font-semibold" style={{ maxWidth: '60%' }} numberOfLines={1}>{value}</Text>
+      <Text className="text-muted dark:text-muted-dark text-sm">{label}</Text>
+      <Text className="text-ink dark:text-ink-dark text-sm font-semibold" style={{ maxWidth: '60%' }} numberOfLines={1}>{value}</Text>
     </View>
   );
 }

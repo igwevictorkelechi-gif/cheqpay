@@ -28,11 +28,11 @@ function LimitCard({
   sub?: string;
 }) {
   return (
-    <View className="bg-card rounded-3xl p-5">
+    <View className="bg-card dark:bg-card-dark rounded-3xl p-5">
       <View className="flex-row items-start justify-between">
         <View className="flex-1">
-          <Text className="text-muted text-base">{label}</Text>
-          <Text className="text-ink text-xl font-bold mt-1">{value}</Text>
+          <Text className="text-muted dark:text-muted-dark text-base">{label}</Text>
+          <Text className="text-ink dark:text-ink-dark text-xl font-bold mt-1">{value}</Text>
         </View>
         <Ionicons name={icon} size={24} color={colors.ink} />
       </View>
@@ -41,7 +41,7 @@ function LimitCard({
           <View className="h-1.5 rounded-full mt-4" style={{ backgroundColor: colors.circle }}>
             <View className="h-1.5 rounded-full" style={{ width: '100%', backgroundColor: colors.brand }} />
           </View>
-          <Text className="text-muted text-sm mt-2">{sub}</Text>
+          <Text className="text-muted dark:text-muted-dark text-sm mt-2">{sub}</Text>
         </>
       )}
     </View>
@@ -77,14 +77,14 @@ export default function AccountLimitsScreen() {
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="arrow-back" size={22} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text className="text-ink text-4xl font-extrabold mt-6">Account limits</Text>
+        <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-6">Account limits</Text>
         <View className="flex-row items-center mt-3 mb-5">
-          <Text className="text-muted text-lg">Your account is currently </Text>
+          <Text className="text-muted dark:text-muted-dark text-lg">Your account is currently </Text>
           <View
             className="rounded-full px-3 py-1"
             style={{ backgroundColor: verified ? colors.brand : colors.circle }}
@@ -94,7 +94,7 @@ export default function AccountLimitsScreen() {
         </View>
 
         {/* Tabs */}
-        <View className="flex-row bg-card rounded-2xl p-1 mb-6">
+        <View className="flex-row bg-card dark:bg-card-dark rounded-2xl p-1 mb-6">
           {(['crypto', 'cash'] as const).map((t) => (
             <TouchableOpacity
               key={t}
@@ -140,7 +140,7 @@ export default function AccountLimitsScreen() {
 
         {!verified && (
           <View className="mt-8">
-            <Text className="text-muted text-center text-base leading-6">
+            <Text className="text-muted dark:text-muted-dark text-center text-base leading-6">
               Unlock higher transaction limits effortlessly! Verify your identity today and enjoy
               expanded account limits.
             </Text>

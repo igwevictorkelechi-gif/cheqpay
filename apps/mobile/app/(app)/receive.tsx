@@ -47,10 +47,10 @@ export default function ReceiveScreen() {
 
   const Header = (title: string, onBack: () => void) => (
     <View className="flex-row items-center px-5 pt-3 pb-2">
-      <TouchableOpacity onPress={onBack} className="w-10 h-10 rounded-full bg-card items-center justify-center">
+      <TouchableOpacity onPress={onBack} className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center">
         <Ionicons name="chevron-back" size={22} color={colors.ink} />
       </TouchableOpacity>
-      <Text className="text-ink text-lg font-bold ml-3">{title}</Text>
+      <Text className="text-ink dark:text-ink-dark text-lg font-bold ml-3">{title}</Text>
     </View>
   );
 
@@ -67,8 +67,8 @@ export default function ReceiveScreen() {
             <View className="rounded-full items-center justify-center" style={{ width: 56, height: 56, backgroundColor: meta.bg }}>
               <Text style={{ color: '#fff', fontSize: 26, fontWeight: '700' }}>{meta.glyph}</Text>
             </View>
-            <Text className="text-ink text-lg font-bold mt-3">{meta.name}</Text>
-            <Text className="text-muted text-sm">{netLabels[selected] ?? info.networkLabel}</Text>
+            <Text className="text-ink dark:text-ink-dark text-lg font-bold mt-3">{meta.name}</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm">{netLabels[selected] ?? info.networkLabel}</Text>
           </View>
 
           <View className="items-center mt-6">
@@ -84,8 +84,8 @@ export default function ReceiveScreen() {
           </View>
 
           <View className="rounded-2xl p-4 mt-6" style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}>
-            <Text className="text-muted text-xs font-semibold uppercase">Your {selected} address</Text>
-            <Text className="text-ink text-sm font-medium mt-2">{addr ?? error ?? 'Loading…'}</Text>
+            <Text className="text-muted dark:text-muted-dark text-xs font-semibold uppercase">Your {selected} address</Text>
+            <Text className="text-ink dark:text-ink-dark text-sm font-medium mt-2">{addr ?? error ?? 'Loading…'}</Text>
           </View>
 
           <View className="flex-row mt-4" style={{ gap: 12 }}>
@@ -96,7 +96,7 @@ export default function ReceiveScreen() {
               style={{ backgroundColor: colors.card, opacity: addr ? 1 : 0.4 }}
             >
               <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={18} color={copied ? colors.positive : colors.ink} />
-              <Text className="text-ink font-bold ml-2">{copied ? 'Copied' : 'Copy'}</Text>
+              <Text className="text-ink dark:text-ink-dark font-bold ml-2">{copied ? 'Copied' : 'Copy'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => addr && Share.share({ message: addr })}
@@ -131,7 +131,7 @@ export default function ReceiveScreen() {
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
       {Header('Receive crypto', () => router.back())}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32, paddingHorizontal: 20 }}>
-        <Text className="text-muted text-sm font-semibold mt-4 mb-2">Select asset</Text>
+        <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-4 mb-2">Select asset</Text>
         <View className="rounded-3xl overflow-hidden" style={{ backgroundColor: colors.card }}>
           {ASSETS.map((sym, i) => {
             const meta = ASSET_META[sym];
@@ -151,8 +151,8 @@ export default function ReceiveScreen() {
                   <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700' }}>{meta.glyph}</Text>
                 </View>
                 <View className="ml-3 flex-1">
-                  <Text className="text-ink text-lg font-bold">{sym}</Text>
-                  <Text className="text-muted text-sm">{meta.name}</Text>
+                  <Text className="text-ink dark:text-ink-dark text-lg font-bold">{sym}</Text>
+                  <Text className="text-muted dark:text-muted-dark text-sm">{meta.name}</Text>
                 </View>
                 {enabled ? (
                   <Ionicons name="chevron-forward" size={20} color={colors.muted} />
@@ -176,8 +176,8 @@ function DetailRow({ label, value, bordered }: { label: string; value: string; b
       className="flex-row items-center justify-between px-4 py-4"
       style={bordered ? { borderTopWidth: 1, borderTopColor: colors.border } : undefined}
     >
-      <Text className="text-muted text-sm">{label}</Text>
-      <Text className="text-ink text-sm font-semibold">{value}</Text>
+      <Text className="text-muted dark:text-muted-dark text-sm">{label}</Text>
+      <Text className="text-ink dark:text-ink-dark text-sm font-semibold">{value}</Text>
     </View>
   );
 }

@@ -28,6 +28,7 @@ const TABS: { name: string; label: string; icon: IconName; iconOutline: IconName
  * matching the iOS-26 style tab bars the design references.
  */
 export default function TabBar({ state, navigation }: BottomTabBarProps) {
+  const styles = makeStyles();
   const insets = useSafeAreaInsets();
   const features = useFeatures();
   const [rowWidth, setRowWidth] = useState(0);
@@ -95,7 +96,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
                     styles.label,
                     focused
                       ? { color: colors.brandLight, fontWeight: '700' }
-                      : { color: 'rgba(244,243,247,0.7)', fontWeight: '500' },
+                      : { color: colors.ink, opacity: 0.7, fontWeight: '500' },
                   ]}
                 >
                   {tab.label}
@@ -109,7 +110,10 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   );
 }
 
-const styles = StyleSheet.create({
+// Built per call, not at module scope: the palette is swapped at runtime
+// for light mode, and StyleSheet.create would freeze the dark values.
+const makeStyles = () =>
+  StyleSheet.create({
   wrap: {
     backgroundColor: 'transparent',
     paddingHorizontal: 22,
@@ -118,11 +122,11 @@ const styles = StyleSheet.create({
   pill: {
     height: 62,
     borderRadius: 31,
-    // Near-opaque so it reads as glass over the dark surface. Swap for a
-    // BlurView here if expo-blur is ever added.
-    backgroundColor: 'rgba(31,27,41,0.94)',
+    // Near-opaque so it reads as glass over the surface beneath, and flips
+    // with the theme. Swap for a BlurView here if expo-blur is ever added.
+    backgroundColor: colors.barFill,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: colors.barEdge,
     paddingHorizontal: 6,
     justifyContent: 'center',
     shadowColor: '#000',
@@ -140,10 +144,10 @@ const styles = StyleSheet.create({
     height: 50,
     alignSelf: 'center',
     borderRadius: 25,
-    backgroundColor: 'rgba(255,255,255,0.09)',
+    backgroundColor: colors.capsule,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: colors.barEdge,
   },
   item: { flex: 1, alignItems: 'center', paddingVertical: 8, gap: 4 },
   label: { fontSize: 11, lineHeight: 13 },
-});
+  });

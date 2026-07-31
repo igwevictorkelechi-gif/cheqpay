@@ -70,12 +70,12 @@ export default function AccountScreen() {
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="arrow-back" size={22} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text className="text-ink text-4xl font-extrabold mt-6 mb-2">Account information</Text>
+        <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-6 mb-2">Account information</Text>
 
         <View className="mt-4" style={{ gap: 16 }}>
           {rows.map((row) => (
@@ -83,7 +83,7 @@ export default function AccountScreen() {
               key={row.title}
               onPress={() => router.push(row.route as never)}
               activeOpacity={0.8}
-              className="flex-row items-center bg-card rounded-3xl p-4"
+              className="flex-row items-center bg-card dark:bg-card-dark rounded-3xl p-4"
             >
               <View
                 className="w-12 h-12 rounded-2xl items-center justify-center"
@@ -98,7 +98,7 @@ export default function AccountScreen() {
                 >
                   {row.title}
                 </Text>
-                <Text className="text-muted text-sm mt-0.5">{row.subtitle}</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm mt-0.5">{row.subtitle}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={colors.muted} />
             </TouchableOpacity>

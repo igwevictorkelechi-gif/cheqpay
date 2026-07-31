@@ -133,7 +133,7 @@ export default function VirtualAccountScreen() {
 
   const Header = (
     <View className="flex-row items-center px-5 pt-3 pb-2">
-      <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 rounded-full bg-card items-center justify-center">
+      <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center">
         <Ionicons name="chevron-back" size={22} color={colors.ink} />
       </TouchableOpacity>
     </View>
@@ -159,8 +159,8 @@ export default function VirtualAccountScreen() {
                 <View className="w-14 h-14 rounded-2xl items-center justify-center" style={{ backgroundColor: 'rgba(107,91,149,0.2)' }}>
                   <Ionicons name="business" size={28} color={colors.brandLight} />
                 </View>
-                <Text className="text-ink text-2xl font-extrabold mt-4">Your account is ready</Text>
-                <Text className="text-muted text-sm mt-1 text-center">
+                <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold mt-4">Your account is ready</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm mt-1 text-center">
                   {amount
                     ? `Transfer ₦${amount.toLocaleString('en-NG')} to this account from any Nigerian bank to fund your wallet instantly.`
                     : 'Send money to this account from any Nigerian bank to fund your wallet instantly.'}
@@ -169,17 +169,17 @@ export default function VirtualAccountScreen() {
 
               {amount ? (
                 <View className="rounded-3xl p-5 mt-6 items-center" style={{ backgroundColor: 'rgba(107,91,149,0.1)' }}>
-                  <Text className="text-muted text-xs font-semibold uppercase">Amount to transfer</Text>
-                  <Text className="text-ink text-3xl font-extrabold mt-1">₦{amount.toLocaleString('en-NG')}</Text>
+                  <Text className="text-muted dark:text-muted-dark text-xs font-semibold uppercase">Amount to transfer</Text>
+                  <Text className="text-ink dark:text-ink-dark text-3xl font-extrabold mt-1">₦{amount.toLocaleString('en-NG')}</Text>
                 </View>
               ) : null}
 
               <View className="rounded-3xl p-5 mt-6" style={{ backgroundColor: colors.card }}>
                 <Field label="Bank name" value={account.bankName} />
                 <View className="my-3 h-px" style={{ backgroundColor: colors.border }} />
-                <Text className="text-muted text-xs font-semibold uppercase">Account number</Text>
+                <Text className="text-muted dark:text-muted-dark text-xs font-semibold uppercase">Account number</Text>
                 <View className="flex-row items-center justify-between mt-1">
-                  <Text className="text-ink text-2xl font-extrabold" style={{ letterSpacing: 1 }}>
+                  <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold" style={{ letterSpacing: 1 }}>
                     {account.accountNumber}
                   </Text>
                   <TouchableOpacity
@@ -188,7 +188,7 @@ export default function VirtualAccountScreen() {
                     style={{ backgroundColor: colors.surface }}
                   >
                     <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={16} color={copied ? colors.positive : colors.ink} />
-                    <Text className="text-ink font-bold ml-1.5 text-sm">{copied ? 'Copied' : 'Copy'}</Text>
+                    <Text className="text-ink dark:text-ink-dark font-bold ml-1.5 text-sm">{copied ? 'Copied' : 'Copy'}</Text>
                   </TouchableOpacity>
                 </View>
                 <View className="my-3 h-px" style={{ backgroundColor: colors.border }} />
@@ -212,7 +212,7 @@ export default function VirtualAccountScreen() {
                   style={{ backgroundColor: colors.card }}
                 >
                   <Ionicons name="share-social-outline" size={18} color={colors.ink} />
-                  <Text className="text-ink font-bold ml-2">Share</Text>
+                  <Text className="text-ink dark:text-ink-dark font-bold ml-2">Share</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => router.replace('/(app)/home')} className="flex-1 rounded-full py-4 items-center" style={{ backgroundColor: colors.brand }}>
                   <Text className="text-white font-bold">Done</Text>
@@ -221,8 +221,8 @@ export default function VirtualAccountScreen() {
             </>
           ) : showForm ? (
             <>
-              <Text className="text-ink text-3xl font-extrabold mt-4">Set up your account</Text>
-              <Text className="text-muted text-sm mt-2">
+              <Text className="text-ink dark:text-ink-dark text-3xl font-extrabold mt-4">Set up your account</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm mt-2">
                 Create your own CheqPay account number to receive Naira deposits from any bank. We
                 need a few details to open it.
               </Text>
@@ -238,7 +238,7 @@ export default function VirtualAccountScreen() {
                   keyboardType="phone-pad"
                 />
                 <View>
-                  <Text className="text-muted text-sm font-semibold mb-1.5">
+                  <Text className="text-muted dark:text-muted-dark text-sm font-semibold mb-1.5">
                     BVN (optional — for a permanent account)
                   </Text>
                   <TextInput
@@ -247,10 +247,10 @@ export default function VirtualAccountScreen() {
                     keyboardType="number-pad"
                     placeholder="11-digit BVN"
                     placeholderTextColor={colors.muted}
-                    className="rounded-2xl px-4 py-3.5 text-ink"
+                    className="rounded-2xl px-4 py-3.5 text-ink dark:text-ink-dark"
                     style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: bvnValid ? colors.border : '#EF4444' }}
                   />
-                  <Text className="text-muted text-xs mt-1.5">
+                  <Text className="text-muted dark:text-muted-dark text-xs mt-1.5">
                     With a BVN you get a permanent, dedicated account number. Without it, we open a
                     temporary one you can upgrade later.
                   </Text>
@@ -261,7 +261,7 @@ export default function VirtualAccountScreen() {
 
               <View className="flex-row items-center mt-5">
                 <Ionicons name="shield-checkmark-outline" size={16} color={colors.brandLight} />
-                <Text className="text-muted text-xs ml-2 flex-1">
+                <Text className="text-muted dark:text-muted-dark text-xs ml-2 flex-1">
                   Your details are sent securely to our licensed payment partner to open the account.
                 </Text>
               </View>
@@ -290,8 +290,8 @@ export default function VirtualAccountScreen() {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <View>
-      <Text className="text-muted text-xs font-semibold uppercase">{label}</Text>
-      <Text className="text-ink text-base font-bold mt-1">{value}</Text>
+      <Text className="text-muted dark:text-muted-dark text-xs font-semibold uppercase">{label}</Text>
+      <Text className="text-ink dark:text-ink-dark text-base font-bold mt-1">{value}</Text>
     </View>
   );
 }
@@ -311,14 +311,14 @@ function Input({
 }) {
   return (
     <View>
-      <Text className="text-muted text-sm font-semibold mb-1.5">{label}</Text>
+      <Text className="text-muted dark:text-muted-dark text-sm font-semibold mb-1.5">{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.muted}
         keyboardType={keyboardType}
-        className="rounded-2xl px-4 py-3.5 text-ink"
+        className="rounded-2xl px-4 py-3.5 text-ink dark:text-ink-dark"
         style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}
       />
     </View>

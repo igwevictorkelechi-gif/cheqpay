@@ -48,20 +48,20 @@ function AssetCard({
   onPick: () => void;
 }) {
   return (
-    <View className="bg-card rounded-3xl p-5">
+    <View className="bg-card dark:bg-card-dark rounded-3xl p-5">
       <View className="flex-row items-center justify-between">
         <TouchableOpacity className="flex-row items-center" activeOpacity={0.7} onPress={onPick}>
           <CoinBadge symbol={symbol} />
-          <Text className="text-ink text-lg font-bold ml-2">{symbol}</Text>
+          <Text className="text-ink dark:text-ink-dark text-lg font-bold ml-2">{symbol}</Text>
           <Ionicons name="chevron-down" size={16} color={colors.muted} style={{ marginLeft: 4 }} />
         </TouchableOpacity>
-        <Text className="text-muted text-xs font-semibold" style={{ letterSpacing: 2 }}>{role}</Text>
+        <Text className="text-muted dark:text-muted-dark text-xs font-semibold" style={{ letterSpacing: 2 }}>{role}</Text>
       </View>
-      <Text className="text-ink font-extrabold text-center mt-3" style={{ fontSize: emphasize ? 40 : 34 }} numberOfLines={1}>
+      <Text className="text-ink dark:text-ink-dark font-extrabold text-center mt-3" style={{ fontSize: emphasize ? 40 : 34 }} numberOfLines={1}>
         {amount}
       </Text>
-      <Text className="text-muted text-sm text-center mt-2">
-        Balance: <Text className="text-ink font-semibold">{balance}</Text>
+      <Text className="text-muted dark:text-muted-dark text-sm text-center mt-2">
+        Balance: <Text className="text-ink dark:text-ink-dark font-semibold">{balance}</Text>
       </Text>
     </View>
   );
@@ -179,11 +179,11 @@ export default function ConvertScreen() {
         <View className="flex-row items-center px-5 pt-3 pb-2">
           <TouchableOpacity
             onPress={() => router.back()}
-            className="w-10 h-10 rounded-full bg-card items-center justify-center"
+            className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center"
           >
             <Ionicons name="chevron-back" size={22} color={colors.ink} />
           </TouchableOpacity>
-          <Text className="flex-1 text-center text-ink text-lg font-bold" style={{ paddingRight: 40 }}>
+          <Text className="flex-1 text-center text-ink dark:text-ink-dark text-lg font-bold" style={{ paddingRight: 40 }}>
             Convert
           </Text>
         </View>
@@ -204,11 +204,11 @@ export default function ConvertScreen() {
 
         <View className="flex-row flex-wrap px-5 mt-3" style={{ gap: 12 }}>
           {keys.map((key) => (
-            <TouchableOpacity key={key} onPress={() => press(key)} className="bg-card rounded-2xl items-center justify-center" style={{ width: '31.5%', height: 56 }} activeOpacity={0.7}>
+            <TouchableOpacity key={key} onPress={() => press(key)} className="bg-card dark:bg-card-dark rounded-2xl items-center justify-center" style={{ width: '31.5%', height: 56 }} activeOpacity={0.7}>
               {key === 'del' ? (
                 <Ionicons name="backspace-outline" size={22} color={colors.ink} />
               ) : (
-                <Text className="text-ink text-xl font-semibold">{key}</Text>
+                <Text className="text-ink dark:text-ink-dark text-xl font-semibold">{key}</Text>
               )}
             </TouchableOpacity>
           ))}
@@ -231,16 +231,16 @@ export default function ConvertScreen() {
 
       <Modal visible={!!picker} transparent animationType="slide" onRequestClose={() => setPicker(null)}>
         <TouchableOpacity className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} activeOpacity={1} onPress={() => setPicker(null)}>
-          <View className="bg-surface rounded-t-3xl p-5" style={{ paddingBottom: insets.bottom + 16 }}>
-            <Text className="text-ink text-lg font-bold mb-4">Select asset</Text>
+          <View className="bg-surface dark:bg-surface-dark rounded-t-3xl p-5" style={{ paddingBottom: insets.bottom + 16 }}>
+            <Text className="text-ink dark:text-ink-dark text-lg font-bold mb-4">Select asset</Text>
             {CONVERT_ASSETS.map((sym) => (
-              <TouchableOpacity key={sym} onPress={() => picker && choose(picker, sym)} className="flex-row items-center bg-card rounded-2xl p-3 mb-2" activeOpacity={0.7}>
+              <TouchableOpacity key={sym} onPress={() => picker && choose(picker, sym)} className="flex-row items-center bg-card dark:bg-card-dark rounded-2xl p-3 mb-2" activeOpacity={0.7}>
                 <CoinBadge symbol={sym} />
                 <View className="ml-3 flex-1">
-                  <Text className="text-ink font-bold">{sym}</Text>
-                  <Text className="text-muted text-xs">{ASSET_META[sym].name}</Text>
+                  <Text className="text-ink dark:text-ink-dark font-bold">{sym}</Text>
+                  <Text className="text-muted dark:text-muted-dark text-xs">{ASSET_META[sym].name}</Text>
                 </View>
-                <Text className="text-muted text-sm">{bal[sym] ?? '0'} {sym}</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm">{bal[sym] ?? '0'} {sym}</Text>
               </TouchableOpacity>
             ))}
           </View>

@@ -31,13 +31,13 @@ export default function AppThemeScreen() {
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="arrow-back" size={22} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text className="text-ink text-4xl font-extrabold mt-6">App Theme</Text>
-        <Text className="text-muted text-sm mt-2 mb-4">
+        <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-6">App Theme</Text>
+        <Text className="text-muted dark:text-muted-dark text-sm mt-2 mb-4">
           Control CheqPay app&apos;s look and feel.
         </Text>
 
@@ -49,7 +49,7 @@ export default function AppThemeScreen() {
                 key={o.key}
                 activeOpacity={0.8}
                 onPress={() => setDarkMode(o.key === 'dark')}
-                className="flex-row items-center bg-card rounded-3xl p-4"
+                className="flex-row items-center bg-card dark:bg-card-dark rounded-3xl p-4"
                 style={selected ? { borderWidth: 1.5, borderColor: colors.brand } : { borderWidth: 1.5, borderColor: 'transparent' }}
               >
                 <View
@@ -59,8 +59,8 @@ export default function AppThemeScreen() {
                   <Ionicons name={o.icon} size={24} color={colors.ink} />
                 </View>
                 <View className="ml-4 flex-1">
-                  <Text className="text-ink text-lg font-bold">{o.title}</Text>
-                  <Text className="text-muted text-sm mt-0.5">{o.subtitle}</Text>
+                  <Text className="text-ink dark:text-ink-dark text-lg font-bold">{o.title}</Text>
+                  <Text className="text-muted dark:text-muted-dark text-sm mt-0.5">{o.subtitle}</Text>
                 </View>
                 {selected ? (
                   <Ionicons name="checkmark-circle" size={26} color={colors.brand} />

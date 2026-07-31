@@ -136,15 +136,15 @@ export default function CryptoScreen() {
                 <View className="flex-row items-center">
                   <CoinIcon bg={asset.bg} glyph={asset.glyph} />
                   <View className="ml-3">
-                    <Text className="text-ink text-lg font-bold">{asset.symbol}</Text>
-                    <Text className="text-muted text-sm">{asset.name}</Text>
+                    <Text className="text-ink dark:text-ink-dark text-lg font-bold">{asset.symbol}</Text>
+                    <Text className="text-muted dark:text-muted-dark text-sm">{asset.name}</Text>
                   </View>
                 </View>
                 <View className="items-end">
-                  <Text className="text-ink text-lg font-bold">
+                  <Text className="text-ink dark:text-ink-dark text-lg font-bold">
                     {showBalance ? `${bal[asset.symbol] ?? '0'} ${asset.symbol}` : '••••'}
                   </Text>
-                  <Text className="text-muted text-sm">
+                  <Text className="text-muted dark:text-muted-dark text-sm">
                     {showBalance ? fmtNgn(ngn[asset.symbol] ?? 0) : '••••'}
                   </Text>
                 </View>
@@ -158,7 +158,7 @@ export default function CryptoScreen() {
           <SectionHeader title="Transactions" onPress={() => router.push('/(app)/transactions')} />
           {txns.length === 0 ? (
             <Card>
-              <Text className="text-muted text-sm text-center py-2">
+              <Text className="text-muted dark:text-muted-dark text-sm text-center py-2">
                 Your crypto transactions will appear here.
               </Text>
             </Card>

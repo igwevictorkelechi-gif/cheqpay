@@ -56,8 +56,8 @@ function Field({
   keyboardType?: 'default' | 'number-pad';
 }) {
   return (
-    <View className="rounded-2xl px-4 py-3 bg-card" style={{ borderWidth: 1, borderColor: colors.border }}>
-      <Text className="text-muted text-xs mb-1">{label}</Text>
+    <View className="rounded-2xl px-4 py-3 bg-card dark:bg-card-dark" style={{ borderWidth: 1, borderColor: colors.border }}>
+      <Text className="text-muted dark:text-muted-dark text-xs mb-1">{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -65,7 +65,7 @@ function Field({
         placeholderTextColor={colors.muted}
         keyboardType={keyboardType}
         autoCapitalize={keyboardType === 'number-pad' ? 'none' : 'words'}
-        className="text-ink text-base"
+        className="text-ink dark:text-ink-dark text-base"
         style={{ padding: 0 }}
       />
     </View>
@@ -135,8 +135,8 @@ export default function OnboardingScreen() {
 
           {step === 'kyc' ? (
             <>
-              <Text className="text-ink text-3xl font-extrabold mb-2">Verify your identity</Text>
-              <Text className="text-muted text-base mb-6">
+              <Text className="text-ink dark:text-ink-dark text-3xl font-extrabold mb-2">Verify your identity</Text>
+              <Text className="text-muted dark:text-muted-dark text-base mb-6">
                 A quick check unlocks higher limits and crypto withdrawals. Your BVN name is matched
                 automatically.
               </Text>
@@ -159,36 +159,36 @@ export default function OnboardingScreen() {
                 {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text className="text-white text-base font-bold">Continue</Text>}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setStep('pin')} className="py-4 items-center">
-                <Text className="text-muted text-sm font-semibold">Skip for now</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm font-semibold">Skip for now</Text>
               </TouchableOpacity>
             </>
           ) : (
             <>
-              <Text className="text-ink text-3xl font-extrabold mb-2">Set up your PIN</Text>
-              <Text className="text-muted text-base mb-6">
+              <Text className="text-ink dark:text-ink-dark text-3xl font-extrabold mb-2">Set up your PIN</Text>
+              <Text className="text-muted dark:text-muted-dark text-base mb-6">
                 Create a PIN to lock the app. You’ll enter it each time you open CheqPay.
               </Text>
 
               <View style={{ gap: 14 }}>
-                <View className="rounded-2xl px-4 py-3 bg-card" style={{ borderWidth: 1, borderColor: colors.border }}>
-                  <Text className="text-muted text-xs mb-1">Enter a PIN (4–6 digits)</Text>
+                <View className="rounded-2xl px-4 py-3 bg-card dark:bg-card-dark" style={{ borderWidth: 1, borderColor: colors.border }}>
+                  <Text className="text-muted dark:text-muted-dark text-xs mb-1">Enter a PIN (4–6 digits)</Text>
                   <TextInput
                     value={pin}
                     onChangeText={(t) => setPinValue(t.replace(/\D/g, '').slice(0, 6))}
                     keyboardType="number-pad"
                     secureTextEntry
-                    className="text-ink text-2xl"
+                    className="text-ink dark:text-ink-dark text-2xl"
                     style={{ padding: 0, letterSpacing: 8 }}
                   />
                 </View>
-                <View className="rounded-2xl px-4 py-3 bg-card" style={{ borderWidth: 1, borderColor: colors.border }}>
-                  <Text className="text-muted text-xs mb-1">Confirm PIN</Text>
+                <View className="rounded-2xl px-4 py-3 bg-card dark:bg-card-dark" style={{ borderWidth: 1, borderColor: colors.border }}>
+                  <Text className="text-muted dark:text-muted-dark text-xs mb-1">Confirm PIN</Text>
                   <TextInput
                     value={confirm}
                     onChangeText={(t) => setConfirm(t.replace(/\D/g, '').slice(0, 6))}
                     keyboardType="number-pad"
                     secureTextEntry
-                    className="text-ink text-2xl"
+                    className="text-ink dark:text-ink-dark text-2xl"
                     style={{ padding: 0, letterSpacing: 8 }}
                   />
                 </View>
@@ -207,7 +207,7 @@ export default function OnboardingScreen() {
                 {savingPin ? <ActivityIndicator color="#FFFFFF" /> : <Text className="text-white text-base font-bold">Finish setup</Text>}
               </TouchableOpacity>
               <TouchableOpacity onPress={finish} className="py-4 items-center">
-                <Text className="text-muted text-sm font-semibold">Skip for now</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm font-semibold">Skip for now</Text>
               </TouchableOpacity>
             </>
           )}

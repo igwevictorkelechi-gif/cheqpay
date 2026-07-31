@@ -38,24 +38,24 @@ export default function SwapSuccessScreen() {
         <SuccessAnimation />
 
 
-        <Text className="text-ink text-2xl font-extrabold mt-6">Swap Successful</Text>
-        <Text className="text-muted text-sm mt-2 text-center">
+        <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold mt-6">Swap Successful</Text>
+        <Text className="text-muted dark:text-muted-dark text-sm mt-2 text-center">
           You swapped {from} {fromSym} for {to} {toSym}
         </Text>
 
         {/* Summary */}
-        <View className="bg-card rounded-3xl p-5 mt-6 w-full">
+        <View className="bg-card dark:bg-card-dark rounded-3xl p-5 mt-6 w-full">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center" style={{ gap: 8 }}>
               <CoinBadge symbol={String(fromSym)} />
-              <Text className="text-ink font-bold">
+              <Text className="text-ink dark:text-ink-dark font-bold">
                 {from} {fromSym}
               </Text>
             </View>
             <Ionicons name="arrow-forward" size={18} color={colors.muted} />
             <View className="flex-row items-center" style={{ gap: 8 }}>
               <CoinBadge symbol={String(toSym)} />
-              <Text className="text-ink font-bold">
+              <Text className="text-ink dark:text-ink-dark font-bold">
                 {to} {toSym}
               </Text>
             </View>
@@ -77,7 +77,7 @@ export default function SwapSuccessScreen() {
           onPress={() => router.replace('/(app)/crypto')}
           className="py-3 items-center mt-1"
         >
-          <Text className="text-muted text-base font-semibold">Done</Text>
+          <Text className="text-muted dark:text-muted-dark text-base font-semibold">Done</Text>
         </TouchableOpacity>
       </View>
     </View>

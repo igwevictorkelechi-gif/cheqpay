@@ -18,15 +18,15 @@ function Field({
 }) {
   const [show, setShow] = useState(false);
   return (
-    <View className="rounded-2xl px-4 py-3 bg-card" style={{ borderWidth: 1, borderColor: colors.border }}>
-      <Text className="text-muted text-xs mb-1">{label}</Text>
+    <View className="rounded-2xl px-4 py-3 bg-card dark:bg-card-dark" style={{ borderWidth: 1, borderColor: colors.border }}>
+      <Text className="text-muted dark:text-muted-dark text-xs mb-1">{label}</Text>
       <View className="flex-row items-center">
         <TextInput
           value={value}
           onChangeText={onChangeText}
           secureTextEntry={!show}
           autoCapitalize="none"
-          className="text-ink text-base flex-1"
+          className="text-ink dark:text-ink-dark text-base flex-1"
           style={{ padding: 0 }}
         />
         <TouchableOpacity onPress={() => setShow((s) => !s)} hitSlop={10}>
@@ -81,12 +81,12 @@ export default function ChangePasswordScreen() {
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="arrow-back" size={22} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text className="text-ink text-4xl font-extrabold mt-6 mb-6">Change password</Text>
+        <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-6 mb-6">Change password</Text>
 
         <View style={{ gap: 14 }}>
           <Field label="Current password" value={current} onChangeText={setCurrent} />

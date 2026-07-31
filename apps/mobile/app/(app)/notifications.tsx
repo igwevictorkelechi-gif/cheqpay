@@ -51,13 +51,13 @@ export default function NotificationsScreen() {
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="arrow-back" size={22} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text className="text-ink text-4xl font-extrabold mt-6">Notifications</Text>
-        <Text className="text-muted text-sm mt-2 mb-4">
+        <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-6">Notifications</Text>
+        <Text className="text-muted dark:text-muted-dark text-sm mt-2 mb-4">
           Choose what CheqPay lets you know about.
         </Text>
 
@@ -66,7 +66,7 @@ export default function NotificationsScreen() {
             <ActivityIndicator color={colors.brand} />
           </View>
         ) : (
-          <View className="bg-card rounded-3xl px-4">
+          <View className="bg-card dark:bg-card-dark rounded-3xl px-4">
             {rows.map((t, i) => (
               <View
                 key={t.key}
@@ -74,8 +74,8 @@ export default function NotificationsScreen() {
                 style={i > 0 ? { borderTopWidth: 1, borderTopColor: colors.border } : undefined}
               >
                 <View className="flex-1 pr-3">
-                  <Text className="text-ink text-base font-semibold">{t.title}</Text>
-                  <Text className="text-muted text-xs mt-0.5">{t.subtitle}</Text>
+                  <Text className="text-ink dark:text-ink-dark text-base font-semibold">{t.title}</Text>
+                  <Text className="text-muted dark:text-muted-dark text-xs mt-0.5">{t.subtitle}</Text>
                 </View>
                 <Switch
                   value={!!prefs[t.key]}

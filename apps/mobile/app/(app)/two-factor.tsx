@@ -106,13 +106,13 @@ export default function TwoFactorScreen() {
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="arrow-back" size={22} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text className="text-ink text-4xl font-extrabold mt-6 mb-2">2-step authentication</Text>
-        <Text className="text-muted text-base mb-6">
+        <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-6 mb-2">2-step authentication</Text>
+        <Text className="text-muted dark:text-muted-dark text-base mb-6">
           Use an authenticator app like Google Authenticator for an extra layer of security.
         </Text>
 
@@ -124,13 +124,13 @@ export default function TwoFactorScreen() {
 
         {mode === 'enabled' && (
           <>
-            <View className="flex-row items-center bg-card rounded-3xl p-5">
+            <View className="flex-row items-center bg-card dark:bg-card-dark rounded-3xl p-5">
               <View className="w-12 h-12 rounded-2xl items-center justify-center" style={{ backgroundColor: 'rgba(52,199,89,0.15)' }}>
                 <Ionicons name="shield-checkmark" size={26} color={colors.positive} />
               </View>
               <View className="ml-4 flex-1">
-                <Text className="text-ink text-lg font-bold">2FA is on</Text>
-                <Text className="text-muted text-sm mt-0.5">Codes required at sign-in</Text>
+                <Text className="text-ink dark:text-ink-dark text-lg font-bold">2FA is on</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm mt-0.5">Codes required at sign-in</Text>
               </View>
             </View>
             <TouchableOpacity
@@ -157,31 +157,31 @@ export default function TwoFactorScreen() {
 
         {mode === 'enrolling' && (
           <>
-            <Text className="text-ink text-base font-semibold mb-3">1. Scan this in your authenticator app</Text>
+            <Text className="text-ink dark:text-ink-dark text-base font-semibold mb-3">1. Scan this in your authenticator app</Text>
             <View className="items-center bg-white rounded-3xl p-6 self-center mb-4">
               {!!uri && <QRCode value={uri} size={200} />}
             </View>
 
-            <Text className="text-muted text-sm mb-2">Or enter this key manually:</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm mb-2">Or enter this key manually:</Text>
             <TouchableOpacity
               onPress={() => {
                 Clipboard.setStringAsync(secret);
                 Alert.alert('Copied', 'Setup key copied to clipboard.');
               }}
-              className="flex-row items-center justify-between bg-card rounded-2xl px-4 py-3 mb-6"
+              className="flex-row items-center justify-between bg-card dark:bg-card-dark rounded-2xl px-4 py-3 mb-6"
             >
-              <Text className="text-ink text-base font-mono flex-1" numberOfLines={1}>{secret}</Text>
+              <Text className="text-ink dark:text-ink-dark text-base font-mono flex-1" numberOfLines={1}>{secret}</Text>
               <Ionicons name="copy-outline" size={18} color={colors.muted} />
             </TouchableOpacity>
 
-            <Text className="text-ink text-base font-semibold mb-3">2. Enter the 6-digit code</Text>
+            <Text className="text-ink dark:text-ink-dark text-base font-semibold mb-3">2. Enter the 6-digit code</Text>
             <TextInput
               value={code}
               onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 6))}
               keyboardType="number-pad"
               placeholder="000000"
               placeholderTextColor={colors.muted}
-              className="rounded-2xl px-4 py-3.5 text-ink text-2xl bg-card text-center tracking-widest"
+              className="rounded-2xl px-4 py-3.5 text-ink dark:text-ink-dark text-2xl bg-card dark:bg-card-dark text-center tracking-widest"
               style={{ borderWidth: 1, borderColor: colors.border, letterSpacing: 8 }}
             />
 

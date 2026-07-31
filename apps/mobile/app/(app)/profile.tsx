@@ -52,8 +52,10 @@ function FeatureCard({
         <Ionicons name={icon} size={18} color="#FFFFFF" />
       </View>
       <View>
-        <Text className="text-ink text-base font-bold">{title}</Text>
-        <Text className="text-muted text-xs mt-0.5">{subtitle}</Text>
+        {/* These two cards keep fixed dark backgrounds in both themes, so the
+            text stays white rather than following the ink token. */}
+        <Text className="text-white text-base font-bold">{title}</Text>
+        <Text className="text-white/70 text-xs mt-0.5">{subtitle}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -120,7 +122,7 @@ export default function ProfileScreen() {
         {/* Close */}
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="close" size={22} color={colors.ink} />
         </TouchableOpacity>
@@ -130,9 +132,9 @@ export default function ProfileScreen() {
           <View style={{ transform: [{ scale: 1.5 }], marginVertical: 12 }}>
             <Avatar name={name} />
           </View>
-          <Text className="text-ink text-2xl font-extrabold mt-4">{name}</Text>
-          <View className="bg-card rounded-full px-3 py-1 mt-2">
-            <Text className="text-muted text-sm font-medium">{handle}</Text>
+          <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold mt-4">{name}</Text>
+          <View className="bg-card dark:bg-card-dark rounded-full px-3 py-1 mt-2">
+            <Text className="text-muted dark:text-muted-dark text-sm font-medium">{handle}</Text>
           </View>
         </View>
 
@@ -141,7 +143,7 @@ export default function ProfileScreen() {
           <TouchableOpacity
             onPress={() => router.push('/(app)/kyc')}
             activeOpacity={0.85}
-            className="flex-row items-center bg-card rounded-2xl p-4 mt-6"
+            className="flex-row items-center bg-card dark:bg-card-dark rounded-2xl p-4 mt-6"
           >
             <View
               className="w-11 h-11 rounded-full items-center justify-center"
@@ -154,8 +156,8 @@ export default function ProfileScreen() {
               />
             </View>
             <View className="ml-3 flex-1">
-              <Text className="text-ink text-base font-bold">{tierInfo(tier).label}</Text>
-              <Text className="text-muted text-xs mt-0.5">{tierInfo(tier).description}</Text>
+              <Text className="text-ink dark:text-ink-dark text-base font-bold">{tierInfo(tier).label}</Text>
+              <Text className="text-muted dark:text-muted-dark text-xs mt-0.5">{tierInfo(tier).description}</Text>
             </View>
             {!tierInfo(tier).verified && (
               <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: colors.brand }}>
@@ -167,25 +169,25 @@ export default function ProfileScreen() {
 
         {/* Account limits */}
         {limits && (
-          <View className="bg-card rounded-2xl p-4 mt-3">
-            <Text className="text-muted text-xs font-semibold uppercase mb-3" style={{ letterSpacing: 0.5 }}>
+          <View className="bg-card dark:bg-card-dark rounded-2xl p-4 mt-3">
+            <Text className="text-muted dark:text-muted-dark text-xs font-semibold uppercase mb-3" style={{ letterSpacing: 0.5 }}>
               Your limits
             </Text>
             <View style={{ gap: 10 }}>
               <View className="flex-row items-center justify-between">
-                <Text className="text-muted text-sm">Per transaction</Text>
-                <Text className="text-ink text-sm font-semibold">{fmtNgn(limits.singleTxKobo)}</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm">Per transaction</Text>
+                <Text className="text-ink dark:text-ink-dark text-sm font-semibold">{fmtNgn(limits.singleTxKobo)}</Text>
               </View>
               <View className="flex-row items-center justify-between">
-                <Text className="text-muted text-sm">Daily deposit</Text>
-                <Text className="text-ink text-sm font-semibold">{fmtNgn(limits.dailyDepositKobo)}</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm">Daily deposit</Text>
+                <Text className="text-ink dark:text-ink-dark text-sm font-semibold">{fmtNgn(limits.dailyDepositKobo)}</Text>
               </View>
               <View className="flex-row items-center justify-between">
-                <Text className="text-muted text-sm">Daily withdrawal</Text>
-                <Text className="text-ink text-sm font-semibold">{fmtNgn(limits.dailyWithdrawalKobo)}</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm">Daily withdrawal</Text>
+                <Text className="text-ink dark:text-ink-dark text-sm font-semibold">{fmtNgn(limits.dailyWithdrawalKobo)}</Text>
               </View>
               <View className="flex-row items-center justify-between">
-                <Text className="text-muted text-sm">Crypto withdrawals</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm">Crypto withdrawals</Text>
                 <Text
                   className="text-sm font-semibold"
                   style={{ color: limits.cryptoWithdrawalEnabled ? colors.positive : '#F5A623' }}
@@ -195,7 +197,7 @@ export default function ProfileScreen() {
               </View>
             </View>
             {!limits.cryptoWithdrawalEnabled && (
-              <Text className="text-muted text-xs mt-3">
+              <Text className="text-muted dark:text-muted-dark text-xs mt-3">
                 Verify your identity to raise limits and unlock crypto withdrawals.
               </Text>
             )}
@@ -227,12 +229,12 @@ export default function ProfileScreen() {
             <TouchableOpacity
               key={item.title}
               onPress={() => item.route && router.push(item.route as never)}
-              className="flex-row items-center bg-card rounded-2xl p-4"
+              className="flex-row items-center bg-card dark:bg-card-dark rounded-2xl p-4"
               activeOpacity={0.7}
             >
               <View className="flex-1">
-                <Text className="text-ink text-base font-bold">{item.title}</Text>
-                <Text className="text-muted text-sm mt-0.5">{item.subtitle}</Text>
+                <Text className="text-ink dark:text-ink-dark text-base font-bold">{item.title}</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm mt-0.5">{item.subtitle}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={colors.muted} />
             </TouchableOpacity>
@@ -241,7 +243,7 @@ export default function ProfileScreen() {
           {/* Log out */}
           <TouchableOpacity
             onPress={handleLogout}
-            className="flex-row items-center justify-between bg-card rounded-2xl p-4"
+            className="flex-row items-center justify-between bg-card dark:bg-card-dark rounded-2xl p-4"
             activeOpacity={0.7}
           >
             <Text className="text-base font-bold" style={{ color: '#EF4444' }}>
@@ -251,7 +253,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text className="text-muted text-xs text-center mt-6">App v1.0.0 (1)</Text>
+        <Text className="text-muted dark:text-muted-dark text-xs text-center mt-6">App v1.0.0 (1)</Text>
       </ScrollView>
     </View>
   );

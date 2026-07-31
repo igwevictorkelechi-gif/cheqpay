@@ -58,14 +58,14 @@ export default function WalletStatementScreen() {
       >
         <TouchableOpacity
           onPress={() => (selected ? setSelected(null) : router.back())}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="arrow-back" size={22} color={colors.ink} />
         </TouchableOpacity>
 
         {!selected ? (
           <>
-            <Text className="text-ink text-4xl font-extrabold mt-6 mb-5">Select wallet</Text>
+            <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-6 mb-5">Select wallet</Text>
 
             <View
               className="flex-row items-center rounded-2xl px-4 py-3 mb-5"
@@ -77,12 +77,12 @@ export default function WalletStatementScreen() {
                 onChangeText={setQuery}
                 placeholder="Search"
                 placeholderTextColor={colors.muted}
-                className="text-ink text-base flex-1 ml-3"
+                className="text-ink dark:text-ink-dark text-base flex-1 ml-3"
                 style={{ padding: 0 }}
               />
             </View>
 
-            <View className="bg-card rounded-3xl px-4">
+            <View className="bg-card dark:bg-card-dark rounded-3xl px-4">
               {filtered.map((w, i) => (
                 <TouchableOpacity
                   key={w.asset}
@@ -99,26 +99,26 @@ export default function WalletStatementScreen() {
                     </Text>
                   </View>
                   <View className="ml-3">
-                    <Text className="text-ink text-lg font-bold">{w.name}</Text>
-                    <Text className="text-muted text-sm">{w.asset}</Text>
+                    <Text className="text-ink dark:text-ink-dark text-lg font-bold">{w.name}</Text>
+                    <Text className="text-muted dark:text-muted-dark text-sm">{w.asset}</Text>
                   </View>
                 </TouchableOpacity>
               ))}
               {filtered.length === 0 && (
-                <Text className="text-muted text-sm text-center py-6">No wallets found.</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm text-center py-6">No wallets found.</Text>
               )}
             </View>
           </>
         ) : (
           <>
             <View className="flex-row items-center justify-between mt-6 mb-5">
-              <Text className="text-ink text-3xl font-extrabold">{selected.name}</Text>
+              <Text className="text-ink dark:text-ink-dark text-3xl font-extrabold">{selected.name}</Text>
               <TouchableOpacity
                 onPress={share}
-                className="flex-row items-center rounded-full px-4 py-2 bg-card"
+                className="flex-row items-center rounded-full px-4 py-2 bg-card dark:bg-card-dark"
               >
                 <Ionicons name="share-outline" size={18} color={colors.ink} />
-                <Text className="text-ink text-sm font-semibold ml-2">Share</Text>
+                <Text className="text-ink dark:text-ink-dark text-sm font-semibold ml-2">Share</Text>
               </TouchableOpacity>
             </View>
 
@@ -128,7 +128,7 @@ export default function WalletStatementScreen() {
               </View>
             ) : txns.length === 0 ? (
               <Card>
-                <Text className="text-muted text-sm text-center py-2">
+                <Text className="text-muted dark:text-muted-dark text-sm text-center py-2">
                   No {selected.asset} transactions yet.
                 </Text>
               </Card>

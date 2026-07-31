@@ -45,14 +45,14 @@ export default function SupportScreen() {
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
       <View className="flex-row items-center px-5 pt-3 pb-2">
-        <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 rounded-full bg-card items-center justify-center">
+        <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center">
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </TouchableOpacity>
-        <Text className="text-ink text-lg font-bold ml-3">Help & Support</Text>
+        <Text className="text-ink dark:text-ink-dark text-lg font-bold ml-3">Help & Support</Text>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 32 }}>
-        <Text className="text-muted text-sm mt-1 mb-4">We&apos;re here to help, 24/7.</Text>
+        <Text className="text-muted dark:text-muted-dark text-sm mt-1 mb-4">We&apos;re here to help, 24/7.</Text>
 
         {/* AI assistant */}
         <TouchableOpacity
@@ -76,23 +76,23 @@ export default function SupportScreen() {
             <TouchableOpacity
               key={c.title}
               onPress={() => Linking.openURL(c.href).catch(() => undefined)}
-              className="flex-row items-center bg-card rounded-2xl p-4"
+              className="flex-row items-center bg-card dark:bg-card-dark rounded-2xl p-4"
               activeOpacity={0.8}
             >
               <View className="w-10 h-10 rounded-full items-center justify-center" style={{ backgroundColor: 'rgba(107,91,149,0.2)' }}>
                 <Ionicons name={c.icon} size={20} color={colors.brandLight} />
               </View>
               <View className="flex-1 ml-3">
-                <Text className="text-ink font-bold">{c.title}</Text>
-                <Text className="text-muted text-sm">{c.subtitle}</Text>
+                <Text className="text-ink dark:text-ink-dark font-bold">{c.title}</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm">{c.subtitle}</Text>
               </View>
             </TouchableOpacity>
           ))}
         </View>
 
-        <View className="bg-card rounded-2xl p-4 mt-6">
-          <Text className="text-ink font-bold mb-1">Before you reach out</Text>
-          <Text className="text-muted text-sm leading-5">
+        <View className="bg-card dark:bg-card-dark rounded-2xl p-4 mt-6">
+          <Text className="text-ink dark:text-ink-dark font-bold mb-1">Before you reach out</Text>
+          <Text className="text-muted dark:text-muted-dark text-sm leading-5">
             For the fastest help, include your registered email and the transaction reference.
             Never share your password, OTP or PIN with anyone — CheqPay staff will never ask for them.
           </Text>

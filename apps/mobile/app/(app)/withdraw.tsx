@@ -147,10 +147,10 @@ export default function WithdrawScreen() {
   function Header({ title, onBack }: { title: string; onBack: () => void }) {
     return (
       <View className="flex-row items-center px-5 pt-3 pb-2">
-        <TouchableOpacity onPress={onBack} className="w-10 h-10 rounded-full bg-card items-center justify-center">
+        <TouchableOpacity onPress={onBack} className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center">
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </TouchableOpacity>
-        <Text className="text-ink text-lg font-bold ml-3">{title}</Text>
+        <Text className="text-ink dark:text-ink-dark text-lg font-bold ml-3">{title}</Text>
       </View>
     );
   }
@@ -159,8 +159,8 @@ export default function WithdrawScreen() {
     return (
       <View className="flex-1 px-5 items-center" style={{ backgroundColor: colors.surface, paddingTop: insets.top + 40 }}>
         <SuccessAnimation />
-        <Text className="text-ink text-2xl font-extrabold mt-6">Withdrawal submitted</Text>
-        <Text className="text-muted text-sm mt-2 text-center">
+        <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold mt-6">Withdrawal submitted</Text>
+        <Text className="text-muted dark:text-muted-dark text-sm mt-2 text-center">
           ₦{amt.toLocaleString()} is on its way to {selected?.accountName} · {selected?.bankName}.
         </Text>
         <TouchableOpacity
@@ -182,26 +182,26 @@ export default function WithdrawScreen() {
             <Header title="Withdraw" onBack={() => router.back()} />
             <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}>
               <View className="rounded-2xl p-4 mt-2" style={{ backgroundColor: colors.card }}>
-                <Text className="text-muted text-sm">Available balance</Text>
-                <Text className="text-ink text-3xl font-extrabold mt-1">₦{balance.toLocaleString()}</Text>
+                <Text className="text-muted dark:text-muted-dark text-sm">Available balance</Text>
+                <Text className="text-ink dark:text-ink-dark text-3xl font-extrabold mt-1">₦{balance.toLocaleString()}</Text>
               </View>
 
-              <Text className="text-muted text-sm font-semibold mt-6 mb-2">Amount</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-2">Amount</Text>
               <View className="flex-row items-center rounded-2xl px-4 py-3.5" style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}>
-                <Text className="text-muted text-lg font-bold mr-1">₦</Text>
+                <Text className="text-muted dark:text-muted-dark text-lg font-bold mr-1">₦</Text>
                 <TextInput
                   value={amount}
                   onChangeText={(t) => setAmount(t.replace(/[^\d.]/g, ''))}
                   keyboardType="decimal-pad"
                   placeholder="0.00"
                   placeholderTextColor={colors.muted}
-                  className="flex-1 text-ink text-lg font-bold"
+                  className="flex-1 text-ink dark:text-ink-dark text-lg font-bold"
                 />
                 <TouchableOpacity onPress={() => setAmount(String(balance))} className="rounded-full px-3 py-1" style={{ backgroundColor: 'rgba(107,91,149,0.25)' }}>
                   <Text style={{ color: colors.brandLight, fontWeight: '700', fontSize: 12 }}>MAX</Text>
                 </TouchableOpacity>
               </View>
-              <Text className="text-muted text-xs mt-2">Minimum ₦100</Text>
+              <Text className="text-muted dark:text-muted-dark text-xs mt-2">Minimum ₦100</Text>
 
               {error && <Text style={{ color: '#FF6B6B' }} className="text-sm mt-4">{error}</Text>}
 
@@ -221,8 +221,8 @@ export default function WithdrawScreen() {
           <>
             <Header title="Choose account" onBack={() => setStage('amount')} />
             <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}>
-              <Text className="text-muted text-sm mt-1">
-                Withdrawing <Text className="text-ink font-bold">₦{amt.toLocaleString()}</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm mt-1">
+                Withdrawing <Text className="text-ink dark:text-ink-dark font-bold">₦{amt.toLocaleString()}</Text>
               </Text>
 
               {loadingAccts ? (
@@ -245,8 +245,8 @@ export default function WithdrawScreen() {
                           <Ionicons name="business" size={20} color={colors.ink} />
                         </View>
                         <View className="flex-1 ml-3">
-                          <Text className="text-ink font-bold" numberOfLines={1}>{b.accountName}</Text>
-                          <Text className="text-muted text-sm" numberOfLines={1}>{b.bankName} · {b.accountNumber}</Text>
+                          <Text className="text-ink dark:text-ink-dark font-bold" numberOfLines={1}>{b.accountName}</Text>
+                          <Text className="text-muted dark:text-muted-dark text-sm" numberOfLines={1}>{b.bankName} · {b.accountNumber}</Text>
                         </View>
                         {selectedId === b.id ? (
                           <Ionicons name="checkmark-circle" size={22} color={colors.brand} />
@@ -290,7 +290,7 @@ export default function WithdrawScreen() {
           <>
             <Header title="Add account" onBack={() => setStage(beneficiaries.length ? 'accounts' : 'amount')} />
             <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}>
-              <Text className="text-muted text-sm font-semibold mt-4 mb-2">Bank</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-4 mb-2">Bank</Text>
               <TouchableOpacity
                 onPress={() => setShowBanks(true)}
                 className="flex-row items-center justify-between rounded-2xl px-4 py-3.5"
@@ -300,7 +300,7 @@ export default function WithdrawScreen() {
                 <Ionicons name="chevron-down" size={20} color={colors.muted} />
               </TouchableOpacity>
 
-              <Text className="text-muted text-sm font-semibold mt-5 mb-2">Account number</Text>
+              <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-5 mb-2">Account number</Text>
               <TextInput
                 value={accountNumber}
                 onChangeText={(t) => { setAccountNumber(t.replace(/\D/g, '').slice(0, 10)); setResolvedName(null); }}
@@ -308,14 +308,14 @@ export default function WithdrawScreen() {
                 maxLength={10}
                 placeholder="10-digit NUBAN"
                 placeholderTextColor={colors.muted}
-                className="rounded-2xl px-4 py-3.5 text-ink"
+                className="rounded-2xl px-4 py-3.5 text-ink dark:text-ink-dark"
                 style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}
               />
 
               {resolvedName ? (
                 <View className="flex-row items-center rounded-2xl p-4 mt-4" style={{ backgroundColor: 'rgba(52,199,89,0.1)', borderWidth: 1, borderColor: 'rgba(52,199,89,0.3)' }}>
                   <Ionicons name="shield-checkmark" size={20} color={colors.positive} />
-                  <Text className="text-ink font-bold ml-2">{resolvedName}</Text>
+                  <Text className="text-ink dark:text-ink-dark font-bold ml-2">{resolvedName}</Text>
                 </View>
               ) : (
                 <TouchableOpacity
@@ -324,7 +324,7 @@ export default function WithdrawScreen() {
                   className="rounded-2xl py-3.5 items-center mt-4"
                   style={{ backgroundColor: colors.card, opacity: canResolve ? 1 : 0.4 }}
                 >
-                  <Text className="text-ink font-bold">{resolving ? 'Verifying…' : 'Verify account'}</Text>
+                  <Text className="text-ink dark:text-ink-dark font-bold">{resolving ? 'Verifying…' : 'Verify account'}</Text>
                 </TouchableOpacity>
               )}
 
@@ -332,7 +332,7 @@ export default function WithdrawScreen() {
 
               <View className="flex-row items-start mt-4" style={{ gap: 6 }}>
                 <Ionicons name="shield-checkmark" size={16} color={colors.brandLight} style={{ marginTop: 2 }} />
-                <Text className="text-muted text-xs flex-1">
+                <Text className="text-muted dark:text-muted-dark text-xs flex-1">
                   For your security, you can only withdraw to a bank account in your own name.
                 </Text>
               </View>
@@ -353,8 +353,8 @@ export default function WithdrawScreen() {
 
         <Modal visible={showBanks} transparent animationType="slide" onRequestClose={() => setShowBanks(false)}>
           <TouchableOpacity className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} activeOpacity={1} onPress={() => setShowBanks(false)}>
-            <View className="bg-surface rounded-t-3xl" style={{ maxHeight: '70%', paddingBottom: insets.bottom + 8 }}>
-              <Text className="text-ink text-lg font-bold p-5">Select bank</Text>
+            <View className="bg-surface dark:bg-surface-dark rounded-t-3xl" style={{ maxHeight: '70%', paddingBottom: insets.bottom + 8 }}>
+              <Text className="text-ink dark:text-ink-dark text-lg font-bold p-5">Select bank</Text>
               <ScrollView>
                 {banks.map((bank) => (
                   <TouchableOpacity
@@ -363,7 +363,7 @@ export default function WithdrawScreen() {
                     className="flex-row items-center justify-between px-5 py-3.5"
                     style={{ borderTopWidth: 1, borderTopColor: colors.border }}
                   >
-                    <Text className="text-ink">{bank.name}</Text>
+                    <Text className="text-ink dark:text-ink-dark">{bank.name}</Text>
                     {bankCode === bank.code && <Ionicons name="checkmark" size={20} color={colors.positive} />}
                   </TouchableOpacity>
                 ))}

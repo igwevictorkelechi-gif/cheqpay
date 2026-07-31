@@ -3,17 +3,29 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // CheqPay brand palette (dark theme)
+        // CheqPay brand palette. NativeWind v2 has no CSS variables, so the
+        // themed neutrals ship as a LIGHT base plus a `-dark` counterpart, and
+        // screens pair them as `bg-card dark:bg-card-dark`. The active scheme
+        // is driven by NativeWindStyleSheet.setColorScheme in app/_layout.
+        // (NativeWind registers `dark` as its own variant and forces Tailwind's
+        // darkMode off, so no darkMode setting belongs here.)
         brand: '#6B5B95',
         'brand-dark': '#574A7A',
         'brand-light': '#8A7BB5',
-        surface: '#14121A',
-        'surface-soft': '#1F1B29',
-        card: '#1F1B29',
-        circle: '#2C2738',
-        border: '#2A2535',
-        ink: '#F4F3F7',
-        muted: '#9A93AD',
+        surface: '#F6F5FA',
+        'surface-dark': '#14121A',
+        'surface-soft': '#FFFFFF',
+        'surface-soft-dark': '#1F1B29',
+        card: '#FFFFFF',
+        'card-dark': '#1F1B29',
+        circle: '#EAE7F2',
+        'circle-dark': '#2C2738',
+        border: '#E0DDEA',
+        'border-dark': '#2A2535',
+        ink: '#1B1726',
+        'ink-dark': '#F4F3F7',
+        muted: '#6E6880',
+        'muted-dark': '#9A93AD',
         // legacy aliases (kept so existing screens keep compiling)
         primary: '#6B5B95',
         secondary: '#574A7A',

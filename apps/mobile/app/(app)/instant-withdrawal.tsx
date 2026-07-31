@@ -59,7 +59,7 @@ export default function InstantWithdrawalScreen() {
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-11 h-11 rounded-full bg-card items-center justify-center"
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="arrow-back" size={22} color={colors.ink} />
         </TouchableOpacity>
@@ -68,8 +68,8 @@ export default function InstantWithdrawalScreen() {
           <Ionicons name="flash" size={30} color="#EF4444" />
         </View>
 
-        <Text className="text-ink text-4xl font-extrabold mt-5 mb-2">Instant withdrawal</Text>
-        <Text className="text-muted text-base mb-6">
+        <Text className="text-ink dark:text-ink-dark text-4xl font-extrabold mt-5 mb-2">Instant withdrawal</Text>
+        <Text className="text-muted dark:text-muted-dark text-base mb-6">
           Skip the 2FA step when withdrawing crypto. Convenient, but it lowers your account security —
           only enable this if you understand the risk.
         </Text>
@@ -79,10 +79,10 @@ export default function InstantWithdrawalScreen() {
             <ActivityIndicator color={colors.brand} />
           </View>
         ) : (
-          <View className="flex-row items-center justify-between bg-card rounded-2xl p-4">
+          <View className="flex-row items-center justify-between bg-card dark:bg-card-dark rounded-2xl p-4">
             <View className="flex-1 pr-3">
-              <Text className="text-ink text-base font-semibold">Withdraw without 2FA</Text>
-              <Text className="text-muted text-xs mt-0.5">
+              <Text className="text-ink dark:text-ink-dark text-base font-semibold">Withdraw without 2FA</Text>
+              <Text className="text-muted dark:text-muted-dark text-xs mt-0.5">
                 {enabled ? 'Enabled — withdrawals skip 2FA' : 'Disabled — 2FA required'}
               </Text>
             </View>

@@ -63,15 +63,15 @@ export default function StatementScreen() {
       <View className="flex-row items-center px-5 pt-3 pb-2">
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-10 h-10 rounded-full bg-card items-center justify-center"
+          className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center"
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </TouchableOpacity>
-        <Text className="text-ink text-lg font-bold ml-3">Account statement</Text>
+        <Text className="text-ink dark:text-ink-dark text-lg font-bold ml-3">Account statement</Text>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}>
-        <Text className="text-muted text-sm mt-1 mb-5">
+        <Text className="text-muted dark:text-muted-dark text-sm mt-1 mb-5">
           Pick a period and a format — we’ll email it to you.
         </Text>
 
@@ -83,8 +83,8 @@ export default function StatementScreen() {
             >
               <Ionicons name="mail" size={26} color={colors.brandLight} />
             </View>
-            <Text className="text-ink text-lg font-bold mt-4">Coming soon</Text>
-            <Text className="text-muted text-sm mt-1 text-center px-6">
+            <Text className="text-ink dark:text-ink-dark text-lg font-bold mt-4">Coming soon</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm mt-1 text-center px-6">
               Emailed statements aren’t switched on yet. You can still view your history under
               Wallet statement.
             </Text>
@@ -97,21 +97,21 @@ export default function StatementScreen() {
             >
               <Ionicons name="mail-open" size={26} color={colors.positive} />
             </View>
-            <Text className="text-ink text-lg font-bold mt-4">Statement on its way</Text>
-            <Text className="text-muted text-sm mt-1 text-center px-6">
+            <Text className="text-ink dark:text-ink-dark text-lg font-bold mt-4">Statement on its way</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm mt-1 text-center px-6">
               We’ve emailed {sent.count} transaction{sent.count === 1 ? '' : 's'} to {sent.email}.
               It can take a minute — check spam if you don’t see it.
             </Text>
             <TouchableOpacity
               onPress={() => setSent(null)}
-              className="mt-5 px-5 py-3 rounded-full bg-card"
+              className="mt-5 px-5 py-3 rounded-full bg-card dark:bg-card-dark"
             >
-              <Text className="text-ink font-bold text-sm">Request another</Text>
+              <Text className="text-ink dark:text-ink-dark font-bold text-sm">Request another</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
-            <Text className="text-muted text-sm font-semibold mb-2">Period</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm font-semibold mb-2">Period</Text>
             <View style={{ gap: 10 }}>
               {PRESETS.map((p) => {
                 const chosen = days === p.days;
@@ -131,8 +131,8 @@ export default function StatementScreen() {
                     }}
                   >
                     <View>
-                      <Text className="text-ink font-bold">{p.label}</Text>
-                      <Text className="text-muted text-xs mt-0.5">
+                      <Text className="text-ink dark:text-ink-dark font-bold">{p.label}</Text>
+                      <Text className="text-muted dark:text-muted-dark text-xs mt-0.5">
                         {p.days === 365 ? from : from} → {TODAY}
                       </Text>
                     </View>
@@ -146,7 +146,7 @@ export default function StatementScreen() {
               })}
             </View>
 
-            <Text className="text-muted text-sm font-semibold mt-6 mb-2">Format</Text>
+            <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-2">Format</Text>
             <View className="flex-row" style={{ gap: 12 }}>
               {(
                 [
@@ -175,8 +175,8 @@ export default function StatementScreen() {
                       size={20}
                       color={chosen ? colors.brandLight : colors.muted}
                     />
-                    <Text className="text-ink font-bold mt-1.5">{f.label}</Text>
-                    <Text className="text-muted text-xs mt-0.5">{f.hint}</Text>
+                    <Text className="text-ink dark:text-ink-dark font-bold mt-1.5">{f.label}</Text>
+                    <Text className="text-muted dark:text-muted-dark text-xs mt-0.5">{f.hint}</Text>
                   </TouchableOpacity>
                 );
               })}
