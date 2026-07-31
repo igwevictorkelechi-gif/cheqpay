@@ -9,7 +9,7 @@ import {
 import type { NgnChargeEvent } from "@/payments/types";
 import { creditBalance } from "@/lib/ledger";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
-import { sendPush } from "@/lib/push";
+import { notifyUser } from "@/lib/alerts";
 import { feeFromBps, getDepositFeeBps } from "@/lib/settings";
 import { awardCashback } from "@/lib/cashback";
 
@@ -63,21 +63,21 @@ export async function notifySettlement(result: SettlementResult): Promise<void> 
   const naira = () => fromMinorUnits(BigInt(result.amountMinor!), Asset.NGN);
 
   if (result.status === "credited") {
-    await sendPush(result.userId, {
+    await notifyUser(result.userId, {
       category: "deposits",
       title: "Deposit received",
       body: `₦${naira()} has landed in your CheqPay wallet.`,
       data: { transactionId: result.transactionId },
     });
   } else if (result.status === "reversed") {
-    await sendPush(result.userId, {
+    await notifyUser(result.userId, {
       category: "withdrawals",
       title: "Withdrawal reversed",
       body: `Your payout of ₦${naira()} failed and was refunded.`,
       data: { transactionId: result.transactionId },
     });
   } else if (result.status === "completed") {
-    await sendPush(result.userId, {
+    await notifyUser(result.userId, {
       category: "withdrawals",
       title: "Withdrawal sent",
       body: "Your payout was completed successfully.",

@@ -119,6 +119,9 @@ export default function HomeScreen() {
           {features.crypto_trading && (
             <CircleAction icon="sync" label="Convert" onPress={() => router.push('/(app)/convert')} />
           )}
+          {features.p2p_transfers && (
+            <CircleAction icon="paper-plane" label="Send" onPress={() => router.push('/(app)/send-user')} />
+          )}
         </ActionRow>
 
         {/* Cash account */}

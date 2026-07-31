@@ -8,7 +8,7 @@ import { awardCashback } from "@/lib/cashback";
 import { getBiller, getServiceConfig } from "@/lib/bills";
 import { getLivePlan } from "@/lib/billCatalog";
 import { billPaySchema } from "@/lib/validation";
-import { sendPush } from "@/lib/push";
+import { notifyUser } from "@/lib/alerts";
 import { BillPaymentError } from "@/payments/types";
 import { feeFromBps, getBillMarginBps } from "@/lib/settings";
 
@@ -189,7 +189,7 @@ export async function POST(req: Request) {
           baseNgnMinor: amountMinor,
           sourceTransactionId: tx.id,
         });
-        await sendPush(auth.id, {
+        await notifyUser(auth.id, {
           category: "bills",
           title: "Bill paid",
           body: `${biller.name} — ₦${fromMinorUnits(amountMinor, Asset.NGN)}${

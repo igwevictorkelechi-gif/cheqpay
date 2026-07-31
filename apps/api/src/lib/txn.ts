@@ -19,6 +19,8 @@ export function serializeTransaction(t: Transaction) {
     planName?: string | null;
     customer?: string;
     token?: string | null;
+    counterparty?: string | null;
+    note?: string | null;
     toAddress?: string;
     rate?: string;
   };
@@ -49,5 +51,8 @@ export function serializeTransaction(t: Transaction) {
     planName: meta.planName ?? null,
     customer: meta.customer ?? null,
     token: meta.token ?? null,
+    // User-to-user transfers: the other party's username and the sender's note.
+    counterparty: meta.counterparty ?? null,
+    note: meta.note ?? null,
   };
 }

@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { consumeAdminOtp, isAdminOtpConfigured } from "@/lib/totp";
-import { sendPush } from "@/lib/push";
+import { notifyUser } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +95,7 @@ export async function POST(req: Request) {
     });
 
     const human = `${fromMinorUnits(amountMinor, asset)} ${asset}`;
-    await sendPush(user.id, {
+    await notifyUser(user.id, {
       category: body.direction === "credit" ? "deposits" : "withdrawals",
       title: body.direction === "credit" ? "Account credited" : "Account debited",
       body:

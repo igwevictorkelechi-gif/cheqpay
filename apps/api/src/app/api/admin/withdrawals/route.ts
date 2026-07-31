@@ -12,7 +12,7 @@ import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { fromMinorUnits } from "@/lib/money";
 import { reviewActionSchema } from "@/lib/validation";
 import { isManualAsset } from "@/lib/manualCrypto";
-import { sendPush } from "@/lib/push";
+import { notifyUser } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
             ...(txHash ? { txHash, externalRef: txHash } : {}),
           },
         });
-        await sendPush(tx.userId, {
+        await notifyUser(tx.userId, {
           category: "withdrawals",
           title: "Crypto withdrawal sent",
           body: `Your ${amount} ${tx.asset} withdrawal has been sent.`,

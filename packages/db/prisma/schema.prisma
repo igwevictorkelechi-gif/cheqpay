@@ -54,6 +54,8 @@ enum TransactionType {
   CONVERT // crypto -> crypto
   BILL // NGN -> bill payment (airtime, data, electricity, cable TV, betting)
   CASHBACK // NGN reward credited on a qualifying transaction
+  TRANSFER_OUT // sent to another CheqPay user (internal)
+  TRANSFER_IN // received from another CheqPay user (internal)
 }
 
 enum TransactionStatus {

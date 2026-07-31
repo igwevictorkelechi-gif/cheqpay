@@ -210,6 +210,19 @@ export const pushTokenSchema = z.object({
 });
 export type PushTokenInput = z.infer<typeof pushTokenSchema>;
 
+/** Send NGN or crypto to another CheqPay user by username. */
+export const userTransferSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/^@+/, ""))
+    .pipe(z.string().regex(/^[a-zA-Z0-9_]{3,20}$/, "Enter a valid username")),
+  asset: z.enum(["NGN", "BTC", "USDT", "USDC"]),
+  /** Decimal string in major units, validated against the asset's precision. */
+  amount: z.string().trim().regex(/^\d+(\.\d+)?$/, "Enter a valid amount"),
+  note: z.string().trim().max(140).optional(),
+});
+
 /** Update editable profile fields. Username is normalized (leading @ stripped). */
 export const profileUpdateSchema = z
   .object({

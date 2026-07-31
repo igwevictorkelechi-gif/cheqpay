@@ -15,7 +15,7 @@ import { isSupportedWallet } from "@/lib/assets";
 import { getTierLimits, MAX_TIER } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
-import { sendPush } from "@/lib/push";
+import { notifyUser } from "@/lib/alerts";
 import { notifyAdminAlert } from "@/lib/adminAlert";
 import { cryptoToNgnKobo } from "@/lib/rates";
 import { getUsdtNgnRate } from "@/lib/settings";
@@ -160,7 +160,7 @@ export async function POST(req: Request) {
           details: { reasons: aml.reasons, ngnValueKobo: ngnValueKobo.toString() },
         },
       });
-      await sendPush(auth.id, {
+      await notifyUser(auth.id, {
         category: "security",
         title: "Withdrawal under review",
         body: `Your ${asset} withdrawal is being reviewed by our compliance team.`,
@@ -184,7 +184,7 @@ export async function POST(req: Request) {
           details: { asset, network, amountMinor: amountMinor.toString(), toAddress: body.toAddress },
         },
       });
-      await sendPush(auth.id, {
+      await notifyUser(auth.id, {
         category: "withdrawals",
         title: "Withdrawal processing",
         body: `Your ${fromMinorUnits(amountMinor, asset)} ${asset} withdrawal is being processed. You'll be notified when it's sent.`,
@@ -227,7 +227,7 @@ export async function POST(req: Request) {
           details: { asset, network, amountMinor: amountMinor.toString(), txHash: result.txHash },
         },
       });
-      await sendPush(auth.id, {
+      await notifyUser(auth.id, {
         category: "withdrawals",
         title: "Crypto withdrawal sent",
         body: `${fromMinorUnits(amountMinor, asset)} ${asset} is on its way to ${body.toAddress.slice(0, 8)}…`,

@@ -122,7 +122,9 @@ export type LedgerTxType =
   | 'SELL'
   | 'CONVERT'
   | 'BILL'
-  | 'CASHBACK';
+  | 'CASHBACK'
+  | 'TRANSFER_OUT'
+  | 'TRANSFER_IN';
 export type LedgerTxStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
 export interface LedgerTransaction {
   id: string;
@@ -147,6 +149,8 @@ export interface LedgerTransaction {
   planName: string | null;
   customer: string | null;
   token: string | null;
+  counterparty: string | null;
+  note: string | null;
 }
 
 // ---- Endpoints ----
@@ -400,6 +404,31 @@ export const api = {
     return apiFetch('/api/features');
   },
 
+  /** Confirm a username exists before sending — never returns PII. */
+  lookupUser(username: string): Promise<{ username: string; self: boolean }> {
+    return apiFetch(`/api/users/lookup?username=${encodeURIComponent(username)}`);
+  },
+
+  /** Send NGN or crypto to another CheqPay user. */
+  sendToUser(input: {
+    username: string;
+    asset: string;
+    amount: string;
+    note?: string;
+  }): Promise<{
+    transactionId: string;
+    status: string;
+    asset: string;
+    amountFormatted: string;
+    recipient: string;
+  }> {
+    return apiFetch('/api/transfers', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: { 'idempotency-key': idemKey() },
+    });
+  },
+
   /** Whether emailed statements are available (email delivery configured). */
   getStatementAvailability(): Promise<{ available: boolean; maxRangeDays: number }> {
     return apiFetch('/api/statements/request');
@@ -458,6 +487,7 @@ export interface FeatureFlags {
   crypto_withdrawals: boolean;
   bill_payments: boolean;
   virtual_cards: boolean;
+  p2p_transfers: boolean;
 }
 
 export interface VirtualCard {

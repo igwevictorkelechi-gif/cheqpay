@@ -14,6 +14,7 @@ export const FEATURE_DEFS = [
   { key: "crypto_withdrawals", label: "Crypto withdrawals", description: "Sending crypto to external wallets" },
   { key: "bill_payments", label: "Bill payments", description: "Airtime, data, electricity and cable" },
   { key: "virtual_cards", label: "Virtual cards", description: "USD virtual cards (requires Maplerad keys)" },
+  { key: "p2p_transfers", label: "User transfers", description: "Send Naira or crypto to another CheqPay user" },
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_DEFS)[number]["key"];

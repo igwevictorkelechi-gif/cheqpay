@@ -5,7 +5,7 @@ import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { creditBalance } from "@/lib/ledger";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { getManualWallets, MANUAL_ASSETS, type ManualAsset } from "@/lib/manualCrypto";
-import { sendPush } from "@/lib/push";
+import { notifyUser } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
     });
 
     if (result.created) {
-      await sendPush(user.id, {
+      await notifyUser(user.id, {
         category: "deposits",
         title: "Deposit received",
         body: `${fromMinorUnits(amountMinor, asset)} ${asset} has landed in your CheqPay wallet.`,

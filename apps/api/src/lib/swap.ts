@@ -8,7 +8,7 @@ import {
 import { ApiError } from "./http";
 import { isWithinSingleTxLimit } from "./kyc";
 import { fromMinorUnits } from "./money";
-import { sendPush } from "./push";
+import { notifyUser } from "./alerts";
 import {
   computeCryptoConvert,
   computeSwap,
@@ -267,7 +267,7 @@ export async function executeSwap(params: {
     title = "Sale complete";
     body = `Sold ${fmtCrypto(quote.amountIn, cryptoAsset)} for ${fmtNgn(quote.amountOut)}.`;
   }
-  await sendPush(params.userId, {
+  await notifyUser(params.userId, {
     category: "trades",
     title,
     body,

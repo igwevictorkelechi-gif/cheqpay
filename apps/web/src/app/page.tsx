@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Eye, EyeOff, Bell, ArrowDown, ArrowRight, RefreshCw, Receipt } from "lucide-react";
+import {
+  Search,
+  Eye,
+  EyeOff,
+  Bell,
+  ArrowDown,
+  ArrowRight,
+  RefreshCw,
+  Receipt,
+  Send,
+} from "lucide-react";
 import AppShell from "@/components/AppShell";
 import {
   TopBar,
@@ -133,6 +143,9 @@ export default function HomePage() {
         )}
         {features.crypto_trading && (
           <CircleAction icon={RefreshCw} label="Convert" onClick={() => router.push("/convert")} />
+        )}
+        {features.p2p_transfers && (
+          <CircleAction icon={Send} label="Send" onClick={() => router.push("/send-user")} />
         )}
       </ActionRow>
 

@@ -1,5 +1,7 @@
 import { Asset, Prisma, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { getCashbackConfig, type CashbackConfig } from "./settings";
+import { fromMinorUnits } from "./money";
+import { notifyUser } from "./alerts";
 
 /**
  * Cashback rewards, paid in NGN and credited as their own ledger row.
@@ -114,6 +116,18 @@ export async function awardCashback(input: {
           },
         },
       });
+    });
+
+    // Tell the user their reward landed (push + email, best-effort).
+    await notifyUser(input.userId, {
+      category: "deposits",
+      title: "Cashback earned",
+      body: `You earned ₦${fromMinorUnits(reward, Asset.NGN)} cashback on your ${input.source}.`,
+      data: { sourceTransactionId: input.sourceTransactionId },
+      details: [
+        { label: "Reward", value: `₦${fromMinorUnits(reward, Asset.NGN)}` },
+        { label: "Earned on", value: input.source },
+      ],
     });
 
     return reward;
