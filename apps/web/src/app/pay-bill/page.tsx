@@ -80,8 +80,9 @@ export default function PayBillPage() {
                       ? router.push(service.route)
                       : toast.show(`${service.label} — coming soon`)
                   }
-                  className="mb-3 flex h-24 w-[48%] flex-col rounded-2xl p-4 text-left transition active:scale-95"
-                  style={{ backgroundColor: "#2A2440" }}
+                  // bg-circle, not a fixed dark hex: the label is text-ink, so a
+                  // hardcoded dark tile turns dark-on-dark in light mode.
+                  className="mb-3 flex h-24 w-[48%] flex-col rounded-2xl bg-circle p-4 text-left transition active:scale-95"
                 >
                   <div className="flex items-start justify-between">
                     <span
