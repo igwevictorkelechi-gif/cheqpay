@@ -10,7 +10,9 @@ export function register() {
   if (!dsn) return;
   Sentry.init({
     dsn,
-    environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV,
+    // Host-agnostic: Vercel sets VERCEL_ENV, Render sets RENDER_SERVICE_TYPE
+    // but no environment name, so fall back to NODE_ENV.
+    environment: process.env.VERCEL_ENV ?? process.env.APP_ENV ?? process.env.NODE_ENV,
     tracesSampleRate: 0.1,
   });
 }

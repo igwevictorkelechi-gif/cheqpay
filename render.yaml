@@ -1,0 +1,136 @@
+# Render Blueprint — CheqPay API.
+#
+# Only the API moves to Render. It is the single service that calls Maplerad,
+# and Maplerad requires a STATIC egress IP whitelisted in their dashboard,
+# which Vercel's serverless functions cannot provide. The web app (cheqpy) and
+# the admin dashboard (cheqpay-admin) stay on Vercel.
+#
+# Setup: Render Dashboard -> New -> Blueprint -> point at this repo. Render
+# reads this file, creates the service, and shows the static outbound IPs to
+# whitelist. See apps/api/RENDER.md for the full cutover runbook.
+
+services:
+  - type: web
+    name: cheqpay-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    # Repo root: this is a bun workspace, so the API needs the root lockfile
+    # and the @cheqpay/db + @cheqpay/shared packages.
+    dockerContext: .
+    # Frankfurt is Render's closest region to Nigeria. Changing region later
+    # changes the static egress IPs, which means re-whitelisting at Maplerad.
+    region: frankfurt
+    plan: starter # not `free`: free instances sleep, and a cold start on a payout is unacceptable
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+
+      # ---- Secrets: set these in the Render dashboard, never in this file ----
+      - key: DATABASE_URL # Supabase pooled (PgBouncer, 6543)
+        sync: false
+      - key: DIRECT_URL # Supabase direct (5432)
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: ADMIN_API_SECRET
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      # Service-role access to the Supabase Admin API (permanent account
+      # deletion removes the auth user). Both must be set to take effect.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # Comma-separated browser origins allowed to call the API. Blank echoes
+      # the request origin (auth is bearer-token, no cookies) — set it once the
+      # web app's final domain is known.
+      - key: ALLOWED_ORIGINS
+        sync: false
+      # Optional Slack/Discord/Zapier incoming webhook for operations alerts.
+      - key: ADMIN_ALERT_WEBHOOK
+        sync: false
+
+      # Maplerad — the reason this service is on Render at all.
+      - key: MAPLERAD_SECRET_KEY
+        sync: false
+      - key: MAPLERAD_WEBHOOK_SECRET # Svix whsec_… for inbound webhooks
+        sync: false
+      - key: MAPLERAD_BASE_URL
+        value: https://api.maplerad.com/v1
+
+      # Transactional email (statements + transaction alerts). Both blank keeps
+      # the feature dark rather than half-working.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+
+      # AI support agent. Unset simply falls back to the FAQ responder.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      # ---- Providers. Flip to "maplerad" only with a LIVE key. ----
+      - key: PAYMENT_PROVIDER
+        value: mock
+      - key: CUSTODY_PROVIDER
+        value: mock
+
+      # ---- Rates / market data ----
+      - key: PRICE_FEED
+        value: live
+      - key: BINANCE_API_BASE
+        value: https://api.binance.com
+      - key: SWAP_SPREAD_BPS
+        value: "150"
+      - key: BUSINESS_USDT_NGN_RATE
+        sync: false
+
+      # ---- AML thresholds (see apps/api/.env.example for meanings) ----
+      - key: AML_LARGE_AMOUNT_NGN
+        sync: false
+      - key: AML_REVIEW_THRESHOLD_NGN
+        sync: false
+      - key: AML_VELOCITY_COUNT
+        sync: false
+      - key: AML_VELOCITY_SUM_NGN
+        sync: false
+      - key: SANCTIONED_ADDRESSES
+        sync: false
+
+      # Public origin of this service, used to build webhook callback URLs.
+      # Set to the Render URL (or your custom domain) once it exists.
+      - key: API_PUBLIC_URL
+        sync: false
+
+      - key: SENTRY_DSN
+        sync: false
+
+      # Gates /api/cron/*. Must match CRON_SECRET on the cron service below.
+      - key: CRON_SECRET
+        sync: false
+
+  # The daily price-alert job. On Vercel this was the `crons` block in
+  # apps/api/vercel.json — that scheduler does NOT follow the API to Render, so
+  # the schedule is re-declared here or price alerts silently stop firing.
+  # Same image as the web service; it just runs a different command.
+  - type: cron
+    name: cheqpay-price-alerts
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    region: frankfurt
+    branch: main
+    schedule: "0 8 * * *" # 08:00 UTC daily — same as the Vercel schedule
+    dockerCommand: bun run cron:price-alerts
+    envVars:
+      - key: API_PUBLIC_URL # the web service's URL; the job calls it over HTTP
+        sync: false
+      - key: CRON_SECRET # must match the web service's value
+        sync: false

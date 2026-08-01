@@ -3,6 +3,12 @@
 This deploys the Phase 0–4 backend so it can be tested live. It's a separate
 Vercel project from the web app, pointed at the same Supabase Postgres.
 
+> **This describes the current (Vercel) deployment.** Going live with Maplerad
+> requires a static outbound IP, which Vercel serverless cannot provide — the
+> API moves to Render for that. See **[RENDER.md](./RENDER.md)** for the
+> migration and cutover runbook. Until Step 7 of that runbook, this deployment
+> stays live and is the rollback target.
+
 ## What you need (one-time)
 - Your Supabase project's **connection strings** (Dashboard → Project Settings →
   Database): the pooled URL (port 6543) and the direct URL (port 5432).
