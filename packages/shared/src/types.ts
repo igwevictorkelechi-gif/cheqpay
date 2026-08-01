@@ -24,7 +24,7 @@ export interface Wallet {
 export interface VirtualAccount {
   id: string;
   user_id: string;
-  provider: 'paystack' | 'flutterwave';
+  provider: 'maplerad';
   account_number: string;
   bank_name: string;
   bank_code: string;
@@ -47,16 +47,6 @@ export interface Transaction {
   status: 'pending' | 'completed' | 'failed';
   metadata: Record<string, any>;
   created_at: string;
-}
-
-// Payment Config
-export interface PaymentConfig {
-  id: string;
-  provider: 'paystack' | 'flutterwave';
-  public_key: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
 }
 
 // Auth Types

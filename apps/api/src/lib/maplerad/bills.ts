@@ -3,13 +3,9 @@
 // Bill payments: data, cable TV, electricity. These debit the business wallet
 // directly (no per-customer account needed). All amounts are minor units (kobo).
 //
-// Cutover strategy: keep the existing Flutterwave path and select the provider
-// via a flag (see `BillsProvider` below / your feature-flags module) so you can
-// A/B and roll back per bill type without a redeploy.
-//
 // NOTE: the public reference lists data / cable / electricity billers only.
-// Airtime is not documented here — confirm with Maplerad whether airtime is a
-// `data` biller variant or must remain on Flutterwave (Open question O1).
+// Airtime is not documented there — confirm with Maplerad whether airtime is a
+// `data` biller variant before enabling it.
 
 import { mapleradRequest } from "./client";
 import type { Minor } from "./types";

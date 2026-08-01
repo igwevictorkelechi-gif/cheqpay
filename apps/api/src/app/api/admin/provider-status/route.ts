@@ -21,16 +21,12 @@ export async function GET(req: Request) {
       return typeof v === "string" && v.trim().length > 0;
     };
 
-    const custodyCryptoApis = env.CUSTODY_PROVIDER === "cryptoapis";
     return jsonOk({
       custody: {
+        // Custody runs on the same Maplerad credentials as the NGN rail.
         provider: env.CUSTODY_PROVIDER,
-        apiKeyConfigured: custodyCryptoApis
-          ? has("CRYPTOAPIS_API_KEY") && has("CRYPTOAPIS_WALLET_ID")
-          : has("TATUM_API_KEY"),
-        webhookConfigured: custodyCryptoApis
-          ? has("CRYPTOAPIS_WEBHOOK_SECRET")
-          : has("TATUM_WEBHOOK_SECRET"),
+        apiKeyConfigured: has("MAPLERAD_SECRET_KEY"),
+        webhookConfigured: has("MAPLERAD_WEBHOOK_SECRET"),
       },
       payments: {
         provider: env.PAYMENT_PROVIDER,

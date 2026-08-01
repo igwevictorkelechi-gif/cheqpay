@@ -44,13 +44,6 @@ export const UpdateProfileSchema = z.object({
   email: z.string().email('Invalid email').optional(),
 });
 
-// Payment Config Schemas
-export const PaymentConfigSchema = z.object({
-  provider: z.enum(['paystack', 'flutterwave']),
-  public_key: z.string().min(1, 'Public key is required'),
-  secret_key: z.string().min(1, 'Secret key is required'),
-});
-
 export type SendOTPType = z.infer<typeof SendOTPSchema>;
 export type VerifyOTPType = z.infer<typeof VerifyOTPSchema>;
 export type RegisterType = z.infer<typeof RegisterSchema>;
@@ -58,4 +51,3 @@ export type SendMoneyType = z.infer<typeof SendMoneySchema>;
 export type WithdrawType = z.infer<typeof WithdrawSchema>;
 export type KYCType = z.infer<typeof KYCSchema>;
 export type UpdateProfileType = z.infer<typeof UpdateProfileSchema>;
-export type PaymentConfigType = z.infer<typeof PaymentConfigSchema>;

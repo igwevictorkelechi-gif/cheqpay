@@ -54,31 +54,14 @@ const envSchema = z.object({
   SANCTIONED_ADDRESSES: z.string().optional(), // comma-separated
 
   // Public origin of this API (e.g. https://cheqpay-admin453.vercel.app). Used
-  // to build the webhook callback URLs we register with providers (Tatum). No
+  // to build the webhook callback URLs we register with providers. No
   // trailing slash.
   API_PUBLIC_URL: z.string().url().optional(),
 
-  // Phase 2 (custody). Maplerad stablecoin (USDT/USDC) is the target provider;
-  // Cobo/Tatum/CryptoAPIs are legacy. No provider offers BTC — it stays
-  // "coming soon" until a BTC custodian is wired.
-  CUSTODY_PROVIDER: providerEnum(
-    "CUSTODY_PROVIDER",
-    ["mock", "tatum", "cryptoapis", "cobo", "maplerad"],
-    "mock"
-  ),
-  TATUM_API_KEY: z.string().optional(),
-  TATUM_WEBHOOK_SECRET: z.string().optional(),
-  // Crypto APIs (cryptoapis.io) Wallet-as-a-Service (legacy — migrating away).
-  CRYPTOAPIS_API_KEY: z.string().optional(),
-  CRYPTOAPIS_WALLET_ID: z.string().optional(),
-  CRYPTOAPIS_WEBHOOK_SECRET: z.string().optional(),
-  CRYPTOAPIS_NETWORK: z.string().default("mainnet"),
-  // Cobo WaaS 2.0. API auth is Ed25519 request signing (SDK-handled); the
-  // callback public key verifies inbound webhooks. COBO_ENV: "dev" | "prod".
-  COBO_API_PRIVATE_KEY: z.string().optional(),
-  COBO_WALLET_ID: z.string().optional(),
-  COBO_CALLBACK_PUBKEY: z.string().optional(),
-  COBO_ENV: z.enum(["dev", "prod"]).default("dev"),
+  // Phase 2 (custody). Maplerad stablecoin (USDT/USDC) is the only provider;
+  // "mock" keeps dev and tests free of external calls. No provider offers BTC —
+  // it stays "coming soon" until a BTC custodian is wired.
+  CUSTODY_PROVIDER: providerEnum("CUSTODY_PROVIDER", ["mock", "maplerad"], "mock"),
 
   // Phase 3 (Naira rails). Maplerad is the rail: bills, payouts, name enquiry
   // and banks. "mock" (the default) keeps dev and tests free of external calls.

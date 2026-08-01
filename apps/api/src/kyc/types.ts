@@ -1,6 +1,6 @@
 /**
  * Identity/KYC verification abstraction. A real provider (Dojah, Smile ID,
- * VerifyMe, or Flutterwave's BVN check) slots in behind this interface; the
+ * VerifyMe, or a PSP BVN check) slots in behind this interface; the
  * mock auto-verifies on a well-formed BVN so the flow works end-to-end in dev.
  */
 export interface KycVerifyInput {

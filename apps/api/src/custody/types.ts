@@ -37,7 +37,7 @@ export interface WithdrawalEvent {
 /**
  * Custody abstraction. The provider holds keys (HSM) and signs; our backend
  * never touches private keys — we store only the returned `custodyRef` and
- * public address. Swappable: Tatum (primary), or a mock for dev/tests.
+ * public address. Swappable: Maplerad (primary), or a mock for dev/tests.
  */
 export interface CustodyProvider {
   readonly name: string;

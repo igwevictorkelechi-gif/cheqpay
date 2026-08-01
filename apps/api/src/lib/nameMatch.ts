@@ -1,6 +1,6 @@
 /**
  * Verify that a resolved bank-account name belongs to the CheqPay user, so
- * withdrawals can only go to the user's own accounts (a Flutterwave-payout /
+ * withdrawals can only go to the user's own accounts (a payout /
  * anti-fraud requirement — the bank's account name reflects the holder's BVN).
  *
  * Nigerian bank names are returned in varied order and may include middle

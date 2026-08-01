@@ -75,10 +75,3 @@ export const LIMITS = {
   DAILY_LIMIT: 50000000,
 };
 
-// Paystack banks for virtual accounts
-export const PAYSTACK_BANKS = [
-  { name: 'Wema Bank', code: '035' },
-  { name: 'Zenith Bank', code: '057' },
-  { name: 'GTBank', code: '058' },
-  { name: 'Access Bank', code: '044' },
-];

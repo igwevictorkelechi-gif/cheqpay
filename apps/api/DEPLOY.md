@@ -41,10 +41,10 @@ Vercel Dashboard → **Add New… → Project** → import this repo, then:
 | `SUPABASE_JWT_SECRET` | from Supabase → Settings → API |
 | `ADMIN_API_SECRET` | a strong secret you choose |
 | `PRICE_FEED` | `live` |
-| `CUSTODY_PROVIDER` | `mock` (until Tatum is wired) |
-| `PAYMENT_PROVIDER` | `mock` (until Flutterwave keys are added) |
+| `CUSTODY_PROVIDER` | `mock` (until Maplerad custody is switched on) |
+| `PAYMENT_PROVIDER` | `mock` (until a live MAPLERAD_SECRET_KEY is set) |
 
-(Leave Tatum/Flutterwave keys unset while on `mock`.)
+(Leave the Maplerad keys unset while on `mock`.)
 
 ## Step 4 — Deploy & smoke-test
 Deploy from the dashboard. Then:
@@ -65,4 +65,4 @@ the admin dashboard's Trading Settings page once you set `CHEQPAY_API_URL` +
 ## Notes
 - `/api/health` works with no DB/secrets; everything else needs Steps 1+3.
 - Custody/PSP are on `mock`, so deposits/swaps are testable end-to-end without
-  live Tatum/Flutterwave keys.
+  live Maplerad keys.

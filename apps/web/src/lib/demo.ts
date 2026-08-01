@@ -32,7 +32,7 @@ export const demoWallet: Wallet = {
 export const demoVirtualAccount: VirtualAccount = {
   id: "demo-va",
   user_id: DEMO_USER_ID,
-  provider: "flutterwave",
+  provider: "maplerad",
   account_number: "7002349836",
   bank_name: "Wema Bank",
   bank_code: "035",

@@ -34,7 +34,7 @@ export interface Bank {
 }
 
 /** Create-virtual-account request. `bvn` (11 digits) is required by
- *  Flutterwave to mint a PERMANENT (dedicated) NUBAN; without it we mint a
+ *  the PSP to mint a PERMANENT (dedicated) NUBAN; without it we mint a
  *  temporary/static account. */
 export interface CreateVirtualAccountInput {
   email: string;

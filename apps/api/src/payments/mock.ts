@@ -17,7 +17,7 @@ import type {
 
 /**
  * Deterministic PSP for development/tests. Verifies a static webhook secret
- * (Flutterwave-style equality), parses a normalized event shape, and returns
+ * (simple equality), parses a normalized event shape, and returns
  * deterministic transfer references.
  */
 export class MockPaymentProvider implements PaymentProvider {

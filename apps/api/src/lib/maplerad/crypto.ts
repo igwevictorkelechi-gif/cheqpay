@@ -1,6 +1,6 @@
 // apps/api/src/lib/maplerad/crypto.ts
 //
-// Stablecoin infrastructure (replaces Tatum): per-customer deposit addresses,
+// Stablecoin infrastructure: per-customer deposit addresses,
 // stablecoin withdrawals, and USD (FEDWIRE/ACH) accounts.
 //
 // ⚠️ COMPLIANCE GATE. This entire module must stay behind the crypto feature
@@ -10,8 +10,8 @@
 // `assertCryptoEnabled()` so an accidental import can't expose crypto in the
 // current launch phase.
 //
-// Also note: Maplerad stablecoin is USDC / USDT / PYUSD only — NOT BTC. If BTC
-// custody must remain, Tatum can't be fully retired (Open question O3).
+// Also note: Maplerad stablecoin is USDC / USDT / PYUSD only — NOT BTC. BTC
+// stays "coming soon" until a BTC custodian is wired.
 
 import { mapleradRequest } from "./client";
 import type { Minor } from "./types";

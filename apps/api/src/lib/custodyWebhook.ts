@@ -7,7 +7,7 @@ import { toMinorUnits } from "@/lib/money";
 
 /**
  * Shared custody deposit/withdrawal webhook handler, used by every custody
- * provider's callback route (Tatum, Crypto APIs, …). The active provider is
+ * provider's callback route. The active provider is
  * resolved from CUSTODY_PROVIDER, and its own signature/parse implementation is
  * applied — so the route files are thin and the crediting logic lives here once.
  *
@@ -26,7 +26,7 @@ export async function handleCustodyWebhook(req: Request) {
     req.headers.get("x-payload-hash") ??
     req.headers.get("x-signature") ??
     req.headers.get("x-signature-sha256") ??
-    req.headers.get("biz-resp-signature"); // Cobo
+    req.headers.get("biz-resp-signature");
 
   if (!custody.verifyWebhookSignature(rawBody, signature)) {
     // Do not record unverified payloads; just reject.
