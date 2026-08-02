@@ -11,6 +11,11 @@ Render gives every service in a region a fixed set of outbound IPs.
 (`cheqpay-admin`) stay on Vercel; neither talks to Maplerad directly. The admin
 dashboard reaches Maplerad *through* the API, so it inherits the static IP.
 
+> [VPS.md](./VPS.md) is the alternative: the same image on a self-managed
+> server (Hostinger, WhoGoHost, any VPS with a dedicated IP). It trades managed
+> deploys, TLS and restarts for a single outbound IP and, on a Nigerian host,
+> naira billing. Pick one — they solve the same problem.
+
 ## What's in the repo
 
 | File | Purpose |
