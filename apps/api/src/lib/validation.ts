@@ -223,14 +223,19 @@ export const userTransferSchema = z.object({
   note: z.string().trim().max(140).optional(),
 });
 
-/** Update editable profile fields. Username is normalized (leading @ stripped). */
+/**
+ * Update editable profile fields. Username is normalized: leading @ stripped and
+ * LOWERCASED. Lookups are case-insensitive but the unique index is not, so a
+ * canonical case is what stops "Victor" and "victor" existing as two accounts
+ * that a single lookup could resolve to either of.
+ */
 export const profileUpdateSchema = z
   .object({
     username: z
       .string()
       .trim()
-      .transform((v) => v.replace(/^@+/, ""))
-      .pipe(z.string().regex(/^[a-zA-Z0-9_]{3,20}$/, "3–20 letters, numbers or underscores"))
+      .transform((v) => v.replace(/^@+/, "").toLowerCase())
+      .pipe(z.string().regex(/^[a-z0-9_]{3,20}$/, "3–20 letters, numbers or underscores"))
       .optional(),
     dateOfBirth: z
       .string()

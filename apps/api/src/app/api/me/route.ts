@@ -4,6 +4,7 @@ import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { getTierLimits } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
 import { profileUpdateSchema } from "@/lib/validation";
+import { assignUsernameIfMissing, ensureUsernameCaseIndex } from "@/lib/username";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,22 @@ export async function POST(req: Request) {
         throw e;
       }
     }
+
+    // Every account needs a username or it cannot receive a P2P transfer —
+    // there is no other way to address one. Assigned here rather than at
+    // signup so existing accounts, which predate this, are healed the next
+    // time they open the app (clients call this on nearly every screen).
+    // Best-effort: a failure here must never block a login.
+    if (!user.username) {
+      try {
+        await ensureUsernameCaseIndex();
+        const assigned = await assignUsernameIfMissing(user.id, user.email);
+        if (assigned) user = { ...user, username: assigned };
+      } catch (err) {
+        console.error("[me] username assignment skipped", err);
+      }
+    }
+
     return jsonOk(serialize(user));
   } catch (err) {
     return toErrorResponse(err);
@@ -75,7 +92,12 @@ export async function PATCH(req: Request) {
     }
 
     const data: Prisma.UserUpdateInput = {};
-    if (patch.username !== undefined) data.username = patch.username;
+    if (patch.username !== undefined) {
+      // Case-insensitive uniqueness is enforced by an index, not by Prisma:
+      // without it "victor" would be accepted alongside an existing "Victor".
+      await ensureUsernameCaseIndex();
+      data.username = patch.username;
+    }
     if (patch.nextOfKin !== undefined) data.nextOfKin = patch.nextOfKin;
     if (patch.dateOfBirth !== undefined) {
       if (user.kycTier >= 2) {
