@@ -9,14 +9,47 @@ Only `apps/api` moves. The web app (`cheqpy`) and admin dashboard
 
 ## Choosing the box
 
-Your Supabase database is in **`eu-west-1` (Ireland)**, and every API request
-makes several Postgres round trips. Server-to-database distance dominates
-everything else on the spec sheet, so **pick a European region**. A US data
-centre adds ~150 ms each way to every query and will be felt on every screen.
+### Region
 
-Minimum sensible spec: **2 vCPU, 4 GB RAM, 40 GB SSD**. The image is built in CI
+Three latencies compete, and the answer is not obvious:
+
+| Server location | → users (NG) | → Maplerad (Lagos) | → Supabase (`eu-west-1`, Ireland) |
+|---|---|---|---|
+| Lagos | ~5 ms | ~5 ms | ~100 ms |
+| Frankfurt / Ireland | ~120 ms | ~120 ms | ~20 ms |
+| US (e.g. Phoenix) | ~200 ms | ~200 ms | ~150 ms |
+
+The database leg is paid **per query**, the user leg **per request**, so the
+deciding factor is how many queries an average request makes. For this API, one:
+
+| Endpoint | Queries |
+|---|---|
+| `/api/wallets`, `/api/balances`, `/api/transactions` | 1 each |
+| `/api/transfers` (worst case, the money path) | 4 sequential |
+
+At one query per request a Lagos server is *faster overall* than a European one
+(~110 ms vs ~140 ms round trip), because the single database hop costs less than
+the user hop it saves. Europe only wins on `/api/transfers` — which is also the
+path that calls Maplerad, where Lagos wins the time straight back.
+
+**So: Lagos or Europe are both defensible; a US data centre is not.** Lagos also
+means one static IP to whitelist and, on a Nigerian host, naira billing. Choose
+Europe if you would rather keep the API next to the database and accept the
+user-latency hit.
+
+If you later move Supabase to a region nearer the server, do it while the
+dataset is small — it is a project once there is real customer money in the
+ledger. Note there is no West-Africa Supabase region, so a Lagos server is
+permanently ~100 ms from its database whatever you do.
+
+### Spec
+
+Minimum sensible: **2 vCPU, 4 GB RAM, 40 GB SSD**. The image is built in CI
 rather than on the server, so you are sizing for the runtime, not for
 `next build`.
+
+Do not go below 2 GB. Next plus the Prisma client plus Caddy will fit, but an
+OOM kill on a payments API is downtime, and the headroom is cheap.
 
 ## Architecture
 
