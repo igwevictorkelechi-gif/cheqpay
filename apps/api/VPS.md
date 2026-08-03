@@ -226,6 +226,9 @@ Mobile is the slow one — `EXPO_PUBLIC_*` is inlined at build time, so installe
 apps keep calling Vercel until users update. **Leave the Vercel deployment
 running** until the new build has rolled out.
 
+> Once the server is serving, **[GO-LIVE.md](./GO-LIVE.md)** is the sequence for
+> switching Maplerad to live and turning the feature flags on one at a time.
+
 ## Step 10 — Decommission
 
 Only once Step 9 is verified *and* the mobile build has rolled out:

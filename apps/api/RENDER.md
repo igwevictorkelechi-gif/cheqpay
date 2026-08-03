@@ -134,6 +134,9 @@ through `CHEQPAY_API_URL` — a blank page means it's wrong), and run one real
 Maplerad call (name enquiry on Payment Settings) to confirm the IP whitelist
 took effect.
 
+> Once Render is serving, **[GO-LIVE.md](./GO-LIVE.md)** is the sequence for
+> switching Maplerad to live and turning the feature flags on one at a time.
+
 ## Step 7 — Decommission the Vercel API
 
 Only once Step 6 passes **and** the mobile build has rolled out:
