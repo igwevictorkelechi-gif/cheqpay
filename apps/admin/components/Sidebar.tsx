@@ -7,7 +7,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
-  Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search, type LucideIcon,
+  Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search,
+  ShieldAlert, Monitor, type LucideIcon,
 } from 'lucide-react';
 
 type Item = { label: string; href: string; icon: LucideIcon };
@@ -29,6 +30,13 @@ const categories: Category[] = [
       { label: 'User Management', href: '/users', icon: Users },
       { label: 'KYC Review', href: '/kyc', icon: ShieldCheck },
       { label: 'Roles & Access', href: '/roles', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Security',
+    icon: ShieldAlert,
+    items: [
+      { label: 'Login & Devices', href: '/security/login-activity', icon: Monitor },
       { label: 'Compliance Lookup', href: '/compliance', icon: Search },
     ],
   },

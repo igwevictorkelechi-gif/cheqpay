@@ -116,6 +116,15 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
+  /// Where and when this account was last active. Denormalized from
+  /// UserSession so the admin list can show it without a join per row.
+  lastSeenAt     DateTime? @map("last_seen_at")
+  lastIp         String?   @map("last_ip")
+  lastDevice     String?   @map("last_device")
+  /// The last route this account called, e.g. "/api/transfers". Path only —
+  /// query strings can carry secrets.
+  lastAction     String?   @map("last_action")
+
   wallets       Wallet[]
   balances      Balance[]
   quotes        Quote[]
@@ -124,10 +133,44 @@ model User {
   auditLogs     AuditLog[]
   beneficiaries Beneficiary[]
   cards         Card[]
+  sessions      UserSession[]
 
   @@index([bvnFingerprint])
   @@index([legalName])
   @@map("app_users")
+}
+
+/// One row per (account, IP, device) the account has been seen from.
+///
+/// Not a session in the auth sense — Supabase owns those. This is the security
+/// history: "this account has been used from an iPhone in Lagos since June, and
+/// from Windows in Kyiv since Tuesday" is the shape of the question it answers,
+/// and the answer is what makes account takeover visible.
+///
+/// Keyed on (userId, ipAddress, userAgent) so a returning device updates its
+/// row rather than adding one. The columns are NOT NULL with '' defaults on
+/// purpose: in Postgres NULLs never collide, so a nullable unique key would let
+/// unknown-IP rows accumulate without limit.
+model UserSession {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  ipAddress   String   @default("") @map("ip_address")
+  userAgent   String   @default("") @map("user_agent")
+  /// Readable label, e.g. "iPhone · Safari".
+  device      String?
+  /// "web" | "mobile" | "unknown"
+  platform    String   @default("unknown")
+  /// How many times this device/IP pair has been seen.
+  hitCount    Int      @default(1) @map("hit_count")
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ipAddress, userAgent])
+  @@index([userId])
+  @@index([lastSeenAt])
+  @@map("user_sessions")
 }
 
 /// Identity snapshot taken when an account is closed, retained for AML
