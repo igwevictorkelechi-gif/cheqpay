@@ -5,6 +5,7 @@ import { getTierLimits } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
 import { profileUpdateSchema } from "@/lib/validation";
 import { assignUsernameIfMissing, ensureUsernameCaseIndex } from "@/lib/username";
+import { closeAccountWithRetention } from "@/lib/retention";
 
 export const dynamic = "force-dynamic";
 
@@ -121,13 +122,19 @@ export async function PATCH(req: Request) {
 }
 
 /**
- * Permanently delete the authenticated user's account. Cascades to wallets,
- * balances, quotes, transactions and KYC records (audit logs are retained with
- * a null user). When Supabase service-role env is configured, the Auth user is
- * deleted too so the credentials cannot be used to sign in again.
+ * Close the authenticated user's account.
  *
- * This is irreversible and money-sensitive: it refuses to run while the user
- * still holds a positive balance.
+ * NOT a hard delete, deliberately. Transaction and KycRecord both cascade on
+ * user deletion, so `prisma.user.delete` would erase the transaction and KYC
+ * history that Nigeria's MLPPA 2022 and the CBN AML/CFT regulations require to
+ * be retained for five years — precisely the records an investigation needs.
+ * Instead the identity is snapshotted, the live profile is scrubbed, and the
+ * ledger is left intact. See lib/retention.ts.
+ *
+ * What the user gets is what they asked for: their personal data is removed
+ * from the running service and their credentials stop working.
+ *
+ * Money-sensitive: refuses while the user still holds a balance.
  */
 export async function DELETE(req: Request) {
   try {
@@ -148,32 +155,62 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // Keep an audit trail of the deletion (userId is nulled by the cascade).
+    // Revoke access FIRST. If this fails the account must stay open: telling
+    // someone their account is closed while their credentials still work is
+    // worse than refusing, and it is what the old implementation did.
+    await deleteSupabaseAuthUser(auth.id);
+
+    const { retainUntil } = await closeAccountWithRetention(auth.id);
+
+    // Survives via AuditLog.onDelete: SetNull, and here the user row survives
+    // anyway, so the trail stays attributable.
     await prisma.auditLog.create({
       data: {
         userId: auth.id,
-        action: "account.deleted",
+        action: "account.closed",
         resourceType: "User",
         resourceId: auth.id,
-        details: { email: user.email },
+        details: {
+          email: user.email,
+          retainUntil: retainUntil.toISOString(),
+          note: "Profile scrubbed; transaction and KYC history retained for AML.",
+        },
       },
     });
 
-    await prisma.user.delete({ where: { id: auth.id } });
-    await deleteSupabaseAuthUser(auth.id);
-
-    return jsonOk({ deleted: true });
+    return jsonOk({
+      deleted: true,
+      // The NDPA requires telling people how long records are kept and why.
+      recordsRetainedUntil: retainUntil.toISOString(),
+      retentionReason:
+        "Transaction and identity records are kept for 5 years as required by Nigerian anti-money-laundering law.",
+    });
   } catch (err) {
     return toErrorResponse(err);
   }
 }
 
-/** Best-effort deletion of the Supabase Auth user via the Admin API. */
+/**
+ * Delete the Supabase Auth user so the credentials stop working.
+ *
+ * Throws on failure. It used to swallow everything and let the caller report
+ * success regardless — and because `fetch` does not throw on HTTP errors, a
+ * wrong service-role key produced a 401 that nothing looked at. The user was
+ * told their account was deleted while they could still sign straight back in.
+ */
 async function deleteSupabaseAuthUser(userId: string): Promise<void> {
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = getEnv();
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new ApiError(
+      503,
+      "Account closure is temporarily unavailable. Please contact support.",
+      "auth_admin_not_configured"
+    );
+  }
+
+  let res: Response;
   try {
-    await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
       method: "DELETE",
       headers: {
         apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -182,6 +219,21 @@ async function deleteSupabaseAuthUser(userId: string): Promise<void> {
     });
   } catch (err) {
     console.error("[account] Supabase auth deletion failed", err);
+    throw new ApiError(
+      502,
+      "Could not close the account right now. Please try again.",
+      "auth_delete_failed"
+    );
+  }
+
+  // 404 means the auth user is already gone — the desired end state.
+  if (!res.ok && res.status !== 404) {
+    console.error(`[account] Supabase auth deletion returned ${res.status}`);
+    throw new ApiError(
+      502,
+      "Could not close the account right now. Please try again.",
+      "auth_delete_failed"
+    );
   }
 }
 
