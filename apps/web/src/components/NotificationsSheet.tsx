@@ -114,7 +114,7 @@ export default function NotificationsSheet({
                     key={t.id}
                     onClick={() => {
                       onClose();
-                      router.push(`/transaction/${t.id}`);
+                      router.push(`/transaction?id=${t.id}`);
                     }}
                     className="flex w-full items-start gap-3 px-5 py-4 text-left active:bg-card"
                   >

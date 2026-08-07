@@ -181,7 +181,7 @@ export default function HomePage() {
         ) : (
           <div className="overflow-hidden rounded-3xl bg-card">
             {txns.slice(0, 5).map((t, i) => (
-              <TxnRow key={t.id} t={t} showStatus={false} divider={i > 0} onClick={() => router.push(`/transaction/${t.id}`)} />
+              <TxnRow key={t.id} t={t} showStatus={false} divider={i > 0} onClick={() => router.push(`/transaction?id=${t.id}`)} />
             ))}
           </div>
         )}

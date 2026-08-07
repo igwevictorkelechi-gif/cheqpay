@@ -53,3 +53,6 @@ android/
 # Next.js generated
 next-env.d.ts
 .vercel
+
+# Static export output (apps/web/build:static) — a build artefact, not source.
+apps/web/out/

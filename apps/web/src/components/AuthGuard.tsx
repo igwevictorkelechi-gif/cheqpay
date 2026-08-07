@@ -8,7 +8,22 @@ import { supabase } from "@/services/supabase";
 const PUBLIC_EXACT = new Set(["/login", "/signup", "/verify-otp"]);
 const PUBLIC_PREFIX = ["/legal", "/privacy", "/terms", "/about", "/support", "/faq", "/contact"];
 
-function isPublic(path: string): boolean {
+/**
+ * Strip a trailing slash so "/login" and "/login/" are the same route.
+ *
+ * They are not the same string, and that mattered: the static export is built
+ * with `trailingSlash`, so usePathname() returns "/login/", which failed the
+ * exact-match check below. The guard then treated the login page as protected,
+ * rendered a blank screen and redirected to /login — which was also "/login/",
+ * so it looped. Normalizing here keeps the guard correct whichever way a URL
+ * arrives, rather than making it depend on the build config.
+ */
+function normalize(path: string): string {
+  return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+}
+
+function isPublic(rawPath: string): boolean {
+  const path = normalize(rawPath);
   return (
     PUBLIC_EXACT.has(path) ||
     PUBLIC_PREFIX.some((p) => path === p || path.startsWith(p + "/"))

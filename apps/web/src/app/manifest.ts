@@ -1,5 +1,9 @@
 import type { MetadataRoute } from "next";
 
+// Emitted at build time, not per request: with `output: "export"` there is no
+// server to run a route handler, and Next refuses to build without this.
+export const dynamic = "force-static";
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "CheqPay",
