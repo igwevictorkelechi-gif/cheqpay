@@ -98,140 +98,26 @@ Tiers gate limits and crypto withdrawals (Tier 0 unverified → Tier 3 premium).
 - **In-app** — an alert bar prompts unverified users to verify, and the profile
   shows the current account level.
 
-## 📋 Prerequisites
+## 📋 Setup
 
-- Node.js 18+
-- npm or yarn
-- Supabase account (https://supabase.com)
-- Paystack account (https://paystack.com)
-- Flutterwave account (https://flutterwave.com)
-- Expo CLI: `npm install -g expo-cli`
-- EAS CLI: `npm install -g eas-cli`
+**See [INSTALL.md](./INSTALL.md)** — tools, environment files, running all four
+apps, and what to do when it does not work.
 
-## 🔧 Setup Instructions
-
-### 1. Clone and Install Dependencies
+The short version:
 
 ```bash
-git clone <repo-url>
-cd cheqpay
-npm install
+bun install
+bunx prisma generate --schema packages/db/prisma/schema.prisma
+cd apps/api && bun run dev          # then web, admin, mobile
 ```
 
-### 2. Supabase Setup
-
-#### Create a Supabase Project
-1. Go to https://supabase.com and create a new project
-2. Note your **Project URL** and **Anon Key** (find in Settings → API)
-3. Create a **Service Role API Key** (for server-side operations)
-
-#### Run Migrations
-1. In Supabase console, go to **SQL Editor**
-2. Create a new query
-3. Paste the contents of `supabase/migrations/001_initial_schema.sql`
-4. Click **Run**
-
-This creates all necessary tables with RLS policies for security.
-
-#### Deploy Edge Functions
-```bash
-# Install Supabase CLI
-npm install -g supabase
-
-# Login
-supabase login
-
-# Deploy functions
-supabase functions deploy create-virtual-account --project-id YOUR_PROJECT_ID
-supabase functions deploy handle-webhook-paystack --project-id YOUR_PROJECT_ID
-supabase functions deploy handle-webhook-flutterwave --project-id YOUR_PROJECT_ID
-supabase functions deploy process-payout --project-id YOUR_PROJECT_ID
-```
-
-### 3. Environment Configuration
-
-#### Mobile App (`.env.local`)
-```bash
-cd apps/mobile
-cp .env.example .env.local
-```
-
-Edit `.env.local`:
-```env
-EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-EXPO_PUBLIC_API_URL=https://your-project.supabase.co/functions/v1
-```
-
-#### Admin Dashboard (`.env.local`)
-```bash
-cd apps/admin
-cp .env.example .env.local
-```
-
-Edit `.env.local`:
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-SUPABASE_PROJECT_ID=your-project-id
-```
-
-### 4. Payment Gateway Configuration
-
-#### Paystack Setup
-1. Log in to Paystack Dashboard: https://dashboard.paystack.co
-2. Go to **Settings** → **Developers** → **API Keys**
-3. Copy your **Public Key** and **Secret Key**
-4. In CheqPay Admin Dashboard:
-   - Go to **Payment Settings**
-   - Select **Paystack**
-   - Paste your Public and Secret keys
-   - Click **Save**
-5. In Paystack Dashboard, go to **Settings** → **Webhooks**
-   - Add webhook URL: `https://your-supabase-url.supabase.co/functions/v1/handle-webhook-paystack`
-   - Events: Select `charge.success` and `transfer.success`
-
-#### Flutterwave Setup
-1. Log in to Flutterwave Dashboard: https://dashboard.flutterwave.com
-2. Go to **Settings** → **API** → **API Keys**
-3. Copy your **Public Key** and **Secret Key**
-4. In CheqPay Admin Dashboard:
-   - Go to **Payment Settings**
-   - Select **Flutterwave**
-   - Paste your Public and Secret keys
-   - Click **Save**
-5. In Flutterwave Dashboard, go to **Settings** → **Webhooks**
-   - Add webhook URL: `https://your-supabase-url.supabase.co/functions/v1/handle-webhook-flutterwave`
-   - Select all events
-
-### 5. Running the Applications
-
-#### Mobile App (Expo)
-```bash
-cd apps/mobile
-npm start
-
-# Press 'i' for iOS simulator
-# Press 'a' for Android emulator
-# Or scan QR code with Expo Go app
-```
-
-#### Web App (Next.js)
-```bash
-cd apps/web
-npm run dev
-```
-
-Open http://localhost:3000 in your browser.
-
-#### Admin Dashboard
-```bash
-cd apps/admin
-npm run dev
-```
-
-Open http://localhost:3001 in your browser.
+> The setup instructions that used to live here were written before the project
+> moved to bun, Prisma and Maplerad. They told you to run `npm install` (wrong
+> package manager — this is a bun workspace), to deploy Supabase Edge Functions
+> that are no longer used, and to configure Paystack and Flutterwave, neither of
+> which the codebase integrates with any more. Following them would have failed
+> at the first step and wasted an afternoon at the rest. They have been removed
+> rather than left to mislead.
 
 ## 🔐 Security Features
 

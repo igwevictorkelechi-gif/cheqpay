@@ -1,4 +1,4 @@
-import { prisma, KycStatus } from "@cheqpay/db";
+import { Prisma, prisma, KycStatus } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { getTierLimits } from "@/lib/kyc";
@@ -7,6 +7,8 @@ import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
 import { kycTier1Schema } from "@/lib/validation";
+import { encryptPii, fingerprintPii, isPiiEncryptionConfigured, last4 } from "@/lib/pii";
+import { ensureRetentionSchema } from "@/lib/retention";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +84,32 @@ export async function POST(req: Request) {
         where: { id: auth.id },
         data: { dateOfBirth: new Date(body.dateOfBirth) },
       });
+    }
+
+    // Persist the identity for AML record-keeping. This is the ONLY moment the
+    // legal name and BVN are in hand — they used to pass straight through to
+    // the provider and be discarded, leaving the database unable to answer
+    // "which account belongs to this person?", which is the first question an
+    // investigation asks. The BVN is encrypted; see lib/pii.ts.
+    //
+    // Best-effort: a failure here must not fail the user's verification. It is
+    // logged loudly because an identity we failed to record is a compliance gap.
+    try {
+      await ensureRetentionSchema();
+      const legalName = `${body.firstName} ${body.lastName}`.trim();
+      const identity: Prisma.UserUpdateInput = { legalName };
+      if (body.bvn && isPiiEncryptionConfigured()) {
+        identity.bvnCiphertext = encryptPii(body.bvn);
+        identity.bvnFingerprint = fingerprintPii(body.bvn);
+        identity.bvnLast4 = last4(body.bvn);
+      } else if (body.bvn) {
+        console.error(
+          "[kyc] PII_ENCRYPTION_KEY is not set — BVN not retained. This is an AML record-keeping gap."
+        );
+      }
+      await prisma.user.update({ where: { id: auth.id }, data: identity });
+    } catch (err) {
+      console.error("[kyc] identity retention failed", err);
     }
 
     // Elevate the user's tier immediately on an automatic pass.

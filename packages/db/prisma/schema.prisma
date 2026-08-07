@@ -44,6 +44,10 @@ enum UserStatus {
   ACTIVE
   SUSPENDED
   BLOCKED
+  /// Account closed at the user's request. The row is kept, with its personal
+  /// data scrubbed, because deleting it would cascade away the transaction and
+  /// KYC history that AML law requires to be retained. See lib/retention.ts.
+  DELETED
 }
 
 enum TransactionType {
@@ -89,6 +93,16 @@ model User {
   username     String?    @unique
   dateOfBirth  DateTime?  @map("date_of_birth") @db.Date
   nextOfKin    String?    @map("next_of_kin")
+  /// Legal name as verified at KYC — NOT the display name. Required to answer
+  /// "which account belongs to this person?"; Supabase Auth metadata is not a
+  /// record of account, and does not survive an auth-user deletion.
+  legalName    String?    @map("legal_name")
+  /// BVN, stored three ways for three jobs. See lib/pii.ts.
+  /// Ciphertext is producible to a regulator; the fingerprint makes lookup an
+  /// indexed query; the last 4 let staff confirm a match without seeing it all.
+  bvnCiphertext String?   @map("bvn_ciphertext")
+  bvnFingerprint String?  @map("bvn_fingerprint")
+  bvnLast4     String?    @map("bvn_last4")
   // When true, crypto withdrawals skip the per-request 2FA (AAL2) step.
   instantWithdrawal Boolean @default(false) @map("instant_withdrawal")
   // Per-category push/notification opt-ins (see lib/notifications defaults).
@@ -102,6 +116,15 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
+  /// Where and when this account was last active. Denormalized from
+  /// UserSession so the admin list can show it without a join per row.
+  lastSeenAt     DateTime? @map("last_seen_at")
+  lastIp         String?   @map("last_ip")
+  lastDevice     String?   @map("last_device")
+  /// The last route this account called, e.g. "/api/transfers". Path only —
+  /// query strings can carry secrets.
+  lastAction     String?   @map("last_action")
+
   wallets       Wallet[]
   balances      Balance[]
   quotes        Quote[]
@@ -110,8 +133,85 @@ model User {
   auditLogs     AuditLog[]
   beneficiaries Beneficiary[]
   cards         Card[]
+  sessions      UserSession[]
 
+  @@index([bvnFingerprint])
+  @@index([legalName])
   @@map("app_users")
+}
+
+/// One row per (account, IP, device) the account has been seen from.
+///
+/// Not a session in the auth sense — Supabase owns those. This is the security
+/// history: "this account has been used from an iPhone in Lagos since June, and
+/// from Windows in Kyiv since Tuesday" is the shape of the question it answers,
+/// and the answer is what makes account takeover visible.
+///
+/// Keyed on (userId, ipAddress, userAgent) so a returning device updates its
+/// row rather than adding one. The columns are NOT NULL with '' defaults on
+/// purpose: in Postgres NULLs never collide, so a nullable unique key would let
+/// unknown-IP rows accumulate without limit.
+model UserSession {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  ipAddress   String   @default("") @map("ip_address")
+  userAgent   String   @default("") @map("user_agent")
+  /// Readable label, e.g. "iPhone · Safari".
+  device      String?
+  /// "web" | "mobile" | "unknown"
+  platform    String   @default("unknown")
+  /// How many times this device/IP pair has been seen.
+  hitCount    Int      @default(1) @map("hit_count")
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ipAddress, userAgent])
+  @@index([userId])
+  @@index([lastSeenAt])
+  @@map("user_sessions")
+}
+
+/// Identity snapshot taken when an account is closed, retained for AML
+/// record-keeping.
+///
+/// Deliberately has NO foreign key to User. The point of this table is to
+/// survive independently: if a User row is ever hard-deleted (by a future
+/// migration, an operator, or a mistake) the record of who held the account
+/// must not go with it. Nigeria's MLPPA 2022 and the CBN AML/CFT regulations
+/// require customer identification records for at least five years after the
+/// business relationship ends.
+///
+/// This is also the answer to the NDPA tension: an erasure request does not
+/// override statutory retention. The live profile is scrubbed; the regulated
+/// minimum is kept here, restricted to compliance use, with an explicit expiry.
+model RetainedSubject {
+  id             String    @id @default(uuid()) @db.Uuid
+  /// The former User.id. Transactions and audit logs still reference it, so
+  /// this is the join back to the retained history.
+  userId         String    @unique @map("user_id") @db.Uuid
+  legalName      String?   @map("legal_name")
+  email          String
+  phone          String?
+  username       String?
+  dateOfBirth    DateTime? @map("date_of_birth") @db.Date
+  bvnCiphertext  String?   @map("bvn_ciphertext")
+  bvnFingerprint String?   @map("bvn_fingerprint")
+  bvnLast4       String?   @map("bvn_last4")
+  kycTier        Int       @map("kyc_tier")
+  /// Why this record exists, e.g. "account_deleted".
+  reason         String
+  /// When retention lapses and this row may lawfully be destroyed. Nothing
+  /// deletes automatically — expiry is a decision, not a cron job.
+  retainUntil    DateTime  @map("retain_until")
+  closedAt       DateTime  @default(now()) @map("closed_at")
+
+  @@index([bvnFingerprint])
+  @@index([email])
+  @@index([phone])
+  @@index([legalName])
+  @@map("retained_subjects")
 }
 
 // A saved NGN payout destination (bank account) for withdrawals. The account

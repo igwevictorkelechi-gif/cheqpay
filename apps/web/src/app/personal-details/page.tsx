@@ -56,7 +56,10 @@ export default function PersonalDetailsPage() {
         if (!(await getAccessToken())) return;
         const data = await api.getMe();
         setMe(data);
-        setUsername(data.username ?? "@" + (data.email?.split("@")[0] ?? "cheqpay"));
+        // Show the stored username or nothing. It used to fall back to the
+        // email's local part, which looked like a real handle but had never
+        // been saved — users handed it out and the sender got "no such user".
+        setUsername(data.username ?? "");
         setDob(data.dateOfBirth ?? "");
         setNextOfKin(data.nextOfKin ?? "");
       } catch {
@@ -122,7 +125,12 @@ export default function PersonalDetailsPage() {
           <>
             <div className="space-y-3.5">
               <LockedField label="Full Name" value={fullName} />
-              <EditField label="Username" value={username} onChange={setUsername} />
+              <EditField
+                label="Username"
+                value={username}
+                onChange={setUsername}
+                placeholder="Username (how others send you money)"
+              />
 
               {verified ? (
                 <LockedField label="Date of birth" value={dob} />

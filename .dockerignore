@@ -1,0 +1,22 @@
+# Keep the build context small and avoid copying host-built artefacts into the
+# image (they would shadow what the Dockerfile builds).
+#
+# The sibling apps are NOT excluded: they are declared workspaces in the root
+# package.json, so a frozen bun install needs their manifests to resolve.
+node_modules
+**/node_modules
+.git
+.github
+**/.next
+**/dist
+**/.turbo
+**/.vercel
+**/.expo
+**/android
+**/ios
+apps/mobile/assets
+**/*.log
+**/.env
+**/.env.*
+!**/.env.example
+**/.DS_Store

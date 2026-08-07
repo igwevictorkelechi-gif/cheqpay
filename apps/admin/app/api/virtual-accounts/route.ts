@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { API_URL } from "@/lib/apiUrl";
 
 // Server-side proxy to the backend admin virtual-accounts endpoint.
-const API_URL = process.env.CHEQPAY_API_URL ?? "https://cheqpay-admin453.vercel.app";
 const ADMIN_SECRET = process.env.ADMIN_API_SECRET ?? "";
 
 export const dynamic = "force-dynamic";

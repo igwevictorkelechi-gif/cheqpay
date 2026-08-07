@@ -1,0 +1,35 @@
+# TLS terminator and reverse proxy for the CheqPay API.
+#
+# Caddy obtains and renews a Let's Encrypt certificate automatically — the whole
+# reason it is here rather than nginx. Certificates live in the caddy_data
+# volume; losing that volume means re-issuing, and Let's Encrypt rate-limits
+# duplicate certificates, so do not prune it.
+
+{$API_DOMAIN} {
+	encode gzip zstd
+
+	# The API is the only upstream. Mobile clients and Maplerad webhooks both
+	# arrive here; authorization is bearer tokens and x-admin-secret, unchanged
+	# from the Vercel deployment.
+	reverse_proxy api:4000 {
+		# Preserve the caller's scheme/host so API_PUBLIC_URL-derived links and
+		# webhook signature checks see the public origin, not the container's.
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+
+	# Do not advertise the stack.
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 20mb
+			roll_keep 5
+		}
+	}
+}

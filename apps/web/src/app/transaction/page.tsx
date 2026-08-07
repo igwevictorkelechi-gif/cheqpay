@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Share2, Loader2 } from "lucide-react";
 import { txnIcon, txnTitle, txnAmount } from "@/components/TxnRow";
 import { shareReceiptImage } from "@/lib/receipt";
@@ -35,7 +35,11 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
 
 export default function TransactionDetailPage() {
   const router = useRouter();
-  const { id } = useParams<{ id: string }>();
+  // Read from the query string rather than a path segment. A static export
+  // must know every path at build time, and transaction ids are UUIDs minted
+  // at runtime — there is no list to enumerate. The page is client-rendered
+  // either way, so nothing about the behaviour changes.
+  const id = useSearchParams().get("id") ?? "";
   const [tx, setTx] = useState<LedgerTransaction | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [copied, setCopied] = useState(false);

@@ -5,8 +5,9 @@
   "scripts": {
     "dev": "next dev -p 4000",
     "build": "next build",
-    "start": "next start -p 4000",
+    "start": "next start -p ${PORT:-4000}",
     "lint": "next lint",
+    "cron:price-alerts": "bun scripts/trigger-cron.ts /api/cron/price-alerts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -1,0 +1,61 @@
+# CheqPay API on a self-managed VPS.
+#
+# Lives at /opt/cheqpay/docker-compose.yml on the server. The image is NOT built
+# here — CI builds it and pushes to GHCR, and this only ever pulls a tag. That
+# keeps the box small (a Next build wants 2-4 GB it does not need to have) and
+# makes a rollback `IMAGE_TAG=<previous> docker compose up -d` rather than a
+# rebuild.
+#
+# Secrets come from /opt/cheqpay/.env, which is root-owned 600 and never in git.
+
+services:
+  api:
+    image: ghcr.io/igwevictorkelechi-gif/cheqpay-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Next binds this; Caddy is the only thing that talks to it.
+      PORT: 4000
+      NODE_ENV: production
+    expose:
+      - "4000"
+    healthcheck:
+      # Bun is in the image, so no curl dependency. A failing health check marks
+      # the container unhealthy; `restart: unless-stopped` plus the deploy
+      # script's wait loop is what turns that into an aborted rollout.
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        # Without this the daemon fills the disk and every write starts failing,
+        # including the database driver's.
+        max-size: "20m"
+        max-file: "5"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # ACME account + issued certificates: MUST persist
+      - caddy_config:/config
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env}
+    depends_on:
+      - api
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  caddy_data:
+  caddy_config:
