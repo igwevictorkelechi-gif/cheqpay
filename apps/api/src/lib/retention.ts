@@ -1,5 +1,4 @@
 import { Prisma, prisma, UserStatus } from "@cheqpay/db";
-import { randomUUID } from "node:crypto";
 
 /**
  * Record retention for AML compliance.
@@ -114,7 +113,10 @@ export async function closeAccountWithRetention(
   // Unique columns cannot simply be nulled to a shared value, and must not keep
   // the real address: a tombstone that is unique per account and obviously not
   // a real mailbox.
-  const tombstone = `deleted-${randomUUID()}@deleted.cheqpay.invalid`;
+  // Global Web Crypto rather than node:crypto: this module is reachable from
+  // instrumentation, which is also compiled for the Edge runtime, and a
+  // node: import there fails the build.
+  const tombstone = `deleted-${crypto.randomUUID()}@deleted.cheqpay.invalid`;
 
   await prisma.$transaction(async (db) => {
     await db.$executeRaw`
