@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { prisma } from "@cheqpay/db";
 import { requestContext } from "./requestContext";
 
@@ -21,11 +22,33 @@ const THROTTLE_MS = 5 * 60_000;
 /** In-process memo of the last write per user, to skip the read entirely. */
 const lastWrite = new Map<string, number>();
 
-/** Fire-and-forget. Never awaited by callers, never throws. */
+/**
+ * Record in the background, without delaying the response.
+ *
+ * Uses Next's `after()` rather than a bare floating promise. On serverless the
+ * instance is frozen the moment the response is sent, so `void somePromise()`
+ * is not "run this in the background" — it is "run this until the response
+ * happens to be ready, then maybe stop mid-statement". That is not theoretical:
+ * the first deploy of this file left the schema half-created, with two of four
+ * ALTER TABLEs applied, because the lambda was suspended between statements.
+ *
+ * `after()` tells the runtime to keep the invocation alive until the callback
+ * finishes, and works on any host rather than only on Vercel.
+ */
 export function touchActivity(req: Request, userId: string): void {
-  void recordActivity(req, userId).catch((err) => {
-    console.error("[activity] failed to record", err);
-  });
+  const run = () =>
+    recordActivity(req, userId).catch((err) => {
+      console.error("[activity] failed to record", err);
+    });
+
+  try {
+    after(run);
+  } catch {
+    // `after` throws outside a request scope (unit tests, scripts). Falling
+    // back keeps those paths working; they are not serverless, so a floating
+    // promise is safe there.
+    void run();
+  }
 }
 
 async function recordActivity(req: Request, userId: string): Promise<void> {
@@ -78,16 +101,16 @@ let ensured: Promise<void> | null = null;
 export function ensureActivitySchema(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      for (const col of [
-        `last_seen_at TIMESTAMP`,
-        `last_ip TEXT`,
-        `last_device TEXT`,
-        `last_action TEXT`,
-      ]) {
-        await prisma.$executeRawUnsafe(
-          `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS ${col}`
-        );
-      }
+      // One ALTER, not four. Postgres applies a multi-clause ALTER TABLE
+      // atomically, so the columns cannot end up half-added if the process is
+      // interrupted between statements — which is exactly what happened on the
+      // first deploy of this file.
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE app_users
+          ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP,
+          ADD COLUMN IF NOT EXISTS last_ip TEXT,
+          ADD COLUMN IF NOT EXISTS last_device TEXT,
+          ADD COLUMN IF NOT EXISTS last_action TEXT`);
       await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS user_sessions (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

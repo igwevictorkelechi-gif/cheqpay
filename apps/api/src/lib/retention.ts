@@ -46,16 +46,14 @@ export function ensureRetentionSchema(): Promise<void> {
       await prisma.$executeRawUnsafe(
         `ALTER TYPE "UserStatus" ADD VALUE IF NOT EXISTS 'DELETED'`
       );
-      for (const col of [
-        `legal_name TEXT`,
-        `bvn_ciphertext TEXT`,
-        `bvn_fingerprint TEXT`,
-        `bvn_last4 TEXT`,
-      ]) {
-        await prisma.$executeRawUnsafe(
-          `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS ${col}`
-        );
-      }
+      // One ALTER, not four: Postgres applies a multi-clause ALTER TABLE
+      // atomically, so an interruption cannot leave the columns half-added.
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE app_users
+          ADD COLUMN IF NOT EXISTS legal_name TEXT,
+          ADD COLUMN IF NOT EXISTS bvn_ciphertext TEXT,
+          ADD COLUMN IF NOT EXISTS bvn_fingerprint TEXT,
+          ADD COLUMN IF NOT EXISTS bvn_last4 TEXT`);
       await prisma.$executeRawUnsafe(
         `CREATE INDEX IF NOT EXISTS app_users_bvn_fingerprint_idx ON app_users (bvn_fingerprint)`
       );
