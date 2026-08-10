@@ -72,7 +72,11 @@ export async function mapleradRequest<T>(
   const headers: Record<string, string> = {
     Authorization: `Bearer ${SECRET_KEY}`,
     Accept: "application/json",
-  };
+  // Present the shared secret when routed through the egress proxy, so the
+  // proxy is not open to anyone who discovers its URL.
+  if (process.env.MAPLERAD_PROXY_SECRET) {
+    headers["X-Proxy-Secret"] = process.env.MAPLERAD_PROXY_SECRET;
+  }};
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   if (opts.idempotencyKey) headers["Idempotency-Key"] = opts.idempotencyKey;
 
