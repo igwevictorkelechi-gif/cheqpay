@@ -28,6 +28,11 @@ API_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Generated per run and never persisted: this only has to be consistent between
 # the server and the curl below.
 ADMIN_SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 40)"
+# env.ts enforces a 16-character minimum, and a shorter value fails env
+# validation with a bare 500 whose real cause only appears in the server log —
+# which would look exactly like the provider call failing. Refuse to run rather
+# than hand back that confusion.
+[ "${#ADMIN_SECRET}" -ge 16 ] || die "Could not generate an admin secret of at least 16 characters (got ${#ADMIN_SECRET}). Is /dev/urandom readable?"
 
 die() { printf '\n\033[31m%s\033[0m\n' "$*" >&2; exit 1; }
 note() { printf '\n\033[1m%s\033[0m\n' "$*"; }

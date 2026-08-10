@@ -1,0 +1,81 @@
+name: Verify Maplerad proxy
+
+# Answers one question: does routing Maplerad through a fixed-IP proxy satisfy
+# their IP whitelist? Runs the proxied case and the direct case back to back —
+# the control is the point, because a proxied success only means something if
+# the direct call fails.
+#
+# Manual only. It calls a third party, so it must never fire on push.
+#
+# Setup (all doable from a phone browser):
+#   repo -> Settings -> Secrets and variables -> Actions -> New repository secret
+#     MAPLERAD_SANDBOX_KEY   the SANDBOX key. Never the live one: the proxy
+#                            terminates TLS on shared hosting, so whatever goes
+#                            through it is readable in that process.
+#     MAPLERAD_PROXY_SECRET  must equal PROXY_SHARED_SECRET on the Node app.
+#
+# Run it:  repo -> Actions -> "Verify Maplerad proxy" -> Run workflow
+# Read it: open the run -> the result is on the summary page, no log digging.
+#
+# GitHub's runner IP is not whitelisted with Maplerad, which is exactly what
+# makes it an honest control for the direct case.
+
+on:
+  workflow_dispatch:
+    inputs:
+      proxy_url:
+        description: "Proxy base URL (no /v1 — the proxy appends it)"
+        required: false
+        default: "https://maplerad-proxy.mycheqpay.com"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # The API imports @cheqpay/db and @cheqpay/shared; without these the
+      # server fails to boot and every probe would fail for the wrong reason.
+      - name: Prepare workspace packages
+        run: |
+          bunx prisma generate --schema packages/db/prisma/schema.prisma
+          cd packages/shared && bunx tsc
+
+      - name: Run the verification
+        id: verify
+        env:
+          MAPLERAD_SECRET_KEY: ${{ secrets.MAPLERAD_SANDBOX_KEY }}
+          MAPLERAD_PROXY_SECRET: ${{ secrets.MAPLERAD_PROXY_SECRET }}
+          MAPLERAD_PROXY_URL: ${{ inputs.proxy_url }}
+        run: |
+          set +e
+          ./apps/api/scripts/verify-maplerad-proxy.sh 2>&1 | tee /tmp/verify.log
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Put the result on the summary page
+        if: always()
+        run: |
+          {
+            echo "## Maplerad proxy verification"
+            echo
+            echo "Proxy: \`${{ inputs.proxy_url }}\`"
+            echo
+            echo '```'
+            # Strip ANSI colour so it is readable on a phone.
+            sed -e 's/\x1b\[[0-9;]*m//g' /tmp/verify.log 2>/dev/null || echo "(no output captured)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail the run if the verification failed
+        if: steps.verify.outputs.exit_code != '0'
+        run: |
+          echo "The verification did not complete — see the summary above."
+          exit 1
