@@ -229,6 +229,8 @@ export const api = {
     providerEnrolled?: boolean;
     /** Name recorded at verification, used to prefill the form. */
     legalName?: string | null;
+    /** YYYY-MM-DD, used to prefill the date picker. */
+    dateOfBirth?: string | null;
     limits: {
       singleTxKobo: string;
       dailyDepositKobo: string;

@@ -15,6 +15,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '@/store';
 import { colors } from '@/components/brand';
 import { api, ApiError } from '@/services/api';
+import DateField from '@/components/DateField';
 
 type State = 'loading' | 'form' | 'pending' | 'approved';
 
@@ -33,6 +34,10 @@ export default function KYCScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [bvn, setBvn] = useState('');
+  // This screen never asked for a date of birth, yet the provider requires one
+  // to enroll a customer — so nobody verifying here could ever be given an
+  // account number, whatever else they filled in.
+  const [dob, setDob] = useState('');
   // Required to enroll the user with the payment provider, which is what a
   // deposit account and a crypto address both hang off. The form used to omit
   // them, so enrollment was skipped for every user who ever verified — they
@@ -57,10 +62,11 @@ export default function KYCScreen() {
     (async () => {
       try {
         await api.ensureProvisioned();
-        const { kycTier, records, providerEnrolled, legalName } = await api.getKyc();
+        const { kycTier, records, providerEnrolled, legalName, dateOfBirth } = await api.getKyc();
         setTier(kycTier);
         // Prefer the verified name: it is the one the provider checks against
         // the BVN, and the only one guaranteed to be present.
+        if (dateOfBirth) setDob(dateOfBirth);
         if (legalName) {
           const p = legalName.trim().split(/\s+/);
           if (p[0]) setFirstName(p[0]);
@@ -104,7 +110,7 @@ export default function KYCScreen() {
     phoneValid &&
     // When the ONLY reason the user is here is the missing details, letting
     // them submit without those details repeats the failure that sent them.
-    (!needsDetails || (phone.trim() !== '' && addressComplete)) &&
+    (!needsDetails || (phone.trim() !== '' && dob !== '' && addressComplete)) &&
     !submitting;
 
   async function submit() {
@@ -115,6 +121,7 @@ export default function KYCScreen() {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         bvn: bvn.trim() || undefined,
+        dateOfBirth: /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : undefined,
         phone: phone.trim() || undefined,
         address: addressComplete
           ? {
@@ -235,6 +242,11 @@ export default function KYCScreen() {
                   </Text>
 
                   <View className="mt-4" style={{ gap: 16 }}>
+                    <DateField
+                      label="Date of birth"
+                      value={dob}
+                      onChange={setDob}
+                    />
                     <View>
                       <Text className="text-muted dark:text-muted-dark text-sm font-semibold mb-1.5">Phone number</Text>
                       <TextInput

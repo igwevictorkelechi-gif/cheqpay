@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { colors } from '@/components/brand';
+import DateField from '@/components/DateField';
 import { api, ApiError } from '@/services/api';
 import { setPin } from '@/lib/applock';
 
@@ -173,7 +174,12 @@ export default function OnboardingScreen() {
               <View style={{ gap: 14 }}>
                 <Field label="First name" value={firstName} onChangeText={setFirstName} placeholder="First name" />
                 <Field label="Last name" value={lastName} onChangeText={setLastName} placeholder="Last name" />
-                <Field label="Date of birth (optional)" value={dob} onChangeText={setDob} placeholder="YYYY-MM-DD" />
+                <DateField
+                  label="Date of birth"
+                  value={dob}
+                  onChange={setDob}
+                  hint="Needed to open your account number."
+                />
                 <Field label="BVN (optional)" value={bvn} onChangeText={(t) => setBvn(t.replace(/\D/g, '').slice(0, 11))} placeholder="11-digit BVN" keyboardType="number-pad" />
 
                 {/* Contact and address open the user's Naira account number

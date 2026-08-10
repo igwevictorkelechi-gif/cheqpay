@@ -39,6 +39,9 @@ export async function GET(req: Request) {
       // details doesn't retype it — and, more importantly, so it cannot drift
       // from the name the provider will check against the BVN.
       legalName: user.legalName ?? null,
+      // Prefills the date picker so somebody finishing their setup does not
+      // scroll back through 25 years to re-enter a date already on file.
+      dateOfBirth: user.dateOfBirth ? user.dateOfBirth.toISOString().slice(0, 10) : null,
       limits: {
         singleTxKobo: limits.singleTxKobo.toString(),
         dailyDepositKobo: limits.dailyDepositKobo.toString(),

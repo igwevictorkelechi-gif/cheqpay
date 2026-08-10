@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ShieldCheck, Clock, CheckCircle2, Loader2 } from "lucide-react";
 import { api, ApiError } from "@/services/api";
@@ -42,6 +42,7 @@ export default function KYCPage() {
   const [error, setError] = useState<string | null>(null);
   /** Already verified, but missing the details the provider needs. */
   const [needsDetails, setNeedsDetails] = useState(false);
+  const dobRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const parts = (user?.full_name ?? "").trim().split(/\s+/);
@@ -53,7 +54,9 @@ export default function KYCPage() {
     (async () => {
       try {
         await api.ensureProvisioned();
-        const { kycTier, records, providerEnrolled, legalName } = await api.getKyc();
+        const { kycTier, records, providerEnrolled, legalName, dateOfBirth } =
+          await api.getKyc();
+        if (dateOfBirth) setDob(dateOfBirth);
         setTier(kycTier);
         // Prefer the name we verified over the Supabase profile name: it is
         // the one the provider will check against the BVN, and it is the only
@@ -228,13 +231,30 @@ export default function KYCPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-semibold text-muted">
-                  Date of birth <span className="font-normal">(optional)</span>
+                  Date of birth{" "}
+                  <span className="font-normal text-muted">
+                    — needed to open your account number
+                  </span>
                 </label>
                 <input
+                  ref={dobRef}
                   value={dob}
                   onChange={(e) => setDob(e.target.value)}
                   type="date"
-                  className="w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand"
+                  max={new Date().toISOString().slice(0, 10)}
+                  // Browsers open the calendar only from the small icon at the
+                  // right edge, which is an easy target to miss on a phone.
+                  // Clicking anywhere in the field opens it. showPicker throws
+                  // if the browser blocks it outside a user gesture — this IS a
+                  // gesture, but older engines lack the method entirely.
+                  onClick={() => {
+                    try {
+                      dobRef.current?.showPicker?.();
+                    } catch {
+                      /* fall back to the native icon */
+                    }
+                  }}
+                  className="w-full cursor-pointer rounded-2xl border border-border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand"
                 />
               </div>
               <div>

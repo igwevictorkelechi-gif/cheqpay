@@ -96,6 +96,7 @@
       "dependencies": {
         "@cheqpay/shared": "*",
         "@react-native-async-storage/async-storage": "^1.21.0",
+        "@react-native-community/datetimepicker": "7.6.1",
         "@supabase/supabase-js": "^2.38.0",
         "@tanstack/react-query": "^5.22.0",
         "axios": "^1.6.0",
@@ -925,6 +926,8 @@
     "@react-native-community/cli-tools": ["@react-native-community/cli-tools@12.3.7", "", { "dependencies": { "appdirsjs": "^1.2.4", "chalk": "^4.1.2", "find-up": "^5.0.0", "mime": "^2.4.1", "node-fetch": "^2.6.0", "open": "^6.2.0", "ora": "^5.4.1", "semver": "^7.5.2", "shell-quote": "^1.7.3", "sudo-prompt": "^9.0.0" } }, "sha512-7NL/1/i+wzd4fBr/FSr3ypR05tiU/Kv9l/M1sL1c6jfcDtWXAL90R161gQkQFK7shIQ8Idp0dQX1rq49tSyfQw=="],
 
     "@react-native-community/cli-types": ["@react-native-community/cli-types@12.3.7", "", { "dependencies": { "joi": "^17.2.1" } }, "sha512-NFtUMyIrNfi3A5C1cjVKDVvYHvvOF7MnOMwdD8jm2NQKewQJrehKBh1eMuykKdqhWyZmuemD4KKhL8f4FxgG0w=="],
+
+    "@react-native-community/datetimepicker": ["@react-native-community/datetimepicker@7.6.1", "", { "dependencies": { "invariant": "^2.2.4" } }, "sha512-g66Q2Kd9Uw3eRL7kkrTsGhi+eXxNoPDRFYH6z78sZQuYjPkUQgJDDMUYgBmaBsQx/fKMtemPrCj1ulGmyi0OSw=="],
 
     "@react-native/assets-registry": ["@react-native/assets-registry@0.73.1", "", {}, "sha512-2FgAbU7uKM5SbbW9QptPPZx8N9Ke2L7bsHb+EhAanZjFZunA9PaYtyjUQ1s7HD+zDVqOQIvjkpXSv7Kejd2tqg=="],
 
