@@ -260,9 +260,10 @@ describe("MapleradProvider — money movement", () => {
     ).resolves.toEqual({ accountName: "ADA OKAFOR" });
   });
 
-  it("refuses to mint a virtual account while Maplerad collections are disabled", async () => {
-    // Deposits are dark by design: failing loudly beats creating Maplerad
-    // customers we cannot actually collect against.
+  it("refuses to mint a virtual account for a user with no Maplerad customer", async () => {
+    // A collection account hangs off a customer id. Without one there is
+    // nothing to attach it to, and saying so beats letting Maplerad answer with
+    // a 400 that names a field the operator has never heard of.
     await expect(
       psp.createVirtualAccount({
         email: "a@b.com",
@@ -271,7 +272,55 @@ describe("MapleradProvider — money movement", () => {
         permanent: true,
         txRef: "va_1",
       })
-    ).rejects.toThrow(/deposits are temporarily unavailable/i);
+    ).rejects.toThrow(/no Maplerad customer record/i);
+  });
+
+  it("opens a permanent collection account for an enrolled customer", async () => {
+    stubMaplerad({
+      "POST /collections/virtual-account": {
+        id: "acc_123",
+        account_number: "9900000001",
+        bank_name: "Wema Bank",
+        bank_code: "035",
+      },
+    });
+
+    await expect(
+      psp.createVirtualAccount({
+        email: "a@b.com",
+        firstName: "Ada",
+        lastName: "Okafor",
+        permanent: true,
+        txRef: "va_1",
+        mapleradCustomerId: "cus_abc",
+      })
+    ).resolves.toEqual({
+      accountNumber: "9900000001",
+      bankName: "Wema Bank",
+      bankCode: "035",
+      providerRef: "acc_123",
+      // Always permanent: a static account is created once and reused forever.
+      permanent: true,
+    });
+  });
+
+  it("does not hand back an account without a number", async () => {
+    // A 2xx with a missing account_number would otherwise be persisted as the
+    // user's NUBAN, and every future deposit to it would be unplaceable.
+    stubMaplerad({
+      "POST /collections/virtual-account": { id: "acc_123", bank_name: "Wema Bank" },
+    });
+
+    await expect(
+      psp.createVirtualAccount({
+        email: "a@b.com",
+        firstName: "Ada",
+        lastName: "Okafor",
+        permanent: true,
+        txRef: "va_1",
+        mapleradCustomerId: "cus_abc",
+      })
+    ).rejects.toThrow(/no account number/i);
   });
 
   it("defers webhook verification to the Svix route", () => {

@@ -47,6 +47,11 @@ export async function getVirtualAccount(
 /**
  * Create (idempotently) the user's NGN virtual account via the PSP and persist
  * it. A valid BVN mints a PERMANENT NUBAN; otherwise a temporary one.
+ *
+ * The Maplerad customer id is read here rather than in the provider, so that
+ * providers stay free of database access. It is only ever read — enrollment
+ * itself happens at KYC approval (lib/mapleradCustomer.ts), because that is the
+ * one moment the BVN is in hand.
  */
 export async function createVirtualAccount(
   userId: string,
@@ -59,6 +64,11 @@ export async function createVirtualAccount(
   const permanent = Boolean(req.bvn);
   const txRef = `va_${userId}_${Date.now()}`;
 
+  const owner = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { mapleradCustomerId: true },
+  });
+
   const psp = getPaymentProvider();
   const result = await psp.createVirtualAccount({
     email,
@@ -68,6 +78,7 @@ export async function createVirtualAccount(
     bvn: req.bvn,
     permanent,
     txRef,
+    mapleradCustomerId: owner?.mapleradCustomerId ?? undefined,
   });
 
   const meta: VaMeta = {

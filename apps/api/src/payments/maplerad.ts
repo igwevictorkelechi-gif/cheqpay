@@ -3,11 +3,12 @@
 // Maplerad is the NGN rail, implementing PaymentProvider (see ./types).
 //
 // Supported: bills (airtime, data, electricity, cable TV), bank payouts, name
-// enquiry and the bank list.
+// enquiry, the bank list, and NGN deposits via dedicated collection accounts.
 //
-// NOT supported yet: NGN deposits. Maplerad has not enabled collections on the
-// business, so virtual-account creation fails for every bank; createVirtualAccount
-// throws a clear error until that is switched on.
+// NGN deposits need collections enabled on the Maplerad business AND a KYC'd
+// Maplerad customer per user — a static NUBAN hangs off a customer id. The
+// account is opened at KYC approval and reused forever; incoming money arrives
+// as a `collection.successful` webhook that credits the user's balance.
 //
 // Betting and food have no Maplerad biller at all — they are marked "coming soon"
 // in the catalog (lib/bills.ts) and never reach this rail.
@@ -34,7 +35,8 @@ import {
 } from "./types";
 
 const DEPOSITS_UNAVAILABLE =
-  "NGN deposits are temporarily unavailable: Maplerad has not enabled collections on this business yet.";
+  "Cannot open a deposit account: this user has no Maplerad customer record yet. " +
+  "Maplerad customer enrollment needs an approved KYC with BVN, date of birth, phone and street address.";
 
 /** NGN decimal string -> kobo integer. "100" -> 10000. */
 function toKobo(amount: string): number {
@@ -282,18 +284,54 @@ export class MapleradProvider implements PaymentProvider {
   // ---- Deposits (money in) — BLOCKED --------------------------------------
 
   /**
-   * Maplerad NGN virtual accounts are not yet usable: collections are not
-   * enabled on the business, so POST /collections/virtual-account returns 400
-   * for every bank, even at KYC tier 2. Rather than half-create Maplerad
-   * customers we cannot collect against, we fail loudly and explain why.
+   * Open the user's dedicated NGN collection account (a permanent NUBAN).
    *
-   * To finish this once Maplerad enables collections: enroll the user as a
-   * Maplerad customer (lib/maplerad/customers.ts), persist the customer id on
-   * the User record, create a static account (lib/maplerad/accounts.ts), and
-   * credit on the `collection.successful` webhook.
+   * Maplerad hangs a collection account off a *customer*, so the caller must
+   * have enrolled one first and passed its id — see lib/virtualAccounts.ts.
+   * Without it there is nothing to attach the account to, and Maplerad's own
+   * error for the missing field is not one an operator can act on, so we say
+   * plainly what is missing instead.
+   *
+   * Money paid into the returned NUBAN lands in the business wallet and arrives
+   * back as a `collection.successful` webhook, which is what actually credits
+   * the user (app/api/webhooks/maplerad/route.ts). Creating the account here
+   * and crediting there are two halves of one feature: neither is any use alone.
    */
-  async createVirtualAccount(_i: CreateVirtualAccountInput): Promise<VirtualAccountResult> {
-    throw new Error(DEPOSITS_UNAVAILABLE);
+  async createVirtualAccount(i: CreateVirtualAccountInput): Promise<VirtualAccountResult> {
+    if (!i.mapleradCustomerId) {
+      throw new Error(DEPOSITS_UNAVAILABLE);
+    }
+
+    const acct = await this.req<{
+      id: string;
+      account_number: string;
+      bank_name?: string;
+      bank_code?: string;
+      account_name?: string;
+    }>("/collections/virtual-account", "POST", {
+      customer_id: i.mapleradCustomerId,
+      currency: "NGN",
+      // Our own reference, echoed back on the collection webhook where
+      // available — a second way to place a payment if account matching ever
+      // comes up short.
+      reference: i.txRef,
+    });
+
+    if (!acct?.account_number) {
+      throw new Error(
+        "Maplerad created a collection account but returned no account number",
+      );
+    }
+
+    return {
+      accountNumber: acct.account_number,
+      bankName: acct.bank_name ?? "Maplerad",
+      bankCode: acct.bank_code,
+      providerRef: acct.id,
+      // Always permanent: a static account is created once per user and reused
+      // forever, which is the whole reason it is tied to a KYC'd customer.
+      permanent: true,
+    };
   }
 
   // ---- Webhooks -----------------------------------------------------------

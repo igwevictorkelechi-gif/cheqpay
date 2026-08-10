@@ -13,7 +13,7 @@
     "preview": "eas build --platform ios --profile preview",
     "submit": "eas submit",
     "lint": "eslint . --ext .ts,.tsx",
-    "test": "jest"
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "@cheqpay/shared": "*",

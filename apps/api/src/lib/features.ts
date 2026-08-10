@@ -25,12 +25,23 @@ const FLAGS_KEY = "feature_flags";
  * Features that default OFF because they cannot safely serve a real user yet.
  * Flip these in the admin dashboard when their blocker clears — no deploy needed.
  *
+ * These are DEFAULTS, not verdicts — each is a switch in the admin dashboard,
+ * so clearing a blocker is a click, not a deploy. Before flipping any of them,
+ * run GET /api/admin/provider-check: it makes real read-only Maplerad calls and
+ * tells you whether this deployment can actually reach the provider, which is
+ * the thing none of these comments can know.
+ *
  * - bill_payments: OFF while MAPLERAD_SECRET_KEY is a SANDBOX key. Bills would
  *   "succeed" and debit the user without delivering any airtime/data/power.
  *   Turn ON for a supervised test window, then OFF again; leave it ON only once
  *   the LIVE key is in place.
- * - ngn_deposits: Maplerad hasn't enabled NGN collections on the business, so
- *   virtual-account creation fails for every bank.
+ * - ngn_deposits: deposits are wired end to end — a collection account is opened
+ *   at KYC approval and the `collection.*` webhook credits the balance. Still
+ *   OFF by default because two things outside this codebase have to be true
+ *   first: Maplerad must have enabled COLLECTIONS on the business, and this
+ *   server's egress IP must be whitelisted. The "Collections enabled" probe in
+ *   provider-check answers both. Turning this on before they hold shows users a
+ *   deposit account that silently swallows their money.
  * - crypto_deposits / crypto_withdrawals: two blockers. Maplerad's address
  *   endpoint currently fails on their side (SQL error, ticket open), AND the
  *   CBN/SEC VASP registration + Google Play Financial Features Declaration are

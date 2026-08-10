@@ -119,6 +119,22 @@ export async function POST(req: Request) {
         data: { kycTier: { set: Math.max(user.kycTier, verdict.tier) } },
       });
 
+      // Enroll the user with Maplerad while the BVN is still in hand — the
+      // stablecoin API only serves tier-1+ Maplerad customers. Best-effort:
+      // skipped when the submission lacks phone/address, retried next submit.
+      //
+      // This MUST come before the deposit account below: a Maplerad collection
+      // account hangs off a customer id, so enrolling second meant every
+      // account request went out without one and failed.
+      await ensureMapleradCustomer(auth.id, user.email, {
+        firstName: body.firstName,
+        lastName: body.lastName,
+        bvn: body.bvn,
+        dateOfBirth: body.dateOfBirth,
+        phone: body.phone ?? user.phone,
+        address: body.address,
+      });
+
       // Open the permanent, dedicated NGN deposit account now, using the BVN
       // and name we already have in hand. It's persisted (idempotent) and
       // reused forever — the user never has to re-verify or generate another.
@@ -128,23 +144,12 @@ export async function POST(req: Request) {
         await createVirtualAccount(auth.id, user.email, {
           firstName: body.firstName,
           lastName: body.lastName,
+          phone: body.phone ?? user.phone ?? undefined,
           bvn: body.bvn,
         });
       } catch (e) {
         console.error("[kyc] virtual account provisioning failed (will retry on deposit)", e);
       }
-
-      // Enroll the user with Maplerad while the BVN is still in hand — the
-      // stablecoin API only serves tier-1+ Maplerad customers. Best-effort:
-      // skipped when the submission lacks phone/address, retried next submit.
-      await ensureMapleradCustomer(auth.id, user.email, {
-        firstName: body.firstName,
-        lastName: body.lastName,
-        bvn: body.bvn,
-        dateOfBirth: body.dateOfBirth,
-        phone: body.phone ?? user.phone,
-        address: body.address,
-      });
 
       await sendPush(auth.id, {
         category: "security",

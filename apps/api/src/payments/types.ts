@@ -46,6 +46,17 @@ export interface CreateVirtualAccountInput {
   /** Our unique reference for the account request. */
   txRef: string;
   narration?: string;
+  /**
+   * The user's Maplerad customer id, when one has been enrolled.
+   *
+   * Maplerad hangs a collection account off a customer, so a static NUBAN
+   * cannot be created without it. It is resolved by the caller
+   * (lib/virtualAccounts.ts) rather than here, to keep providers free of
+   * database access — but that means a Maplerad account request arriving
+   * without it is a caller bug, and the provider says so rather than failing
+   * obscurely inside Maplerad's 400.
+   */
+  mapleradCustomerId?: string;
 }
 
 export interface VirtualAccountResult {
