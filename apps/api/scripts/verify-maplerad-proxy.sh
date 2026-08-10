@@ -74,20 +74,47 @@ case "$egress" in
 esac
 echo "  ^ this is the IP that must be whitelisted in the Maplerad dashboard"
 
+# The control has to differ from the proxied case in ONE way: the egress IP. So
+# the direct call goes to whatever host the proxy itself forwards to, rather
+# than to a hardcoded default that might not be the same host.
+UPSTREAM="$(printf '%s' "$health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("upstream",""))' 2>/dev/null)"
+UPSTREAM="${UPSTREAM:-https://api.maplerad.com/v1}"
+echo "  upstream             -> $UPSTREAM  (the control will call this directly)"
+
+# A sandbox key sent to the live host is rejected with 401 no matter whose IP it
+# comes from, which would look exactly like a whitelist failure and is not one.
+# Compare modes from the key PREFIX only — the key itself is never printed.
+key_prefix="$(printf '%s' "$MAPLERAD_SECRET_KEY" | cut -c1-8)"
+case "$key_prefix:$UPSTREAM" in
+  *test*:*//api.maplerad.com*|*sandbox*:*//api.maplerad.com*)
+    printf '\033[33m
+  WARNING: the key looks like a TEST key (prefix "%s") but the proxy forwards to
+  the LIVE host. Maplerad rejects that pairing with 401 regardless of source IP,
+  so a 401 below would say nothing about the whitelist. Point the proxy upstream
+  at the sandbox host, or read the 401 as inconclusive.\033[0m
+' "$key_prefix"
+    ;;
+esac
+
 # ------------------------------------------------------------- steps 3-5 ----
-# $1 = label, $2 = MAPLERAD_BASE_URL ("" means call Maplerad directly)
+# $1 = label, $2 = MAPLERAD_BASE_URL
 run_case() {
   local label="$1" base="$2" out
   out="$(mktemp)"
 
-  ( cd "$API_DIR" \
-      && MAPLERAD_SECRET_KEY="$MAPLERAD_SECRET_KEY" \
-         MAPLERAD_PROXY_SECRET="$MAPLERAD_PROXY_SECRET" \
-         ADMIN_API_SECRET="$ADMIN_SECRET" \
-         PAYMENT_PROVIDER=maplerad \
-         CUSTODY_PROVIDER=maplerad \
-         ${base:+MAPLERAD_BASE_URL="$base"} \
-         bun run dev -- -p "$PORT" >"$out" 2>&1 ) &
+  # Export rather than use an assignment prefix. Bash decides what is an
+  # assignment prefix while PARSING, before any expansion, so a prefix produced
+  # by ${base:+...} is taken as the command name instead — the server never
+  # started and the wait below then burned its full timeout on nothing.
+  (
+    cd "$API_DIR" || exit 1
+    export MAPLERAD_SECRET_KEY MAPLERAD_PROXY_SECRET
+    export ADMIN_API_SECRET="$ADMIN_SECRET"
+    export PAYMENT_PROVIDER=maplerad
+    export CUSTODY_PROVIDER=maplerad
+    export MAPLERAD_BASE_URL="$base"
+    bun run dev -- -p "$PORT" >"$out" 2>&1
+  ) &
   local pid=$!
 
   # The base URL is read at module load, so the server must be restarted
@@ -97,17 +124,21 @@ run_case() {
   # runner takes well over a minute, while the second reuses that build and is
   # up in seconds. A 60s cap silently timed out the proxied case — the one that
   # actually matters — and left the direct control looking like the whole result.
-  local i up=""
+  local i up="" waited=0
   for i in $(seq 1 240); do
     if curl -sS -m 2 -o /dev/null "http://localhost:$PORT/api/health" 2>/dev/null; then
       up=yes
       break
     fi
+    # If the server process is already gone, waiting the rest of the timeout
+    # tells us nothing — it just delays the real error by four minutes.
+    if ! kill -0 "$pid" 2>/dev/null; then break; fi
+    waited=$i
     sleep 1
   done
 
   if [ -z "$up" ]; then
-    printf '\033[31m  The API never became ready (waited 240s). No result for this case.\033[0m\n'
+    printf '\033[31m  The API never became ready (gave up after %ss). No result for this case.\033[0m\n' "$waited"
     printf '  Last lines of the server log:\n'
     tail -20 "$out" | sed 's/^/    /'
   else
@@ -125,10 +156,10 @@ run_case() {
 note "2/4  PROXIED — MAPLERAD_BASE_URL=$PROXY_URL"
 run_case proxied "$PROXY_URL"
 
-note "3/4  DIRECT (the control) — this machine's IP, which is NOT whitelisted"
+note "3/4  DIRECT (the control) — same host, same key, this machine's un-whitelisted IP"
 echo "     If this also passes, the whitelist is not being enforced and the"
 echo "     proxied result proves nothing."
-run_case direct ""
+run_case direct "$UPSTREAM"
 
 note "4/4  How to read it"
 cat <<'EOF'
@@ -136,7 +167,10 @@ cat <<'EOF'
   both 403                      IP not accepted yet. Check the /__egress address
                                 above is actually saved in the Maplerad dashboard.
   both pass                     No whitelist in force — the premise needs rechecking.
-  401 anywhere                  IP is fine, the key is wrong or rotated.
+  both 401                      Inconclusive about the IP. 401 is the key being
+                                refused, and a test key sent to the live host is
+                                refused from every IP. Check the mode warning above.
+  proxied passes + direct 401   IP is what changed, so the fixed IP is doing the work.
   404 on every probe            The proxy is rejecting us, not Maplerad. Secrets differ.
   "No VIRTUAL institutions"     IP and key are fine; collections are not enabled on
                                 the business. That is a request to Maplerad.
