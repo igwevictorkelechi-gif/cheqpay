@@ -53,7 +53,7 @@ function Field({
   value: string;
   onChangeText: (t: string) => void;
   placeholder?: string;
-  keyboardType?: 'default' | 'number-pad';
+  keyboardType?: 'default' | 'number-pad' | 'phone-pad';
 }) {
   return (
     <View className="rounded-2xl px-4 py-3 bg-card dark:bg-card-dark" style={{ borderWidth: 1, borderColor: colors.border }}>
@@ -81,6 +81,15 @@ export default function OnboardingScreen() {
   const [lastName, setLastName] = useState('');
   const [dob, setDob] = useState('');
   const [bvn, setBvn] = useState('');
+  // Required to enroll the user with the payment provider, which is what a
+  // deposit account and a crypto address both hang off. Collected here because
+  // onboarding is where most users submit KYC, and asking later means chasing
+  // them back into a screen they have already been through once.
+  const [phone, setPhone] = useState('');
+  const [street, setStreet] = useState('');
+  const [city, setCity] = useState('');
+  const [addrState, setAddrState] = useState('');
+  const [postalCode, setPostalCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +99,17 @@ export default function OnboardingScreen() {
   const [savingPin, setSavingPin] = useState(false);
 
   const kycValid = firstName.trim().length >= 2 && lastName.trim().length >= 2;
+
+  /**
+   * Everything the provider needs to enroll a customer. Sent only when
+   * complete — a partial address is rejected by the API's schema, which would
+   * fail the whole submission rather than just skipping enrollment.
+   */
+  const addressComplete =
+    street.trim().length >= 3 &&
+    city.trim().length >= 2 &&
+    addrState.trim().length >= 2 &&
+    postalCode.trim().length >= 3;
 
   const finish = () => router.replace('/(app)/home');
 
@@ -103,6 +123,15 @@ export default function OnboardingScreen() {
         lastName: lastName.trim(),
         dateOfBirth: /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : undefined,
         bvn: bvn.trim() || undefined,
+        phone: phone.trim() || undefined,
+        address: addressComplete
+          ? {
+              street: street.trim(),
+              city: city.trim(),
+              state: addrState.trim(),
+              postalCode: postalCode.trim(),
+            }
+          : undefined,
       });
       setStep('pin');
     } catch (e) {
@@ -146,6 +175,32 @@ export default function OnboardingScreen() {
                 <Field label="Last name" value={lastName} onChangeText={setLastName} placeholder="Last name" />
                 <Field label="Date of birth (optional)" value={dob} onChangeText={setDob} placeholder="YYYY-MM-DD" />
                 <Field label="BVN (optional)" value={bvn} onChangeText={(t) => setBvn(t.replace(/\D/g, '').slice(0, 11))} placeholder="11-digit BVN" keyboardType="number-pad" />
+
+                {/* Contact and address open the user's Naira account number
+                    and crypto wallet. Saying so is what makes the extra
+                    typing worth it at signup. */}
+                <View
+                  className="rounded-2xl p-4"
+                  style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}
+                >
+                  <Text className="text-ink dark:text-ink-dark text-sm font-bold">Contact &amp; address</Text>
+                  <Text className="text-muted dark:text-muted-dark text-xs mt-1 mb-4">
+                    Needed to open your dedicated Naira account number and your crypto wallet.
+                  </Text>
+                  <View style={{ gap: 14 }}>
+                    <Field label="Phone number" value={phone} onChangeText={setPhone} placeholder="080 1234 5678" keyboardType="phone-pad" />
+                    <Field label="Street address" value={street} onChangeText={setStreet} placeholder="12 Adeola Odeku Street" />
+                    <View className="flex-row" style={{ gap: 12 }}>
+                      <View className="flex-1">
+                        <Field label="City" value={city} onChangeText={setCity} placeholder="Lagos" />
+                      </View>
+                      <View className="flex-1">
+                        <Field label="State" value={addrState} onChangeText={setAddrState} placeholder="Lagos" />
+                      </View>
+                    </View>
+                    <Field label="Postal code" value={postalCode} onChangeText={setPostalCode} placeholder="101241" keyboardType="number-pad" />
+                  </View>
+                </View>
               </View>
 
               {error && <Text className="text-sm mt-3" style={{ color: '#EF4444' }}>{error}</Text>}

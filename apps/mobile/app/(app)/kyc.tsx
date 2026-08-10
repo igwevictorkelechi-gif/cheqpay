@@ -33,8 +33,19 @@ export default function KYCScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [bvn, setBvn] = useState('');
+  // Required to enroll the user with the payment provider, which is what a
+  // deposit account and a crypto address both hang off. The form used to omit
+  // them, so enrollment was skipped for every user who ever verified — they
+  // passed KYC and still got no account number.
+  const [phone, setPhone] = useState('');
+  const [street, setStreet] = useState('');
+  const [city, setCity] = useState('');
+  const [addrState, setAddrState] = useState('');
+  const [postalCode, setPostalCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Already verified, but missing the details the provider needs. */
+  const [needsDetails, setNeedsDetails] = useState(false);
 
   useEffect(() => {
     const parts = (user?.full_name ?? '').trim().split(/\s+/);
@@ -46,9 +57,22 @@ export default function KYCScreen() {
     (async () => {
       try {
         await api.ensureProvisioned();
-        const { kycTier, records } = await api.getKyc();
+        const { kycTier, records, providerEnrolled, legalName } = await api.getKyc();
         setTier(kycTier);
-        if (kycTier >= 2) setState('approved');
+        // Prefer the verified name: it is the one the provider checks against
+        // the BVN, and the only one guaranteed to be present.
+        if (legalName) {
+          const p = legalName.trim().split(/\s+/);
+          if (p[0]) setFirstName(p[0]);
+          if (p.length > 1) setLastName(p.slice(1).join(' '));
+        }
+        // Verified but not enrolled means the account is only half open — no
+        // deposit account, no crypto wallet. Show the form rather than a green
+        // tick over an account that cannot receive money.
+        if (kycTier >= 2 && providerEnrolled === false) {
+          setNeedsDetails(true);
+          setState('form');
+        } else if (kycTier >= 2) setState('approved');
         else if (records.some((r) => r.status === 'PENDING')) setState('pending');
         else setState('form');
       } catch {
@@ -58,8 +82,30 @@ export default function KYCScreen() {
   }, []);
 
   const bvnValid = bvn === '' || /^\d{11}$/.test(bvn);
+  // Accepts 08031234567, +2348031234567 and 2348031234567 — the server
+  // normalizes to the provider's +234 / subscriber split.
+  const phoneValid = phone === '' || /^(\+?234|0)?\d{10}$/.test(phone.replace(/[\s-]/g, ''));
+
+  /**
+   * Everything the provider needs to enroll a customer. Sent only when
+   * complete — a partial address is rejected by the API's schema, which would
+   * fail the whole KYC submission rather than just skipping enrollment.
+   */
+  const addressComplete =
+    street.trim().length >= 3 &&
+    city.trim().length >= 2 &&
+    addrState.trim().length >= 2 &&
+    postalCode.trim().length >= 3;
+
   const canSubmit =
-    firstName.trim().length >= 2 && lastName.trim().length >= 2 && bvnValid && !submitting;
+    firstName.trim().length >= 2 &&
+    lastName.trim().length >= 2 &&
+    bvnValid &&
+    phoneValid &&
+    // When the ONLY reason the user is here is the missing details, letting
+    // them submit without those details repeats the failure that sent them.
+    (!needsDetails || (phone.trim() !== '' && addressComplete)) &&
+    !submitting;
 
   async function submit() {
     setError(null);
@@ -69,9 +115,22 @@ export default function KYCScreen() {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         bvn: bvn.trim() || undefined,
+        phone: phone.trim() || undefined,
+        address: addressComplete
+          ? {
+              street: street.trim(),
+              city: city.trim(),
+              state: addrState.trim(),
+              postalCode: postalCode.trim(),
+            }
+          : undefined,
       });
       setTier(res.tier);
-      setState(res.autoVerified ? 'approved' : 'pending');
+      // An already-verified user completing their details won't retype the
+      // BVN, so this reports autoVerified:false. Sending them to "Under
+      // review" would tell a verified user their account is in doubt.
+      setState(needsDetails || res.autoVerified ? 'approved' : 'pending');
+      setNeedsDetails(false);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not submit. Please try again.');
     } finally {
@@ -130,11 +189,14 @@ export default function KYCScreen() {
                 <View className="w-11 h-11 rounded-2xl items-center justify-center" style={{ backgroundColor: 'rgba(107,91,149,0.2)' }}>
                   <Ionicons name="shield-checkmark" size={24} color={colors.brandLight} />
                 </View>
-                <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold ml-3">Verify your identity</Text>
+                <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold ml-3 flex-1">
+                  {needsDetails ? 'Finish setting up your account' : 'Verify your identity'}
+                </Text>
               </View>
               <Text className="text-muted dark:text-muted-dark text-sm mt-2">
-                Confirm your details to raise your limits and unlock crypto withdrawals. With a valid
-                BVN you&apos;re verified instantly.
+                {needsDetails
+                  ? "You're verified — we just need a couple more details to open your Naira account number and your crypto wallet."
+                  : "Confirm your details to raise your limits and unlock crypto withdrawals. With a valid BVN you're verified instantly."}
               </Text>
 
               <View className="mt-6" style={{ gap: 16 }}>
@@ -157,6 +219,46 @@ export default function KYCScreen() {
                     Without a BVN we&apos;ll review your submission manually.
                   </Text>
                 </View>
+
+                {/* Contact and address. Grouped under a heading because the
+                    user is being asked for noticeably more than a name —
+                    saying what it buys them is what makes it worth filling. */}
+                <View
+                  className="rounded-2xl p-4 mt-2"
+                  style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}
+                >
+                  <Text className="text-ink dark:text-ink-dark text-sm font-bold">Contact &amp; address</Text>
+                  <Text className="text-muted dark:text-muted-dark text-xs mt-1">
+                    {needsDetails
+                      ? "This is all that's missing. Your BVN is already on file — you don't need to enter it again."
+                      : 'Needed to open your dedicated Naira account number and your crypto wallet. You can skip these, but those two stay locked until you add them.'}
+                  </Text>
+
+                  <View className="mt-4" style={{ gap: 16 }}>
+                    <View>
+                      <Text className="text-muted dark:text-muted-dark text-sm font-semibold mb-1.5">Phone number</Text>
+                      <TextInput
+                        value={phone}
+                        onChangeText={setPhone}
+                        keyboardType="phone-pad"
+                        placeholder="080 1234 5678"
+                        placeholderTextColor={colors.muted}
+                        className="rounded-2xl px-4 py-3.5 text-ink dark:text-ink-dark"
+                        style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: phoneValid ? colors.border : '#EF4444' }}
+                      />
+                    </View>
+                    <Input label="Street address" value={street} onChangeText={setStreet} placeholder="12 Adeola Odeku Street" />
+                    <View className="flex-row" style={{ gap: 12 }}>
+                      <View className="flex-1">
+                        <Input label="City" value={city} onChangeText={setCity} placeholder="Lagos" />
+                      </View>
+                      <View className="flex-1">
+                        <Input label="State" value={addrState} onChangeText={setAddrState} placeholder="Lagos" />
+                      </View>
+                    </View>
+                    <Input label="Postal code" value={postalCode} onChangeText={setPostalCode} placeholder="101241" />
+                  </View>
+                </View>
               </View>
 
               {error && <Text style={{ color: '#FF6B6B' }} className="text-sm mt-4">{error}</Text>}
@@ -169,7 +271,13 @@ export default function KYCScreen() {
               >
                 {submitting && <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />}
                 <Text className="text-white font-bold text-base">
-                  {submitting ? 'Verifying…' : 'Submit for verification'}
+                  {submitting
+                    ? needsDetails
+                      ? 'Saving…'
+                      : 'Verifying…'
+                    : needsDetails
+                      ? 'Finish setup'
+                      : 'Submit for verification'}
                 </Text>
               </TouchableOpacity>
             </>

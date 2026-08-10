@@ -284,6 +284,14 @@ export const api = {
       cryptoWithdrawalEnabled: boolean;
     };
     records: { id: string; tier: number; status: string; createdAt: string }[];
+    /**
+     * Enrolled with the payment provider. Separate from being verified: a
+     * verified user with this false has no deposit account and no crypto
+     * wallet. Optional because older API deployments don't send it.
+     */
+    providerEnrolled?: boolean;
+    /** Name recorded at verification, used to prefill the form. */
+    legalName?: string | null;
   }> {
     return apiFetch('/api/kyc');
   },
@@ -294,6 +302,13 @@ export const api = {
     dateOfBirth?: string;
     bvn?: string;
     documentRefs?: string[];
+    /**
+     * Phone and address are the provider's requirements for enrolling a
+     * customer, and a customer id is what a deposit account and a crypto
+     * address both hang off. Omitting them silently costs the user both.
+     */
+    phone?: string;
+    address?: { street: string; city: string; state: string; postalCode: string };
   }): Promise<{ id: string; status: string; tier: number; autoVerified: boolean; message: string }> {
     return apiFetch('/api/kyc', { method: 'POST', body: JSON.stringify(input) });
   },
