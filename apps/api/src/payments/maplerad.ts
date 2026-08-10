@@ -60,6 +60,15 @@ export class MapleradProvider implements PaymentProvider {
         Authorization: `Bearer ${this.secretKey}`,
         Accept: "application/json",
         ...(body ? { "Content-Type": "application/json" } : {}),
+        // This provider has its own fetch rather than going through
+        // lib/maplerad/client, so the egress-proxy secret has to be repeated
+        // here. Without it the proxy rejects exactly the calls that move money
+        // — bills, transfers, virtual accounts, name enquiry, the bank list —
+        // while the stablecoin calls that DO use the shared client succeed,
+        // which reads as "Maplerad is half broken" rather than a config gap.
+        ...(process.env.MAPLERAD_PROXY_SECRET
+          ? { "X-Proxy-Secret": process.env.MAPLERAD_PROXY_SECRET }
+          : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
     });
