@@ -112,3 +112,16 @@ body {
   background: #2a2535;
   border-radius: 4px;
 }
+
+/* Theme-specific logo artwork (see components/BrandLogo.tsx). Both files are in
+   the markup and CSS chooses, because the theme is set on <html> before paint —
+   swapping in React would flash the wrong one on every load. */
+.logo-light {
+  display: none;
+}
+html[data-theme="light"] .logo-dark {
+  display: none;
+}
+html[data-theme="light"] .logo-light {
+  display: block;
+}

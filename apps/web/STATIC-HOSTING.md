@@ -67,9 +67,11 @@ on its main page. If the API is on a different box, give it its own subdomain �
 
 ## Check it worked
 
-1. `https://cheqpay.com` loads and shows the sign-in screen.
-2. `https://cheqpay.com/login/` loads directly — not a 404. This is what proves
-   the directory structure survived the upload.
+1. `https://cheqpay.com` loads. Signed out, it redirects to `/welcome/` — the
+   public landing page. Signed in, it goes straight to the wallet.
+2. `https://cheqpay.com/welcome/` and `https://cheqpay.com/login/` load
+   directly — not a 404. This is what proves the directory structure survived
+   the upload.
 3. `http://cheqpay.com` redirects to `https://`.
 4. Sign in. If the code never arrives, the build has the wrong
    `NEXT_PUBLIC_SUPABASE_URL` or anon key.
