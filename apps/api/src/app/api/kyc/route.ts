@@ -7,7 +7,7 @@ import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
 import { kycTier1Schema } from "@/lib/validation";
-import { encryptPii, fingerprintPii, isPiiEncryptionConfigured, last4 } from "@/lib/pii";
+import { decryptPii, encryptPii, fingerprintPii, isPiiEncryptionConfigured, last4 } from "@/lib/pii";
 import { ensureRetentionSchema } from "@/lib/retention";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +29,16 @@ export async function GET(req: Request) {
     const limits = getTierLimits(user.kycTier);
     return jsonOk({
       kycTier: user.kycTier,
+      // Whether the user is enrolled with the payment provider. Verification
+      // and enrollment are separate: a user can be fully verified and still
+      // have no provider customer, which leaves them with no deposit account
+      // and no crypto wallet. Clients use this to ask for the missing details
+      // rather than showing a verified badge over a half-finished account.
+      providerEnrolled: Boolean(user.mapleradCustomerId),
+      // The name recorded at verification. Returned so a user completing their
+      // details doesn't retype it — and, more importantly, so it cannot drift
+      // from the name the provider will check against the BVN.
+      legalName: user.legalName ?? null,
       limits: {
         singleTxKobo: limits.singleTxKobo.toString(),
         dailyDepositKobo: limits.dailyDepositKobo.toString(),
@@ -112,12 +122,20 @@ export async function POST(req: Request) {
       console.error("[kyc] identity retention failed", err);
     }
 
-    // Elevate the user's tier immediately on an automatic pass.
-    if (verdict.verified) {
-      await prisma.user.update({
-        where: { id: auth.id },
-        data: { kycTier: { set: Math.max(user.kycTier, verdict.tier) } },
-      });
+    // Enrollment is attempted for anyone who ENDS UP verified, not only those
+    // verified by this submission. A user who verified before the form asked
+    // for phone and address is verified but not enrolled, and would otherwise
+    // never get a deposit account or a crypto wallet — the approved screen
+    // never shows them the form again. Re-submitting the missing details now
+    // completes their setup.
+    const alreadyVerified = user.kycTier >= 1;
+    if (verdict.verified || alreadyVerified) {
+      if (verdict.verified) {
+        await prisma.user.update({
+          where: { id: auth.id },
+          data: { kycTier: { set: Math.max(user.kycTier, verdict.tier) } },
+        });
+      }
 
       // Enroll the user with Maplerad while the BVN is still in hand — the
       // stablecoin API only serves tier-1+ Maplerad customers. Best-effort:
@@ -126,11 +144,23 @@ export async function POST(req: Request) {
       // This MUST come before the deposit account below: a Maplerad collection
       // account hangs off a customer id, so enrolling second meant every
       // account request went out without one and failed.
+      // A returning user completing their details won't retype the BVN, but
+      // enrollment needs one. We retained it encrypted at first verification
+      // precisely so it can be produced again without asking.
+      let bvn = body.bvn;
+      if (!bvn && user.bvnCiphertext && isPiiEncryptionConfigured()) {
+        try {
+          bvn = decryptPii(user.bvnCiphertext);
+        } catch (err) {
+          console.error("[kyc] could not decrypt the retained BVN for enrollment", err);
+        }
+      }
+
       await ensureMapleradCustomer(auth.id, user.email, {
         firstName: body.firstName,
         lastName: body.lastName,
-        bvn: body.bvn,
-        dateOfBirth: body.dateOfBirth,
+        bvn,
+        dateOfBirth: body.dateOfBirth ?? user.dateOfBirth?.toISOString().slice(0, 10),
         phone: body.phone ?? user.phone,
         address: body.address,
       });
@@ -151,11 +181,15 @@ export async function POST(req: Request) {
         console.error("[kyc] virtual account provisioning failed (will retry on deposit)", e);
       }
 
-      await sendPush(auth.id, {
-        category: "security",
-        title: "Identity verified",
-        body: "Your KYC is approved. Your limits are raised and withdrawals are unlocked.",
-      });
+      // Only for a genuinely new approval — a returning user filling in their
+      // address does not need to be told they were verified all over again.
+      if (verdict.verified && !alreadyVerified) {
+        await sendPush(auth.id, {
+          category: "security",
+          title: "Identity verified",
+          body: "Your KYC is approved. Your limits are raised and withdrawals are unlocked.",
+        });
+      }
     }
 
     await prisma.auditLog.create({

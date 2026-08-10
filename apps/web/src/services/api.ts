@@ -220,6 +220,15 @@ export const api = {
 
   getKyc(): Promise<{
     kycTier: number;
+    /**
+     * Enrolled with the payment provider. Separate from being verified: a
+     * verified user with this false has no deposit account and no crypto
+     * wallet, and needs to supply the contact details the provider requires.
+     * Optional because older API deployments don't send it.
+     */
+    providerEnrolled?: boolean;
+    /** Name recorded at verification, used to prefill the form. */
+    legalName?: string | null;
     limits: {
       singleTxKobo: string;
       dailyDepositKobo: string;
@@ -237,6 +246,18 @@ export const api = {
     dateOfBirth?: string;
     bvn?: string;
     documentRefs?: string[];
+    /**
+     * Phone and address are not ours — they are Maplerad's requirements for
+     * enrolling a customer, and a customer id is what a deposit account and a
+     * crypto address both hang off. Omitting them silently costs the user both.
+     */
+    phone?: string;
+    address?: {
+      street: string;
+      city: string;
+      state: string;
+      postalCode: string;
+    };
   }): Promise<{
     id: string;
     status: string;
