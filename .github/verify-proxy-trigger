@@ -1,0 +1,17 @@
+Editing this file runs the "Verify Maplerad proxy" workflow.
+
+Why this exists: GitHub only shows the "Run workflow" button for workflows
+that live on the repository's DEFAULT branch. This workflow is on a feature
+branch, so there is no button until that merges. Changing this file is the
+trigger instead — it is a path nothing else in the repo touches, so ordinary
+work cannot fire it by accident. Each run calls a third party, which is why
+that matters.
+
+To run it from a phone: open this file on GitHub, tap the pencil, change the
+line below to anything else, and commit. Then open Actions and read the run
+summary.
+
+Once the workflow reaches the default branch, use the button instead and
+delete both this file and the `push` trigger in the workflow.
+
+last run requested: 2026-08-10

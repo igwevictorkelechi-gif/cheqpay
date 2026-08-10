@@ -21,12 +21,28 @@ name: Verify Maplerad proxy
 # makes it an honest control for the direct case.
 
 on:
+  # GitHub only shows the "Run workflow" button for workflows that exist on the
+  # DEFAULT branch. This one lives on a feature branch, so until that merges
+  # there is no button to press.
   workflow_dispatch:
     inputs:
       proxy_url:
         description: "Proxy base URL (no /v1 — the proxy appends it)"
         required: false
         default: "https://maplerad-proxy.mycheqpay.com"
+
+  # Until then, editing the marker file below runs it. Narrow on purpose: it is
+  # the one path in the repo nothing else touches, so this cannot fire on
+  # ordinary work — which matters, because each run calls a third party.
+  #
+  # To run from a phone: open .github/verify-proxy-trigger on GitHub, press the
+  # pencil, change anything (the date line is there for that), commit.
+  #
+  # Once this workflow reaches the default branch, use the button and delete
+  # this trigger — it is a workaround, not a design.
+  push:
+    paths:
+      - ".github/verify-proxy-trigger"
 
 jobs:
   verify:
