@@ -16,7 +16,7 @@ its static IP for Maplerad.
 ```bash
 cd apps/web
 STATIC_EXPORT=1 \
-NEXT_PUBLIC_API_URL=https://api.cheqpay.com \
+NEXT_PUBLIC_API_URL=https://cheqpay-admin453.vercel.app \
 NEXT_PUBLIC_SUPABASE_URL=https://xttgnswgeffyybjfjlkp.supabase.co \
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<the anon key> \
 bun run build:static
@@ -61,26 +61,28 @@ is useless without a certificate to redirect to.
 
 ## Point the domain
 
-An `A` record for `cheqpay.com` (and `www`) at the hosting IP, which cPanel shows
+An `A` record for `mycheqpay.com` (and `www`) at the hosting IP, which cPanel shows
 on its main page. If the API is on a different box, give it its own subdomain —
-`api.cheqpay.com` — rather than trying to share one host.
+`api.mycheqpay.com` — rather than trying to share one host.
 
 ## Check it worked
 
-1. `https://cheqpay.com` loads. Signed out, it redirects to `/welcome/` — the
+1. `https://mycheqpay.com` loads. Signed out, it redirects to `/welcome/` — the
    public landing page. Signed in, it goes straight to the wallet.
-2. `https://cheqpay.com/welcome/` and `https://cheqpay.com/login/` load
+2. `https://mycheqpay.com/welcome/` and `https://mycheqpay.com/login/` load
    directly — not a 404. This is what proves the directory structure survived
    the upload.
-3. `http://cheqpay.com` redirects to `https://`.
+3. `http://mycheqpay.com` redirects to `https://`.
 4. Sign in. If the code never arrives, the build has the wrong
    `NEXT_PUBLIC_SUPABASE_URL` or anon key.
 5. Open the browser console. `Failed to fetch` against the API means either the
    wrong `NEXT_PUBLIC_API_URL` or the API's `ALLOWED_ORIGINS` does not include
-   `https://cheqpay.com`.
+   `https://mycheqpay.com`.
 
 That last one catches people out: **the API must allow this origin.** Set
-`ALLOWED_ORIGINS=https://cheqpay.com` on the API and redeploy it.
+`ALLOWED_ORIGINS=https://mycheqpay.com` on the API and redeploy it.
+(Leaving it unset also works — the API then echoes whichever origin calls
+it. What breaks is setting it to anything that does not include this site.)
 
 ---
 
@@ -108,7 +110,7 @@ WhoGoHost VPS, Caddy can serve these files too — one box, one bill. Add to the
 Caddyfile:
 
 ```
-cheqpay.com {
+mycheqpay.com {
 	root * /var/www/cheqpay
 	file_server
 	try_files {path} {path}/ /404.html
