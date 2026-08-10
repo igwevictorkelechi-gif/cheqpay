@@ -47,7 +47,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -70,7 +70,7 @@ jobs:
         env:
           MAPLERAD_SECRET_KEY: ${{ secrets.MAPLERAD_SANDBOX_KEY }}
           MAPLERAD_PROXY_SECRET: ${{ secrets.MAPLERAD_PROXY_SECRET }}
-          MAPLERAD_PROXY_URL: ${{ inputs.proxy_url }}
+          MAPLERAD_PROXY_URL: ${{ inputs.proxy_url || vars.MAPLERAD_PROXY_URL || 'https://maplerad-proxy.mycheqpay.com' }}
         run: |
           set +e
           ./apps/api/scripts/verify-maplerad-proxy.sh 2>&1 | tee /tmp/verify.log
@@ -82,7 +82,7 @@ jobs:
           {
             echo "## Maplerad proxy verification"
             echo
-            echo "Proxy: \`${{ inputs.proxy_url }}\`"
+            echo "Proxy: \`${{ inputs.proxy_url || vars.MAPLERAD_PROXY_URL || 'https://maplerad-proxy.mycheqpay.com' }}\`"
             echo
             echo '```'
             # Strip ANSI colour so it is readable on a phone.

@@ -40,7 +40,17 @@ note() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 [ -n "${MAPLERAD_SECRET_KEY:-}" ]   || die "MAPLERAD_SECRET_KEY is not set. Use the SANDBOX key — the proxy terminates TLS on shared hosting, so whatever goes through it is readable there."
 [ -n "${MAPLERAD_PROXY_SECRET:-}" ] || die "MAPLERAD_PROXY_SECRET is not set. It must equal PROXY_SHARED_SECRET on the Node app."
 
-pretty() { if command -v jq >/dev/null 2>&1; then jq .; else python3 -m json.tool 2>/dev/null || cat; fi; }
+# Print JSON readably, but never swallow non-JSON. An earlier version piped
+# straight into jq, so when the server had not started the only thing reported
+# was "jq: parse error" — which says nothing about what actually went wrong.
+pretty() {
+  local body
+  body="$(cat)"
+  if printf '%s' "$body" | python3 -m json.tool 2>/dev/null; then
+    return 0
+  fi
+  printf '\033[33m  Not JSON. Raw response:\033[0m\n%s\n' "$body"
+}
 
 # ---------------------------------------------------------------- step 2 ----
 note "1/4  Proxy reachable, and closed to callers without the secret"
@@ -82,14 +92,28 @@ run_case() {
 
   # The base URL is read at module load, so the server must be restarted
   # between cases rather than reconfigured. Wait for it to actually answer.
-  local i
-  for i in $(seq 1 60); do
-    curl -sS -m 2 -o /dev/null "http://localhost:$PORT/api/health" 2>/dev/null && break
+  #
+  # Generous on purpose: the FIRST case compiles Next from cold, which on a CI
+  # runner takes well over a minute, while the second reuses that build and is
+  # up in seconds. A 60s cap silently timed out the proxied case — the one that
+  # actually matters — and left the direct control looking like the whole result.
+  local i up=""
+  for i in $(seq 1 240); do
+    if curl -sS -m 2 -o /dev/null "http://localhost:$PORT/api/health" 2>/dev/null; then
+      up=yes
+      break
+    fi
     sleep 1
   done
 
-  curl -sS -m 90 -H "x-admin-secret: $ADMIN_SECRET" \
-    "http://localhost:$PORT/api/admin/provider-check" 2>&1 | pretty
+  if [ -z "$up" ]; then
+    printf '\033[31m  The API never became ready (waited 240s). No result for this case.\033[0m\n'
+    printf '  Last lines of the server log:\n'
+    tail -20 "$out" | sed 's/^/    /'
+  else
+    curl -sS -m 120 -H "x-admin-secret: $ADMIN_SECRET" \
+      "http://localhost:$PORT/api/admin/provider-check" 2>&1 | pretty
+  fi
 
   kill "$pid" 2>/dev/null
   pkill -f "next dev -p $PORT" 2>/dev/null

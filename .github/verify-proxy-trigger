@@ -14,4 +14,4 @@ summary.
 Once the workflow reaches the default branch, use the button instead and
 delete both this file and the `push` trigger in the workflow.
 
-last run requested: 2026-08-10
+last run requested: 2026-08-10 (rerun — first attempt lost the proxied case)
