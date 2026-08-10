@@ -73,6 +73,7 @@ const categories: Category[] = [
       { label: 'In-App Popup', href: '/features/popup', icon: Megaphone },
       { label: 'Payment Settings', href: '/payment-settings', icon: CreditCard },
       { label: 'Provider Settings', href: '/provider-settings', icon: Server },
+      { label: 'Provider Check', href: '/provider-check', icon: Activity },
       { label: 'Support Contact', href: '/support-contact', icon: MessageSquare },
       { label: 'Admin Profile', href: '/profile', icon: ShieldCheck },
     ],
