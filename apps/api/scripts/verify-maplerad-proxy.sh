@@ -97,10 +97,22 @@ case "$key_prefix:$UPSTREAM" in
 esac
 
 # ------------------------------------------------------------- steps 3-5 ----
-# $1 = label, $2 = MAPLERAD_BASE_URL
+# $1 = label, $2 = MAPLERAD_BASE_URL, $3 = port
+#
+# Each case gets its OWN port. Sharing one port meant the second case lost the
+# bind to a server that had not actually died — kill took the subshell while
+# next-server carried on — and the readiness probe then cheerfully accepted the
+# FIRST server's answer. The run printed the proxied result twice and labelled
+# the copy "direct", which reads as "both pass, no whitelist in force". A wrong
+# answer that looks like a real one is the worst thing this script can produce.
 run_case() {
-  local label="$1" base="$2" out
+  local label="$1" base="$2" port="$3" out
   out="$(mktemp)"
+
+  if curl -sS -m 2 -o /dev/null "http://localhost:$port/api/health" 2>/dev/null; then
+    printf '\033[31m  Port %s is already in use. Refusing to run the %s case: any result would come from a server this script did not configure.\033[0m\n' "$port" "$label"
+    return
+  fi
 
   # Export rather than use an assignment prefix. Bash decides what is an
   # assignment prefix while PARSING, before any expansion, so a prefix produced
@@ -113,7 +125,7 @@ run_case() {
     export PAYMENT_PROVIDER=maplerad
     export CUSTODY_PROVIDER=maplerad
     export MAPLERAD_BASE_URL="$base"
-    bun run dev -- -p "$PORT" >"$out" 2>&1
+    bun run dev -- -p "$port" >"$out" 2>&1
   ) &
   local pid=$!
 
@@ -126,7 +138,7 @@ run_case() {
   # actually matters — and left the direct control looking like the whole result.
   local i up="" waited=0
   for i in $(seq 1 240); do
-    if curl -sS -m 2 -o /dev/null "http://localhost:$PORT/api/health" 2>/dev/null; then
+    if curl -sS -m 2 -o /dev/null "http://localhost:$port/api/health" 2>/dev/null; then
       up=yes
       break
     fi
@@ -142,24 +154,36 @@ run_case() {
     printf '  Last lines of the server log:\n'
     tail -20 "$out" | sed 's/^/    /'
   else
-    curl -sS -m 120 -H "x-admin-secret: $ADMIN_SECRET" \
-      "http://localhost:$PORT/api/admin/provider-check" 2>&1 | pretty
+    local body
+    body="$(curl -sS -m 120 -H "x-admin-secret: $ADMIN_SECRET" \
+      "http://localhost:$port/api/admin/provider-check" 2>&1)"
+    printf '%s' "$body" | pretty
+
+    # provider-check echoes the base URL it actually used. Insist it is the one
+    # we asked for, so a result can never be silently attributed to the wrong
+    # case. Without this the run above reported the proxied result as "direct".
+    case "$body" in
+      *"\"baseUrl\":\"$base\""*) ;;
+      *) printf '\033[31m  MISMATCH: asked for base URL %s but the server reports something else. Discard this result — it did not come from the %s case.\033[0m\n' "$base" "$label" ;;
+    esac
   fi
 
+  # kill takes the subshell; next-server is a grandchild and survives it, which
+  # is what let a dead case keep serving. Take the port itself.
   kill "$pid" 2>/dev/null
-  pkill -f "next dev -p $PORT" 2>/dev/null
+  { lsof -ti "tcp:$port" 2>/dev/null || true; } | xargs -r kill 2>/dev/null
   wait "$pid" 2>/dev/null
   rm -f "$out"
   sleep 2
 }
 
 note "2/4  PROXIED — MAPLERAD_BASE_URL=$PROXY_URL"
-run_case proxied "$PROXY_URL"
+run_case proxied "$PROXY_URL" "$PORT"
 
 note "3/4  DIRECT (the control) — same host, same key, this machine's un-whitelisted IP"
 echo "     If this also passes, the whitelist is not being enforced and the"
 echo "     proxied result proves nothing."
-run_case direct "$UPSTREAM"
+run_case direct "$UPSTREAM" "$((PORT + 1))"
 
 note "4/4  How to read it"
 cat <<'EOF'
