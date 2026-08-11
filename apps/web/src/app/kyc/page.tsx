@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ShieldCheck, Clock, CheckCircle2, Loader2 } from "lucide-react";
 import { api, ApiError } from "@/services/api";
 import { useAuthStore } from "@/store";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 type State = "loading" | "form" | "pending" | "approved";
 
@@ -142,8 +143,9 @@ export default function KYCPage() {
   }
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4">
+    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
         <button
           onClick={() => router.back()}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"

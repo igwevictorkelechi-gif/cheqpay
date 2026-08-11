@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Send, Sparkles } from "lucide-react";
 import { api, ApiError } from "@/services/api";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -60,8 +61,9 @@ export default function SupportChatPage() {
   const showSuggestions = messages.length === 1 && !sending;
 
   return (
-    <div className="flex min-h-screen w-full justify-center bg-black">
-      <div className="flex min-h-screen w-full max-w-[480px] flex-col bg-surface">
+    <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="flex min-h-screen w-full max-w-[480px] flex-col bg-surface lg:max-w-3xl">
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-surface px-5 py-4">
           <button

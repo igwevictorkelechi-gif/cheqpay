@@ -6,6 +6,7 @@ import { ChevronLeft, Search } from "lucide-react";
 import { api } from "@/services/api";
 import { CRYPTO_ASSETS } from "@/lib/cryptoAssets";
 import { useCryptoAvailability } from "@/lib/useCryptoAvailability";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 function CoinIcon({ bg, glyph, size = 48 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -63,8 +64,9 @@ export default function ReceivePickerPage() {
   );
 
   return (
-    <div className="flex min-h-screen w-full justify-center bg-black">
-      <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4">
+    <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
         <button
           onClick={() => router.back()}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"

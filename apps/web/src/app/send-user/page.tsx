@@ -6,6 +6,7 @@ import { AtSign, CheckCircle2, ChevronLeft, Loader2, Send } from "lucide-react";
 import { SuccessAnimation } from "@/components/Lottie";
 import { api, ApiError, type Balance } from "@/services/api";
 import { useFeatures } from "@/lib/useFeatures";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 type Step = "form" | "done";
 
@@ -83,8 +84,9 @@ export default function SendToUserPage() {
 
   if (step === "done" && sent) {
     return (
-      <div className="flex min-h-screen justify-center bg-black">
-        <div className="flex min-h-screen w-full max-w-[480px] flex-col items-center bg-surface px-5 pb-10 pt-4">
+      <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+        <div className="flex min-h-screen w-full max-w-[480px] flex-col items-center bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
           <div className="mt-24 flex flex-col items-center text-center">
             <SuccessAnimation />
             <h1 className="mt-6 text-2xl font-extrabold text-ink">Money sent</h1>
@@ -111,8 +113,9 @@ export default function SendToUserPage() {
   }
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-6 pt-3">
+    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-6 pt-3 lg:max-w-3xl">
         <button
           onClick={() => router.back()}
           className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink"

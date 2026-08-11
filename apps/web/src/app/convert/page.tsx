@@ -263,11 +263,11 @@ export default function ConvertPage() {
 
       {picker && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 lg:items-center"
           onClick={() => setPicker(null)}
         >
           <div
-            className="w-full max-w-[480px] rounded-t-3xl bg-surface p-5 pb-8"
+            className="w-full max-w-[480px] rounded-t-3xl bg-surface p-5 pb-8 lg:rounded-3xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">

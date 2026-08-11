@@ -80,9 +80,9 @@ export default function NotificationsSheet({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center">
+    <div className="fixed inset-0 z-50 flex justify-center lg:items-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden="true" />
-      <div className="relative mt-0 flex h-full w-full max-w-[480px] flex-col bg-surface">
+      <div className="relative mt-0 flex h-full w-full max-w-[480px] flex-col bg-surface lg:h-[85vh] lg:max-w-lg lg:overflow-hidden lg:rounded-3xl lg:border lg:border-border">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 className="text-lg font-bold text-ink">Notifications</h2>
           <button

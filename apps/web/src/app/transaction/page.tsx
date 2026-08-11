@@ -6,6 +6,7 @@ import { ArrowLeft, Share2, Loader2 } from "lucide-react";
 import { txnIcon, txnTitle, txnAmount } from "@/components/TxnRow";
 import { shareReceiptImage } from "@/lib/receipt";
 import { api, getAccessToken, type LedgerTransaction } from "@/services/api";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 const STATUS_COLOR: Record<string, string> = {
   COMPLETED: "#34C759",
@@ -75,8 +76,9 @@ export default function TransactionDetailPage() {
   const Icon = tx ? txnIcon(tx.type).Icon : null;
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-10 pt-3">
+    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-10 pt-3 lg:max-w-3xl">
         <div className="flex items-center justify-between">
           <button
             onClick={() => router.back()}

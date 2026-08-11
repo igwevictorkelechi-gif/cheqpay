@@ -58,7 +58,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const activeIndex = tabs.findIndex((t) => isTabActive(t.href, pathname));
 
   return (
-    <div className="min-h-screen w-full bg-black lg:bg-surface">
+    <div className="min-h-screen w-full bg-black lg:bg-surface lg:pl-64">
       <DesktopSidebar />
 
       {/*
@@ -72,7 +72,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         because a balance card stretched across a 27" monitor is not a better
         experience, just a wider one.
       */}
-      <div className="mx-auto flex min-h-screen w-full max-w-[480px] flex-col overflow-hidden bg-surface lg:ml-64 lg:max-w-none lg:overflow-visible">
+      <div className="mx-auto flex min-h-screen w-full max-w-[480px] flex-col overflow-hidden bg-surface lg:max-w-none lg:overflow-visible">
         <div className="flex-1 overflow-y-auto pb-28 lg:mx-auto lg:w-full lg:max-w-3xl lg:overflow-visible lg:px-6 lg:pb-12 lg:pt-4">
           {children}
         </div>

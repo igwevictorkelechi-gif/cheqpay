@@ -6,6 +6,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { ChevronLeft, Copy, Share2, Check, AlertTriangle } from "lucide-react";
 import { api, ApiError } from "@/services/api";
 import { getAssetMeta } from "@/lib/cryptoAssets";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -101,8 +102,9 @@ export default function ReceiveDetailPage() {
 
   if (!meta) {
     return (
-      <div className="flex min-h-screen w-full justify-center bg-black">
-        <div className="min-h-screen w-full max-w-[480px] bg-surface px-5 pt-4">
+      <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+        <div className="min-h-screen w-full max-w-[480px] bg-surface px-5 pt-4 lg:max-w-3xl">
           <button
             onClick={() => router.back()}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
@@ -118,8 +120,9 @@ export default function ReceiveDetailPage() {
 
   if (!loading && notLive) {
     return (
-      <div className="flex min-h-screen w-full justify-center bg-black">
-        <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4">
+      <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+        <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
           <button
             onClick={() => router.back()}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
@@ -149,8 +152,9 @@ export default function ReceiveDetailPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full justify-center bg-black">
-      <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4">
+    <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, FileText, Loader2, Mail, Sheet } from "lucide-react";
 import { api, ApiError } from "@/services/api";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 type Format = "pdf" | "csv";
 
@@ -77,8 +78,9 @@ export default function StatementPage() {
     "w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-ink outline-none focus:border-brand";
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-6 pt-3">
+    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-6 pt-3 lg:max-w-3xl">
         <button
           onClick={() => router.back()}
           className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink"

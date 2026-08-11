@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SuccessAnimation } from "@/components/Lottie";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 export default function WithdrawDonePage() {
   const router = useRouter();
@@ -14,8 +15,9 @@ export default function WithdrawDonePage() {
   }, []);
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col items-center bg-surface px-5 pb-10 pt-4">
+    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col items-center bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
         <div className="mt-24 flex flex-col items-center text-center">
           <SuccessAnimation />
           <h1 className="mt-6 text-2xl font-extrabold text-ink">Withdrawal on the way</h1>
