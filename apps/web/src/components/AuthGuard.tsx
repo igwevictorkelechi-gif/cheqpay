@@ -22,7 +22,13 @@ const LANDING = "/welcome";
  * arrives, rather than making it depend on the build config.
  */
 function normalize(path: string): string {
-  return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+  // Also resolve an RSC payload URL to the route it belongs to. A failed
+  // prefetch can land the browser on /crypto/index.txt; without this the guard
+  // sees a path matching nothing public and bounces a signed-out visitor to
+  // /login?next=%2Fcrypto%2Findex.txt. The .htaccess rule should redirect that
+  // request before it ever reaches us — this is the belt to its braces.
+  const p = path.endsWith("/index.txt") ? path.slice(0, -"index.txt".length) : path;
+  return p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
 }
 
 function isPublic(rawPath: string): boolean {

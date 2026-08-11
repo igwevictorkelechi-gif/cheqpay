@@ -17,6 +17,34 @@
   RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
 </IfModule>
 
+# ---- Failed RSC prefetches ------------------------------------------------
+# The export emits an index.txt (the RSC payload) beside every index.html. Next
+# prefetches those for every visible link, and when one fails it falls back to a
+# hard browser navigation to the payload URL itself — so a transient network
+# blip on this host leaves the user parked on /crypto/index.txt looking at raw
+# text. Send those navigations to the page the payload belongs to.
+#
+# The conditions are load-bearing: Next's own fetch() for the payload must keep
+# receiving the file, or client-side routing stops working entirely — which is
+# worse than the bug being fixed. Two independent guards, either of which is
+# sufficient, because getting this wrong breaks every navigation:
+#
+#   Accept  a real browser navigation asks for text/html. Measured against this
+#           build, Next's prefetch sends `Accept: */*` — note that is NOT
+#           text/x-component, so match on text/html being PRESENT rather than
+#           on any assumed payload type.
+#   RSC     Next sets `RSC: 1` on payload requests and browsers never do.
+#
+# The optional group also covers the root payload (/index.txt -> /), which a
+# path anchored on a slash would miss. Query strings (?_rsc=…) are not part of
+# a RewriteRule pattern, so they do not need handling here.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP_ACCEPT} text/html
+  RewriteCond %{HTTP:RSC} !=1
+  RewriteRule ^(.*/)?index\.txt$ /$1 [R=302,L]
+</IfModule>
+
 # ---- Directory index ------------------------------------------------------
 # The export is built with trailingSlash, so every route is a folder holding an
 # index.html. This is what makes /login work with no rewrite rules at all.
