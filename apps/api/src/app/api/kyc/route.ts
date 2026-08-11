@@ -178,7 +178,10 @@ export async function POST(req: Request) {
           firstName: body.firstName,
           lastName: body.lastName,
           phone: body.phone ?? user.phone ?? undefined,
-          bvn: body.bvn,
+          // The recovered value, not body.bvn: a returning user completing
+          // their address does not retype the BVN, and passing undefined here
+          // marks a permanent account as temporary.
+          bvn,
         });
       } catch (e) {
         console.error("[kyc] virtual account provisioning failed (will retry on deposit)", e);

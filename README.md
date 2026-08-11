@@ -1,109 +1,210 @@
-# CheqPay - Nigerian NGN ⇄ Crypto Custodial Wallet
+# CheqPay — Nigerian NGN ⇄ Crypto Custodial Wallet
 
 An NGN ⇄ crypto (BTC + USDT) custodial wallet with a dedicated backend. Users
-fund with Naira via Flutterwave virtual accounts, buy/sell/convert crypto at
-live rates, send/receive crypto on-chain, pay bills, and complete KYC — with a
-web app, a native mobile app, and an admin dashboard.
+fund with Naira through a dedicated **Maplerad** virtual account (NUBAN), buy,
+sell and convert crypto at live rates, send and receive on-chain, pay bills, and
+complete KYC — from a web app, a native mobile app, and an admin dashboard.
 
-## 🏗️ Project Structure
+## Project structure
 
 ```
 cheqpay/
 ├── apps/
-│   ├── mobile/          # React Native Expo app (iOS/Android)
-│   ├── web/             # Next.js 15 user app (dark, mobile-first PWA)
-│   ├── admin/           # Next.js 15 admin dashboard
-│   └── api/             # Next.js 15 custodial backend (money engine)
+│   ├── mobile/          # React Native + Expo (iOS/Android)
+│   ├── web/             # Next.js 15 user app (dark PWA, phone → desktop)
+│   ├── admin/           # Next.js 15 admin dashboard (+ its own API proxy layer)
+│   └── api/             # Next.js 15 custodial backend — the money engine
 ├── packages/
 │   ├── db/              # Prisma schema + migrations (Supabase Postgres)
 │   └── shared/          # Shared types and schemas
-└── supabase/            # Legacy edge functions / migrations
+└── supabase/            # Migrations and seed SQL
 ```
 
 Managed with **bun workspaces + Turborepo**. The user apps talk to `apps/api`
-(the custodial backend) over HTTP; auth tokens come from Supabase Auth.
-
-## 🎯 Apps at a Glance
+over HTTPS; auth tokens come from Supabase Auth.
 
 | App | Platform | Purpose | Stack |
 |-----|----------|---------|-------|
-| **Mobile** | iOS/Android | User wallet, crypto, bills, KYC | React Native + Expo |
-| **Web** | Browser | Same, dark mobile-first PWA | Next.js 15 + Tailwind |
-| **Admin** | Browser | KYC review, settings, bill logos, users | Next.js 15 |
-| **API** | Serverless | Custodial money engine (ledger, swaps, payouts) | Next.js 15 + Prisma |
+| **Mobile** | iOS/Android | Wallet, crypto, bills, KYC | React Native + Expo |
+| **Web** | Browser | The same product as a PWA | Next.js 15 + Tailwind |
+| **Admin** | Browser | KYC review, settings, users, logos | Next.js 15 |
+| **API** | Serverless | Ledger, swaps, payouts, webhooks | Next.js 15 + Prisma |
 
+## Tech stack
 
-
-## 🚀 Tech Stack
-
-### Mobile App
-- **React Native** with Expo for iOS/Android
-- **Expo Router** for navigation
-- **NativeWind/Tailwind** for styling
-- **Zustand** for state management
-- **TanStack Query** for data fetching
-- **TypeScript** for type safety
-
-### Admin Dashboard
-- **Next.js 15** (App Router)
-- **TypeScript**
-- **Tailwind CSS** + **shadcn/ui**
-- **Recharts** for analytics
-- **TanStack Table** for data tables
-
-### Web App ✨ NEW
-- **Next.js 15** (App Router) 
-- **TypeScript**
-- **Tailwind CSS** (responsive design)
-- **Zustand** for state management
-- **Fully responsive** (mobile, tablet, desktop)
-
-### Backend (`apps/api`) — custodial money engine
-- **Next.js 15** route handlers (serverless on Vercel)
-- **Prisma** on **Supabase Postgres** (BigInt minor units — no floats)
-- **Supabase Auth** token validation; MFA (AAL2) gating on withdrawals
-- **Swappable providers** behind interfaces: custody, payments, price feed, KYC
+**Backend (`apps/api`) — the custodial money engine**
+- Next.js 15 route handlers, serverless on Vercel
+- Prisma on Supabase Postgres. **Money is BigInt minor units — never floats**
+- Supabase Auth token validation; MFA (AAL2) gating on withdrawals
+- Swappable providers behind interfaces: payments, custody, price feed, KYC
 - Idempotency keys, webhook signature verification, AML screening, rate limits,
   append-only audit log
 
-### Provider integrations (all behind interfaces; `mock` is the safe default)
-- **Payments — Flutterwave**: NGN virtual accounts, bank payouts, bill payments
-- **Custody — Tatum**: crypto wallets, deposits, on-chain withdrawals (BTC/USDT)
-- **Price feed**: Binance / CoinGecko (live) for BTC/USDT spot
-- **KYC — Dojah**: BVN lookup + name match for automatic verification
+**Clients** — React Native + Expo Router + NativeWind (mobile); Next.js 15 App
+Router + Tailwind + Zustand (web and admin). TypeScript throughout.
 
-## ✨ Core Features
+### Provider integrations
 
-- **NGN wallet** — fund via a dedicated Flutterwave virtual account (NUBAN);
-  withdraw to any Nigerian bank.
-- **Crypto (BTC + USDT)** — buy, sell, and **convert** (incl. direct BTC↔USDT)
-  at live rates with an admin-controlled spread; **receive** (QR + address) and
-  **send** on-chain.
-- **Bill payments** — airtime, data, electricity, cable TV, betting via
-  Flutterwave, with brand-tiled providers (logos uploadable from admin).
-- **Transactions** — one custodial ledger; unified history across home, crypto,
-  and the transactions screen.
-- **KYC & account tiers** — see below.
+`mock` is the default everywhere, so a fresh checkout never calls a third party.
 
-## 🪪 KYC & Account Tiers
+| Concern | Provider | Covers |
+|---|---|---|
+| Payments | **Maplerad** | NGN virtual accounts (collections), bank payouts, bill payments, name enquiry |
+| Custody | **Maplerad** | Stablecoin wallets and addresses |
+| Price feed | Binance / CoinGecko | BTC and USDT spot |
+| KYC | Dojah | BVN lookup + name match |
+
+Maplerad is the only live money provider. Flutterwave, Paystack and Tatum were
+removed — if you find them referenced anywhere, that reference is stale.
+
+> **Maplerad requires IP whitelisting, and Vercel has no static outbound IP.**
+> Production therefore routes Maplerad calls through a fixed-IP egress proxy via
+> `MAPLERAD_BASE_URL`, with a shared secret in `X-Proxy-Secret`. Both Maplerad
+> clients (`lib/maplerad/client.ts` and `payments/maplerad.ts`) send that header.
+> Verified: the same key refused from an un-whitelisted IP succeeds through the
+> proxy. See `.github/workflows/verify-maplerad-proxy.yml`.
+
+## Core features
+
+- **NGN wallet** — fund via a dedicated Maplerad NUBAN; withdraw to any
+  Nigerian bank
+- **Crypto (BTC + USDT)** — buy, sell and convert (including BTC↔USDT) at live
+  rates with an admin-controlled spread; receive (QR + address) and send
+  on-chain
+- **Bill payments** — airtime, data, electricity, cable TV and betting, with
+  brand tiles whose logos are uploaded from admin
+- **Transfers between users** — send to another CheqPay user by username
+- **Cashback** — configurable reward credited on qualifying transactions
+- **Statements** — CSV and PDF, emailed on request
+- **One custodial ledger** — a single transaction history behind every screen
+
+Transaction types: `DEPOSIT`, `WITHDRAWAL`, `BUY`, `SELL`, `CONVERT`, `BILL`,
+`CASHBACK`, `TRANSFER_OUT`, `TRANSFER_IN`.
+
+## KYC, and what it unlocks
 
 Tiers gate limits and crypto withdrawals (Tier 0 unverified → Tier 3 premium).
 
-- **Automatic verification** — submitting a valid **BVN + matching name**
-  auto-approves to **Tier 2** via the KYC provider (Dojah in prod; a mock
-  auto-approves on a well-formed BVN in dev).
-- **Manual review** — anything that doesn't auto-verify lands in the admin
-  **KYC Review** queue (approve/reject → sets the record status and user tier,
-  audited).
-- **In-app** — an alert bar prompts unverified users to verify, and the profile
-  shows the current account level.
+Submitting **BVN + matching name** auto-approves via the KYC provider. Anything
+that does not auto-verify lands in the admin **KYC Review** queue.
 
-## 📋 Setup
+The order of what happens on `POST /api/kyc` matters, and is deliberate:
 
-**See [INSTALL.md](./INSTALL.md)** — tools, environment files, running all four
-apps, and what to do when it does not work.
+1. Verify the identity with the KYC provider and record the verdict
+2. Persist the identity fields; the **BVN is retained encrypted** so it can be
+   produced again without asking the user to retype it
+3. **Enrol the user as a Maplerad customer** — needs BVN, date of birth, phone
+   and address
+4. **Then** open the permanent NGN deposit account
 
-The short version:
+Step 4 depends on step 3: a Maplerad collection account hangs off a customer id.
+Enrolling second meant every account request went out without one and failed, so
+nobody ever received an account number. Steps 3 and 4 are best-effort — a
+provider hiccup must not fail verification, and the deposit screen re-provisions
+on demand.
+
+Deposits are then credited by the `collection.*` webhook, which matches the
+NUBAN to its owner and credits the ledger idempotently.
+
+The KYC form must collect **phone and address**, not just BVN and name.
+Without them enrolment is skipped, and without enrolment there is no account
+number.
+
+## API reference
+
+63 routes in `apps/api`. Every one is verified to exist, load and enforce its
+guard — see [Testing](#testing). Everything not marked public requires a
+Supabase bearer token; admin routes require the admin secret.
+
+**Health and configuration (public)**
+
+| Route | Methods |
+|---|---|
+| `/api/health` | GET |
+| `/api/ready` | GET |
+| `/api/features` | GET |
+| `/api/popup` | GET |
+| `/api/support/contact` | GET |
+| `/api/market/[asset]/price` | GET |
+| `/api/market/[asset]/chart` | GET |
+
+**Identity, KYC and account**
+
+| Route | Methods |
+|---|---|
+| `/api/me` | GET, POST, PATCH, DELETE |
+| `/api/kyc` | GET, POST |
+| `/api/users/lookup` | GET |
+| `/api/notifications/preferences` | GET, PATCH |
+| `/api/push/register` | POST, DELETE |
+| `/api/security/instant-withdrawal` | POST |
+| `/api/statements/request` | GET, POST |
+| `/api/support/chat` | POST |
+
+**Money in**
+
+| Route | Methods |
+|---|---|
+| `/api/virtual-accounts` | GET, POST |
+| `/api/wallets` | GET, POST |
+| `/api/balances` | GET |
+| `/api/crypto/deposit-addresses` | GET |
+
+**Money out**
+
+| Route | Methods |
+|---|---|
+| `/api/withdrawals/ngn` | POST |
+| `/api/withdrawals/crypto` | POST |
+| `/api/banks` | GET |
+| `/api/banks/resolve` | POST |
+| `/api/beneficiaries` | GET, POST |
+| `/api/beneficiaries/[id]` | DELETE |
+
+**Trading, bills, transfers, cards, history**
+
+| Route | Methods |
+|---|---|
+| `/api/quotes` | POST |
+| `/api/quotes/convert` | POST |
+| `/api/swaps` | POST |
+| `/api/bills/catalog` | GET |
+| `/api/bills/validate` | POST |
+| `/api/bills/pay` | POST |
+| `/api/transfers` | POST |
+| `/api/cards` | GET, POST |
+| `/api/cards/[id]` | GET |
+| `/api/transactions` | GET |
+| `/api/transactions/[id]` | GET |
+
+**Called by machines, not by the apps**
+
+| Route | Methods | Caller |
+|---|---|---|
+| `/api/webhooks/maplerad` | POST | Maplerad (signature verified) |
+| `/api/cron/price-alerts` | GET | Vercel cron, `apps/api/vercel.json` |
+
+**Admin — 25 routes, all behind the admin secret**
+
+`adjust-balance`, `analytics`, `bills/logo`, `bills/logos`, `credentials`,
+`credit-crypto`, `crypto-wallets`, `features`, `kyc`, `login`, `otp`, `popup`,
+`provider-check`, `provider-status`, `roles`, `security/activity`, `settings`,
+`stats`, `subjects/lookup`, `support-contact`, `transactions`, `users`,
+`users/[id]`, `virtual-accounts`, `withdrawals`.
+
+The admin dashboard never calls these directly. It has its own route layer at
+`apps/admin/app/api/*` that proxies each one server-side, so `ADMIN_API_SECRET`
+stays out of the browser.
+
+`GET /api/admin/provider-check` is the one to reach for when money stops
+moving: it makes read-only calls to Maplerad and reports, per probe, whether the
+key is valid, whether this deployment's IP is whitelisted, whether collections
+are enabled, and whether there is float. It exercises **both** Maplerad clients.
+
+## Setup
+
+**See [INSTALL.md](./INSTALL.md)** for tools, environment files and running all
+four apps.
 
 ```bash
 bun install
@@ -111,235 +212,93 @@ bunx prisma generate --schema packages/db/prisma/schema.prisma
 cd apps/api && bun run dev          # then web, admin, mobile
 ```
 
-> The setup instructions that used to live here were written before the project
-> moved to bun, Prisma and Maplerad. They told you to run `npm install` (wrong
-> package manager — this is a bun workspace), to deploy Supabase Edge Functions
-> that are no longer used, and to configure Paystack and Flutterwave, neither of
-> which the codebase integrates with any more. Following them would have failed
-> at the first step and wasted an afternoon at the rest. They have been removed
-> rather than left to mislead.
+Migrations are **not** applied on deploy. Idempotent `ensure*` helpers run at
+boot from `apps/api/src/instrumentation.ts` instead.
 
-## 🔐 Security Features
+## Testing
 
-### API Keys Protection
-- **Secret keys never touch the client** - only used in Supabase Edge Functions
-- Keys are encrypted in database
-- Communication is HTTPS-only
-
-### Row-Level Security (RLS)
-- Users can only view/modify their own data
-- Admins have elevated permissions
-- Service role for backend operations
-
-### Admin Authentication
-- Secure admin login (implement with NextAuth.js)
-- Session tokens stored securely
-- CSRF protection
-
-## 📱 Mobile App Features
-
-### Authentication
-- Phone number + OTP login
-- Automatic session persistence
-- Biometric optional
-
-### Wallet Management
-- Real wallet balance display with eye toggle
-- Virtual account details (account number, bank name)
-- Copy account number to clipboard
-
-### Transactions
-- Send money to other users
-- Wallet-to-wallet instant transfers
-- Withdraw to any Nigerian bank account
-
-### Virtual Account Funding
-- Dedicated/Static virtual account per user
-- Automatic balance update on bank transfer
-- Real-time webhook processing
-
-### Additional Features
-- KYC verification (BVN/NIN)
-- Transaction history with filters
-- Profile management
-- Support for Nigerian banks
-
-## 💻 Admin Dashboard Features
-
-### Dashboard
-- Real-time statistics (total wallets, active users, KYC pending, daily volume)
-- Recent user activity
-- Quick action shortcuts
-
-### Users Management
-- Search and filter users
-- KYC approval/rejection
-- Block/unblock users
-- View wallet balances
-
-### Virtual Accounts
-- View all assigned virtual accounts
-- Regenerate accounts
-- Switch between providers
-- Account number management
-
-### Payment Settings
-- Configure Paystack keys
-- Configure Flutterwave keys
-- Toggle active provider
-- Webhook configuration helper
-
-### Transactions
-- View all platform transactions
-- Filter by type and status
-- Export to CSV
-- Search and pagination
-- Manual reconciliation
-
-## 🧪 Testing
-
-### Test Virtual Account Creation
 ```bash
-curl -X POST https://your-supabase-url.supabase.co/functions/v1/create-virtual-account \
-  -H "Authorization: Bearer YOUR_ANON_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "user-uuid",
-    "provider": "paystack",
-    "customer_email": "user@example.com",
-    "customer_phone": "08012345678",
-    "customer_name": "John Doe"
-  }'
+bun run test          # 163 tests
+bun run build         # api, web, admin (mobile builds through EAS)
+bun run lint
 ```
 
-### Test Webhook (Paystack)
+Two checks worth knowing about, both of which have caught real bugs that
+typechecking and unit tests could not:
+
+**Every route exists and guards itself.** Boot the API and probe all 63 routes
+unauthenticated. A `401` proves the route loaded and refused an anonymous
+caller; a `404` would mean the route is missing. No database is needed —
+authentication is checked before any Prisma call.
+
 ```bash
-curl -X POST http://localhost:3000/api/webhooks/paystack \
-  -H "Content-Type: application/json" \
-  -H "x-paystack-signature: your-signature" \
-  -d '{
-    "event": "charge.success",
-    "data": {
-      "reference": "your-reference",
-      "amount": 2500000,
-      "customer": {"email": "customer@example.com"}
-    }
-  }'
+cd apps/api && ADMIN_API_SECRET=<16+ chars> bunx next dev -p 4399
+curl -i http://localhost:4399/api/health          # 200
+curl -i -X POST http://localhost:4399/api/kyc     # 401, not 404
 ```
 
-### Test Payout
+**Every client call resolves to a real route.** API paths are strings, so a call
+to a route that was renamed or never existed compiles and ships. Both bugs found
+that way were client calls into routes that had never existed, each wrapped in a
+`try/catch` that swallowed the 404 — so the UI looked like it worked.
+
+**Responsive layout.** `apps/web` is checked by driving a real browser over the
+built app at seven viewport sizes from 360px portrait to 1920px, asserting no
+horizontal overflow and that the desktop sidebar appears only where it should.
+That is how a 256px overflow on every `AppShell` page was found.
+
+## Deployment
+
+| Target | Where |
+|---|---|
+| API | Vercel project `cheqpay-admin453` → `cheqpay-admin453.vercel.app` |
+| Web | Vercel project `cheqpy` |
+| Admin | Vercel project `cheqpay-admin` |
+| Mobile | EAS (`eas build --platform ios` / `android`) |
+
+`.github/workflows/deploy-vercel.yml` deploys web and API to **production** on
+every push to `main` or the active feature branch.
+
+`mycheqpay.com` is served from a **static export**, not from Vercel:
+
 ```bash
-curl -X POST https://your-supabase-url.supabase.co/functions/v1/process-payout \
-  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "user-uuid",
-    "amount": 10000,
-    "bank_account_number": "0123456789",
-    "bank_code": "058",
-    "narration": "Withdrawal"
-  }'
+cd apps/web && STATIC_EXPORT=1 bun run build   # emits out/
 ```
 
-## 📊 Database Schema
+Upload `out/` to the web host. Every page is client-rendered and talks to the
+API over HTTPS, so the host only ever serves files — no Node, no PHP, no
+database. See [apps/web/STATIC-HOSTING.md](./apps/web/STATIC-HOSTING.md).
+**A change is not live on `mycheqpay.com` until a fresh export is uploaded.**
 
-### Users Table
-- `id` (UUID, PK)
-- `phone` (VARCHAR, UNIQUE)
-- `email` (VARCHAR, UNIQUE)
-- `full_name` (VARCHAR)
-- `kyc_status` (pending/approved/rejected)
-- `referral_code` (VARCHAR, UNIQUE)
-- Timestamps
+## Database
 
-### Wallets Table
-- `id` (UUID, PK)
-- `user_id` (FK to users)
-- `balance` (DECIMAL)
-- `ledger_balance` (DECIMAL)
+Prisma models: `User`, `UserSession`, `RetainedSubject`, `Beneficiary`, `Card`,
+`Wallet`, `Balance`, `Quote`, `Transaction`, `KycRecord`, `WebhookEvent`,
+`PlatformSetting`, `AuditLog`, `BillerAsset`.
 
-### Virtual Accounts Table
-- `id` (UUID, PK)
-- `user_id` (FK, UNIQUE)
-- `provider` (paystack/flutterwave)
-- `account_number` (VARCHAR)
-- `bank_name` (VARCHAR)
-- `reference` (VARCHAR, UNIQUE)
-- `is_active` (BOOLEAN)
-- `metadata` (JSONB)
+`packages/db/prisma/schema.prisma` is the source of truth — read it rather than
+a copy in a README, which is how the previous one came to describe tables that
+no longer existed.
 
-### Transactions Table
-- `id` (UUID, PK)
-- `user_id` (FK)
-- `type` (credit/debit/transfer/withdrawal/airtime/bills)
-- `amount` (DECIMAL)
-- `reference` (VARCHAR, UNIQUE)
-- `status` (pending/completed/failed)
-- `metadata` (JSONB)
+Balances are BigInt minor units. `WebhookEvent` carries a unique `eventId` that
+makes replay a no-op.
 
-### Payment Configs Table
-- `provider` (paystack/flutterwave, UNIQUE)
-- `public_key` (VARCHAR)
-- `secret_key_encrypted` (TEXT)
-- `is_active` (BOOLEAN)
+## Security
 
-## 🎨 UI/UX Design
+- Provider secret keys are server-only and never reach a client bundle
+- `ADMIN_API_SECRET` stays server-side; the admin browser talks to its own proxy
+- Row-level security on Supabase; users see only their own rows
+- Withdrawals require MFA at AAL2
+- BVN and other PII are encrypted at rest with `PII_ENCRYPTION_KEY`
+- Webhook signatures are verified before any state change
+- Append-only audit log on every privileged action
 
-### Mobile App
-- **OPay-inspired design** with modern green (#10B981) branding
-- Clean card-based layouts
-- Fast onboarding (Phone → OTP → Dashboard)
-- Real-time balance updates
-- Smooth transitions and animations
+## License
 
-### Admin Dashboard
-- Professional business UI
-- Responsive grid layouts
-- Data tables with sorting/filtering
-- Chart visualizations
-- Quick action buttons
+Intended to be MIT. There is no LICENSE file in the repository yet — the
+previous README pointed at one that has never existed. Add it before treating
+the project as licensed.
 
-## 🚀 Deployment
+## Support
 
-### Mobile App (EAS)
-```bash
-cd apps/mobile
-eas build --platform ios
-eas submit --platform ios
-```
-
-### Admin Dashboard (Vercel)
-```bash
-cd apps/admin
-vercel
-```
-
-### Edge Functions
-```bash
-supabase functions deploy --project-id YOUR_PROJECT_ID
-```
-
-## 📖 API Documentation
-
-See `API.md` for complete API endpoint documentation.
-
-## 🤝 Contributing
-
-1. Create a feature branch
-2. Make your changes
-3. Submit a pull request
-
-## 📄 License
-
-MIT License - See LICENSE file
-
-## 📞 Support
-
-For issues and questions:
 - Email: support@cheqpay.com
-- Documentation: https://docs.cheqpay.com
-- Community: https://discord.gg/cheqpay
-
----
-
-**Built with ❤️ for African fintech**
