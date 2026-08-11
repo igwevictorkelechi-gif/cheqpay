@@ -70,14 +70,35 @@ export async function POST(req: Request) {
 
     const body = kycTier1Schema.parse(await req.json());
 
+    // A returning user completing their details won't retype the BVN, but the
+    // identity check needs one. We retained it encrypted at first verification
+    // precisely so it can be produced again without asking.
+    //
+    // Recovered here rather than further down because the verification below
+    // needs it too: with KYC_PROVIDER=maplerad the check IS the enrollment, so
+    // a BVN that only appeared after the check would never reach it.
+    let bvn = body.bvn;
+    if (!bvn && user.bvnCiphertext && isPiiEncryptionConfigured()) {
+      try {
+        bvn = decryptPii(user.bvnCiphertext);
+      } catch (err) {
+        console.error("[kyc] could not decrypt the retained BVN for enrollment", err);
+      }
+    }
+
     // Automated identity check (BVN/ID). Passing auto-approves; otherwise the
     // submission stays PENDING for manual admin review.
     const verdict = await getKycProvider().verify({
       firstName: body.firstName,
       lastName: body.lastName,
-      dateOfBirth: body.dateOfBirth,
-      bvn: body.bvn,
+      dateOfBirth: body.dateOfBirth ?? user.dateOfBirth?.toISOString().slice(0, 10),
+      bvn,
       documentRefs: body.documentRefs,
+      // Only the Maplerad provider reads these; the others ignore them.
+      userId: auth.id,
+      email: user.email,
+      phone: body.phone ?? user.phone,
+      address: body.address,
     });
 
     const record = await prisma.kycRecord.create({
@@ -147,18 +168,11 @@ export async function POST(req: Request) {
       // This MUST come before the deposit account below: a Maplerad collection
       // account hangs off a customer id, so enrolling second meant every
       // account request went out without one and failed.
-      // A returning user completing their details won't retype the BVN, but
-      // enrollment needs one. We retained it encrypted at first verification
-      // precisely so it can be produced again without asking.
-      let bvn = body.bvn;
-      if (!bvn && user.bvnCiphertext && isPiiEncryptionConfigured()) {
-        try {
-          bvn = decryptPii(user.bvnCiphertext);
-        } catch (err) {
-          console.error("[kyc] could not decrypt the retained BVN for enrollment", err);
-        }
-      }
-
+      // `bvn` was recovered above, before the identity check, so that a
+      // Maplerad-backed check sees the same value this enrollment does.
+      //
+      // Idempotent: when the check above already enrolled the user this finds
+      // the persisted customer id and returns without calling the provider.
       await ensureMapleradCustomer(auth.id, user.email, {
         firstName: body.firstName,
         lastName: body.lastName,

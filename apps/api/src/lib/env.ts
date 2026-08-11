@@ -90,7 +90,7 @@ const envSchema = z.object({
 
   // KYC / identity verification. `mock` auto-verifies on a well-formed BVN;
   // `dojah` performs a real BVN lookup + name match (requires Dojah keys).
-  KYC_PROVIDER: providerEnum("KYC_PROVIDER", ["mock", "dojah"], "mock"),
+  KYC_PROVIDER: providerEnum("KYC_PROVIDER", ["mock", "dojah", "maplerad"], "mock"),
   DOJAH_APP_ID: z.string().optional(),
   DOJAH_API_KEY: z.string().optional(),
   DOJAH_API_BASE: z.string().url().default("https://api.dojah.io"),
