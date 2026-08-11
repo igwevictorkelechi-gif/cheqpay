@@ -365,7 +365,7 @@ model KycRecord {
 // verified before any state change; the unique eventId prevents replay.
 model WebhookEvent {
   id             String    @id @default(uuid()) @db.Uuid
-  source         String // "flutterwave" | "tatum" | ...
+  source         String // "maplerad"
   eventId        String    @map("event_id") // provider-supplied unique id
   payload        Json
   signatureValid Boolean   @map("signature_valid")

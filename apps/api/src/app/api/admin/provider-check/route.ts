@@ -5,6 +5,8 @@ import { MapleradError } from "@/lib/maplerad/client";
 import { getInstitutions } from "@/lib/maplerad/accounts";
 import { getWallets } from "@/lib/maplerad/wallets";
 import { getBillers } from "@/lib/maplerad/bills";
+import { mapleradIfConfigured } from "@/payments";
+import { BillPaymentError } from "@/payments/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,6 +65,14 @@ async function probe(
  * inside a generic message.
  */
 function describe(err: unknown): string {
+  // The two Maplerad clients report failures with different error types. Map
+  // the second one onto the first so a 403 reads as a 403 either way, rather
+  // than falling through to a bare message with the status buried in it.
+  if (err instanceof BillPaymentError) {
+    return describe(
+      new MapleradError(err.providerMessage ?? err.message, err.providerStatus ?? 0, err),
+    );
+  }
   if (err instanceof MapleradError) {
     if (err.status === 403) {
       return `HTTP 403 — Maplerad rejected this server's IP address. Whitelist the deployment's outbound IP in the Maplerad dashboard. Vercel has no fixed outbound IP, so this cannot be satisfied there. (${err.message})`;
@@ -145,6 +155,26 @@ export async function GET(req: Request) {
           const billers = await getBillers("data");
           if (billers.length === 0) throw new Error("No data billers returned");
           return `${billers.length} data billers`;
+        },
+      ),
+    );
+
+    // The four probes above all run through lib/maplerad/client.ts. The money
+    // paths — virtual accounts, transfers, bills — use a SECOND client in
+    // payments/maplerad.ts with its own fetch, its own headers and its own copy
+    // of the proxy secret. It can be broken while every probe above passes, and
+    // the first person to find out would otherwise be a user whose deposit
+    // account never appeared. listBanks is that client's cheapest GET.
+    probes.push(
+      await probe(
+        "Money-path client",
+        "The client behind virtual accounts, transfers and bills also authenticates",
+        async () => {
+          const psp = mapleradIfConfigured();
+          if (!psp) throw new Error("Maplerad payment provider is not configured");
+          const banks = await psp.listBanks();
+          if (banks.length === 0) throw new Error("No banks returned");
+          return `${banks.length} banks listed via payments/maplerad.ts`;
         },
       ),
     );

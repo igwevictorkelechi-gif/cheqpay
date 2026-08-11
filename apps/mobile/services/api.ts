@@ -262,19 +262,6 @@ export const api = {
     });
   },
 
-  initDeposit(amount: string): Promise<{
-    txRef: string;
-    transactionId: string;
-    amount: string;
-    currency?: string;
-  }> {
-    return apiFetch('/api/deposits/flutterwave', {
-      method: 'POST',
-      headers: { 'idempotency-key': idemKey() },
-      body: JSON.stringify({ amount }),
-    });
-  },
-
   getKyc(): Promise<{
     kycTier: number;
     limits: {

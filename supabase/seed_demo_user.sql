@@ -24,7 +24,7 @@ on conflict (user_id) do update
 
 -- 3) Static virtual account
 insert into public.virtual_accounts (user_id, provider, account_number, bank_name, bank_code, reference, is_active)
-select id, 'flutterwave', '7002349836', 'Wema Bank', '035', 'cheqpay-demo-va', true
+select id, 'maplerad', '7002349836', 'Wema Bank', '035', 'cheqpay-demo-va', true
 from auth.users where email = 'demo@cheqpay.app'
 on conflict (user_id) do nothing;
 

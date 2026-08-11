@@ -27,7 +27,6 @@ export default function AppLayout() {
       <Tabs.Screen name="convert" options={{ href: null }} />
       <Tabs.Screen name="swap-confirm" options={{ href: null }} />
       <Tabs.Screen name="swap-success" options={{ href: null }} />
-      <Tabs.Screen name="send-money" options={{ href: null }} />
       <Tabs.Screen name="send-user" options={{ href: null }} />
       <Tabs.Screen name="transactions" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ href: null }} />
