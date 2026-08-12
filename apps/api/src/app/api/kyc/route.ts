@@ -97,6 +97,27 @@ export async function POST(req: Request) {
       documentRefs: body.documentRefs,
     });
 
+    if (!verdict.verified) {
+      // A submission that does not auto-verify sends the user to "Under review"
+      // and — because enrolment is gated on the verdict — silently denies them a
+      // Maplerad customer and therefore a deposit account. The provider's reason
+      // is the only thing that distinguishes "the name did not match the BVN
+      // registry" from "the lookup was refused because our IP is not
+      // whitelisted", and those need opposite fixes.
+      //
+      // It was reaching the client as `message` and the audit log, but nowhere
+      // an operator looks first, so every diagnosis started by guessing.
+      //
+      // Safe to log: provider reasons never carry the BVN — that is exactly why
+      // providerRef holds only the last four digits.
+      console.warn("[kyc] not auto-verified — sent to manual review", {
+        userId: auth.id,
+        provider: getKycProvider().name,
+        reason: verdict.reason,
+        submittedBvn: bvn ? `…${bvn.slice(-4)}` : "none",
+      });
+    }
+
     const record = await prisma.kycRecord.create({
       data: {
         userId: auth.id,
