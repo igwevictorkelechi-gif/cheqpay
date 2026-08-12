@@ -1,4 +1,4 @@
-import { getEnv } from "@/lib/env";
+import { assertNotMockInProduction, assertProviderConfigured, getEnv } from "@/lib/env";
 import type { PaymentProvider } from "./types";
 import { MockPaymentProvider } from "./mock";
 import { MapleradProvider } from "./maplerad";
@@ -30,6 +30,11 @@ export function getPaymentProvider(): PaymentProvider {
   if (cached) return cached;
 
   const env = getEnv();
+  // Before resolving, not after: a misconfigured or production-mock rail must
+  // refuse the request rather than answer it with an invented account number.
+  assertProviderConfigured("PAYMENT_PROVIDER");
+  assertNotMockInProduction("PAYMENT_PROVIDER", env.PAYMENT_PROVIDER);
+
   if (env.PAYMENT_PROVIDER === "maplerad") {
     const mp = mapleradIfConfigured();
     if (!mp) {

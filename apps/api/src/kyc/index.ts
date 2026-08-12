@@ -1,4 +1,4 @@
-import { getEnv } from "@/lib/env";
+import { assertNotMockInProduction, assertProviderConfigured, getEnv } from "@/lib/env";
 import type { KycProvider } from "./types";
 import { MockKycProvider } from "./mock";
 import { DojahKycProvider } from "./dojah";
@@ -12,6 +12,12 @@ let cached: KycProvider | null = null;
 export function getKycProvider(): KycProvider {
   if (cached) return cached;
   const env = getEnv();
+  // The mock provider auto-approves any well-formed BVN without checking it
+  // against the registry, so on the live deployment it is not a KYC provider at
+  // all — it is an identity check that always says yes.
+  assertProviderConfigured("KYC_PROVIDER");
+  assertNotMockInProduction("KYC_PROVIDER", env.KYC_PROVIDER);
+
   if (env.KYC_PROVIDER === "maplerad") {
     // No key check here: this provider goes through the shared Maplerad client,
     // which fails loudly on its own if MAPLERAD_SECRET_KEY is missing.
