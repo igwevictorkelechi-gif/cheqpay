@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -23,8 +23,24 @@ import { describe, expect, it } from "vitest";
  * instrumentation.ts. It cannot be satisfied by remembering — only by wiring.
  */
 
-const LIB_DIR = join(__dirname);
+// The whole API source tree, not just lib/. Every ALTER lives in lib/ today,
+// but a scan scoped to where the problem happened to be found last time would
+// miss the next one silently — which is the failure mode this file exists to
+// prevent.
+const SRC_DIR = join(__dirname, "..");
 const INSTRUMENTATION = join(__dirname, "..", "instrumentation.ts");
+
+/** Every .ts file under src/, excluding tests. */
+function sourceFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    if (entry === "node_modules" || entry === ".next") continue;
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...sourceFiles(full));
+    else if (entry.endsWith(".ts") && !entry.endsWith(".test.ts")) out.push(full);
+  }
+  return out;
+}
 
 /**
  * The source of a function, from its opening brace to the matching close.
@@ -49,9 +65,9 @@ function functionBody(src: string, startIndex: number): string {
 function columnAddingHelpers(): Array<{ file: string; fn: string }> {
   const found: Array<{ file: string; fn: string }> = [];
 
-  for (const file of readdirSync(LIB_DIR)) {
-    if (!file.endsWith(".ts") || file.endsWith(".test.ts")) continue;
-    const src = readFileSync(join(LIB_DIR, file), "utf8");
+  for (const path of sourceFiles(SRC_DIR)) {
+    const file = path.slice(SRC_DIR.length + 1);
+    const src = readFileSync(path, "utf8");
     if (!/ALTER TABLE/i.test(src)) continue;
 
     for (const m of src.matchAll(/(?:export\s+)?(?:async\s+)?function\s+(ensure\w+)/g)) {
@@ -95,7 +111,7 @@ describe("runtime schema bootstrap", () => {
   it("exports every column-adding helper so boot can reach it", () => {
     // A private helper cannot be wired in, which is how the last one was missed.
     for (const { file, fn } of helpers) {
-      const src = readFileSync(join(LIB_DIR, file), "utf8");
+      const src = readFileSync(join(SRC_DIR, file), "utf8");
       expect(new RegExp(`export\\s+(?:async\\s+)?function\\s+${fn}\\b`).test(src)).toBe(true);
     }
   });
