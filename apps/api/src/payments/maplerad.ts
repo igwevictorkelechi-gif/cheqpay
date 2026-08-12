@@ -316,19 +316,24 @@ export class MapleradProvider implements PaymentProvider {
       throw new Error(DEPOSITS_UNAVAILABLE);
     }
 
+    // customer_id and currency are the only accepted fields (plus an optional
+    // preferred_bank, a VIRTUAL institution code). We used to also send a
+    // `reference`, on the belief that it came back on the collection webhook
+    // and gave a second way to place a payment. It is not in the request schema
+    // at all, so it was never stored and never echoed — and the webhook matches
+    // on the NUBAN regardless, which is the stronger signal anyway.
+    //
+    // Note there is no bank_code in the response, only bank_name. Nothing here
+    // may pretend otherwise: the admin account list shows the code as blank,
+    // which is honest, rather than a value invented from the name.
     const acct = await this.req<{
       id: string;
       account_number: string;
       bank_name?: string;
-      bank_code?: string;
       account_name?: string;
     }>("/collections/virtual-account", "POST", {
       customer_id: i.mapleradCustomerId,
       currency: "NGN",
-      // Our own reference, echoed back on the collection webhook where
-      // available — a second way to place a payment if account matching ever
-      // comes up short.
-      reference: i.txRef,
     });
 
     if (!acct?.account_number) {
@@ -340,7 +345,8 @@ export class MapleradProvider implements PaymentProvider {
     return {
       accountNumber: acct.account_number,
       bankName: acct.bank_name ?? "Maplerad",
-      bankCode: acct.bank_code,
+      // Not returned by this endpoint; left undefined rather than guessed.
+      bankCode: undefined,
       providerRef: acct.id,
       // Always permanent: a static account is created once per user and reused
       // forever, which is the whole reason it is tied to a KYC'd customer.

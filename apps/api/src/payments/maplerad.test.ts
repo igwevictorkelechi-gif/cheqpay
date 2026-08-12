@@ -276,12 +276,16 @@ describe("MapleradProvider — money movement", () => {
   });
 
   it("opens a permanent collection account for an enrolled customer", async () => {
-    stubMaplerad({
+    // The stub mirrors the documented response exactly. It used to include a
+    // bank_code, which this endpoint does not return — so the test was
+    // confirming a field the provider could never actually supply.
+    const sent = stubMaplerad({
       "POST /collections/virtual-account": {
         id: "acc_123",
         account_number: "9900000001",
+        account_name: "ADA OKAFOR",
         bank_name: "Wema Bank",
-        bank_code: "035",
+        currency: "NGN",
       },
     });
 
@@ -297,11 +301,18 @@ describe("MapleradProvider — money movement", () => {
     ).resolves.toEqual({
       accountNumber: "9900000001",
       bankName: "Wema Bank",
-      bankCode: "035",
+      // Not in the response; must not be invented from the bank name.
+      bankCode: undefined,
       providerRef: "acc_123",
       // Always permanent: a static account is created once and reused forever.
       permanent: true,
     });
+
+    // Only customer_id and currency are accepted. Sending anything else is not
+    // harmless — an unexpected field is exactly the kind of thing a provider
+    // rejects with a 400 naming a parameter nobody here has heard of.
+    const body = sent.find((c) => c.key === "POST /collections/virtual-account")?.body;
+    expect(body).toEqual({ customer_id: "cus_abc", currency: "NGN" });
   });
 
   it("does not hand back an account without a number", async () => {
