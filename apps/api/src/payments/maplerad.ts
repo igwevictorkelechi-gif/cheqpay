@@ -38,10 +38,17 @@ import {
 // from the moment someone signs up (POST /customers needs only a name and an
 // email); what a deposit account needs on top is the tier 1 upgrade, and that
 // is what is missing here.
+// The condition this guards is `!mapleradCustomerId` — no customer record at
+// all — so it must not claim a tier problem. It used to say "not yet tier 1",
+// which sent an operator looking for a failed upgrade when the truth was that
+// the user had never submitted the KYC form: POST /api/kyc is the only thing
+// that creates the customer, and the deposit screen does not create one.
 const DEPOSITS_UNAVAILABLE =
-  "Cannot open a deposit account: this customer is not yet Maplerad tier 1, " +
-  "which collections require. Finish identity verification with BVN, date of " +
-  "birth, phone and street address.";
+  "Cannot open a deposit account: this user has no Maplerad customer record. " +
+  "One is created when the KYC form is submitted (POST /api/kyc) — opening the " +
+  "deposit screen does not create it. Submit KYC with BVN, date of birth, phone " +
+  "and full street address, which is also what the tier 1 upgrade collections " +
+  "require.";
 
 /** NGN decimal string -> kobo integer. "100" -> 10000. */
 function toKobo(amount: string): number {
