@@ -65,10 +65,11 @@ export class MapleradCustodyProvider implements CustodyProvider {
       select: { mapleradCustomerId: true },
     });
     if (!user?.mapleradCustomerId) {
-      // Enrollment happens at KYC approval and needs phone + address; without
-      // it there is no Maplerad customer to attach an address to.
+      // The customer record is created from name and email alone, so reaching
+      // here means even that has not happened yet — a provider failure or a
+      // profile that predates it, not missing identity details.
       throw new Error(
-        "User has no Maplerad customer id yet (KYC with phone + address required)"
+        "User has no Maplerad customer id yet (customer record was never created)"
       );
     }
 

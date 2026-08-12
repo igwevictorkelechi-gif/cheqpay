@@ -113,6 +113,17 @@ model User {
   // deposit addresses, cards) hangs off. Enrolled best-effort at KYC approval,
   // the one moment the BVN is in hand; null until then.
   mapleradCustomerId String? @unique @map("maplerad_customer_id")
+  /// Highest Maplerad tier we have successfully upgraded this customer to.
+  /// Collections — and therefore NGN deposit accounts — need tier 1.
+  mapleradTier       Int     @default(0) @map("maplerad_tier")
+
+  /// Street address, kept so the tier 1 upgrade can be retried later. It used
+  /// to live only in the KYC request body, so a user whose upgrade failed could
+  /// never be upgraded again without filling the whole form in a second time.
+  addressStreet      String? @map("address_street")
+  addressCity        String? @map("address_city")
+  addressState       String? @map("address_state")
+  addressPostalCode  String? @map("address_postal_code")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 

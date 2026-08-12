@@ -34,9 +34,14 @@ import {
   type VirtualAccountResult,
 } from "./types";
 
+// Named for what the user has to do about it. A Maplerad customer now exists
+// from the moment someone signs up (POST /customers needs only a name and an
+// email); what a deposit account needs on top is the tier 1 upgrade, and that
+// is what is missing here.
 const DEPOSITS_UNAVAILABLE =
-  "Cannot open a deposit account: this user has no Maplerad customer record yet. " +
-  "Maplerad customer enrollment needs an approved KYC with BVN, date of birth, phone and street address.";
+  "Cannot open a deposit account: this customer is not yet Maplerad tier 1, " +
+  "which collections require. Finish identity verification with BVN, date of " +
+  "birth, phone and street address.";
 
 /** NGN decimal string -> kobo integer. "100" -> 10000. */
 function toKobo(amount: string): number {

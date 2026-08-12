@@ -5,7 +5,7 @@ import { getTierLimits } from "@/lib/kyc";
 import { getKycProvider } from "@/kyc";
 import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
-import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
+import { ensureMapleradCustomer, rememberAddress } from "@/lib/mapleradCustomer";
 import { kycTier1Schema } from "@/lib/validation";
 import { decryptPii, encryptPii, fingerprintPii, isPiiEncryptionConfigured, last4 } from "@/lib/pii";
 import { ensureRetentionSchema } from "@/lib/retention";
@@ -168,6 +168,18 @@ export async function POST(req: Request) {
       // This MUST come before the deposit account below: a Maplerad collection
       // account hangs off a customer id, so enrolling second meant every
       // account request went out without one and failed.
+      // Keep the address on the profile. Without this the tier 1 upgrade can
+      // only ever be attempted during a KYC submission, because the address
+      // exists nowhere else — which is why an already-verified user could never
+      // be upgraded, and so could never be given a deposit account.
+      if (body.address) {
+        try {
+          await rememberAddress(auth.id, body.address);
+        } catch (err) {
+          console.error("[kyc] could not persist the address", err);
+        }
+      }
+
       // `bvn` was recovered above, before the identity check, so that a
       // Maplerad-backed check sees the same value this enrollment does.
       //

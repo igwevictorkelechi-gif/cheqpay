@@ -48,11 +48,20 @@ export type IdentityType =
   | "VOTERS_CARD"
   | "DRIVERS_LICENSE";
 
-export interface EnrollCustomerInput {
+/** POST /customers — everything Maplerad needs to open a tier 0 customer. */
+export interface CreateCustomerInput {
   first_name: string;
   last_name: string;
   email: string;
   country: string; // "NG"
+}
+
+/**
+ * PATCH /customers/upgrade/tier1 — the identity evidence that lifts a tier 0
+ * customer to tier 1, which is what collections (deposit accounts) require.
+ */
+export interface UpgradeCustomerTier1Input {
+  customer_id: string;
   identification_number: string; // BVN for Nigeria
   dob: string; // "DD-MM-YYYY"
   phone: { phone_country_code: string; phone_number: string };
@@ -63,12 +72,6 @@ export interface EnrollCustomerInput {
     state: string;
     country: string;
     postal_code: string;
-  };
-  identity?: {
-    type: IdentityType;
-    image: string; // URL to uploaded document
-    number: string;
-    country: string;
   };
   photo?: string; // URL to selfie
 }

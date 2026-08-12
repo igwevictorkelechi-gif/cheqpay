@@ -272,7 +272,7 @@ describe("MapleradProvider — money movement", () => {
         permanent: true,
         txRef: "va_1",
       })
-    ).rejects.toThrow(/no Maplerad customer record/i);
+    ).rejects.toThrow(/not yet Maplerad tier 1/i);
   });
 
   it("opens a permanent collection account for an enrolled customer", async () => {

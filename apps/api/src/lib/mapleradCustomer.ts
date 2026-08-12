@@ -1,19 +1,27 @@
 import { prisma } from "@cheqpay/db";
-import { enrollCustomer } from "./maplerad/customers";
+import { createCustomer, upgradeCustomerTier1 } from "./maplerad/customers";
 
 /**
- * Enroll a user as a Maplerad customer (tier 1) and persist the customer id.
+ * Give a user a Maplerad customer record, and lift it to tier 1 when we hold
+ * enough identity evidence to do so.
  *
- * Maplerad's stablecoin API only serves tier-1+ customers, and tier 1 requires
- * the BVN — which this codebase holds only transiently, during KYC submission.
- * So enrollment happens at KYC approval, best-effort: a Maplerad hiccup must
- * never fail the user's KYC. If enrollment is skipped (missing data or provider
- * error) the user simply has no stablecoin wallet yet; it is retried on their
- * next KYC submission.
+ * Maplerad splits this into two calls and so does this function:
  *
- * Verified against the sandbox: tier 1 requires names, email, country, BVN,
- * dob (DD-MM-YYYY), phone AND a street address. Identity document + selfie
- * would reach tier 2 but are not needed for stablecoin addresses.
+ *   POST  /customers                 name + email + country  -> tier 0
+ *   PATCH /customers/upgrade/tier1   BVN, dob, phone, address -> tier 1
+ *
+ * That split matters. The previous version made a single call carrying the full
+ * identity, so a user missing any one field ended up with no customer record at
+ * all — and every downstream feature failed with "no Maplerad customer record
+ * yet", which reads as a provider problem rather than as four missing form
+ * fields. Now the record always exists and only the upgrade is conditional.
+ *
+ * Tier 1 is what collections require, so an NGN deposit account still needs the
+ * upgrade to have succeeded. The difference is that the upgrade can be retried
+ * on its own, from data already on the user, without asking them to fill the
+ * KYC form a second time.
+ *
+ * Best-effort throughout: a Maplerad outage must never fail a user's KYC.
  */
 export interface MapleradEnrollmentInput {
   firstName: string;
@@ -31,65 +39,155 @@ export interface MapleradEnrollmentInput {
   };
 }
 
+/** Columns added at runtime — migrations are not applied on deploy here. */
+let ensured: Promise<void> | null = null;
+function ensureMapleradSchema(): Promise<void> {
+  if (!ensured) {
+    ensured = (async () => {
+      // One multi-clause ALTER: Postgres applies it atomically, so the columns
+      // cannot end up half-added if the process dies partway.
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE app_users
+          ADD COLUMN IF NOT EXISTS maplerad_tier INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS address_street TEXT,
+          ADD COLUMN IF NOT EXISTS address_city TEXT,
+          ADD COLUMN IF NOT EXISTS address_state TEXT,
+          ADD COLUMN IF NOT EXISTS address_postal_code TEXT`);
+    })().catch((err) => {
+      // Let a later call try again rather than caching the failure forever.
+      ensured = null;
+      throw err;
+    });
+  }
+  return ensured;
+}
+
 export async function ensureMapleradCustomer(
   userId: string,
   email: string,
   input: MapleradEnrollmentInput
 ): Promise<string | null> {
-  const existing = await prisma.user.findUnique({
+  await ensureMapleradSchema();
+
+  const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { mapleradCustomerId: true },
+    select: {
+      mapleradCustomerId: true,
+      mapleradTier: true,
+      addressStreet: true,
+      addressCity: true,
+      addressState: true,
+      addressPostalCode: true,
+    },
   });
-  if (existing?.mapleradCustomerId) return existing.mapleradCustomerId;
+  if (!user) return null;
+
+  let customerId = user.mapleradCustomerId;
+
+  // ---- Step 1: the customer record itself ---------------------------------
+  if (!customerId) {
+    try {
+      const customer = await createCustomer({
+        first_name: input.firstName,
+        last_name: input.lastName,
+        email,
+        country: "NG",
+      });
+      customerId = customer.id;
+      await prisma.user.update({
+        where: { id: userId },
+        data: { mapleradCustomerId: customerId },
+      });
+    } catch (err) {
+      console.error("[maplerad] could not create the customer (will retry)", {
+        userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
+  }
+
+  // ---- Step 2: the tier 1 upgrade -----------------------------------------
+  if (user.mapleradTier >= 1) return customerId;
+
+  // Fall back to the address already on file. This is what lets the upgrade be
+  // retried later — on a deposit attempt, say — without the user re-entering
+  // anything they have already given us once.
+  const address =
+    input.address ??
+    (user.addressStreet && user.addressCity && user.addressState && user.addressPostalCode
+      ? {
+          street: user.addressStreet,
+          city: user.addressCity,
+          state: user.addressState,
+          postalCode: user.addressPostalCode,
+        }
+      : undefined);
 
   const missing: string[] = [];
   if (!input.bvn) missing.push("bvn");
   if (!input.dateOfBirth) missing.push("dateOfBirth");
   if (!input.phone) missing.push("phone");
-  if (!input.address) missing.push("address");
+  if (!address) missing.push("address");
   if (missing.length) {
-    // Not an error — the KYC form doesn't collect all of these yet. Log so we
-    // can see how many users are skipped once stablecoins matter.
-    console.warn("[maplerad] enrollment skipped (incomplete data)", { userId, missing });
-    return null;
+    // Not an error: the customer exists and can be upgraded as soon as the
+    // user supplies the rest.
+    console.warn("[maplerad] tier 1 upgrade skipped (incomplete data)", { userId, missing });
+    return customerId;
   }
 
   const dob = toMapleradDob(input.dateOfBirth!);
   const phone = toMapleradPhone(input.phone!);
   if (!dob || !phone) {
-    console.warn("[maplerad] enrollment skipped (unparseable dob/phone)", { userId });
-    return null;
+    console.warn("[maplerad] tier 1 upgrade skipped (unparseable dob/phone)", { userId });
+    return customerId;
   }
 
   try {
-    const customer = await enrollCustomer({
-      first_name: input.firstName,
-      last_name: input.lastName,
-      email,
-      country: "NG",
+    await upgradeCustomerTier1({
+      customer_id: customerId,
       identification_number: input.bvn!,
       dob,
       phone,
       address: {
-        street: input.address!.street,
-        city: input.address!.city,
-        state: input.address!.state,
+        street: address!.street,
+        city: address!.city,
+        state: address!.state,
         country: "NG",
-        postal_code: input.address!.postalCode,
+        postal_code: address!.postalCode,
       },
     });
+    // The response carries no customer object, so the tier is recorded from the
+    // call having succeeded rather than read back from the body.
     await prisma.user.update({
       where: { id: userId },
-      data: { mapleradCustomerId: customer.id },
+      data: { mapleradTier: 1 },
     });
-    return customer.id;
   } catch (err) {
-    console.error("[maplerad] customer enrollment failed (will retry on next KYC submit)", {
+    console.error("[maplerad] tier 1 upgrade failed (will retry)", {
       userId,
       error: err instanceof Error ? err.message : String(err),
     });
-    return null;
   }
+
+  return customerId;
+}
+
+/** Persist the address so a later tier 1 upgrade needs nothing from the user. */
+export async function rememberAddress(
+  userId: string,
+  address: { street: string; city: string; state: string; postalCode: string }
+): Promise<void> {
+  await ensureMapleradSchema();
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      addressStreet: address.street,
+      addressCity: address.city,
+      addressState: address.state,
+      addressPostalCode: address.postalCode,
+    },
+  });
 }
 
 /** "1988-10-20" -> "20-10-1988" (Maplerad wants DD-MM-YYYY). */
