@@ -145,10 +145,16 @@ export class MapleradProvider implements PaymentProvider {
     }
   }
 
-  /** Airtime: no plan to resolve — the amount is whatever the user typed. */
+  /**
+   * Airtime: no plan to resolve — the amount is whatever the user typed.
+   *
+   * The identifier comes from the catalog, whose airtime entries are unverified
+   * against Maplerad's published biller list; see the AIRTIME_NETWORKS note in
+   * lib/bills.ts.
+   */
   private async payAirtime(input: BillPayInput, kobo: number): Promise<BillPayResult> {
     const r = await this.req<{ id: string; status: string }>("/bills/airtime", "POST", {
-      identifier: this.identifier(input), // e.g. "mtn-ng"
+      identifier: this.identifier(input),
       phone_number: input.customer,
       amount: kobo,
     });
@@ -253,18 +259,45 @@ export class MapleradProvider implements PaymentProvider {
 
   // ---- Payouts (money out) ------------------------------------------------
 
+  /**
+   * Every NGN payout bank, following pagination to the end.
+   *
+   * This used to request one page of 100 and return it. GET /institutions
+   * paginates (the envelope carries page/page_size/total, which this client
+   * discards along with the rest of the envelope), and Nigeria has more than 100
+   * NUBAN institutions once microfinance banks are counted — so the tail was
+   * being dropped silently. A user whose bank fell past the cut saw no error,
+   * just a bank missing from the list, which reads as "Cheqpay doesn't support
+   * my bank" rather than as the bug it is.
+   */
   async listBanks(): Promise<Bank[]> {
-    const banks = await this.req<Array<{ name: string; code: string }>>(
-      "/institutions?type=NUBAN&country=NG&page=1&page_size=100",
-    );
-    return banks.map((b) => ({ code: b.code, name: b.name }));
+    const PAGE_SIZE = 100;
+    const MAX_PAGES = 20; // hard stop if `page` is ever ignored
+    const banks: Bank[] = [];
+
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const batch = await this.req<Array<{ name: string; code: string }>>(
+        `/institutions?type=NUBAN&country=NG&page=${page}&page_size=${PAGE_SIZE}`,
+      );
+      banks.push(...batch.map((b) => ({ code: b.code, name: b.name })));
+      if (batch.length < PAGE_SIZE) break; // a short page is the last page
+    }
+
+    return banks;
   }
 
+  /**
+   * Name enquiry. POST /institutions/resolve takes `account_number` and
+   * `bank_code` and nothing else — we used to also send `currency`, which is
+   * absent from the request schema and so was never read.
+   *
+   * Note the endpoint returns a dummy name in sandbox; only Live resolves a real
+   * account, so a sandbox "match" proves nothing about a real NUBAN.
+   */
   async resolveBankAccount(input: ResolveAccountInput): Promise<ResolveAccountResult> {
     const r = await this.req<{ account_name: string }>("/institutions/resolve", "POST", {
       bank_code: input.bankCode,
       account_number: input.accountNumber,
-      currency: "NGN",
     });
     return { accountName: r.account_name };
   }
@@ -281,7 +314,7 @@ export class MapleradProvider implements PaymentProvider {
     reference: string;
     narration?: string;
   }): Promise<TransferResult> {
-    const r = await this.req<{ id: string; status?: string }>("/transfers", "POST", {
+    const r = await this.req<{ id?: string; status?: string }>("/transfers", "POST", {
       bank_code: input.bankCode,
       account_number: input.accountNumber,
       amount: toKobo(input.amount),
@@ -290,7 +323,13 @@ export class MapleradProvider implements PaymentProvider {
       reference: input.reference,
     });
     return {
-      providerRef: r.id,
+      // Maplerad's documented 200 body for this endpoint is an echo of the
+      // request — no id, no status — which is almost certainly a copy-paste slip
+      // in their docs, but it costs nothing to survive being right. Settlement
+      // matches on OUR reference (the transfer.* webhook carries it back), so a
+      // missing id loses nothing that matters; falling back to the reference
+      // keeps externalRef populated instead of writing undefined.
+      providerRef: r.id ?? input.reference,
       status: r.status ? normalizeStatus(r.status) : "pending",
     };
   }

@@ -79,9 +79,17 @@ export async function getVirtualAccountById(
 }
 
 /**
- * List institutions (banks). Use type "VIRTUAL" for the `preferred_bank` when
- * creating collection accounts, "NUBAN" for NGN payout destinations.
+ * List one page of institutions (banks). Use type "VIRTUAL" for the
+ * `preferred_bank` when creating collection accounts, "NUBAN" for NGN payout
+ * destinations.
  * GET /institutions?type=&country=&page=&page_size=
+ *
+ * ⚠️ This endpoint paginates, and `page_size` defaults to 10. The envelope
+ * carries `page`, `page_size` and `total` as siblings of `data`, but the shared
+ * client unwraps `data` and drops them — so a truncated list is indistinguishable
+ * from a complete one here. Use getAllInstitutions() anywhere a missing bank
+ * would be a user-visible failure; this function is for probes and single-page
+ * reads that do not care.
  */
 export async function getInstitutions(input: {
   type?: InstitutionType;
@@ -97,4 +105,32 @@ export async function getInstitutions(input: {
       page_size: input.pageSize,
     },
   });
+}
+
+/** Page size used when walking the full institution list. */
+const INSTITUTION_PAGE_SIZE = 100;
+/** Hard stop so a provider that ignores `page` cannot spin forever. */
+const INSTITUTION_PAGE_LIMIT = 20;
+
+/**
+ * Every institution of a type, following pagination to the end.
+ *
+ * Nigeria has far more than 100 NUBAN institutions once microfinance banks are
+ * counted, so a single page silently omits banks — and the user whose bank is
+ * missing sees no error, just a bank that is not in the list. Walking to the end
+ * is the only way to be sure the list is whole.
+ */
+export async function getAllInstitutions(input: {
+  type?: InstitutionType;
+  country?: string;
+}): Promise<Institution[]> {
+  const all: Institution[] = [];
+  for (let page = 1; page <= INSTITUTION_PAGE_LIMIT; page++) {
+    const batch = await getInstitutions({ ...input, page, pageSize: INSTITUTION_PAGE_SIZE });
+    all.push(...batch);
+    // A short page is the last page. Relying on this rather than on `total`
+    // because the client cannot see `total` — see getInstitutions.
+    if (batch.length < INSTITUTION_PAGE_SIZE) return all;
+  }
+  return all;
 }

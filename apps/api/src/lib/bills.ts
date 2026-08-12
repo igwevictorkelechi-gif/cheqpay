@@ -70,8 +70,21 @@ export interface ServiceConfig {
   plans: BillPlan[];
 }
 
-/** Airtime: Maplerad has a per-network identifier, so we honour the user's pick
- *  rather than relying on its number-sniffing "ng-airtime" catch-all. */
+/**
+ * Airtime networks.
+ *
+ * ⚠️ These mapleradIds are UNVERIFIED. They were written on the belief that
+ * Maplerad publishes one airtime biller per network, but its documented example
+ * for GET /bills/airtime/billers/NG returns a single country-level biller —
+ * `{ name: "Airtime NG", identifier: "ng-airtime" }` — with no per-network
+ * entries. An example shows one item rather than the whole list, so it does not
+ * disprove these either; the question is genuinely open.
+ *
+ * Run /api/admin/provider-check (its "Airtime billers" probe prints every
+ * identifier Maplerad returns) and then either keep these or point all four at
+ * the single identifier. Until that is done, airtime purchases may be sent to a
+ * biller that does not exist.
+ */
 const AIRTIME_NETWORKS: Biller[] = [
   { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", mapleradId: "mtn-ng" },
   { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", mapleradId: "airtel-ng" },

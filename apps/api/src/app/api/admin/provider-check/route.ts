@@ -159,6 +159,23 @@ export async function GET(req: Request) {
       ),
     );
 
+    // Prints identifiers rather than just a count, because this probe exists to
+    // answer a specific open question: lib/bills.ts sends per-network airtime
+    // identifiers ("mtn-ng" and friends) while Maplerad's own example shows a
+    // single country-level "ng-airtime". Whichever this returns is the answer,
+    // and buying airtime on the wrong biller is not a mistake worth guessing at.
+    probes.push(
+      await probe(
+        "Airtime billers",
+        "Airtime can be sold, and which identifiers Maplerad actually publishes",
+        async () => {
+          const billers = await getBillers("airtime");
+          if (billers.length === 0) throw new Error("No airtime billers returned");
+          return billers.map((b) => `${b.name} (${b.identifier})`).join(", ");
+        },
+      ),
+    );
+
     // The four probes above all run through lib/maplerad/client.ts. The money
     // paths — virtual accounts, transfers, bills — use a SECOND client in
     // payments/maplerad.ts with its own fetch, its own headers and its own copy

@@ -20,7 +20,11 @@ async function tokenWith(claims: Record<string, unknown>) {
     .sign(new TextEncoder().encode("decode-only-secret-decode-only"));
 }
 
-afterEach(() => vi.unstubAllGlobals());
+// Block body, not a concise arrow: the concise form returns VitestUtils where a
+// void hook is expected, which does not typecheck.
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("verifySupabaseJwt", () => {
   it("returns the user when Supabase validates the token", async () => {

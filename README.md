@@ -64,6 +64,49 @@ removed — if you find them referenced anywhere, that reference is stale.
 > Verified: the same key refused from an un-whitelisted IP succeeds through the
 > proxy. See `.github/workflows/verify-maplerad-proxy.yml`.
 
+#### Outbound Maplerad endpoints, checked against the published contract
+
+Every Maplerad call we make, audited field by field against Maplerad's OpenAPI
+definitions. This table records what was *read from the contract*, not what was
+executed — a ✅ means our request and response handling match the published
+schema, not that the call has been run against a funded live account.
+
+| Endpoint | Used by | State |
+|---|---|---|
+| `POST /identity/bvn` | KYC name match | ✅ |
+| `POST /customers` | Customer creation (tier 0) | ✅ |
+| `PATCH /customers/upgrade/tier1` | Tier 1 upgrade | ✅ |
+| `PATCH /customers/upgrade/tier2` | — | Contract recorded, no caller (needs document upload) |
+| `POST /collections/virtual-account` | NGN deposit account | ✅ Fixed — sent an unaccepted `reference`, read a `bank_code` never returned |
+| `POST /crypto` | Deposit addresses | ✅ (`offramp`, not `off_ramp`; coin enum is **upper**-case) |
+| `POST /crypto/transfer` | Stablecoin withdrawal | ⚠️ See below — coin enum is **lower**-case; chain enum is `solana` only |
+| `GET /institutions` | Bank lists | ✅ Fixed — paginates; one page was silently dropping the tail |
+| `POST /institutions/resolve` | Name enquiry | ✅ Fixed — sent an undocumented `currency`. Returns a dummy name in sandbox |
+| `POST /institutions/fetch` | — | ✅, no caller |
+| `POST /transfers` | NGN payouts | ✅ — documented 200 body carries no `id`, so we fall back to our own reference |
+| `GET /bills/{type}/billers/{country}` | Biller discovery | ✅ |
+| `GET /bills/airtime/billers/{country}` | Airtime billers | ⚠️ See below |
+| `GET /bills/{bill_type}/bundle/{biller}` | Data bundles | ✅ |
+| `POST /bills/data` · `/airtime` · `/cable` · `/electricity` | Bill payment | ✅ |
+
+Two open items, both flagged in the code at the point where they matter:
+
+**Stablecoin withdrawals are disabled, deliberately.** `POST /crypto` mints
+addresses on six chains; `POST /crypto/transfer` documents Solana as its only
+destination. Both pairs we ship (USDT and USDC, ERC-20) are therefore one-way on
+paper: money could arrive at an address with no documented route out. Rather than
+hand users an address we might not be able to empty, `custody/maplerad.ts`
+refuses to mint one until the chain is confirmed withdrawable. Nothing observable
+changes today — address creation is broken on Maplerad's side anyway — but the
+trap cannot open the moment they fix it. To lift it, run one sandbox withdrawal
+and set `withdrawable: true`, or move the pairs to Solana.
+
+**Airtime biller identifiers are unverified.** `lib/bills.ts` sends per-network
+identifiers (`mtn-ng`, `airtel-ng`, …); Maplerad's documented example returns a
+single country-level `ng-airtime`. An example is not a full list, so this is
+genuinely open. `provider-check`'s "Airtime billers" probe prints every
+identifier Maplerad returns — one read-only call settles it.
+
 ## Core features
 
 - **NGN wallet** — fund via a dedicated Maplerad NUBAN; withdraw to any
@@ -218,7 +261,7 @@ boot from `apps/api/src/instrumentation.ts` instead.
 ## Testing
 
 ```bash
-bun run test          # 163 tests
+bun run test          # 188 tests
 bun run build         # api, web, admin (mobile builds through EAS)
 bun run lint
 ```

@@ -253,11 +253,49 @@ describe("MapleradProvider — money movement", () => {
     ]);
   });
 
+  it("falls back to our reference when the payout response carries no id", async () => {
+    // Maplerad's documented 200 body for /transfers echoes the request, with no
+    // id and no status. Settlement matches on our reference either way, but
+    // externalRef must not end up unset.
+    stubMaplerad({ "POST /transfers": { bank_code: "044", amount: 250_050 } });
+    const r = await psp.initiateTransfer({
+      amount: "2500.50",
+      bankCode: "044",
+      accountNumber: "0690000031",
+      reference: "tx-payout-2",
+    });
+
+    expect(r).toEqual({ providerRef: "tx-payout-2", status: "pending" });
+  });
+
   it("resolves an account name before we send money to it", async () => {
-    stubMaplerad({ "POST /institutions/resolve": { account_name: "ADA OKAFOR" } });
+    const sent = stubMaplerad({ "POST /institutions/resolve": { account_name: "ADA OKAFOR" } });
     await expect(
       psp.resolveBankAccount({ accountNumber: "0690000031", bankCode: "044" })
     ).resolves.toEqual({ accountName: "ADA OKAFOR" });
+
+    // account_number and bank_code are the whole request schema — a `currency`
+    // used to be sent too, and was never read.
+    expect(sent[0].body).toEqual({ bank_code: "044", account_number: "0690000031" });
+  });
+
+  it("pages through the bank list instead of returning only the first 100", async () => {
+    // Nigeria has more than 100 NUBAN institutions once microfinance banks are
+    // counted. Returning one page dropped the tail silently, and the user whose
+    // bank fell past the cut saw no error — just a bank that wasn't listed.
+    const page = (n: number, count: number) =>
+      Array.from({ length: count }, (_, i) => ({ name: `Bank ${n}-${i}`, code: `${n}${i}` }));
+
+    const sent = stubMaplerad({
+      "GET /institutions?type=NUBAN&country=NG&page=1&page_size=100": page(1, 100),
+      "GET /institutions?type=NUBAN&country=NG&page=2&page_size=100": page(2, 100),
+      "GET /institutions?type=NUBAN&country=NG&page=3&page_size=100": page(3, 37),
+    });
+
+    const banks = await psp.listBanks();
+
+    expect(banks).toHaveLength(237);
+    expect(sent).toHaveLength(3); // stopped on the short page, did not keep going
   });
 
   it("refuses to mint a virtual account for a user with no Maplerad customer", async () => {

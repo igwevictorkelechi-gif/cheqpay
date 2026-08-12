@@ -3,16 +3,30 @@
 // Bill payments: data, cable TV, electricity. These debit the business wallet
 // directly (no per-customer account needed). All amounts are minor units (kobo).
 //
-// NOTE: the public reference lists data / cable / electricity billers only.
-// Airtime is not documented there — confirm with Maplerad whether airtime is a
-// `data` biller variant before enabling it.
-
 import { mapleradRequest } from "./client";
 import type { Minor } from "./types";
 
 // ---- Discovery ------------------------------------------------------------
 
-export type BillType = "data" | "cable" | "electricity";
+/**
+ * Airtime is documented separately from the other three: the "Get Billers By
+ * Type and Country" endpoint enumerates data / cable / electricity, while
+ * airtime has its own page pinned to /bills/airtime/billers/{country}. Both are
+ * the same URL shape, so one function serves them.
+ *
+ * ⚠️ UNRESOLVED — airtime biller identifiers. The airtime page's worked example
+ * returns a single country-level biller, `{ name: "Airtime NG", identifier:
+ * "ng-airtime", commission: 1 }`, whereas lib/bills.ts sends per-network
+ * identifiers ("mtn-ng", "airtel-ng", "glo-ng", "9mobile-ng") on the belief that
+ * Maplerad offers one per network. An OpenAPI example shows one item, not the
+ * whole list, so it does not settle the question either way — and guessing is
+ * how you buy airtime on the wrong network.
+ *
+ * Settle it with one read-only call: /api/admin/provider-check now probes
+ * airtime billers and prints every identifier Maplerad returns. If the list is
+ * just `ng-airtime`, point all four networks in lib/bills.ts at it.
+ */
+export type BillType = "airtime" | "data" | "cable" | "electricity";
 
 export interface Biller {
   name: string;
@@ -20,7 +34,10 @@ export interface Biller {
   commission: number;
 }
 
-/** GET /bills/{type}/billers/{country} */
+/**
+ * GET /bills/{type}/billers/{country}
+ * (and GET /bills/airtime/billers/{country}, which is the same shape)
+ */
 export async function getBillers(
   type: BillType,
   country = "NG",
