@@ -39,9 +39,24 @@ export interface MapleradEnrollmentInput {
   };
 }
 
-/** Columns added at runtime — migrations are not applied on deploy here. */
+/**
+ * Columns added at runtime — migrations are not applied on deploy here.
+ *
+ * ⚠️ MUST be called from instrumentation.ts at boot, not only from
+ * ensureMapleradCustomer below. Prisma emits every column the User model
+ * declares on every query of that model, so from the moment `mapleradTier` and
+ * the address fields joined the schema, EVERY query returning a User selected
+ * them — /api/me, the admin user list, KYC, virtual accounts, transfers.
+ *
+ * Calling this only from the enrolment path created a deadlock: the sole thing
+ * that could create the columns was a KYC submission, and the KYC route reads
+ * the user (and therefore fails) before it ever reaches enrolment. Nothing
+ * could heal it from inside the app. See the long note in instrumentation.ts —
+ * this is the second time this exact hazard has bitten, which is why the helper
+ * is exported rather than private.
+ */
 let ensured: Promise<void> | null = null;
-function ensureMapleradSchema(): Promise<void> {
+export function ensureMapleradSchema(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
       // One multi-clause ALTER: Postgres applies it atomically, so the columns

@@ -53,11 +53,22 @@ async function ensureSchema(): Promise<void> {
 
   try {
     // Imported lazily so the module graph above stays free of them.
-    const [{ ensureRetentionSchema }, { ensureActivitySchema }] = await Promise.all([
-      import("@/lib/retention"),
-      import("@/lib/activity"),
+    const [{ ensureRetentionSchema }, { ensureActivitySchema }, { ensureMapleradSchema }] =
+      await Promise.all([
+        import("@/lib/retention"),
+        import("@/lib/activity"),
+        import("@/lib/mapleradCustomer"),
+      ]);
+    await Promise.all([
+      ensureRetentionSchema(),
+      ensureActivitySchema(),
+      // maplerad_tier + the address columns. Omitting this is what broke the
+      // admin user list, KYC and virtual accounts in production: the columns
+      // were only created on KYC submission, but every User query selected them,
+      // so KYC itself failed before it could create them. Nothing that adds a
+      // column to an existing model may be left out of this list.
+      ensureMapleradSchema(),
     ]);
-    await Promise.all([ensureRetentionSchema(), ensureActivitySchema()]);
   } catch (err) {
     console.error("[bootstrap] schema preparation failed; will retry on next start", err);
   }
