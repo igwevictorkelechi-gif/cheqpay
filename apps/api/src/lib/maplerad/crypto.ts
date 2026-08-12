@@ -60,6 +60,14 @@ export async function createDepositAddress(input: {
       customer_id: input.customerId,
       coin: input.coin ?? "USDC",
       chain: input.chain ?? "solana",
+      // `offramp`, not `off_ramp`. Maplerad's own documentation disagrees with
+      // itself here: the request schema names the property `offramp` and the
+      // response returns `offramp`, but the worked "Request Example" beside it
+      // sends `off_ramp`. Two of three say offramp, including the machine-
+      // readable half, so that is what goes on the wire. Do not "correct" this
+      // to match the example without testing what actually gets honoured —
+      // silently sending the wrong name means offramp defaults to false and
+      // deposits stop converting to USD, with nothing failing loudly.
       offramp: input.offramp ?? false,
     },
   });
