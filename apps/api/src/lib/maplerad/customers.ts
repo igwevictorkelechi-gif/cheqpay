@@ -47,6 +47,20 @@ export async function upgradeCustomerTier1(
 }
 
 /**
+ * Tier 2 is PATCH /customers/upgrade/tier2 and is deliberately not implemented
+ * here, because it would have no caller: it requires a government ID as
+ * { type: NIN | PASSPORT | VOTERS_CARD | DRIVERS_LICENSE, image, number,
+ * country } where `image` is a URL to a hosted document, and this app has no
+ * document upload. kycTier1Schema carries a documentRefs array, but nothing in
+ * either client populates it.
+ *
+ * Recorded rather than written so whoever wires card issuing has the contract
+ * to hand. One asymmetry to note when they do: unlike tier 1, tier 2 returns a
+ * body — data: { id, status } — so its result can be read rather than inferred
+ * from the call not throwing.
+ */
+
+/**
  * Correct details on an existing customer.
  *
  * PATCH /customers/{id}
