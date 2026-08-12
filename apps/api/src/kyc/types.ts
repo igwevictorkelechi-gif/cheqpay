@@ -9,20 +9,6 @@ export interface KycVerifyInput {
   dateOfBirth?: string;
   bvn?: string;
   documentRefs?: string[];
-  /**
-   * The fields below are only needed by a provider that enrolls the user as it
-   * verifies them — Maplerad wants a full customer record, not just a BVN and a
-   * name. Providers that merely check an identity (Dojah, the mock) ignore them.
-   */
-  userId?: string;
-  email?: string;
-  phone?: string | null;
-  address?: {
-    street: string;
-    city: string;
-    state: string;
-    postalCode: string;
-  };
 }
 
 export interface KycVerifyResult {

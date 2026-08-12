@@ -1,82 +1,82 @@
 // apps/api/src/kyc/maplerad.ts
 //
-// Verify identity by enrolling the user as a Maplerad customer, rather than
-// asking a separate identity bureau and hoping the two agree.
+// Verify identity against Maplerad's BVN registry lookup.
 //
-// Why this exists. With a separate provider there are two answers to "is this
-// user verified": our KycRecord, written from the bureau's verdict, and the
-// Maplerad customer tier, which is what actually governs whether Maplerad will
-// open an account or issue a stablecoin address. They diverge in exactly one
-// direction and it is the worst one — the bureau approves on BVN + name, the
-// app says "verified", and then enrollment quietly fails for want of a phone or
-// an address, so the user is told they are verified and still cannot be given
-// an account number. Enrolling as the verification step collapses the two into
-// one answer.
+// POST /identity/bvn returns what the registry holds for a number — names, date
+// of birth, phone. Confirming the returned name matches what the user typed is
+// the check. It creates nothing and moves no money, so it is safe to run on
+// every submission.
 //
-// It does NOT ask the user for less. Maplerad tier 1 needs BVN, date of birth,
-// phone and address where a bureau needs BVN and a name. What it removes is the
-// false success in between, and one provider to hold credentials for.
+// This replaced an earlier version that verified by *enrolling* the user, which
+// was heavier than the job needs: enrollment requires a date of birth, a phone
+// and a full street address before it will tell you anything, so a user with a
+// perfectly valid BVN could not be verified until they had supplied four more
+// fields. A lookup needs the BVN alone. Enrollment still happens — separately,
+// after approval, in the KYC route — which is where it belongs.
 //
-// ⚠️ This provider is only usable where Maplerad itself is reachable. Maplerad
-// enforces an IP whitelist and Vercel has no fixed egress IP, so without
-// MAPLERAD_BASE_URL pointing at the egress proxy every enrollment returns
-// "Access Denied" — and with this selected that means nobody can verify at all,
-// which is worse than the split-brain it fixes. Do not set KYC_PROVIDER=maplerad
-// until /api/admin/provider-check passes.
+// ⚠️ Maplerad enforces an IP whitelist and Vercel has no fixed egress IP, so
+// without MAPLERAD_BASE_URL pointing at the egress proxy every call here
+// returns "Access Denied" and nobody can verify. Do not set
+// KYC_PROVIDER=maplerad until /api/admin/provider-check passes.
 
-import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
+import { verifyBvn } from "@/lib/maplerad/identity";
 import type { KycProvider, KycVerifyInput, KycVerifyResult } from "./types";
-
-/** Maplerad tier 1 is what unlocks accounts and stablecoin addresses. */
-const TIER = 1;
 
 export class MapleradKycProvider implements KycProvider {
   readonly name = "maplerad";
 
   async verify(input: KycVerifyInput): Promise<KycVerifyResult> {
-    if (!input.userId || !input.email) {
-      // A programming error rather than a failed check: the route did not pass
-      // through what this provider needs. Say so plainly instead of reporting
-      // the user as unverified, which would look like their BVN was rejected.
+    if (!input.bvn || !/^\d{11}$/.test(input.bvn)) {
+      return { verified: false, tier: 1, reason: "No valid BVN provided" };
+    }
+
+    let found;
+    try {
+      found = await verifyBvn(input.bvn);
+    } catch (err) {
+      // Covers a refused lookup and an unreachable provider alike. Either way
+      // the submission falls through to manual review rather than being
+      // reported to the user as a rejected identity.
       return {
         verified: false,
-        tier: 0,
-        reason:
-          "KYC_PROVIDER=maplerad needs the user id and email; the caller did not supply them.",
+        tier: 1,
+        reason: `BVN lookup failed: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
 
-    // ensureMapleradCustomer is idempotent and already swallows provider
-    // errors, returning null. It is the same call the KYC route makes after
-    // approval, so selecting this provider does not enroll twice — the second
-    // call finds the persisted id and returns it.
-    const customerId = await ensureMapleradCustomer(input.userId, input.email, {
-      firstName: input.firstName,
-      lastName: input.lastName,
-      bvn: input.bvn,
-      dateOfBirth: input.dateOfBirth,
-      phone: input.phone,
-      address: input.address,
-    });
+    if (!found?.first_name || !found?.last_name) {
+      return { verified: false, tier: 1, reason: "BVN not found" };
+    }
 
-    if (!customerId) {
+    // Names only, matching the Dojah provider. The registry's date of birth is
+    // deliberately not used as a gate: placeholder dates are common in the BVN
+    // data, and rejecting on one would turn a registry defect into a user who
+    // cannot open an account.
+    const nameMatches =
+      norm(found.first_name) === norm(input.firstName) &&
+      norm(found.last_name) === norm(input.lastName);
+
+    if (!nameMatches) {
       return {
         verified: false,
-        tier: 0,
-        // Deliberately not "your BVN was rejected": the enrollment can also be
-        // skipped for incomplete data or fail on the provider's side, and the
-        // server log distinguishes them. Sending it for review is the safe
-        // reading of an ambiguous outcome.
-        reason:
-          "Maplerad did not confirm this identity. Sent for review — check the server log for whether data was missing or the provider refused.",
+        tier: 1,
+        reason: "BVN name did not match the details provided",
       };
     }
 
     return {
       verified: true,
-      tier: TIER,
-      reason: "Enrolled as a Maplerad customer; identity confirmed against the BVN.",
-      providerRef: customerId,
+      tier: 2,
+      reason: "BVN + name verified via Maplerad",
+      // The BVN itself is never put in a provider reference — it is the
+      // identifier we encrypt everywhere else, and this string reaches the
+      // audit log in clear.
+      providerRef: `maplerad-bvn-${input.bvn.slice(-4)}`,
     };
   }
+}
+
+/** Lowercase, trim, collapse whitespace for a lenient name comparison. */
+function norm(s: string | undefined): string {
+  return (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }

@@ -3,64 +3,79 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // vi.mock is hoisted above every const in the file, so the spy has to be
 // created inside vi.hoisted or the factory closes over a temporal-dead-zone
 // binding and the whole module fails to load.
-const { ensureMapleradCustomer } = vi.hoisted(() => ({ ensureMapleradCustomer: vi.fn() }));
-vi.mock("@/lib/mapleradCustomer", () => ({ ensureMapleradCustomer }));
+const { verifyBvn } = vi.hoisted(() => ({ verifyBvn: vi.fn() }));
+vi.mock("@/lib/maplerad/identity", () => ({ verifyBvn }));
 
 import { MapleradKycProvider } from "./maplerad";
 
-const base = {
-  firstName: "Ada",
-  lastName: "Obi",
-  bvn: "12345678901",
-  dateOfBirth: "1990-01-02",
-  phone: "08031234567",
-  address: { street: "1 Awolowo Rd", city: "Ikoyi", state: "Lagos", postalCode: "101233" },
-  userId: "u-1",
-  email: "ada@example.com",
+const registry = {
+  first_name: "Ada",
+  last_name: "Obi",
+  middle_name: "Ngozi",
+  dob: "1990-01-02",
+  phone_number: "08031234567",
 };
 
+const submitted = { firstName: "Ada", lastName: "Obi", bvn: "12345678901" };
+
 describe("Maplerad KYC provider", () => {
-  beforeEach(() => ensureMapleradCustomer.mockReset());
+  beforeEach(() => {
+    verifyBvn.mockReset();
+  });
 
-  it("verifies at tier 1 when enrollment returns a customer id", async () => {
-    ensureMapleradCustomer.mockResolvedValue("cus_123");
-    const r = await new MapleradKycProvider().verify(base);
+  it("verifies to tier 2 when the registry name matches", async () => {
+    verifyBvn.mockResolvedValue(registry);
+    const r = await new MapleradKycProvider().verify(submitted);
     expect(r.verified).toBe(true);
-    expect(r.tier).toBe(1);
-    // The customer id is the audit trail back to Maplerad.
-    expect(r.providerRef).toBe("cus_123");
+    expect(r.tier).toBe(2);
+    expect(verifyBvn).toHaveBeenCalledWith("12345678901");
   });
 
-  it("passes the whole customer record through, not just BVN and name", async () => {
-    ensureMapleradCustomer.mockResolvedValue("cus_123");
-    await new MapleradKycProvider().verify(base);
-    const [userId, email, input] = ensureMapleradCustomer.mock.calls[0];
-    expect(userId).toBe("u-1");
-    expect(email).toBe("ada@example.com");
-    // Tier 1 is refused without these, so losing any of them in the hand-off
-    // would look like the user's identity was rejected.
-    expect(input).toMatchObject({
-      bvn: "12345678901",
-      dateOfBirth: "1990-01-02",
-      phone: "08031234567",
-      address: base.address,
+  it("matches names leniently on case and whitespace", async () => {
+    verifyBvn.mockResolvedValue({ ...registry, first_name: "  ADA ", last_name: "obi" });
+    const r = await new MapleradKycProvider().verify(submitted);
+    expect(r.verified).toBe(true);
+  });
+
+  it("sends a mismatched name to review rather than approving it", async () => {
+    verifyBvn.mockResolvedValue({ ...registry, last_name: "Okafor" });
+    const r = await new MapleradKycProvider().verify(submitted);
+    expect(r.verified).toBe(false);
+    expect(r.reason).toMatch(/did not match/i);
+  });
+
+  it("does not gate on the registry date of birth", async () => {
+    // Placeholder dates are common in BVN data; rejecting on one would turn a
+    // registry defect into a user who cannot open an account.
+    verifyBvn.mockResolvedValue({ ...registry, dob: "1964-01-10" });
+    const r = await new MapleradKycProvider().verify({ ...submitted, dateOfBirth: "1990-01-02" });
+    expect(r.verified).toBe(true);
+  });
+
+  it("requires a well-formed BVN before calling the provider", async () => {
+    for (const bvn of [undefined, "", "123", "1234567890a"]) {
+      const r = await new MapleradKycProvider().verify({ ...submitted, bvn });
+      expect(r.verified).toBe(false);
+    }
+    expect(verifyBvn).not.toHaveBeenCalled();
+  });
+
+  it("falls through to review when the lookup fails", async () => {
+    verifyBvn.mockImplementation(async () => {
+      throw new Error("Access Denied");
     });
+    const r = await new MapleradKycProvider().verify(submitted);
+    expect(r.verified).toBe(false);
+    // The operator needs the provider's own words to tell an IP problem from a
+    // bad BVN; the user is not told their identity was rejected.
+    expect(r.reason).toMatch(/Access Denied/);
+    expect(r.reason).not.toMatch(/did not match/i);
   });
 
-  it("does not verify when enrollment yields nothing", async () => {
-    ensureMapleradCustomer.mockResolvedValue(null);
-    const r = await new MapleradKycProvider().verify(base);
-    expect(r.verified).toBe(false);
-    expect(r.tier).toBe(0);
-    // Ambiguous outcome — must not be reported to the user as a rejected BVN.
-    expect(r.reason).not.toMatch(/rejected/i);
-  });
-
-  it("reports a caller mistake rather than an unverified user", async () => {
-    const r = await new MapleradKycProvider().verify({ ...base, userId: undefined });
-    expect(r.verified).toBe(false);
-    expect(r.reason).toMatch(/user id and email/i);
-    // Never reach the provider with an incomplete call.
-    expect(ensureMapleradCustomer).not.toHaveBeenCalled();
+  it("keeps the BVN out of the provider reference", async () => {
+    verifyBvn.mockResolvedValue(registry);
+    const r = await new MapleradKycProvider().verify(submitted);
+    // providerRef reaches the audit log in clear.
+    expect(r.providerRef).not.toContain("12345678901");
   });
 });

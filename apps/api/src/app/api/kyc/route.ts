@@ -75,8 +75,9 @@ export async function POST(req: Request) {
     // precisely so it can be produced again without asking.
     //
     // Recovered here rather than further down because the verification below
-    // needs it too: with KYC_PROVIDER=maplerad the check IS the enrollment, so
-    // a BVN that only appeared after the check would never reach it.
+    // needs it too — a BVN-based check has nothing to work with otherwise, and
+    // a returning user completing their address would fail verification for
+    // want of a number we already hold.
     let bvn = body.bvn;
     if (!bvn && user.bvnCiphertext && isPiiEncryptionConfigured()) {
       try {
@@ -94,11 +95,6 @@ export async function POST(req: Request) {
       dateOfBirth: body.dateOfBirth ?? user.dateOfBirth?.toISOString().slice(0, 10),
       bvn,
       documentRefs: body.documentRefs,
-      // Only the Maplerad provider reads these; the others ignore them.
-      userId: auth.id,
-      email: user.email,
-      phone: body.phone ?? user.phone,
-      address: body.address,
     });
 
     const record = await prisma.kycRecord.create({

@@ -48,6 +48,23 @@ export type IdentityType =
   | "VOTERS_CARD"
   | "DRIVERS_LICENSE";
 
+/**
+ * POST /identity/bvn — what the BVN registry holds for a number.
+ *
+ * `image` is a base64 passport photograph from the registry. It is deliberately
+ * not persisted anywhere: it is biometric PII we have no need for, and storing
+ * it would widen the blast radius of a database breach for no benefit.
+ */
+export interface BvnLookup {
+  first_name: string;
+  last_name: string;
+  middle_name?: string;
+  gender?: string;
+  dob?: string; // YYYY-MM-DD
+  phone_number?: string;
+  image?: string; // base64 photo — do not store
+}
+
 /** POST /customers — everything Maplerad needs to open a tier 0 customer. */
 export interface CreateCustomerInput {
   first_name: string;
