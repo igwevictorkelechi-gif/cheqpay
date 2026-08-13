@@ -105,6 +105,47 @@ export interface Customer {
   updated_at: string;
 }
 
+/**
+ * GET /customers/{id} — everything Maplerad holds for a customer.
+ *
+ * ⚠️ There is NO `tier` field, unlike the Customer returned by POST /customers.
+ * Tier has to be inferred from whether the identity and address blocks are
+ * populated — that is what hasTier1Evidence() does. Do not add a `tier` here on
+ * the assumption it is simply undocumented.
+ *
+ * `identity.number` is a BVN in the clear and `identity.image` a photograph.
+ * Neither is persisted anywhere: we hold the BVN encrypted from the user's own
+ * submission, and have no use for the photo.
+ */
+export interface MapleradCustomerDetail {
+  id: string;
+  first_name: string;
+  last_name: string;
+  middle_name?: string | null;
+  email: string;
+  phone_number?: string | null;
+  dob?: string | null; // DD-MM-YYYY
+  type?: string; // "INDIVIDUAL"
+  active?: boolean;
+  disabled?: boolean;
+  identity?: {
+    type?: string; // "BVN"
+    number?: string; // do not store
+    image?: string | null; // do not store
+    country?: string;
+  } | null;
+  address?: {
+    street?: string;
+    street2?: string | null;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    country?: string;
+  } | null;
+  status?: string; // "COMPLETED"
+  can_enrol_visa_card?: boolean;
+}
+
 // ---- Wallets --------------------------------------------------------------
 
 export interface Wallet {

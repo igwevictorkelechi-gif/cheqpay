@@ -5,7 +5,12 @@
 // hangs off, so persist it on the Cheqpay user record.
 
 import { mapleradRequest } from "./client";
-import type { Customer, CreateCustomerInput, UpgradeCustomerTier1Input } from "./types";
+import type {
+  Customer,
+  CreateCustomerInput,
+  MapleradCustomerDetail,
+  UpgradeCustomerTier1Input,
+} from "./types";
 
 /**
  * Open a tier 0 customer. Name, email and country only — no BVN, no date of
@@ -59,6 +64,41 @@ export async function upgradeCustomerTier1(
  * body — data: { id, status } — so its result can be read rather than inferred
  * from the call not throwing.
  */
+
+/**
+ * Fetch what Maplerad holds for a customer.
+ *
+ * GET /customers/{id}
+ *
+ * Read-only: it creates nothing and moves no money, so it is safe to call on any
+ * path. Two jobs here.
+ *
+ * First, it proves a stored customer id is real. Ours can be set by hand — a
+ * customer created on the Maplerad dashboard has to be pasted into the user row
+ * to connect the two — and a wrong id would otherwise wedge the account
+ * permanently: every downstream call would fail against an id that does not
+ * exist, while the code kept assuming enrolment was already done.
+ *
+ * Second, it says whether the tier 1 evidence is already on file. Note the
+ * response carries NO tier field — see MapleradCustomerDetail — so tier has to
+ * be read from whether identity and address are present, not from a number.
+ */
+export async function getCustomer(customerId: string): Promise<MapleradCustomerDetail> {
+  return mapleradRequest<MapleradCustomerDetail>(`/customers/${customerId}`);
+}
+
+/**
+ * Whether Maplerad already holds everything the tier 1 upgrade would supply.
+ *
+ * The upgrade needs a BVN, a date of birth, a phone and a full address. When the
+ * fetched customer already has all four, the customer is at tier 1 whatever our
+ * local column says, and re-sending the upgrade is at best a no-op.
+ */
+export function hasTier1Evidence(c: MapleradCustomerDetail): boolean {
+  return Boolean(
+    c.identity?.number && c.dob && c.phone_number && c.address?.street && c.address?.city,
+  );
+}
 
 /**
  * Correct details on an existing customer.

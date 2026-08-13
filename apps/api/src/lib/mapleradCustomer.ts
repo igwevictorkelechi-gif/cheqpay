@@ -1,5 +1,11 @@
 import { prisma } from "@cheqpay/db";
-import { createCustomer, upgradeCustomerTier1 } from "./maplerad/customers";
+import {
+  createCustomer,
+  getCustomer,
+  hasTier1Evidence,
+  upgradeCustomerTier1,
+} from "./maplerad/customers";
+import { MapleradError } from "./maplerad/client";
 
 /**
  * Give a user a Maplerad customer record, and lift it to tier 1 when we hold
@@ -119,6 +125,49 @@ export async function ensureMapleradCustomer(
         error: err instanceof Error ? err.message : String(err),
       });
       return null;
+    }
+  } else {
+    // ---- Step 1b: reconcile an id we did not create -----------------------
+    //
+    // A customer id can arrive here without this code having created it — a
+    // customer opened on the Maplerad dashboard has to be pasted into the user
+    // row by hand to connect the two. Two things then need checking that a
+    // self-created id never does.
+    //
+    // Whether it exists at all: a mistyped id would wedge the account forever,
+    // because every later call fails against an id Maplerad does not have while
+    // this function keeps assuming enrolment is done. Clearing it lets the next
+    // attempt create a real one.
+    //
+    // And what tier it actually holds: maplerad_tier is our local cache of
+    // Maplerad's state, and a hand-set id arrives with that cache at 0 whatever
+    // the truth is. Reading it back means the upgrade decision below is made
+    // from Maplerad's own record rather than from our guess.
+    try {
+      const remote = await getCustomer(customerId);
+      if (hasTier1Evidence(remote)) {
+        await prisma.user.update({ where: { id: userId }, data: { mapleradTier: 1 } });
+        return customerId;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      // Only a genuine "no such customer" clears the id. A refused or
+      // unreachable provider must not discard a good id — that would replace a
+      // working link with a new customer on every outage.
+      const notFound = err instanceof MapleradError && err.status === 404;
+      console.error("[maplerad] could not read back the stored customer", {
+        userId,
+        customerId,
+        notFound,
+        error: message,
+      });
+      if (notFound) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { mapleradCustomerId: null, mapleradTier: 0 },
+        });
+        return null;
+      }
     }
   }
 
