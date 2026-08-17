@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { piiKeyStatus } from "./piiKey";
 
 /**
  * Encryption for regulated personal data — currently the BVN.
@@ -28,10 +29,20 @@ const IV_BYTES = 12; // GCM standard
 
 let cachedKey: Buffer | null = null;
 
-/** True when PII encryption is configured. */
+// Lives in its own module so instrumentation.ts can validate the key without
+// dragging node:crypto into the Edge bundle. Re-exported here so callers that
+// already import from lib/pii have one place to look.
+export { piiKeyStatus, type PiiKeyStatus } from "./piiKey";
+
+/**
+ * True only when the key is present AND usable.
+ *
+ * Every caller branches on this to decide whether to attempt encryption, so
+ * answering "yes" for an unusable key is what turned a configuration mistake
+ * into lost data. A false here means the caller skips encryption and says so.
+ */
 export function isPiiEncryptionConfigured(): boolean {
-  const raw = process.env.PII_ENCRYPTION_KEY;
-  return typeof raw === "string" && raw.trim().length > 0;
+  return piiKeyStatus() === "ok";
 }
 
 /**
@@ -113,6 +124,66 @@ export function fingerprintMatches(a: string, b: string): boolean {
   const bb = Buffer.from(b, "hex");
   if (ba.length !== bb.length) return false;
   return timingSafeEqual(ba, bb);
+}
+
+/** The identity columns to write, plus the reason any of them are missing. */
+export interface RetainedIdentity {
+  legalName: string;
+  bvnCiphertext?: string;
+  bvnFingerprint?: string;
+  bvnLast4?: string;
+}
+
+/**
+ * Decide what can be retained for a KYC submission.
+ *
+ * Extracted so the guarantee is structural rather than incidental: the legal
+ * name is set before the BVN is even considered, and no encryption failure can
+ * remove it. Previously the two shared a try block, so an unusable key threw
+ * before the database write and lost BOTH — even though the name needs no key.
+ * An account with no name attached is the one an investigation cannot answer.
+ *
+ * Returns the columns to write and, separately, an operator-facing reason when
+ * the BVN could not be included. Never throws.
+ */
+export function buildRetainedIdentity(input: { legalName: string; bvn?: string }): {
+  identity: RetainedIdentity;
+  problem: string | null;
+} {
+  const identity: RetainedIdentity = { legalName: input.legalName };
+  if (!input.bvn) return { identity, problem: null };
+
+  const status = piiKeyStatus();
+  if (status === "unset") {
+    return {
+      identity,
+      problem:
+        "PII_ENCRYPTION_KEY is not set — BVN not retained. This is an AML record-keeping gap.",
+    };
+  }
+  if (status === "invalid") {
+    return {
+      identity,
+      problem:
+        "PII_ENCRYPTION_KEY is set but unusable — it must be base64 decoding to exactly " +
+        "32 bytes (generate with: openssl rand -base64 32). BVN not retained. This is an " +
+        "AML record-keeping gap.",
+    };
+  }
+
+  try {
+    identity.bvnCiphertext = encryptPii(input.bvn);
+    identity.bvnFingerprint = fingerprintPii(input.bvn);
+    identity.bvnLast4 = last4(input.bvn);
+    return { identity, problem: null };
+  } catch (err) {
+    return {
+      identity,
+      problem: `BVN encryption failed — BVN not retained: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
 }
 
 /** Last 4 digits, for display. Returns "" when there is nothing to show. */

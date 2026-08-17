@@ -1,11 +1,14 @@
+import { randomBytes } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  buildRetainedIdentity,
   decryptPii,
   encryptPii,
   fingerprintMatches,
   fingerprintPii,
   isPiiEncryptionConfigured,
   last4,
+  piiKeyStatus,
   resetPiiKeyCache,
 } from "./pii";
 
@@ -91,6 +94,56 @@ describe("key handling", () => {
     expect(isPiiEncryptionConfigured()).toBe(false);
   });
 
+  it("tells a missing key apart from an unusable one", () => {
+    // The two need opposite fixes — generate one, versus replace the one you
+    // generated wrongly — so a single boolean cannot express the situation.
+    delete process.env.PII_ENCRYPTION_KEY;
+    resetPiiKeyCache();
+    expect(piiKeyStatus()).toBe("unset");
+
+    process.env.PII_ENCRYPTION_KEY = "   ";
+    resetPiiKeyCache();
+    expect(piiKeyStatus()).toBe("unset");
+
+    process.env.PII_ENCRYPTION_KEY = KEY;
+    resetPiiKeyCache();
+    expect(piiKeyStatus()).toBe("ok");
+  });
+
+  it("rejects a 32-CHARACTER key, which is the natural mistake", () => {
+    // "any 32+ character random string" is wrong and decodes to 24 bytes. The
+    // requirement is base64 decoding to 32 bytes — 44 characters from
+    // `openssl rand -base64 32`.
+    const thirtyTwoChars = "abcdefghijklmnopqrstuvwxyz012345";
+    expect(thirtyTwoChars).toHaveLength(32);
+    expect(Buffer.from(thirtyTwoChars, "base64")).toHaveLength(24);
+
+    process.env.PII_ENCRYPTION_KEY = thirtyTwoChars;
+    resetPiiKeyCache();
+    expect(piiKeyStatus()).toBe("invalid");
+    // The whole point: callers branch on this, so it must not claim to be ready.
+    expect(isPiiEncryptionConfigured()).toBe(false);
+  });
+
+  it("accepts what the documented command actually produces", () => {
+    // 32 random bytes → 44 base64 characters. Generated here rather than
+    // hard-coded so the test exercises real output shape.
+    process.env.PII_ENCRYPTION_KEY = randomBytes(32).toString("base64");
+    expect(process.env.PII_ENCRYPTION_KEY).toHaveLength(44);
+    resetPiiKeyCache();
+    expect(piiKeyStatus()).toBe("ok");
+    expect(decryptPii(encryptPii("22123456789"))).toBe("22123456789");
+  });
+
+  it("never throws while classifying, however mangled the value", () => {
+    for (const bad of ["!!!!", "=", "a", "𝔲𝔫𝔦𝔠𝔬𝔡𝔢", "-".repeat(100)]) {
+      process.env.PII_ENCRYPTION_KEY = bad;
+      resetPiiKeyCache();
+      expect(() => piiKeyStatus()).not.toThrow();
+      expect(piiKeyStatus()).not.toBe("ok");
+    }
+  });
+
   it("refuses to operate without a key rather than storing recoverable data", () => {
     delete process.env.PII_ENCRYPTION_KEY;
     resetPiiKeyCache();
@@ -115,5 +168,70 @@ describe("last4", () => {
 
   it("returns empty when there is too little to show", () => {
     expect(last4("12")).toBe("");
+  });
+});
+
+/**
+ * The legal name must survive any key problem.
+ *
+ * It shares no dependency with the key, but used to share a try block with the
+ * encryption, so an unusable key threw before the database write and lost both.
+ * An account with a BVN we could not store is a compliance gap; an account with
+ * no name attached is one an investigation cannot answer at all.
+ */
+describe("buildRetainedIdentity", () => {
+  it("retains name and BVN when the key is good", () => {
+    const { identity, problem } = buildRetainedIdentity({
+      legalName: "Ada Obi",
+      bvn: "22123456789",
+    });
+    expect(problem).toBeNull();
+    expect(identity.legalName).toBe("Ada Obi");
+    expect(identity.bvnLast4).toBe("6789");
+    expect(decryptPii(identity.bvnCiphertext!)).toBe("22123456789");
+    expect(identity.bvnFingerprint).toBe(fingerprintPii("22123456789"));
+  });
+
+  it("keeps the name when the key is missing", () => {
+    delete process.env.PII_ENCRYPTION_KEY;
+    resetPiiKeyCache();
+    const { identity, problem } = buildRetainedIdentity({
+      legalName: "Ada Obi",
+      bvn: "22123456789",
+    });
+    expect(identity.legalName).toBe("Ada Obi");
+    expect(identity.bvnCiphertext).toBeUndefined();
+    expect(problem).toMatch(/not set/);
+  });
+
+  it("keeps the name when the key is unusable, and says which problem it is", () => {
+    process.env.PII_ENCRYPTION_KEY = "abcdefghijklmnopqrstuvwxyz012345"; // 24 bytes
+    resetPiiKeyCache();
+    const { identity, problem } = buildRetainedIdentity({
+      legalName: "Ada Obi",
+      bvn: "22123456789",
+    });
+    expect(identity.legalName).toBe("Ada Obi");
+    expect(identity.bvnCiphertext).toBeUndefined();
+    // Distinguishable from "not set" — the fix is different.
+    expect(problem).toMatch(/unusable/);
+    expect(problem).toMatch(/openssl rand -base64 32/);
+  });
+
+  it("never throws, whatever the key is", () => {
+    for (const bad of [undefined, "", "!!!", "a".repeat(10)]) {
+      if (bad === undefined) delete process.env.PII_ENCRYPTION_KEY;
+      else process.env.PII_ENCRYPTION_KEY = bad;
+      resetPiiKeyCache();
+      expect(() => buildRetainedIdentity({ legalName: "Ada Obi", bvn: "22123456789" })).not.toThrow();
+    }
+  });
+
+  it("reports no problem when there was no BVN to retain", () => {
+    delete process.env.PII_ENCRYPTION_KEY;
+    resetPiiKeyCache();
+    const { identity, problem } = buildRetainedIdentity({ legalName: "Ada Obi" });
+    expect(problem).toBeNull();
+    expect(identity).toEqual({ legalName: "Ada Obi" });
   });
 });

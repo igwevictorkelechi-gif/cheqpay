@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/auth";
 import { getEnv } from "@/lib/env";
 import { jsonOk, toErrorResponse } from "@/lib/http";
+import { piiKeyStatus } from "@/lib/pii";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,15 @@ export async function GET(req: Request) {
       deposits: {
         configured: env.PAYMENT_PROVIDER === "maplerad" && has("MAPLERAD_SECRET_KEY"),
         verifyWith: "/api/admin/provider-check",
+      },
+      // Whether regulated personal data can actually be stored. Reported as a
+      // three-way status, not a boolean, because "set but malformed" needs a
+      // different fix from "not set" — and because a bad key is otherwise
+      // invisible until someone submits a KYC form and reads the logs. The key
+      // itself is never echoed, only the verdict.
+      piiEncryption: {
+        status: piiKeyStatus(),
+        retainsBvn: piiKeyStatus() === "ok",
       },
       priceFeed: env.PRICE_FEED,
       relaxWithdrawalGuards: env.RELAX_WITHDRAWAL_GUARDS,

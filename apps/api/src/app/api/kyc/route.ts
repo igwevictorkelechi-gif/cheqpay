@@ -7,7 +7,7 @@ import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer, rememberAddress } from "@/lib/mapleradCustomer";
 import { kycTier1Schema } from "@/lib/validation";
-import { decryptPii, encryptPii, fingerprintPii, isPiiEncryptionConfigured, last4 } from "@/lib/pii";
+import { buildRetainedIdentity, decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
 import { ensureRetentionSchema } from "@/lib/retention";
 
 export const dynamic = "force-dynamic";
@@ -147,18 +147,18 @@ export async function POST(req: Request) {
     // logged loudly because an identity we failed to record is a compliance gap.
     try {
       await ensureRetentionSchema();
-      const legalName = `${body.firstName} ${body.lastName}`.trim();
-      const identity: Prisma.UserUpdateInput = { legalName };
-      if (body.bvn && isPiiEncryptionConfigured()) {
-        identity.bvnCiphertext = encryptPii(body.bvn);
-        identity.bvnFingerprint = fingerprintPii(body.bvn);
-        identity.bvnLast4 = last4(body.bvn);
-      } else if (body.bvn) {
-        console.error(
-          "[kyc] PII_ENCRYPTION_KEY is not set — BVN not retained. This is an AML record-keeping gap."
-        );
-      }
-      await prisma.user.update({ where: { id: auth.id }, data: identity });
+      // buildRetainedIdentity never throws and always returns the legal name,
+      // so a key problem costs the BVN and nothing else. See lib/pii.ts.
+      const { identity, problem } = buildRetainedIdentity({
+        legalName: `${body.firstName} ${body.lastName}`.trim(),
+        bvn: body.bvn,
+      });
+      if (problem) console.error(`[kyc] ${problem}`);
+
+      await prisma.user.update({
+        where: { id: auth.id },
+        data: identity satisfies Prisma.UserUpdateInput,
+      });
     } catch (err) {
       console.error("[kyc] identity retention failed", err);
     }

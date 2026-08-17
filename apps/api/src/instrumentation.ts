@@ -19,6 +19,41 @@ export async function register() {
   }
 
   await ensureSchema();
+  await checkPiiKey();
+}
+
+/**
+ * Announce a missing or malformed PII_ENCRYPTION_KEY at boot.
+ *
+ * Without this the only way to discover the key is wrong is to submit a KYC
+ * form and read the logs — the encryption sits inside a best-effort block, so a
+ * bad key costs a stored BVN and says nothing to anyone watching. Checking here
+ * costs one string decode per cold start.
+ *
+ * Logged, never thrown, for the same reason as the schema helpers above: an API
+ * that refuses to boot is worse than one running with a named gap. The value is
+ * never logged — only the verdict.
+ */
+async function checkPiiKey(): Promise<void> {
+  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  try {
+    const { piiKeyStatus } = await import("@/lib/piiKey");
+    const status = piiKeyStatus();
+    if (status === "invalid") {
+      console.error(
+        "[bootstrap] PII_ENCRYPTION_KEY is set but unusable — it must be base64 " +
+          "decoding to exactly 32 bytes. Generate one with: openssl rand -base64 32. " +
+          "Until it is fixed, BVNs are NOT retained and admin BVN search is unavailable."
+      );
+    } else if (status === "unset") {
+      console.warn(
+        "[bootstrap] PII_ENCRYPTION_KEY is not set — BVNs will not be retained. " +
+          "This is an AML record-keeping gap."
+      );
+    }
+  } catch (err) {
+    console.error("[bootstrap] could not check PII_ENCRYPTION_KEY", err);
+  }
 }
 
 /**
