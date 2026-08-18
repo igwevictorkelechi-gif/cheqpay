@@ -1,14 +1,14 @@
-import { Prisma, prisma, KycStatus } from "@cheqpay/db";
+import { prisma, KycStatus } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { getTierLimits } from "@/lib/kyc";
 import { getKycProvider } from "@/kyc";
 import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
-import { ensureMapleradCustomer, rememberAddress } from "@/lib/mapleradCustomer";
+import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
+import { persistKycIdentity } from "@/lib/kycIdentity";
 import { kycTier1Schema } from "@/lib/validation";
-import { buildRetainedIdentity, decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
-import { ensureRetentionSchema } from "@/lib/retention";
+import { decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
 
 export const dynamic = "force-dynamic";
 
@@ -87,6 +87,19 @@ export async function POST(req: Request) {
       }
     }
 
+    // Store everything the user submitted, securely, BEFORE anything is checked
+    // against Maplerad. This is the first side effect of the submission and it is
+    // allowed to fail loudly: if we cannot record who submitted what, we must not
+    // go on to ask the provider about them. The BVN is stored encrypted; the
+    // phone is filled only when empty. See lib/kycIdentity.ts.
+    await persistKycIdentity(auth.id, {
+      legalName: `${body.firstName} ${body.lastName}`.trim(),
+      bvn: body.bvn,
+      dateOfBirth: body.dateOfBirth,
+      phone: body.phone,
+      address: body.address,
+    });
+
     // Automated identity check (BVN/ID). Passing auto-approves; otherwise the
     // submission stays PENDING for manual admin review.
     const verdict = await getKycProvider().verify({
@@ -128,40 +141,9 @@ export async function POST(req: Request) {
       },
     });
 
-    // Persist the submitted date of birth on the profile so Personal details
-    // can show it (it becomes locked once the account is verified).
-    if (body.dateOfBirth && /^\d{4}-\d{2}-\d{2}$/.test(body.dateOfBirth)) {
-      await prisma.user.update({
-        where: { id: auth.id },
-        data: { dateOfBirth: new Date(body.dateOfBirth) },
-      });
-    }
-
-    // Persist the identity for AML record-keeping. This is the ONLY moment the
-    // legal name and BVN are in hand — they used to pass straight through to
-    // the provider and be discarded, leaving the database unable to answer
-    // "which account belongs to this person?", which is the first question an
-    // investigation asks. The BVN is encrypted; see lib/pii.ts.
-    //
-    // Best-effort: a failure here must not fail the user's verification. It is
-    // logged loudly because an identity we failed to record is a compliance gap.
-    try {
-      await ensureRetentionSchema();
-      // buildRetainedIdentity never throws and always returns the legal name,
-      // so a key problem costs the BVN and nothing else. See lib/pii.ts.
-      const { identity, problem } = buildRetainedIdentity({
-        legalName: `${body.firstName} ${body.lastName}`.trim(),
-        bvn: body.bvn,
-      });
-      if (problem) console.error(`[kyc] ${problem}`);
-
-      await prisma.user.update({
-        where: { id: auth.id },
-        data: identity satisfies Prisma.UserUpdateInput,
-      });
-    } catch (err) {
-      console.error("[kyc] identity retention failed", err);
-    }
+    // Date of birth, legal name, encrypted BVN and address were all written by
+    // persistKycIdentity above, before any provider call — so nothing needs
+    // storing here.
 
     // Enrollment is attempted for anyone who ENDS UP verified, not only those
     // verified by this submission. A user who verified before the form asked
@@ -185,17 +167,10 @@ export async function POST(req: Request) {
       // This MUST come before the deposit account below: a Maplerad collection
       // account hangs off a customer id, so enrolling second meant every
       // account request went out without one and failed.
-      // Keep the address on the profile. Without this the tier 1 upgrade can
-      // only ever be attempted during a KYC submission, because the address
-      // exists nowhere else — which is why an already-verified user could never
-      // be upgraded, and so could never be given a deposit account.
-      if (body.address) {
-        try {
-          await rememberAddress(auth.id, body.address);
-        } catch (err) {
-          console.error("[kyc] could not persist the address", err);
-        }
-      }
+      //
+      // The address is already on the profile — persistKycIdentity wrote it
+      // above — so ensureMapleradCustomer can fall back to it on a later retry
+      // even when this submission omitted it.
 
       // `bvn` was recovered above, before the identity check, so that a
       // Maplerad-backed check sees the same value this enrollment does.

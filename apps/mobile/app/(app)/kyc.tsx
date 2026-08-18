@@ -91,6 +91,12 @@ export default function KYCScreen() {
   // Accepts 08031234567, +2348031234567 and 2348031234567 — the server
   // normalizes to the provider's +234 / subscriber split.
   const phoneValid = phone === '' || /^(\+?234|0)?\d{10}$/.test(phone.replace(/[\s-]/g, ''));
+  // Date of birth is mandatory: the full provider enrolment requires it.
+  const dobValid = /^\d{4}-\d{2}-\d{2}$/.test(dob) && (() => {
+    const d = new Date(dob);
+    if (Number.isNaN(d.getTime())) return false;
+    return d.getTime() < Date.now() && d.getUTCFullYear() >= 1900;
+  })();
 
   /**
    * Everything the provider needs to enroll a customer. Sent only when
@@ -106,11 +112,12 @@ export default function KYCScreen() {
   const canSubmit =
     firstName.trim().length >= 2 &&
     lastName.trim().length >= 2 &&
+    dobValid &&
     bvnValid &&
     phoneValid &&
     // When the ONLY reason the user is here is the missing details, letting
     // them submit without those details repeats the failure that sent them.
-    (!needsDetails || (phone.trim() !== '' && dob !== '' && addressComplete)) &&
+    (!needsDetails || (phone.trim() !== '' && addressComplete)) &&
     !submitting;
 
   async function submit() {
@@ -121,7 +128,7 @@ export default function KYCScreen() {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         bvn: bvn.trim() || undefined,
-        dateOfBirth: /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : undefined,
+        dateOfBirth: dob,
         phone: phone.trim() || undefined,
         address: addressComplete
           ? {
@@ -243,9 +250,10 @@ export default function KYCScreen() {
 
                   <View className="mt-4" style={{ gap: 16 }}>
                     <DateField
-                      label="Date of birth"
+                      label="Date of birth (required)"
                       value={dob}
                       onChange={setDob}
+                      hint="Required to open your account number"
                     />
                     <View>
                       <Text className="text-muted dark:text-muted-dark text-sm font-semibold mb-1.5">Phone number</Text>

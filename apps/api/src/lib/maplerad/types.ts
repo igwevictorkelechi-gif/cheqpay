@@ -74,6 +74,42 @@ export interface CreateCustomerInput {
 }
 
 /**
+ * POST /customers/enroll — the full, single-call enrollment. Unlike
+ * CreateCustomerInput (tier 0), this carries the complete identity and returns a
+ * customer with access to all Maplerad resources including Issuing. Used only
+ * when we hold every required field; otherwise we fall back to the tier 0 create
+ * plus a later tier 1 upgrade. See createCustomer/enrollCustomer in customers.ts.
+ *
+ * `identity` (a government ID document) and `photo` (a selfie) are optional in
+ * the API and unused here — this app has no document upload, so enrollment is
+ * BVN-only, exactly as the tier 1 upgrade path is.
+ */
+export interface EnrollCustomerInput {
+  first_name: string;
+  last_name: string;
+  email: string;
+  country: string; // "NG"
+  identification_number: string; // BVN for Nigeria
+  dob: string; // "DD-MM-YYYY"
+  phone: { phone_country_code: string; phone_number: string };
+  address: {
+    street: string;
+    street2?: string;
+    city: string;
+    state: string;
+    country: string;
+    postal_code: string;
+  };
+  identity?: {
+    type: "NIN" | "PASSPORT" | "VOTERS_CARD" | "DRIVERS_LICENSE";
+    image: string; // URL to the uploaded document
+    number: string;
+    country: string;
+  };
+  photo?: string; // URL to a selfie image
+}
+
+/**
  * PATCH /customers/upgrade/tier1 — the identity evidence that lifts a tier 0
  * customer to tier 1, which is what collections (deposit accounts) require.
  */

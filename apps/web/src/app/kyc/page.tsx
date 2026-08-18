@@ -87,6 +87,14 @@ export default function KYCPage() {
   // Accepts 08031234567, +2348031234567 and 2348031234567 — the server
   // normalizes to Maplerad's +234 / subscriber split.
   const phoneValid = phone === "" || /^(\+?234|0)?\d{10}$/.test(phone.replace(/[\s-]/g, ""));
+  // Date of birth is mandatory: the full Maplerad enrolment requires it. A
+  // plausible date, in the past, roughly within a human lifespan.
+  const dobValid = /^\d{4}-\d{2}-\d{2}$/.test(dob) && (() => {
+    const d = new Date(dob);
+    if (Number.isNaN(d.getTime())) return false;
+    const year = d.getUTCFullYear();
+    return d.getTime() < Date.now() && year >= 1900;
+  })();
 
   /**
    * Everything Maplerad needs to enroll a customer. Sent only when complete —
@@ -102,6 +110,7 @@ export default function KYCPage() {
   const canSubmit =
     firstName.trim().length >= 2 &&
     lastName.trim().length >= 2 &&
+    dobValid &&
     bvnValid &&
     phoneValid &&
     // When the ONLY reason the user is here is the missing details, letting
@@ -117,7 +126,7 @@ export default function KYCPage() {
       const res = await api.submitKyc({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        dateOfBirth: dob || undefined,
+        dateOfBirth: dob,
         bvn: bvn.trim() || undefined,
         phone: phone.trim() || undefined,
         address: addressComplete
@@ -235,7 +244,7 @@ export default function KYCPage() {
                 <label className="mb-1.5 block text-sm font-semibold text-muted">
                   Date of birth{" "}
                   <span className="font-normal text-muted">
-                    — needed to open your account number
+                    — required to open your account number
                   </span>
                 </label>
                 <input
@@ -243,6 +252,7 @@ export default function KYCPage() {
                   value={dob}
                   onChange={(e) => setDob(e.target.value)}
                   type="date"
+                  required
                   max={new Date().toISOString().slice(0, 10)}
                   // Browsers open the calendar only from the small icon at the
                   // right edge, which is an easy target to miss on a phone.
@@ -256,7 +266,9 @@ export default function KYCPage() {
                       /* fall back to the native icon */
                     }
                   }}
-                  className="w-full cursor-pointer rounded-2xl border border-border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand"
+                  className={`w-full cursor-pointer rounded-2xl border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand ${
+                    dob === "" || dobValid ? "border-border" : "border-red-500/60"
+                  }`}
                 />
               </div>
               <div>

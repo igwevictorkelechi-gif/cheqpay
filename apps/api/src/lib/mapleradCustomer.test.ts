@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   createCustomer,
+  enrollCustomer,
   upgradeCustomerTier1,
   getCustomer,
   findUnique,
@@ -9,6 +10,7 @@ const {
   executeRawUnsafe,
 } = vi.hoisted(() => ({
   createCustomer: vi.fn(),
+  enrollCustomer: vi.fn(),
   upgradeCustomerTier1: vi.fn(),
   getCustomer: vi.fn(),
   findUnique: vi.fn(),
@@ -22,7 +24,13 @@ vi.mock("./maplerad/customers", async () => {
   const real = await vi.importActual<typeof import("./maplerad/customers")>(
     "./maplerad/customers"
   );
-  return { createCustomer, upgradeCustomerTier1, getCustomer, hasTier1Evidence: real.hasTier1Evidence };
+  return {
+    createCustomer,
+    enrollCustomer,
+    upgradeCustomerTier1,
+    getCustomer,
+    hasTier1Evidence: real.hasTier1Evidence,
+  };
 });
 vi.mock("@cheqpay/db", () => ({
   prisma: {
@@ -59,35 +67,62 @@ function row(over: Record<string, unknown> = {}) {
 
 describe("ensureMapleradCustomer", () => {
   beforeEach(() => {
-    for (const m of [createCustomer, upgradeCustomerTier1, getCustomer, findUnique, update, executeRawUnsafe]) {
+    for (const m of [createCustomer, enrollCustomer, upgradeCustomerTier1, getCustomer, findUnique, update, executeRawUnsafe]) {
       m.mockReset();
     }
     executeRawUnsafe.mockResolvedValue(undefined);
     update.mockResolvedValue({});
   });
 
-  it("creates the customer from name and email alone, then upgrades", async () => {
+  it("enrolls in one full call when the whole identity is present", async () => {
+    // Complete data takes the happy path: a single /customers/enroll instead of
+    // tier-0 create + tier-1 upgrade, for a customer with full access.
     findUnique.mockResolvedValue(row());
-    createCustomer.mockResolvedValue({ id: "cus_1" });
-    upgradeCustomerTier1.mockResolvedValue(undefined);
+    enrollCustomer.mockResolvedValue({ id: "cus_1", tier: 2 });
 
     const id = await ensureMapleradCustomer("u1", "ada@example.com", full);
 
     expect(id).toBe("cus_1");
+    expect(enrollCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        first_name: "Ada",
+        last_name: "Obi",
+        email: "ada@example.com",
+        country: "NG",
+        identification_number: "12345678901",
+        dob: "02-01-1990", // DD-MM-YYYY, not our YYYY-MM-DD
+        phone: { phone_country_code: "+234", phone_number: "8031234567" },
+        address: expect.objectContaining({ country: "NG", postal_code: address.postalCode }),
+      })
+    );
+    // No fallback and no separate upgrade — enroll did it all.
+    expect(createCustomer).not.toHaveBeenCalled();
+    expect(upgradeCustomerTier1).not.toHaveBeenCalled();
+    // The tier is read from the enroll response, not assumed.
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { mapleradCustomerId: "cus_1", mapleradTier: 2 } })
+    );
+  });
+
+  it("falls back to the tier-0 create when a required field is missing", async () => {
+    // Missing phone: enroll would 400, so open the tier-0 customer instead and
+    // leave the upgrade for a later submission. A record must always exist.
+    findUnique.mockResolvedValue(row());
+    createCustomer.mockResolvedValue({ id: "cus_2" });
+
+    const { phone: _omit, ...noPhone } = full;
+    const id = await ensureMapleradCustomer("u1", "ada@example.com", noPhone);
+
+    expect(id).toBe("cus_2");
+    expect(enrollCustomer).not.toHaveBeenCalled();
     expect(createCustomer).toHaveBeenCalledWith({
       first_name: "Ada",
       last_name: "Obi",
       email: "ada@example.com",
       country: "NG",
     });
-    expect(upgradeCustomerTier1).toHaveBeenCalledWith(
-      expect.objectContaining({
-        customer_id: "cus_1",
-        identification_number: "12345678901",
-        dob: "02-01-1990", // DD-MM-YYYY, not our YYYY-MM-DD
-        phone: { phone_country_code: "+234", phone_number: "8031234567" },
-      })
-    );
+    // Phone is the missing field, so the upgrade is skipped this time.
+    expect(upgradeCustomerTier1).not.toHaveBeenCalled();
   });
 
   it("still returns a customer id when identity details are missing", async () => {
@@ -102,6 +137,7 @@ describe("ensureMapleradCustomer", () => {
     });
 
     expect(id).toBe("cus_2");
+    expect(enrollCustomer).not.toHaveBeenCalled();
     expect(upgradeCustomerTier1).not.toHaveBeenCalled();
   });
 
@@ -167,7 +203,7 @@ describe("ensureMapleradCustomer — reconciling an id it did not create", () =>
   // inside another describe does not apply here, and the leaked state made a
   // rejected getCustomer look like a successful one.
   beforeEach(() => {
-    for (const m of [createCustomer, upgradeCustomerTier1, getCustomer, findUnique, update, executeRawUnsafe]) {
+    for (const m of [createCustomer, enrollCustomer, upgradeCustomerTier1, getCustomer, findUnique, update, executeRawUnsafe]) {
       m.mockReset();
     }
     executeRawUnsafe.mockResolvedValue(undefined);

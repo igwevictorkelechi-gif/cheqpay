@@ -1,6 +1,7 @@
 import { prisma } from "@cheqpay/db";
 import {
   createCustomer,
+  enrollCustomer,
   getCustomer,
   hasTier1Evidence,
   upgradeCustomerTier1,
@@ -104,24 +105,76 @@ export async function ensureMapleradCustomer(
   if (!user) return null;
 
   let customerId = user.mapleradCustomerId;
+  // Local mirror of the tier so an enrol that lands tier 1+ in this call is seen
+  // by Step 2 below, which would otherwise re-decide from the stale fetched row.
+  let tier = user.mapleradTier;
+
+  // Resolved once, up front, because both the full enrol (Step 1) and the tier 1
+  // upgrade (Step 2) need it. Falls back to the address already on file so a
+  // retry needs nothing new from the user.
+  const address =
+    input.address ??
+    (user.addressStreet && user.addressCity && user.addressState && user.addressPostalCode
+      ? {
+          street: user.addressStreet,
+          city: user.addressCity,
+          state: user.addressState,
+          postalCode: user.addressPostalCode,
+        }
+      : undefined);
+  const dob = input.dateOfBirth ? toMapleradDob(input.dateOfBirth) : null;
+  const phone = input.phone ? toMapleradPhone(input.phone) : null;
 
   // ---- Step 1: the customer record itself ---------------------------------
   if (!customerId) {
+    // Happy path: when we hold the complete identity, enrol in one call for a
+    // customer with access to all Maplerad resources (incl. Issuing). Otherwise
+    // fall back to the tier 0 create so a customer record always exists, and let
+    // Step 2 upgrade it once the rest arrives.
+    const canEnrollFull = Boolean(input.bvn && dob && phone && address);
     try {
-      const customer = await createCustomer({
-        first_name: input.firstName,
-        last_name: input.lastName,
-        email,
-        country: "NG",
-      });
-      customerId = customer.id;
-      await prisma.user.update({
-        where: { id: userId },
-        data: { mapleradCustomerId: customerId },
-      });
+      if (canEnrollFull) {
+        const customer = await enrollCustomer({
+          first_name: input.firstName,
+          last_name: input.lastName,
+          email,
+          country: "NG",
+          identification_number: input.bvn!,
+          dob: dob!,
+          phone: phone!,
+          address: {
+            street: address!.street,
+            city: address!.city,
+            state: address!.state,
+            country: "NG",
+            postal_code: address!.postalCode,
+          },
+        });
+        customerId = customer.id;
+        // The enrol response carries the tier (2 in Maplerad's example). Trust
+        // it, but never record below tier 1 from a successful full enrol.
+        tier = Math.max(1, customer.tier ?? 1);
+        await prisma.user.update({
+          where: { id: userId },
+          data: { mapleradCustomerId: customerId, mapleradTier: tier },
+        });
+      } else {
+        const customer = await createCustomer({
+          first_name: input.firstName,
+          last_name: input.lastName,
+          email,
+          country: "NG",
+        });
+        customerId = customer.id;
+        await prisma.user.update({
+          where: { id: userId },
+          data: { mapleradCustomerId: customerId },
+        });
+      }
     } catch (err) {
       console.error("[maplerad] could not create the customer (will retry)", {
         userId,
+        fullEnroll: canEnrollFull,
         error: err instanceof Error ? err.message : String(err),
       });
       return null;
@@ -172,22 +225,13 @@ export async function ensureMapleradCustomer(
   }
 
   // ---- Step 2: the tier 1 upgrade -----------------------------------------
-  if (user.mapleradTier >= 1) return customerId;
+  // `tier` (not user.mapleradTier) so a full enrol above, which may have just
+  // landed tier 2, is not followed by a pointless upgrade attempt.
+  if (tier >= 1) return customerId;
 
-  // Fall back to the address already on file. This is what lets the upgrade be
-  // retried later — on a deposit attempt, say — without the user re-entering
-  // anything they have already given us once.
-  const address =
-    input.address ??
-    (user.addressStreet && user.addressCity && user.addressState && user.addressPostalCode
-      ? {
-          street: user.addressStreet,
-          city: user.addressCity,
-          state: user.addressState,
-          postalCode: user.addressPostalCode,
-        }
-      : undefined);
-
+  // `address`, `dob` and `phone` were resolved once above and are reused here —
+  // the address falls back to what is already on file, so the upgrade can be
+  // retried later (on a deposit attempt, say) without the user re-entering it.
   const missing: string[] = [];
   if (!input.bvn) missing.push("bvn");
   if (!input.dateOfBirth) missing.push("dateOfBirth");
@@ -200,8 +244,6 @@ export async function ensureMapleradCustomer(
     return customerId;
   }
 
-  const dob = toMapleradDob(input.dateOfBirth!);
-  const phone = toMapleradPhone(input.phone!);
   if (!dob || !phone) {
     console.warn("[maplerad] tier 1 upgrade skipped (unparseable dob/phone)", { userId });
     return customerId;

@@ -8,6 +8,7 @@ import { mapleradRequest } from "./client";
 import type {
   Customer,
   CreateCustomerInput,
+  EnrollCustomerInput,
   MapleradCustomerDetail,
   UpgradeCustomerTier1Input,
 } from "./types";
@@ -20,13 +21,34 @@ import type {
  *
  * That short list is the point. Every signed-up user has these four fields, so
  * this call can always succeed, and once it has, the user has a Maplerad
- * customer id. The code used to make a single /customers/enroll call carrying
- * the full identity, which meant a user missing any one field had no customer
- * record at all — and every downstream feature failed with "no Maplerad
- * customer record yet" rather than with the actual reason.
+ * customer id. It is the FALLBACK: when we hold the complete identity we enroll
+ * in one call (enrollCustomer below); when a field is missing we still open the
+ * customer here and upgrade later, so a user is never left with no customer
+ * record at all — which is what happened when a single full-enroll call was the
+ * only path and any one missing field failed the whole thing.
  */
 export async function createCustomer(input: CreateCustomerInput): Promise<Customer> {
   return mapleradRequest<Customer>("/customers", {
+    method: "POST",
+    body: input,
+  });
+}
+
+/**
+ * Enroll a customer in full, in one call. Carries the complete identity and
+ * returns a customer with access to all Maplerad resources including Issuing.
+ *
+ * POST /customers/enroll
+ *
+ * This is the HAPPY PATH, used only when BVN, date of birth, phone and address
+ * are all in hand. It requires every one of those, so a caller missing any field
+ * must use createCustomer (tier 0) instead and upgrade later — that fallback is
+ * the whole reason the two coexist. The returned Customer carries a `tier`
+ * (2 in Maplerad's example), so callers read the tier from the response rather
+ * than assuming it.
+ */
+export async function enrollCustomer(input: EnrollCustomerInput): Promise<Customer> {
+  return mapleradRequest<Customer>("/customers/enroll", {
     method: "POST",
     body: input,
   });

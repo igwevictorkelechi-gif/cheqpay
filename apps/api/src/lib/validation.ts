@@ -8,7 +8,12 @@ import { z } from "zod";
 export const kycTier1Schema = z.object({
   firstName: z.string().min(2).max(60),
   lastName: z.string().min(2).max(60),
-  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD").optional(),
+  // Required: the full Maplerad enrolment needs it, and the clients now mark it
+  // mandatory. Stored as a real Date; converted to Maplerad's DD-MM-YYYY only at
+  // the call boundary.
+  dateOfBirth: z
+    .string({ required_error: "Date of birth is required" })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
   country: z.string().length(2).default("NG"),
   bvn: z.string().regex(/^\d{11}$/, "Expected an 11-digit BVN").optional(),
   documentRefs: z.array(z.string().min(1)).max(10).default([]),

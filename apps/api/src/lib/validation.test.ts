@@ -19,6 +19,7 @@ describe("kycTier1Schema", () => {
     const parsed = kycTier1Schema.parse({
       firstName: "Ada",
       lastName: "Lovelace",
+      dateOfBirth: "1990-12-10",
       phone: "08031234567",
       address: { street: "12 Marina Rd", city: "Lagos", state: "Lagos", postalCode: "100001" },
     });
@@ -28,6 +29,12 @@ describe("kycTier1Schema", () => {
   it("rejects a malformed date", () => {
     expect(() =>
       kycTier1Schema.parse({ firstName: "Ada", lastName: "Lovelace", dateOfBirth: "10/12/1990" })
+    ).toThrow();
+  });
+
+  it("rejects a submission with no date of birth — it is now mandatory", () => {
+    expect(() =>
+      kycTier1Schema.parse({ firstName: "Ada", lastName: "Lovelace" })
     ).toThrow();
   });
 
@@ -42,6 +49,7 @@ describe("kycTier1Schema", () => {
       kycTier1Schema.parse({
         firstName: "Ada",
         lastName: "Lovelace",
+        dateOfBirth: "1990-12-10",
         address: { street: "12 Marina Rd", city: "Lagos" },
       })
     ).toThrow();
