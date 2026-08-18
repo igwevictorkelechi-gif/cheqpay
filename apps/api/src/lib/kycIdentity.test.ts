@@ -1,20 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { update, findUnique, buildRetainedIdentity, ensureRetentionSchema, ensureMapleradSchema } =
-  vi.hoisted(() => ({
-    update: vi.fn(),
-    findUnique: vi.fn(),
-    buildRetainedIdentity: vi.fn(),
-    ensureRetentionSchema: vi.fn(),
-    ensureMapleradSchema: vi.fn(),
-  }));
+const {
+  update,
+  findUnique,
+  buildRetainedIdentity,
+  encryptPii,
+  last4,
+  ensureRetentionSchema,
+  ensureMapleradSchema,
+  ensureKycDocSchema,
+} = vi.hoisted(() => ({
+  update: vi.fn(),
+  findUnique: vi.fn(),
+  buildRetainedIdentity: vi.fn(),
+  encryptPii: vi.fn(),
+  last4: vi.fn(),
+  ensureRetentionSchema: vi.fn(),
+  ensureMapleradSchema: vi.fn(),
+  ensureKycDocSchema: vi.fn(),
+}));
 
 vi.mock("@cheqpay/db", () => ({ prisma: { user: { update, findUnique } }, Prisma: {} }));
 // The encryption itself is covered by pii.test.ts; here we only care that the
-// identity it returns is folded into the single write, so a stub is enough.
-vi.mock("./pii", () => ({ buildRetainedIdentity }));
+// identity it returns is folded into the single write, so stubs are enough.
+vi.mock("./pii", () => ({ buildRetainedIdentity, encryptPii, last4 }));
 vi.mock("./retention", () => ({ ensureRetentionSchema }));
-vi.mock("./mapleradCustomer", () => ({ ensureMapleradSchema }));
+vi.mock("./mapleradCustomer", () => ({ ensureMapleradSchema, ensureKycDocSchema }));
 
 import { persistKycIdentity } from "./kycIdentity";
 
@@ -25,15 +36,28 @@ const base = {
   dateOfBirth: "1990-01-02",
   phone: "08031234567",
   address,
+  idDoc: { type: "NIN", number: "22233344455" },
 };
 
 describe("persistKycIdentity", () => {
   beforeEach(() => {
-    for (const m of [update, findUnique, buildRetainedIdentity, ensureRetentionSchema, ensureMapleradSchema]) {
+    for (const m of [
+      update,
+      findUnique,
+      buildRetainedIdentity,
+      encryptPii,
+      last4,
+      ensureRetentionSchema,
+      ensureMapleradSchema,
+      ensureKycDocSchema,
+    ]) {
       m.mockReset();
     }
     ensureRetentionSchema.mockResolvedValue(undefined);
     ensureMapleradSchema.mockResolvedValue(undefined);
+    ensureKycDocSchema.mockResolvedValue(undefined);
+    encryptPii.mockImplementation((v: string) => `v1:enc(${v})`);
+    last4.mockImplementation((v: string) => v.slice(-4));
     update.mockResolvedValue({});
     findUnique.mockResolvedValue({ phone: null });
     // Echo the legal name, and the encrypted BVN fields only when a BVN is given.
@@ -67,6 +91,33 @@ describe("persistKycIdentity", () => {
     // DOB is stored as a real Date, not the YYYY-MM-DD string.
     expect(data.dateOfBirth).toBeInstanceOf(Date);
     expect((data.dateOfBirth as Date).toISOString().slice(0, 10)).toBe("1990-01-02");
+  });
+
+  it("stores the government ID: type in the clear, number encrypted + last4", async () => {
+    await persistKycIdentity("u1", base);
+
+    const data = update.mock.calls.find((c) => "legalName" in c[0].data)![0].data;
+    expect(data.idDocType).toBe("NIN");
+    expect(data.idDocNumberCiphertext).toBe("v1:enc(22233344455)");
+    expect(data.idDocNumberLast4).toBe("4455");
+    expect(encryptPii).toHaveBeenCalledWith("22233344455");
+  });
+
+  it("omits the ID fields when no document is supplied", async () => {
+    await persistKycIdentity("u1", { ...base, idDoc: undefined });
+    const data = update.mock.calls.find((c) => "legalName" in c[0].data)![0].data;
+    expect(data).not.toHaveProperty("idDocType");
+    expect(data).not.toHaveProperty("idDocNumberCiphertext");
+  });
+
+  it("keeps the ID type even if number encryption fails", async () => {
+    encryptPii.mockImplementation(() => {
+      throw new Error("bad key");
+    });
+    await persistKycIdentity("u1", base);
+    const data = update.mock.calls.find((c) => "legalName" in c[0].data)![0].data;
+    expect(data.idDocType).toBe("NIN");
+    expect(data).not.toHaveProperty("idDocNumberCiphertext");
   });
 
   it("omits the BVN fields when the user did not supply one", async () => {

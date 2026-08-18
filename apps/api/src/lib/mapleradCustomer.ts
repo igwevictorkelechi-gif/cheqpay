@@ -44,6 +44,16 @@ export interface MapleradEnrollmentInput {
     state: string;
     postalCode: string;
   };
+  /**
+   * Government ID for the full enrol. `imageUrl` is a fetchable URL to the front
+   * document image (a short-lived signed URL, minted by the caller at enrol
+   * time), because Maplerad fetches it once during enrolment.
+   */
+  identity?: {
+    type: "NIN" | "PASSPORT" | "VOTERS_CARD" | "DRIVERS_LICENSE";
+    number: string;
+    imageUrl: string;
+  };
 }
 
 /**
@@ -82,6 +92,31 @@ export function ensureMapleradSchema(): Promise<void> {
     });
   }
   return ensured;
+}
+
+/**
+ * Government-ID columns on the user, created at runtime for the same reason as
+ * the Maplerad columns above: Prisma selects every declared column on every User
+ * query, so these must exist before the first query, not lazily on first KYC.
+ *
+ * ⚠️ Like ensureMapleradSchema, MUST be wired into instrumentation.ts at boot.
+ * The schema-bootstrap guard test enforces it.
+ */
+let ensuredKycDoc: Promise<void> | null = null;
+export function ensureKycDocSchema(): Promise<void> {
+  if (!ensuredKycDoc) {
+    ensuredKycDoc = (async () => {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE app_users
+          ADD COLUMN IF NOT EXISTS id_doc_type TEXT,
+          ADD COLUMN IF NOT EXISTS id_doc_number_ciphertext TEXT,
+          ADD COLUMN IF NOT EXISTS id_doc_number_last4 TEXT`);
+    })().catch((err) => {
+      ensuredKycDoc = null;
+      throw err;
+    });
+  }
+  return ensuredKycDoc;
 }
 
 export async function ensureMapleradCustomer(
@@ -149,6 +184,18 @@ export async function ensureMapleradCustomer(
             country: "NG",
             postal_code: address!.postalCode,
           },
+          // The government ID, when the caller resolved one. Only the front
+          // image is carried — Maplerad's identity takes a single image.
+          ...(input.identity
+            ? {
+                identity: {
+                  type: input.identity.type,
+                  image: input.identity.imageUrl,
+                  number: input.identity.number,
+                  country: "NG",
+                },
+              }
+            : {}),
         });
         customerId = customer.id;
         // The enrol response carries the tier (2 in Maplerad's example). Trust

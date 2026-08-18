@@ -104,6 +104,37 @@ describe("ensureMapleradCustomer", () => {
     );
   });
 
+  it("forwards the government ID to the full enroll when present", async () => {
+    findUnique.mockResolvedValue(row());
+    enrollCustomer.mockResolvedValue({ id: "cus_9", tier: 2 });
+
+    await ensureMapleradCustomer("u1", "ada@example.com", {
+      ...full,
+      identity: { type: "NIN", number: "22233344455", imageUrl: "https://signed/front.jpg" },
+    });
+
+    expect(enrollCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identity: {
+          type: "NIN",
+          image: "https://signed/front.jpg",
+          number: "22233344455",
+          country: "NG",
+        },
+      })
+    );
+  });
+
+  it("enrolls without an identity block when none was resolved", async () => {
+    findUnique.mockResolvedValue(row());
+    enrollCustomer.mockResolvedValue({ id: "cus_10", tier: 2 });
+
+    await ensureMapleradCustomer("u1", "ada@example.com", full);
+
+    const arg = enrollCustomer.mock.calls[0][0];
+    expect(arg).not.toHaveProperty("identity");
+  });
+
   it("falls back to the tier-0 create when a required field is missing", async () => {
     // Missing phone: enroll would 400, so open the tier-0 customer instead and
     // leave the upgrade for a later submission. A record must always exist.

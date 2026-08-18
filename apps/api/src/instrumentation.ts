@@ -88,12 +88,15 @@ async function ensureSchema(): Promise<void> {
 
   try {
     // Imported lazily so the module graph above stays free of them.
-    const [{ ensureRetentionSchema }, { ensureActivitySchema }, { ensureMapleradSchema }] =
-      await Promise.all([
-        import("@/lib/retention"),
-        import("@/lib/activity"),
-        import("@/lib/mapleradCustomer"),
-      ]);
+    const [
+      { ensureRetentionSchema },
+      { ensureActivitySchema },
+      { ensureMapleradSchema, ensureKycDocSchema },
+    ] = await Promise.all([
+      import("@/lib/retention"),
+      import("@/lib/activity"),
+      import("@/lib/mapleradCustomer"),
+    ]);
     await Promise.all([
       ensureRetentionSchema(),
       ensureActivitySchema(),
@@ -103,6 +106,8 @@ async function ensureSchema(): Promise<void> {
       // so KYC itself failed before it could create them. Nothing that adds a
       // column to an existing model may be left out of this list.
       ensureMapleradSchema(),
+      // The government-ID columns, same hazard: every User query selects them.
+      ensureKycDocSchema(),
     ]);
   } catch (err) {
     console.error("[bootstrap] schema preparation failed; will retry on next start", err);

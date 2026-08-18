@@ -1,7 +1,7 @@
 import { Prisma, prisma } from "@cheqpay/db";
-import { buildRetainedIdentity } from "./pii";
+import { buildRetainedIdentity, encryptPii, last4 } from "./pii";
 import { ensureRetentionSchema } from "./retention";
-import { ensureMapleradSchema } from "./mapleradCustomer";
+import { ensureKycDocSchema, ensureMapleradSchema } from "./mapleradCustomer";
 
 /**
  * Persist everything a KYC submission carries, as the FIRST side effect of the
@@ -34,15 +34,27 @@ export interface KycIdentityInput {
     state: string;
     postalCode: string;
   };
+  /**
+   * Government ID. The number is regulated PII, stored encrypted like the BVN
+   * (ciphertext + last 4), never in the clear.
+   */
+  idDoc?: {
+    type: string;
+    number: string;
+  };
 }
 
 export async function persistKycIdentity(
   userId: string,
   input: KycIdentityInput
 ): Promise<void> {
-  // Both sets of columns are created lazily (migrations are not applied on
+  // All three column sets are created lazily (migrations are not applied on
   // deploy), so make sure they exist before writing to them.
-  await Promise.all([ensureRetentionSchema(), ensureMapleradSchema()]);
+  await Promise.all([
+    ensureRetentionSchema(),
+    ensureMapleradSchema(),
+    ensureKycDocSchema(),
+  ]);
 
   // Legal name + encrypted BVN. buildRetainedIdentity never throws and always
   // returns the legal name, so a key problem costs only the BVN. Its `problem`
@@ -66,6 +78,23 @@ export async function persistKycIdentity(
     data.addressCity = input.address.city;
     data.addressState = input.address.state;
     data.addressPostalCode = input.address.postalCode;
+  }
+
+  // Government ID: type in the clear (it is not sensitive), number encrypted and
+  // last-4 for display — the same shape as the BVN. Encryption is best-effort:
+  // a key problem must not lose the type or fail the whole identity write.
+  if (input.idDoc) {
+    data.idDocType = input.idDoc.type;
+    try {
+      data.idDocNumberCiphertext = encryptPii(input.idDoc.number);
+      data.idDocNumberLast4 = last4(input.idDoc.number);
+    } catch (err) {
+      console.error(
+        `[kyc] ID document number not encrypted — not retained: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
   }
 
   // This write is the guarantee — a failure propagates and stops the KYC flow

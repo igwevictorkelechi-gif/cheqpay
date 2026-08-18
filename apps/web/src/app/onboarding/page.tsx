@@ -67,7 +67,6 @@ export default function OnboardingPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [dob, setDob] = useState("");
-  const [bvn, setBvn] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,15 +81,15 @@ export default function OnboardingPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await api.submitKyc({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        dateOfBirth: /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : undefined,
-        bvn: bvn.trim() || undefined,
-      });
+      // Full KYC (BVN + government ID) happens on the Verify screen, which needs
+      // document uploads. Here we only save the date of birth if given, so the
+      // Verify screen can prefill it; the name is already on the auth profile.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+        await api.updateProfile({ dateOfBirth: dob });
+      }
       setStep("pin");
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not submit. Please try again.");
+      setError(e instanceof ApiError ? e.message : "Could not save. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -111,23 +110,17 @@ export default function OnboardingPage() {
 
         {step === "kyc" ? (
           <>
-            <h1 className="mb-2 text-3xl font-extrabold text-ink">Verify your identity</h1>
+            <h1 className="mb-2 text-3xl font-extrabold text-ink">Tell us about you</h1>
             <p className="mb-6 text-base text-muted">
-              A quick check unlocks higher limits and crypto withdrawals. Your BVN name is matched
-              automatically.
+              Just your name to get started. You&apos;ll verify your identity with
+              a BVN and a government ID from the Verify screen, which unlocks higher
+              limits, deposits and crypto withdrawals.
             </p>
 
             <div className="space-y-3.5">
               <Field label="First name" value={firstName} onChange={setFirstName} placeholder="First name" />
               <Field label="Last name" value={lastName} onChange={setLastName} placeholder="Last name" />
               <Field label="Date of birth (optional)" value={dob} onChange={setDob} placeholder="YYYY-MM-DD" />
-              <Field
-                label="BVN (optional)"
-                value={bvn}
-                onChange={(t) => setBvn(t.replace(/\D/g, "").slice(0, 11))}
-                placeholder="11-digit BVN"
-                numeric
-              />
             </div>
 
             {error && <p className="mt-3 text-sm text-red-400">{error}</p>}

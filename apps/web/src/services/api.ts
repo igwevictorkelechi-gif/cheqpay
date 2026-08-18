@@ -249,6 +249,16 @@ export const api = {
     bvn?: string;
     documentRefs?: string[];
     /**
+     * The government ID. `type` + `number` are entered; the two refs are the
+     * storage paths returned by uploadKycDocument for the front and back images.
+     */
+    identity: {
+      type: "NIN" | "PASSPORT" | "VOTERS_CARD" | "DRIVERS_LICENSE";
+      number: string;
+      frontRef: string;
+      backRef: string;
+    };
+    /**
      * Phone and address are not ours — they are Maplerad's requirements for
      * enrolling a customer, and a customer id is what a deposit account and a
      * crypto address both hang off. Omitting them silently costs the user both.
@@ -268,6 +278,21 @@ export const api = {
     message: string;
   }> {
     return apiFetch("/api/kyc", { method: "POST", body: JSON.stringify(input) });
+  },
+
+  /**
+   * Upload one government-ID image (front or back). Returns a storage ref to
+   * pass back in submitKyc's `identity`. The image never becomes public.
+   */
+  uploadKycDocument(
+    image: string,
+    side: "front" | "back",
+    contentType: "image/jpeg" | "image/png"
+  ): Promise<{ ref: string; side: "front" | "back" }> {
+    return apiFetch("/api/kyc/documents", {
+      method: "POST",
+      body: JSON.stringify({ image, side, contentType }),
+    });
   },
 
   getNotificationPrefs(): Promise<{ preferences: Record<string, boolean> }> {

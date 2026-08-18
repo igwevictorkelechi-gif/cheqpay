@@ -9,6 +9,46 @@ import DesktopSidebar from "@/components/DesktopSidebar";
 
 type State = "loading" | "form" | "pending" | "approved";
 
+const ID_TYPES: { value: "NIN" | "PASSPORT" | "VOTERS_CARD" | "DRIVERS_LICENSE"; label: string }[] = [
+  { value: "NIN", label: "NIN" },
+  { value: "PASSPORT", label: "International passport" },
+  { value: "VOTERS_CARD", label: "Voter's card" },
+  { value: "DRIVERS_LICENSE", label: "Driver's licence" },
+];
+
+/**
+ * Draw the image onto a canvas capped at 1600px on its long edge and return
+ * JPEG base64 (no data: prefix). Keeps uploads small and uniform.
+ */
+async function downscaleToBase64(
+  file: File
+): Promise<{ base64: string; contentType: "image/jpeg" }> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error("Could not read the file"));
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("Could not load the image"));
+    el.src = dataUrl;
+  });
+  const max = 1600;
+  const scale = Math.min(1, max / Math.max(img.width, img.height));
+  const w = Math.round(img.width * scale);
+  const h = Math.round(img.height * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas is not available");
+  ctx.drawImage(img, 0, 0, w, h);
+  const out = canvas.toDataURL("image/jpeg", 0.85);
+  return { base64: out.split(",")[1] ?? "", contentType: "image/jpeg" };
+}
+
 export default function KYCPage() {
   const router = useRouter();
   const { user } = useAuthStore();
@@ -30,6 +70,16 @@ export default function KYCPage() {
   const [lastName, setLastName] = useState("");
   const [dob, setDob] = useState("");
   const [bvn, setBvn] = useState("");
+  // Government ID (required). Type + number are typed; the two refs come back
+  // from uploading the front/back images to the API.
+  const [idType, setIdType] = useState<
+    "NIN" | "PASSPORT" | "VOTERS_CARD" | "DRIVERS_LICENSE" | ""
+  >("");
+  const [idNumber, setIdNumber] = useState("");
+  const [frontRef, setFrontRef] = useState<string | null>(null);
+  const [backRef, setBackRef] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<"front" | "back" | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   // Required to enroll the user with Maplerad, which is what a deposit account
   // and a crypto address both hang off. The form used to omit them, so
   // enrollment was skipped for every user who ever verified — they passed KYC
@@ -107,10 +157,14 @@ export default function KYCPage() {
     addrState.trim().length >= 2 &&
     postalCode.trim().length >= 3;
 
+  // Government ID is required: a type, a number, and both images uploaded.
+  const idComplete = Boolean(idType && idNumber.trim().length >= 4 && frontRef && backRef);
+
   const canSubmit =
     firstName.trim().length >= 2 &&
     lastName.trim().length >= 2 &&
     dobValid &&
+    idComplete &&
     bvnValid &&
     phoneValid &&
     // When the ONLY reason the user is here is the missing details, letting
@@ -118,6 +172,30 @@ export default function KYCPage() {
     // sent them here.
     (!needsDetails || (phone.trim() !== "" && addressComplete)) &&
     !submitting;
+
+  /**
+   * Downscale a picked image to a data URL under ~1600px, then hand its base64
+   * (no data: prefix) to the API. Downscaling keeps the request small enough for
+   * the serverless body limit and strips most EXIF bloat.
+   */
+  async function uploadSide(side: "front" | "back", file: File) {
+    setUploadError(null);
+    setUploading(side);
+    try {
+      const { base64, contentType } = await downscaleToBase64(file);
+      const { ref } = await api.uploadKycDocument(base64, side, contentType);
+      if (side === "front") setFrontRef(ref);
+      else setBackRef(ref);
+    } catch (e) {
+      setUploadError(
+        e instanceof ApiError ? e.message : "Could not upload the image. Please try again."
+      );
+      if (side === "front") setFrontRef(null);
+      else setBackRef(null);
+    } finally {
+      setUploading(null);
+    }
+  }
 
   async function submit() {
     setError(null);
@@ -128,6 +206,12 @@ export default function KYCPage() {
         lastName: lastName.trim(),
         dateOfBirth: dob,
         bvn: bvn.trim() || undefined,
+        identity: {
+          type: idType as "NIN" | "PASSPORT" | "VOTERS_CARD" | "DRIVERS_LICENSE",
+          number: idNumber.trim(),
+          frontRef: frontRef as string,
+          backRef: backRef as string,
+        },
         phone: phone.trim() || undefined,
         address: addressComplete
           ? {
@@ -287,6 +371,81 @@ export default function KYCPage() {
                 <p className="mt-1.5 text-xs text-muted">
                   Without a BVN we&apos;ll review your submission manually.
                 </p>
+              </div>
+
+              {/* Government ID — required. Pick a type, enter its number, and
+                  upload clear photos of the front and back. */}
+              <div className="!mt-7 rounded-2xl border border-border bg-card/50 p-4">
+                <p className="text-sm font-semibold text-ink">Government ID</p>
+                <p className="mt-1 text-xs text-muted">
+                  Required. Choose an ID type, enter its number, and upload clear
+                  photos of the front and back.
+                </p>
+
+                <div className="mt-4">
+                  <label className="mb-1.5 block text-sm font-semibold text-muted">ID type</label>
+                  <select
+                    value={idType}
+                    onChange={(e) => setIdType(e.target.value as typeof idType)}
+                    className="w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-ink outline-none focus:border-brand"
+                  >
+                    <option value="">Select an ID type</option>
+                    {ID_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="mt-3">
+                  <label className="mb-1.5 block text-sm font-semibold text-muted">ID number</label>
+                  <input
+                    value={idNumber}
+                    onChange={(e) => setIdNumber(e.target.value.slice(0, 30))}
+                    placeholder="Document number"
+                    className="w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand"
+                  />
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  {(["front", "back"] as const).map((side) => {
+                    const ref = side === "front" ? frontRef : backRef;
+                    const busy = uploading === side;
+                    return (
+                      <label
+                        key={side}
+                        className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border px-3 py-5 text-center text-xs ${
+                          ref ? "border-green-500/60 text-ink" : "border-border text-muted"
+                        }`}
+                      >
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={busy}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) void uploadSide(side, f);
+                          }}
+                        />
+                        {busy ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : ref ? (
+                          <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <ShieldCheck className="h-5 w-5" />
+                        )}
+                        <span className="font-semibold capitalize">
+                          {ref ? `${side} uploaded` : `Upload ${side}`}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {uploadError && (
+                  <p className="mt-2 text-xs text-red-500">{uploadError}</p>
+                )}
               </div>
 
               {/* Contact and address. Separated with a heading because the user

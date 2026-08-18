@@ -103,6 +103,14 @@ model User {
   bvnCiphertext String?   @map("bvn_ciphertext")
   bvnFingerprint String?  @map("bvn_fingerprint")
   bvnLast4     String?    @map("bvn_last4")
+  /// Government ID captured at KYC (NIN / passport / voter's card / driver's
+  /// licence). The number is regulated PII, so it is stored encrypted the same
+  /// way the BVN is (ciphertext + last 4); the images live in private object
+  /// storage, referenced from KycRecord.documentRefs. Columns are created at
+  /// boot by ensureKycDocSchema() — see lib/mapleradCustomer.ts.
+  idDocType             String? @map("id_doc_type")
+  idDocNumberCiphertext String? @map("id_doc_number_ciphertext")
+  idDocNumberLast4      String? @map("id_doc_number_last4")
   // When true, crypto withdrawals skip the per-request 2FA (AAL2) step.
   instantWithdrawal Boolean @default(false) @map("instant_withdrawal")
   // Per-category push/notification opt-ins (see lib/notifications defaults).

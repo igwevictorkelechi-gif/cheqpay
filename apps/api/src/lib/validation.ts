@@ -17,6 +17,16 @@ export const kycTier1Schema = z.object({
   country: z.string().length(2).default("NG"),
   bvn: z.string().regex(/^\d{11}$/, "Expected an 11-digit BVN").optional(),
   documentRefs: z.array(z.string().min(1)).max(10).default([]),
+  // A government ID, required. The user picks a type, enters its number, and
+  // uploads front and back; the two `*Ref` values are the storage paths returned
+  // by POST /api/kyc/documents. Only the front is sent to Maplerad (its enroll
+  // identity carries a single image); both are kept on the KYC record.
+  identity: z.object({
+    type: z.enum(["NIN", "PASSPORT", "VOTERS_CARD", "DRIVERS_LICENSE"]),
+    number: z.string().trim().min(4).max(30),
+    frontRef: z.string().min(1),
+    backRef: z.string().min(1),
+  }),
   // Optional today: needed only to enroll the user with Maplerad, whose tier 1
   // requires a phone and street address (verified against their sandbox). Old
   // clients omit them — enrollment is skipped and retried on the next submit.
@@ -31,6 +41,15 @@ export const kycTier1Schema = z.object({
     .optional(),
 });
 export type KycTier1Input = z.infer<typeof kycTier1Schema>;
+
+/** Body of POST /api/kyc/documents — one ID image at a time. */
+export const kycDocumentUploadSchema = z.object({
+  // base64 of the raw image bytes (no data: prefix).
+  image: z.string().min(1),
+  side: z.enum(["front", "back"]),
+  contentType: z.enum(["image/jpeg", "image/png"]),
+});
+export type KycDocumentUploadInput = z.infer<typeof kycDocumentUploadSchema>;
 
 /** Admin action on a KYC submission. */
 export const kycReviewSchema = z.object({

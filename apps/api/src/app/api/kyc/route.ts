@@ -7,6 +7,7 @@ import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
 import { persistKycIdentity } from "@/lib/kycIdentity";
+import { signKycDocument } from "@/lib/storage";
 import { kycTier1Schema } from "@/lib/validation";
 import { decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
 
@@ -98,6 +99,7 @@ export async function POST(req: Request) {
       dateOfBirth: body.dateOfBirth,
       phone: body.phone,
       address: body.address,
+      idDoc: { type: body.identity.type, number: body.identity.number },
     });
 
     // Automated identity check (BVN/ID). Passing auto-approves; otherwise the
@@ -137,7 +139,9 @@ export async function POST(req: Request) {
         tier: verdict.verified ? verdict.tier : 1,
         status: verdict.verified ? KycStatus.APPROVED : KycStatus.PENDING,
         reviewedAt: verdict.verified ? new Date() : null,
-        documentRefs: body.documentRefs,
+        // The two ID-document storage paths (front, back). These are what an
+        // admin reviewer opens; the images themselves stay in the private bucket.
+        documentRefs: [body.identity.frontRef, body.identity.backRef],
       },
     });
 
@@ -172,6 +176,18 @@ export async function POST(req: Request) {
       // above — so ensureMapleradCustomer can fall back to it on a later retry
       // even when this submission omitted it.
 
+      // A fresh, short-lived signed URL for the front ID image, resolved here so
+      // a later retry re-signs rather than depending on a stale URL. Best-effort:
+      // if signing fails, enroll without the identity block rather than failing
+      // the whole KYC — the customer is still created and the ID is on file.
+      let identity: { type: typeof body.identity.type; number: string; imageUrl: string } | undefined;
+      try {
+        const imageUrl = await signKycDocument(body.identity.frontRef, 3600);
+        identity = { type: body.identity.type, number: body.identity.number, imageUrl };
+      } catch (err) {
+        console.error("[kyc] could not sign the ID document for enrollment", err);
+      }
+
       // `bvn` was recovered above, before the identity check, so that a
       // Maplerad-backed check sees the same value this enrollment does.
       //
@@ -184,6 +200,7 @@ export async function POST(req: Request) {
         dateOfBirth: body.dateOfBirth ?? user.dateOfBirth?.toISOString().slice(0, 10),
         phone: body.phone ?? user.phone,
         address: body.address,
+        identity,
       });
 
       // Open the permanent, dedicated NGN deposit account now, using the BVN
@@ -228,7 +245,8 @@ export async function POST(req: Request) {
           dateOfBirth: body.dateOfBirth,
           country: body.country,
           hasBvn: !!body.bvn,
-          documentCount: body.documentRefs.length,
+          // The government ID: type only, never the number (that is PII).
+          idDocType: body.identity.type,
           verified: verdict.verified,
           reason: verdict.reason,
         },

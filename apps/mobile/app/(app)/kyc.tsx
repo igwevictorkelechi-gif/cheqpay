@@ -12,10 +12,18 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '@/store';
 import { colors } from '@/components/brand';
 import { api, ApiError } from '@/services/api';
 import DateField from '@/components/DateField';
+
+const ID_TYPES: { value: 'NIN' | 'PASSPORT' | 'VOTERS_CARD' | 'DRIVERS_LICENSE'; label: string }[] = [
+  { value: 'NIN', label: 'NIN' },
+  { value: 'PASSPORT', label: 'Passport' },
+  { value: 'VOTERS_CARD', label: "Voter's card" },
+  { value: 'DRIVERS_LICENSE', label: "Driver's licence" },
+];
 
 type State = 'loading' | 'form' | 'pending' | 'approved';
 
@@ -34,6 +42,15 @@ export default function KYCScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [bvn, setBvn] = useState('');
+  // Government ID (required): type + number are entered, the two refs come back
+  // from uploading the front/back images.
+  const [idType, setIdType] = useState<
+    'NIN' | 'PASSPORT' | 'VOTERS_CARD' | 'DRIVERS_LICENSE' | ''
+  >('');
+  const [idNumber, setIdNumber] = useState('');
+  const [frontRef, setFrontRef] = useState<string | null>(null);
+  const [backRef, setBackRef] = useState<string | null>(null);
+  const [uploadingSide, setUploadingSide] = useState<'front' | 'back' | null>(null);
   // This screen never asked for a date of birth, yet the provider requires one
   // to enroll a customer — so nobody verifying here could ever be given an
   // account number, whatever else they filled in.
@@ -109,16 +126,46 @@ export default function KYCScreen() {
     addrState.trim().length >= 2 &&
     postalCode.trim().length >= 3;
 
+  // Government ID is required: a type, a number, and both images uploaded.
+  const idComplete = Boolean(idType && idNumber.trim().length >= 4 && frontRef && backRef);
+
   const canSubmit =
     firstName.trim().length >= 2 &&
     lastName.trim().length >= 2 &&
     dobValid &&
+    idComplete &&
     bvnValid &&
     phoneValid &&
     // When the ONLY reason the user is here is the missing details, letting
     // them submit without those details repeats the failure that sent them.
     (!needsDetails || (phone.trim() !== '' && addressComplete)) &&
     !submitting;
+
+  async function pickAndUpload(side: 'front' | 'back') {
+    setError(null);
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setError('Photo access is needed to upload your ID.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+      base64: true,
+      allowsEditing: false,
+    });
+    if (result.canceled || !result.assets?.[0]?.base64) return;
+    setUploadingSide(side);
+    try {
+      const { ref } = await api.uploadKycDocument(result.assets[0].base64, side, 'image/jpeg');
+      if (side === 'front') setFrontRef(ref);
+      else setBackRef(ref);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not upload the image. Please try again.');
+    } finally {
+      setUploadingSide(null);
+    }
+  }
 
   async function submit() {
     setError(null);
@@ -129,6 +176,12 @@ export default function KYCScreen() {
         lastName: lastName.trim(),
         bvn: bvn.trim() || undefined,
         dateOfBirth: dob,
+        identity: {
+          type: idType as 'NIN' | 'PASSPORT' | 'VOTERS_CARD' | 'DRIVERS_LICENSE',
+          number: idNumber.trim(),
+          frontRef: frontRef as string,
+          backRef: backRef as string,
+        },
         phone: phone.trim() || undefined,
         address: addressComplete
           ? {
@@ -232,6 +285,84 @@ export default function KYCScreen() {
                   <Text className="text-muted dark:text-muted-dark text-xs mt-1.5">
                     Without a BVN we&apos;ll review your submission manually.
                   </Text>
+                </View>
+
+                {/* Government ID — required. Type + number + front/back photos. */}
+                <View
+                  className="rounded-2xl p-4 mt-2"
+                  style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}
+                >
+                  <Text className="text-ink dark:text-ink-dark text-sm font-bold">Government ID</Text>
+                  <Text className="text-muted dark:text-muted-dark text-xs mt-1">
+                    Required. Choose an ID type, enter its number, and upload clear photos of the front and back.
+                  </Text>
+
+                  <View className="flex-row flex-wrap mt-3" style={{ gap: 8 }}>
+                    {ID_TYPES.map((t) => {
+                      const active = idType === t.value;
+                      return (
+                        <TouchableOpacity
+                          key={t.value}
+                          onPress={() => setIdType(t.value)}
+                          className="rounded-full px-3 py-2"
+                          style={{
+                            backgroundColor: active ? colors.brand : colors.surface,
+                            borderWidth: 1,
+                            borderColor: active ? colors.brand : colors.border,
+                          }}
+                        >
+                          <Text style={{ color: active ? '#fff' : colors.ink, fontSize: 12, fontWeight: '600' }}>
+                            {t.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <TextInput
+                    value={idNumber}
+                    onChangeText={(t) => setIdNumber(t.slice(0, 30))}
+                    placeholder="ID number"
+                    placeholderTextColor={colors.muted}
+                    className="rounded-2xl px-4 py-3.5 text-ink dark:text-ink-dark mt-3"
+                    style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+                  />
+
+                  <View className="flex-row mt-3" style={{ gap: 12 }}>
+                    {(['front', 'back'] as const).map((side) => {
+                      const ref = side === 'front' ? frontRef : backRef;
+                      const busy = uploadingSide === side;
+                      return (
+                        <TouchableOpacity
+                          key={side}
+                          onPress={() => pickAndUpload(side)}
+                          disabled={busy}
+                          className="flex-1 items-center justify-center rounded-2xl py-5"
+                          style={{
+                            backgroundColor: colors.surface,
+                            borderWidth: 1,
+                            borderColor: ref ? '#22C55E' : colors.border,
+                          }}
+                        >
+                          {busy ? (
+                            <ActivityIndicator color={colors.brand} />
+                          ) : (
+                            <Ionicons
+                              name={ref ? 'checkmark-circle' : 'cloud-upload-outline'}
+                              size={22}
+                              color={ref ? '#22C55E' : colors.muted}
+                            />
+                          )}
+                          <Text
+                            className="text-xs font-semibold mt-1 capitalize"
+                            style={{ color: ref ? colors.ink : colors.muted }}
+                          >
+                            {ref ? `${side} uploaded` : `Upload ${side}`}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
 
                 {/* Contact and address. Grouped under a heading because the
