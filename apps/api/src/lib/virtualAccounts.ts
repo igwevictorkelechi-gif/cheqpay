@@ -4,6 +4,7 @@ import { getPaymentProvider } from "@/payments";
 export interface VirtualAccountView {
   accountNumber: string;
   bankName: string;
+  accountName?: string;
   bankCode?: string;
   permanent: boolean;
 }
@@ -11,6 +12,7 @@ export interface VirtualAccountView {
 interface VaMeta {
   providerRef: string;
   bankName: string;
+  accountName?: string;
   bankCode?: string;
   permanent: boolean;
 }
@@ -39,6 +41,7 @@ export async function getVirtualAccount(
   return {
     accountNumber: w.address,
     bankName: meta.bankName,
+    accountName: meta.accountName,
     bankCode: meta.bankCode,
     permanent: meta.permanent,
   };
@@ -84,6 +87,7 @@ export async function createVirtualAccount(
   const meta: VaMeta = {
     providerRef: result.providerRef,
     bankName: result.bankName,
+    accountName: result.accountName,
     bankCode: result.bankCode,
     permanent: result.permanent,
   };
@@ -122,6 +126,7 @@ export async function createVirtualAccount(
   return {
     accountNumber: result.accountNumber,
     bankName: result.bankName,
+    accountName: result.accountName,
     bankCode: result.bankCode,
     permanent: result.permanent,
   };
@@ -133,6 +138,7 @@ function parseMeta(raw: string): VaMeta {
     return {
       providerRef: String(p.providerRef ?? ""),
       bankName: String(p.bankName ?? "Bank"),
+      accountName: p.accountName ? String(p.accountName) : undefined,
       bankCode: p.bankCode ? String(p.bankCode) : undefined,
       permanent: Boolean(p.permanent),
     };

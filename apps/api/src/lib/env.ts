@@ -135,6 +135,12 @@ const envSchema = z.object({
   // Svix signing secret — verifies inbound Maplerad webhooks (payout settlement
   // today; deposits once Maplerad enables collections).
   MAPLERAD_WEBHOOK_SECRET: z.string().optional(),
+  // Optional VIRTUAL-institution identifier for the bank that should mint each
+  // NGN deposit account (e.g. Moniepoint's). Sent as `preferred_bank` on
+  // /collections/virtual-account when set; read directly from process.env in the
+  // provider, so this entry is for documentation/validation. Unset → Maplerad
+  // picks the bank, exactly as before.
+  MAPLERAD_PREFERRED_BANK: z.string().optional(),
 
   // Phase 4 (rates / market data)
   PRICE_FEED: providerEnum("PRICE_FEED", ["live", "mock"], "live"),

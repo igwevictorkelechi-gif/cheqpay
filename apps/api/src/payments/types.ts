@@ -62,6 +62,8 @@ export interface CreateVirtualAccountInput {
 export interface VirtualAccountResult {
   accountNumber: string;
   bankName: string;
+  /** The account holder name the provider returned for the NUBAN, if any. */
+  accountName?: string;
   bankCode?: string;
   providerRef: string;
   permanent: boolean;

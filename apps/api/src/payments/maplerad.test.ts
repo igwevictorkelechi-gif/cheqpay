@@ -339,6 +339,8 @@ describe("MapleradProvider — money movement", () => {
     ).resolves.toEqual({
       accountNumber: "9900000001",
       bankName: "Wema Bank",
+      // The response carries account_name; it is captured, not dropped.
+      accountName: "ADA OKAFOR",
       // Not in the response; must not be invented from the bank name.
       bankCode: undefined,
       providerRef: "acc_123",
@@ -346,11 +348,44 @@ describe("MapleradProvider — money movement", () => {
       permanent: true,
     });
 
-    // Only customer_id and currency are accepted. Sending anything else is not
-    // harmless — an unexpected field is exactly the kind of thing a provider
-    // rejects with a 400 naming a parameter nobody here has heard of.
+    // With no preferred bank configured, only customer_id and currency are sent.
+    // An unexpected field is exactly the kind of thing a provider rejects with a
+    // 400 naming a parameter nobody here has heard of.
     const body = sent.find((c) => c.key === "POST /collections/virtual-account")?.body;
     expect(body).toEqual({ customer_id: "cus_abc", currency: "NGN" });
+  });
+
+  it("requests a specific bank when MAPLERAD_PREFERRED_BANK is set", async () => {
+    // The env var carries a VIRTUAL-institution identifier (e.g. Moniepoint's);
+    // when present it is forwarded as preferred_bank so the NUBAN is minted there.
+    vi.stubEnv("MAPLERAD_PREFERRED_BANK", "moniepoint-ng");
+    const sent = stubMaplerad({
+      "POST /collections/virtual-account": {
+        id: "acc_124",
+        account_number: "5000000002",
+        account_name: "ADA OKAFOR",
+        bank_name: "Moniepoint MFB",
+        currency: "NGN",
+      },
+    });
+
+    const r = await psp.createVirtualAccount({
+      email: "a@b.com",
+      firstName: "Ada",
+      lastName: "Okafor",
+      permanent: true,
+      txRef: "va_2",
+      mapleradCustomerId: "cus_abc",
+    });
+    expect(r.bankName).toBe("Moniepoint MFB");
+
+    const body = sent.find((c) => c.key === "POST /collections/virtual-account")?.body;
+    expect(body).toEqual({
+      customer_id: "cus_abc",
+      currency: "NGN",
+      preferred_bank: "moniepoint-ng",
+    });
+    vi.unstubAllEnvs();
   });
 
   it("does not hand back an account without a number", async () => {

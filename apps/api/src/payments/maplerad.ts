@@ -373,16 +373,22 @@ export class MapleradProvider implements PaymentProvider {
       throw new Error(DEPOSITS_UNAVAILABLE);
     }
 
-    // customer_id and currency are the only accepted fields (plus an optional
-    // preferred_bank, a VIRTUAL institution code). We used to also send a
-    // `reference`, on the belief that it came back on the collection webhook
-    // and gave a second way to place a payment. It is not in the request schema
-    // at all, so it was never stored and never echoed — and the webhook matches
-    // on the NUBAN regardless, which is the stronger signal anyway.
+    // customer_id and currency are the only required fields. preferred_bank is
+    // an optional VIRTUAL-institution identifier that picks which bank mints the
+    // NUBAN; when MAPLERAD_PREFERRED_BANK is set (e.g. to Moniepoint's), we send
+    // it so every deposit account is opened there. It is omitted entirely when
+    // unset — an unexpected field is exactly the kind of thing a provider
+    // rejects with a 400 naming a parameter nobody here has heard of.
+    //
+    // We used to also send a `reference`, on the belief that it came back on the
+    // collection webhook and gave a second way to place a payment. It is not in
+    // the request schema at all, so it was never stored and never echoed — and
+    // the webhook matches on the NUBAN regardless, which is the stronger signal.
     //
     // Note there is no bank_code in the response, only bank_name. Nothing here
     // may pretend otherwise: the admin account list shows the code as blank,
     // which is honest, rather than a value invented from the name.
+    const preferredBank = process.env.MAPLERAD_PREFERRED_BANK?.trim();
     const acct = await this.req<{
       id: string;
       account_number: string;
@@ -391,6 +397,7 @@ export class MapleradProvider implements PaymentProvider {
     }>("/collections/virtual-account", "POST", {
       customer_id: i.mapleradCustomerId,
       currency: "NGN",
+      ...(preferredBank ? { preferred_bank: preferredBank } : {}),
     });
 
     if (!acct?.account_number) {
@@ -402,6 +409,9 @@ export class MapleradProvider implements PaymentProvider {
     return {
       accountNumber: acct.account_number,
       bankName: acct.bank_name ?? "Maplerad",
+      // The account holder name Maplerad assigned to the NUBAN — stored so the
+      // user can confirm the account is theirs.
+      accountName: acct.account_name,
       // Not returned by this endpoint; left undefined rather than guessed.
       bankCode: undefined,
       providerRef: acct.id,
