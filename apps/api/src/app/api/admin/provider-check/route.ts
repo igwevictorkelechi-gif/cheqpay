@@ -159,11 +159,12 @@ export async function GET(req: Request) {
       ),
     );
 
-    // Prints identifiers rather than just a count, because this probe exists to
-    // answer a specific open question: lib/bills.ts sends per-network airtime
-    // identifiers ("mtn-ng" and friends) while Maplerad's own example shows a
-    // single country-level "ng-airtime". Whichever this returns is the answer,
-    // and buying airtime on the wrong biller is not a mistake worth guessing at.
+    // Prints identifiers rather than just a count so this confirms what we now
+    // send. We used to guess per-network codes ("mtn-ng" and friends); the
+    // POST /bills/airtime enum settled it as a single country-level
+    // "ng-airtime", which is what both lib/bills.ts and payments/maplerad.ts
+    // use. If this ever returns something else, airtime purchases are failing
+    // after the customer has been debited — treat it as launch-blocking.
     probes.push(
       await probe(
         "Airtime billers",

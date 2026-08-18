@@ -55,6 +55,13 @@ function toKobo(amount: string): number {
   return Math.round(parseFloat(amount) * 100);
 }
 
+/**
+ * The one Maplerad identifier for Nigerian airtime, for every network. Maplerad
+ * derives the carrier from the phone number; there are no per-network airtime
+ * codes. (Data is different — it has real per-network billers like mtn-data-ng.)
+ */
+const NG_AIRTIME_IDENTIFIER = "ng-airtime";
+
 export class MapleradProvider implements PaymentProvider {
   readonly name = "maplerad";
 
@@ -155,13 +162,17 @@ export class MapleradProvider implements PaymentProvider {
   /**
    * Airtime: no plan to resolve — the amount is whatever the user typed.
    *
-   * The identifier comes from the catalog, whose airtime entries are unverified
-   * against Maplerad's published biller list; see the AIRTIME_NETWORKS note in
-   * lib/bills.ts.
+   * The identifier is pinned rather than taken from the catalog, which is the
+   * one place in this class that ignores `billerCode`. Maplerad accepts a single
+   * country-level airtime identifier and works the network out from the phone
+   * number, so the network the user tapped is a display choice with no bearing
+   * on the request. Reading it from the catalog would let a stale per-network
+   * code reach the provider and fail the purchase AFTER the customer is debited
+   * — and the refund is not the same thing as the airtime arriving.
    */
   private async payAirtime(input: BillPayInput, kobo: number): Promise<BillPayResult> {
     const r = await this.req<{ id: string; status: string }>("/bills/airtime", "POST", {
-      identifier: this.identifier(input),
+      identifier: NG_AIRTIME_IDENTIFIER,
       phone_number: input.customer,
       amount: kobo,
     });

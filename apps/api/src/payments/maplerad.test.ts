@@ -51,7 +51,7 @@ afterEach(() => {
 const base = { customer: "08030000000", reference: "tx-1" };
 
 describe("MapleradProvider — bills", () => {
-  it("buys airtime on the network the customer chose", async () => {
+  it("always buys airtime through the single ng-airtime identifier", async () => {
     const sent = stubMaplerad();
     const r = await psp.payBill({
       ...base,
@@ -65,7 +65,7 @@ describe("MapleradProvider — bills", () => {
     expect(sent).toEqual([
       {
         key: "POST /bills/airtime",
-        body: { identifier: "mtn-ng", phone_number: "08030000000", amount: 50_000 },
+        body: { identifier: "ng-airtime", phone_number: "08030000000", amount: 50_000 },
       },
     ]);
   });

@@ -73,23 +73,24 @@ export interface ServiceConfig {
 /**
  * Airtime networks.
  *
- * ⚠️ These mapleradIds are UNVERIFIED. They were written on the belief that
- * Maplerad publishes one airtime biller per network, but its documented example
- * for GET /bills/airtime/billers/NG returns a single country-level biller —
- * `{ name: "Airtime NG", identifier: "ng-airtime" }` — with no per-network
- * entries. An example shows one item rather than the whole list, so it does not
- * disprove these either; the question is genuinely open.
+ * RESOLVED (was the open AIRTIME_NETWORKS question): Maplerad's
+ * POST /bills/airtime takes ONE country-level identifier whose enum is
+ * ["ng-airtime", "airteltigo-gh", "mtn-gh", "vodafone-gh"] — Nigeria has a
+ * single value, `ng-airtime`, and Maplerad resolves the carrier from the
+ * phone number. There are no per-network NG airtime billers. Sending
+ * `mtn-ng` etc. fails the purchase AFTER the customer is debited.
+ * Per-network codes are correct only for DATA — see DATA_NETWORKS, whose
+ * `mtn-data-ng` and friends are real billers and must not be collapsed the
+ * same way. Source: https://maplerad.dev/reference/buy-airtime
  *
- * Run /api/admin/provider-check (its "Airtime billers" probe prints every
- * identifier Maplerad returns) and then either keep these or point all four at
- * the single identifier. Until that is done, airtime purchases may be sent to a
- * biller that does not exist.
+ * The tiles stay as a display-only picker; every one settles through ng-airtime.
  */
+const NG_AIRTIME = "ng-airtime";
 const AIRTIME_NETWORKS: Biller[] = [
-  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", mapleradId: "mtn-ng" },
-  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", mapleradId: "airtel-ng" },
-  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", mapleradId: "glo-ng" },
-  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", mapleradId: "9mobile-ng" },
+  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", mapleradId: NG_AIRTIME },
+  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", mapleradId: NG_AIRTIME },
+  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", mapleradId: NG_AIRTIME },
+  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", mapleradId: NG_AIRTIME },
 ];
 
 const DATA_NETWORKS: Biller[] = [
