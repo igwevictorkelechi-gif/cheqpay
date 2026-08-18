@@ -7,6 +7,7 @@ import { assertFeatureEnabled } from "@/lib/features";
 import { userTransferSchema } from "@/lib/validation";
 import { notifyUser } from "@/lib/alerts";
 import { ensureTransferEnums } from "@/lib/ensureTransfers";
+import { requestContext } from "@/lib/requestContext";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,13 @@ export async function POST(req: Request) {
     });
     const senderLabel = sender?.username ? `@${sender.username}` : "a CheqPay user";
     const recipientLabel = `@${recipient.username}`;
+    // The IP that initiated the movement. Recorded on the transaction itself
+    // because nothing else answers "which address made this payment": the user's
+    // lastIp is only ever the most recent request of any kind, and it is
+    // overwritten on the next call. Only the OUT leg carries it — the recipient
+    // did not make this request, and stamping their row with the sender's
+    // address would be a lie an investigation could act on.
+    const { ip: initiatorIp } = requestContext(req);
     const shared = {
       kind: "transfer" as const,
       fromUsername: sender?.username ?? null,
@@ -110,7 +118,7 @@ export async function POST(req: Request) {
           amount: amountMinor,
           status: TransactionStatus.COMPLETED,
           idempotencyKey: `${idempotencyKey}:out`,
-          metadata: { ...shared, direction: "out", counterparty: recipient.username },
+          metadata: { ...shared, direction: "out", counterparty: recipient.username, ip: initiatorIp },
         },
       });
       await db.transaction.create({
@@ -132,6 +140,7 @@ export async function POST(req: Request) {
       await db.auditLog.create({
         data: {
           userId: auth.id,
+          ipAddress: initiatorIp,
           action: "transfer.sent",
           resourceType: "Transaction",
           resourceId: sent.id,

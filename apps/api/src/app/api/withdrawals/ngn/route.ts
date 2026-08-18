@@ -9,6 +9,7 @@ import { getEnv } from "@/lib/env";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { ngnWithdrawalSchema } from "@/lib/validation";
 import { getWithdrawalFeeNgn } from "@/lib/settings";
+import { requestContext } from "@/lib/requestContext";
 
 import { assertFeatureEnabled } from "@/lib/features";
 
@@ -24,6 +25,9 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request) {
   try {
+    // The address that initiated this payout, kept on the transaction so an
+    // investigation can answer "where was this withdrawal requested from".
+    const { ip: initiatorIp } = requestContext(req);
     const auth = await requireUser(req);
     await assertFeatureEnabled("ngn_withdrawals");
     enforceRateLimit(`wd:ngn:${auth.id}`, 5, 60_000);
@@ -85,6 +89,7 @@ export async function POST(req: Request) {
           metadata: {
             bankCode: body.bankCode,
             accountNumber: body.accountNumber,
+            ip: initiatorIp,
           },
         },
       });
@@ -108,6 +113,7 @@ export async function POST(req: Request) {
       await prisma.auditLog.create({
         data: {
           userId: auth.id,
+          ipAddress: initiatorIp,
           action: "ngn.withdrawal.initiated",
           resourceType: "Transaction",
           resourceId: tx.id,

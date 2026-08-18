@@ -11,6 +11,7 @@ import { billPaySchema } from "@/lib/validation";
 import { notifyUser } from "@/lib/alerts";
 import { BillPaymentError } from "@/payments/types";
 import { feeFromBps, getBillMarginBps } from "@/lib/settings";
+import { requestContext } from "@/lib/requestContext";
 
 import { assertFeatureEnabled } from "@/lib/features";
 
@@ -25,6 +26,9 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request) {
   try {
+    // The address that initiated this purchase, kept on the transaction so an
+    // investigation can place the request.
+    const { ip: initiatorIp } = requestContext(req);
     const auth = await requireUser(req);
     await assertFeatureEnabled("bill_payments");
     enforceRateLimit(`bill:pay:${auth.id}`, 10, 60_000);
@@ -117,6 +121,7 @@ export async function POST(req: Request) {
           status: TransactionStatus.PROCESSING,
           idempotencyKey,
           metadata: {
+            ip: initiatorIp,
             kind: "bill",
             service: body.service,
             billerId: biller.id,
@@ -156,6 +161,7 @@ export async function POST(req: Request) {
           status,
           externalRef: result.providerRef,
           metadata: {
+            ip: initiatorIp,
             kind: "bill",
             service: body.service,
             billerId: biller.id,
@@ -170,6 +176,7 @@ export async function POST(req: Request) {
       await prisma.auditLog.create({
         data: {
           userId: auth.id,
+          ipAddress: initiatorIp,
           action: "bill.paid",
           resourceType: "Transaction",
           resourceId: tx.id,
