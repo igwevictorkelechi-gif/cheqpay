@@ -17,6 +17,17 @@
   RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
 </IfModule>
 
+# ---- Canonical host -------------------------------------------------------
+# www and the apex are two different addresses as far as a search engine is
+# concerned. Served from both, every inbound link splits its value between them
+# and neither ranks as well as one would. The pages canonicalise to the apex
+# (see lib/site.ts), so send www there too and keep the two consistent.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+  RewriteRule ^(.*)$ https://%1/$1 [R=301,L]
+</IfModule>
+
 # ---- Failed RSC prefetches ------------------------------------------------
 # The export emits an index.txt (the RSC payload) beside every index.html. Next
 # prefetches those for every visible link, and when one fails it falls back to a

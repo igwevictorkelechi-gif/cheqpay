@@ -5,7 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/services/supabase";
 
 // Routes reachable without a session.
-const PUBLIC_EXACT = new Set(["/login", "/signup", "/verify-otp", "/welcome"]);
+// "/" is public because it now serves the landing page to signed-out
+// visitors and the dashboard to signed-in ones — the page itself chooses.
+// Listing it here is what stops this guard blanking the homepage, which is
+// what left out/index.html with nothing for search engines to index.
+const PUBLIC_EXACT = new Set(["/", "/login", "/signup", "/verify-otp", "/welcome"]);
 const PUBLIC_PREFIX = ["/legal", "/privacy", "/terms", "/about", "/support", "/faq", "/contact"];
 
 /** Where a signed-out visitor to the app root is sent. */
@@ -60,14 +64,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       setReady(true);
       const path = normalize(pathname);
       if (!ok && !isPublic(pathname)) {
-        // A signed-out visitor to the app root gets the landing page, not a
-        // login form: arriving at cheqpay.com without an account is the normal
-        // case for a browser, and a bare password box explains nothing about
-        // what this is. Deep links still go to /login with ?next, because
-        // somebody asking for /withdraw does want to sign in.
-        router.replace(
-          path === "/" ? LANDING : `/login?next=${encodeURIComponent(path)}`
-        );
+        // A deep link into the app does want a sign-in form — somebody asking
+        // for /withdraw knows what they came for. The bare root no longer needs
+        // handling here: it is public and renders the landing page itself.
+        router.replace(`/login?next=${encodeURIComponent(path)}`);
       } else if (ok && (path === "/login" || path === "/signup" || path === LANDING)) {
         router.replace("/");
       }

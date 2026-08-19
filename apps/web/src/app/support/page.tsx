@@ -107,6 +107,34 @@ export default function SupportPage() {
           for them.
         </p>
       </Section>
+
+      <Section heading="Things we get asked most">
+        <p>
+          <strong>A deposit has not arrived.</strong> Bank transfers into your CheqPay
+          account number usually land within minutes, but a bank can hold one longer at
+          peak times. Check that the transfer went to your own dedicated account number
+          and, if it has been more than an hour, send us the bank&apos;s transaction
+          reference and we will trace it.
+        </p>
+        <p className="mt-3">
+          <strong>A withdrawal is still processing.</strong> Naira payouts settle
+          through the receiving bank, so the last leg is theirs rather than ours. Crypto
+          withdrawals are broadcast immediately and then wait on network confirmations —
+          usually minutes for USDT and up to about an hour for Bitcoin.
+        </p>
+        <p className="mt-3">
+          <strong>Verification was not approved.</strong> The commonest cause is a name
+          that does not match the one on your BVN, or a document photo where an edge or
+          a digit is cut off. Resubmit with the full document in frame and the name
+          exactly as your bank has it.
+        </p>
+        <p className="mt-3">
+          <strong>A bill payment did not deliver.</strong> If the value never arrived,
+          the amount is returned to your CheqPay balance automatically. Send us the
+          transaction reference and the phone number or meter number you were paying and
+          we will confirm what happened.
+        </p>
+      </Section>
     </InfoPage>
   );
 }
