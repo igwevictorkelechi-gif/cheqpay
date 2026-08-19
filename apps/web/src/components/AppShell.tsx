@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Bitcoin, Tag, CreditCard, LucideIcon } from "lucide-react";
 import { useFeatures } from "@/lib/useFeatures";
+import DesktopSidebar from "./DesktopSidebar";
 
 /**
  * `outlineOnly` marks glyph-style icons that have no closed silhouette — the
@@ -30,8 +31,9 @@ function isTabActive(href: string, pathname: string): boolean {
 }
 
 /**
- * Phone-shaped shell with the dark CheqPay surface and a floating bottom
- * tab bar. Pages render inside `children`.
+ * The application shell. Phone-shaped with a floating bottom tab bar up to lg;
+ * from lg the admin-style sidebar takes over as the navigation and the width
+ * cap is lifted. Pages render inside `children` either way.
  *
  * The bar follows the iOS-26 "liquid glass" pattern: a translucent blurred
  * pill inset from the screen edges, with a lighter glass capsule that slides
@@ -56,12 +58,28 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const activeIndex = tabs.findIndex((t) => isTabActive(t.href, pathname));
 
   return (
-    <div className="flex min-h-screen w-full justify-center bg-black">
-      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col overflow-hidden bg-surface">
-        <div className="flex-1 overflow-y-auto pb-28">{children}</div>
+    <div className="min-h-screen w-full bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
 
-        {/* Floating glass tab bar — pinned to the viewport so it never scrolls */}
-        <nav className="fixed bottom-6 left-1/2 z-30 w-[calc(100%-2.75rem)] max-w-[430px] -translate-x-1/2 rounded-full border border-white/10 bg-card/70 px-1.5 py-1 shadow-2xl shadow-black/50 backdrop-blur-2xl">
+      {/*
+        One tree, two layouts.
+
+        Below lg the app is a 480px column centred on black — the phone shape it
+        was designed as, which is also what a tablet in portrait wants.
+
+        From lg the black letterboxing and the width cap both go: the content
+        sits beside the sidebar and is capped at a readable measure instead,
+        because a balance card stretched across a 27" monitor is not a better
+        experience, just a wider one.
+      */}
+      <div className="mx-auto flex min-h-screen w-full max-w-[480px] flex-col overflow-hidden bg-surface lg:max-w-none lg:overflow-visible">
+        <div className="flex-1 overflow-y-auto pb-28 lg:mx-auto lg:w-full lg:max-w-3xl lg:overflow-visible lg:px-6 lg:pb-12 lg:pt-4">
+          {children}
+        </div>
+
+        {/* Floating glass tab bar — pinned to the viewport so it never scrolls.
+            Hidden from lg, where the sidebar is the navigation. */}
+        <nav className="fixed bottom-6 left-1/2 z-30 w-[calc(100%-2.75rem)] max-w-[430px] -translate-x-1/2 rounded-full border border-white/10 bg-card/70 px-1.5 py-1 shadow-2xl shadow-black/50 backdrop-blur-2xl lg:hidden">
           <div className="relative flex items-center">
             {/* Liquid-glass capsule behind the active tab */}
             {activeIndex >= 0 && (

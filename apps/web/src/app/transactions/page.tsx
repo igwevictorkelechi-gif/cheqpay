@@ -99,7 +99,7 @@ export default function TransactionsPage() {
           ) : (
             <div className="overflow-hidden rounded-3xl bg-card">
               {txns.map((t, i) => (
-                <TxnRow key={t.id} t={t} divider={i > 0} onClick={() => router.push(`/transaction/${t.id}`)} />
+                <TxnRow key={t.id} t={t} divider={i > 0} onClick={() => router.push(`/transaction?id=${t.id}`)} />
               ))}
             </div>
           )}

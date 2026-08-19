@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/auth";
 import { getEnv } from "@/lib/env";
 import { jsonOk, toErrorResponse } from "@/lib/http";
+import { piiKeyStatus } from "@/lib/pii";
 
 export const dynamic = "force-dynamic";
 
@@ -39,9 +40,25 @@ export async function GET(req: Request) {
         provider: env.PAYMENT_PROVIDER,
         configured: has("MAPLERAD_SECRET_KEY"),
       },
-      // NGN deposits need Maplerad to enable collections on the business; until
-      // then virtual-account creation fails and the deposit path stays dark.
-      deposits: { available: false, reason: "maplerad_collections_not_enabled" },
+      // NGN deposits are wired end to end (collection account at KYC approval,
+      // credit on the collection webhook). Whether they actually work depends on
+      // collections being enabled on the Maplerad business and this server's IP
+      // being whitelisted — neither is visible from process.env, so this reports
+      // configuration only. GET /api/admin/provider-check answers "does it work"
+      // by making real calls.
+      deposits: {
+        configured: env.PAYMENT_PROVIDER === "maplerad" && has("MAPLERAD_SECRET_KEY"),
+        verifyWith: "/api/admin/provider-check",
+      },
+      // Whether regulated personal data can actually be stored. Reported as a
+      // three-way status, not a boolean, because "set but malformed" needs a
+      // different fix from "not set" — and because a bad key is otherwise
+      // invisible until someone submits a KYC form and reads the logs. The key
+      // itself is never echoed, only the verdict.
+      piiEncryption: {
+        status: piiKeyStatus(),
+        retainsBvn: piiKeyStatus() === "ok",
+      },
       priceFeed: env.PRICE_FEED,
       relaxWithdrawalGuards: env.RELAX_WITHDRAWAL_GUARDS,
       adminSecretConfigured: has("ADMIN_API_SECRET"),

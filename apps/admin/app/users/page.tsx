@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search, Filter, ChevronRight } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
@@ -31,6 +32,7 @@ function getKYCBadge(status: string) {
 }
 
 export default function UsersPage() {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -128,7 +130,18 @@ export default function UsersPage() {
               const badge = getKYCBadge(user.kycStatus);
               const label = user.kycStatus.charAt(0).toUpperCase() + user.kycStatus.slice(1).toLowerCase();
               return (
-                <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                <tr
+                  key={user.id}
+                  onClick={() => router.push(`/users/${user.id}`)}
+                  // Keyboard users get the same reachability as the mouse: the
+                  // row is focusable and Enter opens it, which an onClick alone
+                  // would not give them.
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') router.push(`/users/${user.id}`);
+                  }}
+                  className="cursor-pointer hover:bg-gray-50 transition-colors focus:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
+                >
                   <td className="px-6 py-4">
                     <div>
                       <p className="font-semibold text-gray-900">{user.email}</p>
@@ -146,6 +159,7 @@ export default function UsersPage() {
                   <td className="px-6 py-4 text-right">
                     <a
                       href={`/users/${user.id}`}
+                      onClick={(e) => e.stopPropagation()}
                       className="text-brand-600 hover:text-brand-700 font-semibold inline-flex items-center gap-1 ml-auto"
                     >
                       View

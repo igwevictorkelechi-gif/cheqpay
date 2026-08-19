@@ -36,8 +36,8 @@ export function LoadingAnimation({ size = 90 }: { size?: number }) {
 /** Full-screen route loading state (used by Next.js loading.tsx). */
 export function LoadingScreen() {
   return (
-    <div className="flex min-h-screen w-full justify-center bg-black">
-      <div className="flex min-h-screen w-full max-w-[480px] flex-col items-center justify-center bg-surface">
+    <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface">
+      <div className="flex min-h-screen w-full max-w-[480px] flex-col items-center justify-center bg-surface lg:max-w-none">
         <LoadingAnimation />
         <p className="-mt-2 text-sm font-semibold text-muted">Loading…</p>
       </div>

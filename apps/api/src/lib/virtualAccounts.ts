@@ -4,6 +4,7 @@ import { getPaymentProvider } from "@/payments";
 export interface VirtualAccountView {
   accountNumber: string;
   bankName: string;
+  accountName?: string;
   bankCode?: string;
   permanent: boolean;
 }
@@ -11,6 +12,7 @@ export interface VirtualAccountView {
 interface VaMeta {
   providerRef: string;
   bankName: string;
+  accountName?: string;
   bankCode?: string;
   permanent: boolean;
 }
@@ -39,6 +41,7 @@ export async function getVirtualAccount(
   return {
     accountNumber: w.address,
     bankName: meta.bankName,
+    accountName: meta.accountName,
     bankCode: meta.bankCode,
     permanent: meta.permanent,
   };
@@ -47,6 +50,11 @@ export async function getVirtualAccount(
 /**
  * Create (idempotently) the user's NGN virtual account via the PSP and persist
  * it. A valid BVN mints a PERMANENT NUBAN; otherwise a temporary one.
+ *
+ * The Maplerad customer id is read here rather than in the provider, so that
+ * providers stay free of database access. It is only ever read — enrollment
+ * itself happens at KYC approval (lib/mapleradCustomer.ts), because that is the
+ * one moment the BVN is in hand.
  */
 export async function createVirtualAccount(
   userId: string,
@@ -59,6 +67,11 @@ export async function createVirtualAccount(
   const permanent = Boolean(req.bvn);
   const txRef = `va_${userId}_${Date.now()}`;
 
+  const owner = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { mapleradCustomerId: true },
+  });
+
   const psp = getPaymentProvider();
   const result = await psp.createVirtualAccount({
     email,
@@ -68,11 +81,13 @@ export async function createVirtualAccount(
     bvn: req.bvn,
     permanent,
     txRef,
+    mapleradCustomerId: owner?.mapleradCustomerId ?? undefined,
   });
 
   const meta: VaMeta = {
     providerRef: result.providerRef,
     bankName: result.bankName,
+    accountName: result.accountName,
     bankCode: result.bankCode,
     permanent: result.permanent,
   };
@@ -111,6 +126,7 @@ export async function createVirtualAccount(
   return {
     accountNumber: result.accountNumber,
     bankName: result.bankName,
+    accountName: result.accountName,
     bankCode: result.bankCode,
     permanent: result.permanent,
   };
@@ -122,6 +138,7 @@ function parseMeta(raw: string): VaMeta {
     return {
       providerRef: String(p.providerRef ?? ""),
       bankName: String(p.bankName ?? "Bank"),
+      accountName: p.accountName ? String(p.accountName) : undefined,
       bankCode: p.bankCode ? String(p.bankCode) : undefined,
       permanent: Boolean(p.permanent),
     };

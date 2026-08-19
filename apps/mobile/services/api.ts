@@ -262,19 +262,6 @@ export const api = {
     });
   },
 
-  initDeposit(amount: string): Promise<{
-    txRef: string;
-    transactionId: string;
-    amount: string;
-    currency?: string;
-  }> {
-    return apiFetch('/api/deposits/flutterwave', {
-      method: 'POST',
-      headers: { 'idempotency-key': idemKey() },
-      body: JSON.stringify({ amount }),
-    });
-  },
-
   getKyc(): Promise<{
     kycTier: number;
     limits: {
@@ -284,6 +271,16 @@ export const api = {
       cryptoWithdrawalEnabled: boolean;
     };
     records: { id: string; tier: number; status: string; createdAt: string }[];
+    /**
+     * Enrolled with the payment provider. Separate from being verified: a
+     * verified user with this false has no deposit account and no crypto
+     * wallet. Optional because older API deployments don't send it.
+     */
+    providerEnrolled?: boolean;
+    /** Name recorded at verification, used to prefill the form. */
+    legalName?: string | null;
+    /** YYYY-MM-DD, used to prefill the date picker. */
+    dateOfBirth?: string | null;
   }> {
     return apiFetch('/api/kyc');
   },
@@ -294,8 +291,37 @@ export const api = {
     dateOfBirth?: string;
     bvn?: string;
     documentRefs?: string[];
+    /**
+     * The government ID. `type` + `number` are entered; the two refs are the
+     * storage paths returned by uploadKycDocument for the front and back images.
+     */
+    identity: {
+      type: 'NIN' | 'PASSPORT' | 'VOTERS_CARD' | 'DRIVERS_LICENSE';
+      number: string;
+      frontRef: string;
+      backRef: string;
+    };
+    /**
+     * Phone and address are the provider's requirements for enrolling a
+     * customer, and a customer id is what a deposit account and a crypto
+     * address both hang off. Omitting them silently costs the user both.
+     */
+    phone?: string;
+    address?: { street: string; city: string; state: string; postalCode: string };
   }): Promise<{ id: string; status: string; tier: number; autoVerified: boolean; message: string }> {
     return apiFetch('/api/kyc', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  /** Upload one government-ID image (front or back). Returns a storage ref. */
+  uploadKycDocument(
+    image: string,
+    side: 'front' | 'back',
+    contentType: 'image/jpeg' | 'image/png'
+  ): Promise<{ ref: string; side: 'front' | 'back' }> {
+    return apiFetch('/api/kyc/documents', {
+      method: 'POST',
+      body: JSON.stringify({ image, side, contentType }),
+    });
   },
 
   getNotificationPrefs(): Promise<{ preferences: Record<string, boolean> }> {

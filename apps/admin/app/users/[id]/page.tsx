@@ -15,6 +15,64 @@ type UserDetail = {
     kycStatus: string;
     createdAt: string;
   };
+  kyc: {
+    legalName: string | null;
+    dateOfBirth: string | null;
+    email: string | null;
+    phone: string | null;
+    address: {
+      street: string | null;
+      city: string | null;
+      state: string | null;
+      postalCode: string | null;
+    };
+    bvnLast4: string | null;
+    idDocType: string | null;
+    idDocNumberLast4: string | null;
+    mapleradCustomerId: string | null;
+    mapleradTier: number;
+    submittedAt: string | null;
+    documents: { front: string | null; back: string | null };
+  };
+  activity: {
+    lastSeenAt: string | null;
+    lastIp: string | null;
+    lastDevice: string | null;
+    lastAction: string | null;
+    lastTransactionIp: string | null;
+    lastTransactionAt: string | null;
+    devices: {
+      id: string;
+      ipAddress: string | null;
+      device: string | null;
+      platform: string;
+      userAgent: string | null;
+      hitCount: number;
+      firstSeenAt: string;
+      lastSeenAt: string;
+    }[];
+  };
+  stats: {
+    byType: { type: string; asset: string; count: number; total: string }[];
+    lifecycle: {
+      accountAgeDays: number;
+      firstTransactionAt: string | null;
+      lastTransactionAt: string | null;
+      daysSinceLastActivity: number | null;
+      totalTransactions: number;
+      completedTransactions: number;
+      failedTransactions: number;
+    };
+    risk: {
+      deviceCount: number;
+      distinctIpCount: number;
+      failedRate: number;
+      kycSubmissionCount: number;
+      kycTier: number;
+      providerEnrolled: boolean;
+      depositAccountNumber: string | null;
+    };
+  };
   balances: { asset: string; available: string; locked: string }[];
   kycRecords: { id: string; tier: number; status: string; createdAt: string }[];
   transactions: {
@@ -24,9 +82,50 @@ type UserDetail = {
     amount: string;
     status: string;
     reference: string;
+    ip: string | null;
     createdAt: string;
   }[];
 };
+
+/** Anything not captured shows a dash rather than an empty cell. */
+const DASH = '—';
+function show(v: string | number | null | undefined): string {
+  if (v === null || v === undefined || v === '') return DASH;
+  return String(v);
+}
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return DASH;
+  return new Date(iso).toLocaleString();
+}
+
+const ID_TYPE_LABELS: Record<string, string> = {
+  NIN: 'NIN',
+  PASSPORT: 'International passport',
+  VOTERS_CARD: "Voter's card",
+  DRIVERS_LICENSE: "Driver's licence",
+};
+
+/** One label/value pair in a definition grid. */
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</dt>
+      <dd className="mt-1 text-sm text-gray-900">{value}</dd>
+    </div>
+  );
+}
+
+/** One number in the statistics grid. */
+function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="mt-1 text-xl font-bold text-gray-900">{value}</p>
+      {hint && <p className="mt-0.5 text-xs text-gray-500">{hint}</p>}
+    </div>
+  );
+}
 
 const STATUSES = ['ACTIVE', 'SUSPENDED', 'BLOCKED'] as const;
 const TIERS = [0, 1, 2, 3] as const;
@@ -220,6 +319,241 @@ export default function UserDetailPage() {
             </div>
           </section>
 
+          {/* What the user actually submitted at KYC. Numbers are last-4 only;
+              the whole BVN lives behind the audited compliance lookup. */}
+          <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-baseline justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">KYC submission</h2>
+              <span className="text-sm text-gray-500">
+                {data.kyc.submittedAt
+                  ? `Submitted ${formatDateTime(data.kyc.submittedAt)}`
+                  : 'Not submitted'}
+              </span>
+            </div>
+
+            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Legal name" value={show(data.kyc.legalName)} />
+              <Field label="Date of birth" value={show(data.kyc.dateOfBirth)} />
+              <Field label="Email" value={show(data.kyc.email)} />
+              <Field label="Phone" value={show(data.kyc.phone)} />
+              <Field
+                label="BVN"
+                value={data.kyc.bvnLast4 ? `•••• ${data.kyc.bvnLast4}` : DASH}
+              />
+              <Field
+                label="ID document"
+                value={
+                  data.kyc.idDocType
+                    ? `${ID_TYPE_LABELS[data.kyc.idDocType] ?? data.kyc.idDocType}${
+                        data.kyc.idDocNumberLast4 ? ` · •••• ${data.kyc.idDocNumberLast4}` : ''
+                      }`
+                    : DASH
+                }
+              />
+              <Field
+                label="Address"
+                value={
+                  data.kyc.address.street
+                    ? [
+                        data.kyc.address.street,
+                        data.kyc.address.city,
+                        data.kyc.address.state,
+                        data.kyc.address.postalCode,
+                      ]
+                        .filter(Boolean)
+                        .join(', ')
+                    : DASH
+                }
+              />
+              <Field
+                label="Provider customer"
+                value={
+                  data.kyc.mapleradCustomerId
+                    ? `${data.kyc.mapleradCustomerId} (tier ${data.kyc.mapleradTier})`
+                    : 'Not enrolled'
+                }
+              />
+            </dl>
+
+            <div className="mt-6">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+                ID document images
+              </p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {(['front', 'back'] as const).map((side) => {
+                  const url = data.kyc.documents[side];
+                  return (
+                    <div key={side}>
+                      <p className="mb-1 text-sm font-medium capitalize text-gray-700">{side}</p>
+                      {url ? (
+                        <a href={url} target="_blank" rel="noopener noreferrer">
+                          {/* Signed URL, short-lived. eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={`${side} of the ID document`}
+                            className="h-48 w-full rounded-lg border border-gray-200 object-contain bg-gray-50"
+                          />
+                        </a>
+                      ) : (
+                        <div className="flex h-48 w-full items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-sm text-gray-500">
+                          Not uploaded
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {/* Where this account connects from. */}
+          <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">Devices &amp; IP addresses</h2>
+
+            <dl className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Last login" value={formatDateTime(data.activity.lastSeenAt)} />
+              <Field label="Last IP" value={show(data.activity.lastIp)} />
+              <Field label="Last device" value={show(data.activity.lastDevice)} />
+              <Field label="Last action" value={show(data.activity.lastAction)} />
+              <Field
+                label="Last transaction IP"
+                value={
+                  data.activity.lastTransactionIp ?? (
+                    <span className="text-gray-500">
+                      {DASH}{' '}
+                      <span className="text-xs">(not recorded before this release)</span>
+                    </span>
+                  )
+                }
+              />
+              <Field
+                label="Last transaction at"
+                value={formatDateTime(data.activity.lastTransactionAt)}
+              />
+            </dl>
+
+            {data.activity.devices.length === 0 ? (
+              <p className="text-gray-500">No device activity recorded yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-gray-200 text-left text-gray-500">
+                    <tr>
+                      <th className="py-2 pr-4 font-medium">IP address</th>
+                      <th className="py-2 pr-4 font-medium">Device</th>
+                      <th className="py-2 pr-4 font-medium">Platform</th>
+                      <th className="py-2 pr-4 font-medium">Seen</th>
+                      <th className="py-2 pr-4 font-medium">First seen</th>
+                      <th className="py-2 font-medium">Last seen</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.activity.devices.map((d) => (
+                      <tr key={d.id}>
+                        <td className="py-2 pr-4 font-mono text-gray-900">{show(d.ipAddress)}</td>
+                        <td className="py-2 pr-4 text-gray-900">{show(d.device)}</td>
+                        <td className="py-2 pr-4 text-gray-600">{d.platform}</td>
+                        <td className="py-2 pr-4 text-gray-600">{d.hitCount}×</td>
+                        <td className="py-2 pr-4 text-gray-600">{formatDateTime(d.firstSeenAt)}</td>
+                        <td className="py-2 text-gray-600">{formatDateTime(d.lastSeenAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* Statistics. */}
+          <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">Statistics</h2>
+
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+              Activity &amp; lifecycle
+            </p>
+            <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <Stat label="Account age" value={`${data.stats.lifecycle.accountAgeDays}d`} />
+              <Stat label="Transactions" value={data.stats.lifecycle.totalTransactions} />
+              <Stat label="Completed" value={data.stats.lifecycle.completedTransactions} />
+              <Stat label="Failed" value={data.stats.lifecycle.failedTransactions} />
+              <Stat
+                label="First transaction"
+                value={
+                  data.stats.lifecycle.firstTransactionAt
+                    ? new Date(data.stats.lifecycle.firstTransactionAt).toLocaleDateString()
+                    : DASH
+                }
+              />
+              <Stat
+                label="Last transaction"
+                value={
+                  data.stats.lifecycle.lastTransactionAt
+                    ? new Date(data.stats.lifecycle.lastTransactionAt).toLocaleDateString()
+                    : DASH
+                }
+              />
+              <Stat
+                label="Days since active"
+                value={data.stats.lifecycle.daysSinceLastActivity ?? DASH}
+              />
+            </div>
+
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+              Risk &amp; compliance
+            </p>
+            <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <Stat label="Devices" value={data.stats.risk.deviceCount} />
+              <Stat label="Distinct IPs" value={data.stats.risk.distinctIpCount} />
+              <Stat
+                label="Failed rate"
+                value={`${data.stats.risk.failedRate}%`}
+                hint="of all transactions"
+              />
+              <Stat label="KYC submissions" value={data.stats.risk.kycSubmissionCount} />
+              <Stat label="KYC tier" value={data.stats.risk.kycTier} />
+              <Stat
+                label="Provider enrolled"
+                value={data.stats.risk.providerEnrolled ? 'Yes' : 'No'}
+              />
+              <Stat
+                label="Deposit account"
+                value={data.stats.risk.depositAccountNumber ?? 'None'}
+              />
+            </div>
+
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+              Lifetime totals by type
+            </p>
+            {data.stats.byType.length === 0 ? (
+              <p className="text-gray-500">No transactions yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-gray-200 text-left text-gray-500">
+                    <tr>
+                      <th className="py-2 pr-4 font-medium">Type</th>
+                      <th className="py-2 pr-4 font-medium">Asset</th>
+                      <th className="py-2 pr-4 font-medium">Count</th>
+                      <th className="py-2 font-medium">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.stats.byType.map((g) => (
+                      <tr key={`${g.type}-${g.asset}`}>
+                        <td className="py-2 pr-4 font-medium text-gray-900">{g.type}</td>
+                        <td className="py-2 pr-4 text-gray-600">{g.asset}</td>
+                        <td className="py-2 pr-4 text-gray-600">{g.count}</td>
+                        <td className="py-2 font-semibold text-gray-900">
+                          {formatAmount(g.asset, g.total)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
           <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold text-gray-900">Balances</h2>
             {data.balances.length === 0 ? (
@@ -253,13 +587,14 @@ export default function UserDetailPage() {
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Amount</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reference</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">IP</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Date</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {data.transactions.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                         No transactions.
                       </td>
                     </tr>
@@ -280,6 +615,7 @@ export default function UserDetailPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">{t.reference}</td>
+                      <td className="px-6 py-4 font-mono text-sm text-gray-500">{show(t.ip)}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {new Date(t.createdAt).toLocaleString()}
                       </td>

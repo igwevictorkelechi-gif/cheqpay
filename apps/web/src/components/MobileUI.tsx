@@ -11,7 +11,7 @@ export function useToast() {
     setTimeout(() => setMsg(null), 1800);
   }, []);
   const node = msg ? (
-    <div className="fixed inset-x-0 bottom-28 z-50 flex justify-center px-6">
+    <div className="fixed inset-x-0 bottom-28 z-50 flex justify-center px-6 lg:bottom-8 lg:left-64">
       <div className="rounded-full bg-card px-5 py-3 text-sm font-semibold text-ink shadow-xl ring-1 ring-border">
         {msg}
       </div>

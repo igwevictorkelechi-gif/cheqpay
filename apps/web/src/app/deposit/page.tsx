@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, Landmark } from "lucide-react";
 import { NairaFlag } from "@/components/MobileUI";
 import { api } from "@/services/api";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 export default function AddMoneyPage() {
   const router = useRouter();
@@ -32,8 +33,9 @@ export default function AddMoneyPage() {
   const valid = Number(digits) > 0;
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-6 pt-3">
+    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-6 pt-3 lg:max-w-3xl">
         {/* Header */}
         <button
           onClick={() => router.back()}

@@ -7,7 +7,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
-  Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, type LucideIcon,
+  Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search,
+  ShieldAlert, Monitor, type LucideIcon,
 } from 'lucide-react';
 
 type Item = { label: string; href: string; icon: LucideIcon };
@@ -29,6 +30,14 @@ const categories: Category[] = [
       { label: 'User Management', href: '/users', icon: Users },
       { label: 'KYC Review', href: '/kyc', icon: ShieldCheck },
       { label: 'Roles & Access', href: '/roles', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Security',
+    icon: ShieldAlert,
+    items: [
+      { label: 'Login & Devices', href: '/security/login-activity', icon: Monitor },
+      { label: 'Compliance Lookup', href: '/compliance', icon: Search },
     ],
   },
   {
@@ -64,6 +73,7 @@ const categories: Category[] = [
       { label: 'In-App Popup', href: '/features/popup', icon: Megaphone },
       { label: 'Payment Settings', href: '/payment-settings', icon: CreditCard },
       { label: 'Provider Settings', href: '/provider-settings', icon: Server },
+      { label: 'Provider Check', href: '/provider-check', icon: Activity },
       { label: 'Support Contact', href: '/support-contact', icon: MessageSquare },
       { label: 'Admin Profile', href: '/profile', icon: ShieldCheck },
     ],

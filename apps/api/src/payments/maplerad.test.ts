@@ -51,7 +51,7 @@ afterEach(() => {
 const base = { customer: "08030000000", reference: "tx-1" };
 
 describe("MapleradProvider — bills", () => {
-  it("buys airtime on the network the customer chose", async () => {
+  it("always buys airtime through the single ng-airtime identifier", async () => {
     const sent = stubMaplerad();
     const r = await psp.payBill({
       ...base,
@@ -65,7 +65,7 @@ describe("MapleradProvider — bills", () => {
     expect(sent).toEqual([
       {
         key: "POST /bills/airtime",
-        body: { identifier: "mtn-ng", phone_number: "08030000000", amount: 50_000 },
+        body: { identifier: "ng-airtime", phone_number: "08030000000", amount: 50_000 },
       },
     ]);
   });
@@ -253,16 +253,55 @@ describe("MapleradProvider — money movement", () => {
     ]);
   });
 
+  it("falls back to our reference when the payout response carries no id", async () => {
+    // Maplerad's documented 200 body for /transfers echoes the request, with no
+    // id and no status. Settlement matches on our reference either way, but
+    // externalRef must not end up unset.
+    stubMaplerad({ "POST /transfers": { bank_code: "044", amount: 250_050 } });
+    const r = await psp.initiateTransfer({
+      amount: "2500.50",
+      bankCode: "044",
+      accountNumber: "0690000031",
+      reference: "tx-payout-2",
+    });
+
+    expect(r).toEqual({ providerRef: "tx-payout-2", status: "pending" });
+  });
+
   it("resolves an account name before we send money to it", async () => {
-    stubMaplerad({ "POST /institutions/resolve": { account_name: "ADA OKAFOR" } });
+    const sent = stubMaplerad({ "POST /institutions/resolve": { account_name: "ADA OKAFOR" } });
     await expect(
       psp.resolveBankAccount({ accountNumber: "0690000031", bankCode: "044" })
     ).resolves.toEqual({ accountName: "ADA OKAFOR" });
+
+    // account_number and bank_code are the whole request schema — a `currency`
+    // used to be sent too, and was never read.
+    expect(sent[0].body).toEqual({ bank_code: "044", account_number: "0690000031" });
   });
 
-  it("refuses to mint a virtual account while Maplerad collections are disabled", async () => {
-    // Deposits are dark by design: failing loudly beats creating Maplerad
-    // customers we cannot actually collect against.
+  it("pages through the bank list instead of returning only the first 100", async () => {
+    // Nigeria has more than 100 NUBAN institutions once microfinance banks are
+    // counted. Returning one page dropped the tail silently, and the user whose
+    // bank fell past the cut saw no error — just a bank that wasn't listed.
+    const page = (n: number, count: number) =>
+      Array.from({ length: count }, (_, i) => ({ name: `Bank ${n}-${i}`, code: `${n}${i}` }));
+
+    const sent = stubMaplerad({
+      "GET /institutions?type=NUBAN&country=NG&page=1&page_size=100": page(1, 100),
+      "GET /institutions?type=NUBAN&country=NG&page=2&page_size=100": page(2, 100),
+      "GET /institutions?type=NUBAN&country=NG&page=3&page_size=100": page(3, 37),
+    });
+
+    const banks = await psp.listBanks();
+
+    expect(banks).toHaveLength(237);
+    expect(sent).toHaveLength(3); // stopped on the short page, did not keep going
+  });
+
+  it("refuses to mint a virtual account for a user with no Maplerad customer", async () => {
+    // A collection account hangs off a customer id. Without one there is
+    // nothing to attach it to, and saying so beats letting Maplerad answer with
+    // a 400 that names a field the operator has never heard of.
     await expect(
       psp.createVirtualAccount({
         email: "a@b.com",
@@ -271,7 +310,101 @@ describe("MapleradProvider — money movement", () => {
         permanent: true,
         txRef: "va_1",
       })
-    ).rejects.toThrow(/deposits are temporarily unavailable/i);
+    ).rejects.toThrow(/no Maplerad customer record/i);
+  });
+
+  it("opens a permanent collection account for an enrolled customer", async () => {
+    // The stub mirrors the documented response exactly. It used to include a
+    // bank_code, which this endpoint does not return — so the test was
+    // confirming a field the provider could never actually supply.
+    const sent = stubMaplerad({
+      "POST /collections/virtual-account": {
+        id: "acc_123",
+        account_number: "9900000001",
+        account_name: "ADA OKAFOR",
+        bank_name: "Wema Bank",
+        currency: "NGN",
+      },
+    });
+
+    await expect(
+      psp.createVirtualAccount({
+        email: "a@b.com",
+        firstName: "Ada",
+        lastName: "Okafor",
+        permanent: true,
+        txRef: "va_1",
+        mapleradCustomerId: "cus_abc",
+      })
+    ).resolves.toEqual({
+      accountNumber: "9900000001",
+      bankName: "Wema Bank",
+      // The response carries account_name; it is captured, not dropped.
+      accountName: "ADA OKAFOR",
+      // Not in the response; must not be invented from the bank name.
+      bankCode: undefined,
+      providerRef: "acc_123",
+      // Always permanent: a static account is created once and reused forever.
+      permanent: true,
+    });
+
+    // With no preferred bank configured, only customer_id and currency are sent.
+    // An unexpected field is exactly the kind of thing a provider rejects with a
+    // 400 naming a parameter nobody here has heard of.
+    const body = sent.find((c) => c.key === "POST /collections/virtual-account")?.body;
+    expect(body).toEqual({ customer_id: "cus_abc", currency: "NGN" });
+  });
+
+  it("requests a specific bank when MAPLERAD_PREFERRED_BANK is set", async () => {
+    // The env var carries a VIRTUAL-institution identifier (e.g. Moniepoint's);
+    // when present it is forwarded as preferred_bank so the NUBAN is minted there.
+    vi.stubEnv("MAPLERAD_PREFERRED_BANK", "moniepoint-ng");
+    const sent = stubMaplerad({
+      "POST /collections/virtual-account": {
+        id: "acc_124",
+        account_number: "5000000002",
+        account_name: "ADA OKAFOR",
+        bank_name: "Moniepoint MFB",
+        currency: "NGN",
+      },
+    });
+
+    const r = await psp.createVirtualAccount({
+      email: "a@b.com",
+      firstName: "Ada",
+      lastName: "Okafor",
+      permanent: true,
+      txRef: "va_2",
+      mapleradCustomerId: "cus_abc",
+    });
+    expect(r.bankName).toBe("Moniepoint MFB");
+
+    const body = sent.find((c) => c.key === "POST /collections/virtual-account")?.body;
+    expect(body).toEqual({
+      customer_id: "cus_abc",
+      currency: "NGN",
+      preferred_bank: "moniepoint-ng",
+    });
+    vi.unstubAllEnvs();
+  });
+
+  it("does not hand back an account without a number", async () => {
+    // A 2xx with a missing account_number would otherwise be persisted as the
+    // user's NUBAN, and every future deposit to it would be unplaceable.
+    stubMaplerad({
+      "POST /collections/virtual-account": { id: "acc_123", bank_name: "Wema Bank" },
+    });
+
+    await expect(
+      psp.createVirtualAccount({
+        email: "a@b.com",
+        firstName: "Ada",
+        lastName: "Okafor",
+        permanent: true,
+        txRef: "va_1",
+        mapleradCustomerId: "cus_abc",
+      })
+    ).rejects.toThrow(/no account number/i);
   });
 
   it("defers webhook verification to the Svix route", () => {

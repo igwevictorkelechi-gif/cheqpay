@@ -6,7 +6,10 @@ import { getKycProvider } from "@/kyc";
 import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
+import { persistKycIdentity } from "@/lib/kycIdentity";
+import { signKycDocument } from "@/lib/storage";
 import { kycTier1Schema } from "@/lib/validation";
+import { decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +30,19 @@ export async function GET(req: Request) {
     const limits = getTierLimits(user.kycTier);
     return jsonOk({
       kycTier: user.kycTier,
+      // Whether the user is enrolled with the payment provider. Verification
+      // and enrollment are separate: a user can be fully verified and still
+      // have no provider customer, which leaves them with no deposit account
+      // and no crypto wallet. Clients use this to ask for the missing details
+      // rather than showing a verified badge over a half-finished account.
+      providerEnrolled: Boolean(user.mapleradCustomerId),
+      // The name recorded at verification. Returned so a user completing their
+      // details doesn't retype it — and, more importantly, so it cannot drift
+      // from the name the provider will check against the BVN.
+      legalName: user.legalName ?? null,
+      // Prefills the date picker so somebody finishing their setup does not
+      // scroll back through 25 years to re-enter a date already on file.
+      dateOfBirth: user.dateOfBirth ? user.dateOfBirth.toISOString().slice(0, 10) : null,
       limits: {
         singleTxKobo: limits.singleTxKobo.toString(),
         dailyDepositKobo: limits.dailyDepositKobo.toString(),
@@ -55,15 +71,67 @@ export async function POST(req: Request) {
 
     const body = kycTier1Schema.parse(await req.json());
 
+    // A returning user completing their details won't retype the BVN, but the
+    // identity check needs one. We retained it encrypted at first verification
+    // precisely so it can be produced again without asking.
+    //
+    // Recovered here rather than further down because the verification below
+    // needs it too — a BVN-based check has nothing to work with otherwise, and
+    // a returning user completing their address would fail verification for
+    // want of a number we already hold.
+    let bvn = body.bvn;
+    if (!bvn && user.bvnCiphertext && isPiiEncryptionConfigured()) {
+      try {
+        bvn = decryptPii(user.bvnCiphertext);
+      } catch (err) {
+        console.error("[kyc] could not decrypt the retained BVN for enrollment", err);
+      }
+    }
+
+    // Store everything the user submitted, securely, BEFORE anything is checked
+    // against Maplerad. This is the first side effect of the submission and it is
+    // allowed to fail loudly: if we cannot record who submitted what, we must not
+    // go on to ask the provider about them. The BVN is stored encrypted; the
+    // phone is filled only when empty. See lib/kycIdentity.ts.
+    await persistKycIdentity(auth.id, {
+      legalName: `${body.firstName} ${body.lastName}`.trim(),
+      bvn: body.bvn,
+      dateOfBirth: body.dateOfBirth,
+      phone: body.phone,
+      address: body.address,
+      idDoc: { type: body.identity.type, number: body.identity.number },
+    });
+
     // Automated identity check (BVN/ID). Passing auto-approves; otherwise the
     // submission stays PENDING for manual admin review.
     const verdict = await getKycProvider().verify({
       firstName: body.firstName,
       lastName: body.lastName,
-      dateOfBirth: body.dateOfBirth,
-      bvn: body.bvn,
+      dateOfBirth: body.dateOfBirth ?? user.dateOfBirth?.toISOString().slice(0, 10),
+      bvn,
       documentRefs: body.documentRefs,
     });
+
+    if (!verdict.verified) {
+      // A submission that does not auto-verify sends the user to "Under review"
+      // and — because enrolment is gated on the verdict — silently denies them a
+      // Maplerad customer and therefore a deposit account. The provider's reason
+      // is the only thing that distinguishes "the name did not match the BVN
+      // registry" from "the lookup was refused because our IP is not
+      // whitelisted", and those need opposite fixes.
+      //
+      // It was reaching the client as `message` and the audit log, but nowhere
+      // an operator looks first, so every diagnosis started by guessing.
+      //
+      // Safe to log: provider reasons never carry the BVN — that is exactly why
+      // providerRef holds only the last four digits.
+      console.warn("[kyc] not auto-verified — sent to manual review", {
+        userId: auth.id,
+        provider: getKycProvider().name,
+        reason: verdict.reason,
+        submittedBvn: bvn ? `…${bvn.slice(-4)}` : "none",
+      });
+    }
 
     const record = await prisma.kycRecord.create({
       data: {
@@ -71,24 +139,68 @@ export async function POST(req: Request) {
         tier: verdict.verified ? verdict.tier : 1,
         status: verdict.verified ? KycStatus.APPROVED : KycStatus.PENDING,
         reviewedAt: verdict.verified ? new Date() : null,
-        documentRefs: body.documentRefs,
+        // The two ID-document storage paths (front, back). These are what an
+        // admin reviewer opens; the images themselves stay in the private bucket.
+        documentRefs: [body.identity.frontRef, body.identity.backRef],
       },
     });
 
-    // Persist the submitted date of birth on the profile so Personal details
-    // can show it (it becomes locked once the account is verified).
-    if (body.dateOfBirth && /^\d{4}-\d{2}-\d{2}$/.test(body.dateOfBirth)) {
-      await prisma.user.update({
-        where: { id: auth.id },
-        data: { dateOfBirth: new Date(body.dateOfBirth) },
-      });
-    }
+    // Date of birth, legal name, encrypted BVN and address were all written by
+    // persistKycIdentity above, before any provider call — so nothing needs
+    // storing here.
 
-    // Elevate the user's tier immediately on an automatic pass.
-    if (verdict.verified) {
-      await prisma.user.update({
-        where: { id: auth.id },
-        data: { kycTier: { set: Math.max(user.kycTier, verdict.tier) } },
+    // Enrollment is attempted for anyone who ENDS UP verified, not only those
+    // verified by this submission. A user who verified before the form asked
+    // for phone and address is verified but not enrolled, and would otherwise
+    // never get a deposit account or a crypto wallet — the approved screen
+    // never shows them the form again. Re-submitting the missing details now
+    // completes their setup.
+    const alreadyVerified = user.kycTier >= 1;
+    if (verdict.verified || alreadyVerified) {
+      if (verdict.verified) {
+        await prisma.user.update({
+          where: { id: auth.id },
+          data: { kycTier: { set: Math.max(user.kycTier, verdict.tier) } },
+        });
+      }
+
+      // Enroll the user with Maplerad while the BVN is still in hand — the
+      // stablecoin API only serves tier-1+ Maplerad customers. Best-effort:
+      // skipped when the submission lacks phone/address, retried next submit.
+      //
+      // This MUST come before the deposit account below: a Maplerad collection
+      // account hangs off a customer id, so enrolling second meant every
+      // account request went out without one and failed.
+      //
+      // The address is already on the profile — persistKycIdentity wrote it
+      // above — so ensureMapleradCustomer can fall back to it on a later retry
+      // even when this submission omitted it.
+
+      // A fresh, short-lived signed URL for the front ID image, resolved here so
+      // a later retry re-signs rather than depending on a stale URL. Best-effort:
+      // if signing fails, enroll without the identity block rather than failing
+      // the whole KYC — the customer is still created and the ID is on file.
+      let identity: { type: typeof body.identity.type; number: string; imageUrl: string } | undefined;
+      try {
+        const imageUrl = await signKycDocument(body.identity.frontRef, 3600);
+        identity = { type: body.identity.type, number: body.identity.number, imageUrl };
+      } catch (err) {
+        console.error("[kyc] could not sign the ID document for enrollment", err);
+      }
+
+      // `bvn` was recovered above, before the identity check, so that a
+      // Maplerad-backed check sees the same value this enrollment does.
+      //
+      // Idempotent: when the check above already enrolled the user this finds
+      // the persisted customer id and returns without calling the provider.
+      await ensureMapleradCustomer(auth.id, user.email, {
+        firstName: body.firstName,
+        lastName: body.lastName,
+        bvn,
+        dateOfBirth: body.dateOfBirth ?? user.dateOfBirth?.toISOString().slice(0, 10),
+        phone: body.phone ?? user.phone,
+        address: body.address,
+        identity,
       });
 
       // Open the permanent, dedicated NGN deposit account now, using the BVN
@@ -100,29 +212,25 @@ export async function POST(req: Request) {
         await createVirtualAccount(auth.id, user.email, {
           firstName: body.firstName,
           lastName: body.lastName,
-          bvn: body.bvn,
+          phone: body.phone ?? user.phone ?? undefined,
+          // The recovered value, not body.bvn: a returning user completing
+          // their address does not retype the BVN, and passing undefined here
+          // marks a permanent account as temporary.
+          bvn,
         });
       } catch (e) {
         console.error("[kyc] virtual account provisioning failed (will retry on deposit)", e);
       }
 
-      // Enroll the user with Maplerad while the BVN is still in hand — the
-      // stablecoin API only serves tier-1+ Maplerad customers. Best-effort:
-      // skipped when the submission lacks phone/address, retried next submit.
-      await ensureMapleradCustomer(auth.id, user.email, {
-        firstName: body.firstName,
-        lastName: body.lastName,
-        bvn: body.bvn,
-        dateOfBirth: body.dateOfBirth,
-        phone: body.phone ?? user.phone,
-        address: body.address,
-      });
-
-      await sendPush(auth.id, {
-        category: "security",
-        title: "Identity verified",
-        body: "Your KYC is approved. Your limits are raised and withdrawals are unlocked.",
-      });
+      // Only for a genuinely new approval — a returning user filling in their
+      // address does not need to be told they were verified all over again.
+      if (verdict.verified && !alreadyVerified) {
+        await sendPush(auth.id, {
+          category: "security",
+          title: "Identity verified",
+          body: "Your KYC is approved. Your limits are raised and withdrawals are unlocked.",
+        });
+      }
     }
 
     await prisma.auditLog.create({
@@ -137,7 +245,8 @@ export async function POST(req: Request) {
           dateOfBirth: body.dateOfBirth,
           country: body.country,
           hasBvn: !!body.bvn,
-          documentCount: body.documentRefs.length,
+          // The government ID: type only, never the number (that is PII).
+          idDocType: body.identity.type,
           verified: verdict.verified,
           reason: verdict.reason,
         },

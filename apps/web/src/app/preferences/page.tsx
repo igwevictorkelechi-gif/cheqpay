@@ -10,6 +10,7 @@ import {
   ChevronRight,
   LucideIcon,
 } from "lucide-react";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 type Row = {
   icon: LucideIcon;
@@ -58,8 +59,9 @@ export default function PreferencesPage() {
   const router = useRouter();
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-8 pt-3">
+    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-8 pt-3 lg:max-w-3xl">
         {/* Back */}
         <button
           onClick={() => router.back()}

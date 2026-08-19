@@ -1,6 +1,6 @@
 {
-  "extends": ["//"],
-  "tasks": {
+  "$schema": "https://turbo.build/schema.json",
+  "pipeline": {
     "dev": {
       "cache": false,
       "persistent": true
@@ -18,7 +18,5 @@
       "cache": true
     }
   },
-  "globalEnv": [
-    "TURBO_REMOTE_ONLY"
-  ]
+  "globalEnv": ["TURBO_REMOTE_ONLY"]
 }

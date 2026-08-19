@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { NIGERIAN_BANKS } from "@cheqpay/shared";
 import { api, ApiError, type Bank, type Beneficiary } from "@/services/api";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 type Mode = "list" | "add";
 
@@ -111,8 +112,9 @@ export default function BankAccountsPage() {
   }
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-6 pt-3">
+    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-6 pt-3 lg:max-w-3xl">
         <button
           onClick={() => (mode === "add" ? (resetForm(), setMode("list")) : router.back())}
           className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink"

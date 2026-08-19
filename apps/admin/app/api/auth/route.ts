@@ -5,10 +5,10 @@ import {
   sessionCookieValue,
   sessionEmail,
 } from "@/lib/adminAuth";
+import { API_URL } from "@/lib/apiUrl";
 
 export const dynamic = "force-dynamic";
 
-const API_URL = process.env.CHEQPAY_API_URL ?? "https://cheqpay-admin453.vercel.app";
 const TWELVE_HOURS = 60 * 60 * 12;
 
 /** Log in with the admin dashboard credentials (verified by the backend). */

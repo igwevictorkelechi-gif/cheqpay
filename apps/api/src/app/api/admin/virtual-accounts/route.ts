@@ -36,7 +36,12 @@ export async function GET(req: Request) {
 
     return jsonOk({
       virtualAccounts: rows.map((w) => {
-        let meta: { bankName?: string; bankCode?: string; permanent?: boolean } = {};
+        let meta: {
+          bankName?: string;
+          accountName?: string;
+          bankCode?: string;
+          permanent?: boolean;
+        } = {};
         try {
           meta = JSON.parse(w.custodyRef) as typeof meta;
         } catch {
@@ -50,6 +55,7 @@ export async function GET(req: Request) {
           userStatus: w.user.status,
           accountNumber: w.address,
           bankName: meta.bankName ?? "—",
+          accountName: meta.accountName ?? "—",
           bankCode: meta.bankCode ?? null,
           permanent: Boolean(meta.permanent),
           createdAt: w.createdAt,

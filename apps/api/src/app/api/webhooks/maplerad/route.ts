@@ -5,10 +5,10 @@
 // handlers don't pre-parse the body, so `req.text()` gives us the exact bytes
 // Maplerad signed, and any re-serialization would break the signature.
 //
-// Today this settles PAYOUTS (transfer.*). Deposits (collection.*) cannot happen
-// yet — Maplerad has not enabled collections on the business, so no user has a
-// virtual account to be paid into. We acknowledge and log those instead of
-// guessing at a credit; see payments/maplerad.ts createVirtualAccount.
+// This settles PAYOUTS (transfer.*) and DEPOSITS (collection.*). A deposit that
+// cannot be matched to an owner is logged as an error rather than credited to a
+// guess — real money arrived, and placing it on the wrong account is worse than
+// leaving it for a human.
 
 import { NextResponse } from "next/server";
 import { readSvixHeaders, verifyWebhook } from "@/lib/maplerad/webhooks";
@@ -18,8 +18,10 @@ import {
   markProcessed,
   notifySettlement,
 } from "@/lib/ngnWebhook";
-import type { MapleradWebhookEvent } from "@/lib/maplerad/types";
+import type { CollectionEventData, MapleradWebhookEvent } from "@/lib/maplerad/types";
 import { handleIssuingEvent, type IssuingEventData } from "@/lib/maplerad/issuing";
+import { handleCollectionEvent } from "@/lib/maplerad/deposits";
+import { prismaLedgerPort } from "@/lib/mapleradCollections";
 import { cardStore } from "@/lib/cards";
 
 // Node.js runtime: we need crypto + the raw body. Never the edge runtime.
@@ -93,14 +95,25 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     if (name.startsWith("collection.")) {
-      // Unreachable until Maplerad enables collections. Loud, because a real
-      // collection event means someone's money arrived and we are not crediting it.
-      console.error("[maplerad webhook] collection event but deposits are not wired", {
-        id: svix.id,
-        name,
-      });
+      // Someone paid into a user's dedicated NUBAN. Credit the owner.
+      const outcome = await handleCollectionEvent(
+        event as unknown as MapleradWebhookEvent<CollectionEventData>,
+        prismaLedgerPort
+      );
+
+      if (outcome.outcome === "unmatched") {
+        // Real money arrived that we could not place. Never silent: this needs
+        // a human, and the payer is owed either a credit or a refund.
+        console.error("[maplerad webhook] COLLECTION UNMATCHED — money received, no owner found", {
+          id: svix.id,
+          name,
+          amount: outcome.amount,
+          payload: JSON.stringify(event.data).slice(0, 2000),
+        });
+      }
+
       await markProcessed(SOURCE, svix.id);
-      return NextResponse.json({ status: "unhandled", eventId: svix.id });
+      return NextResponse.json({ ...outcome, eventId: svix.id });
     }
 
     if (name.startsWith("issuing.")) {

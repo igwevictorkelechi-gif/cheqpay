@@ -8,10 +8,25 @@ import { z } from "zod";
 export const kycTier1Schema = z.object({
   firstName: z.string().min(2).max(60),
   lastName: z.string().min(2).max(60),
-  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD").optional(),
+  // Required: the full Maplerad enrolment needs it, and the clients now mark it
+  // mandatory. Stored as a real Date; converted to Maplerad's DD-MM-YYYY only at
+  // the call boundary.
+  dateOfBirth: z
+    .string({ required_error: "Date of birth is required" })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
   country: z.string().length(2).default("NG"),
   bvn: z.string().regex(/^\d{11}$/, "Expected an 11-digit BVN").optional(),
   documentRefs: z.array(z.string().min(1)).max(10).default([]),
+  // A government ID, required. The user picks a type, enters its number, and
+  // uploads front and back; the two `*Ref` values are the storage paths returned
+  // by POST /api/kyc/documents. Only the front is sent to Maplerad (its enroll
+  // identity carries a single image); both are kept on the KYC record.
+  identity: z.object({
+    type: z.enum(["NIN", "PASSPORT", "VOTERS_CARD", "DRIVERS_LICENSE"]),
+    number: z.string().trim().min(4).max(30),
+    frontRef: z.string().min(1),
+    backRef: z.string().min(1),
+  }),
   // Optional today: needed only to enroll the user with Maplerad, whose tier 1
   // requires a phone and street address (verified against their sandbox). Old
   // clients omit them — enrollment is skipped and retried on the next submit.
@@ -26,6 +41,15 @@ export const kycTier1Schema = z.object({
     .optional(),
 });
 export type KycTier1Input = z.infer<typeof kycTier1Schema>;
+
+/** Body of POST /api/kyc/documents — one ID image at a time. */
+export const kycDocumentUploadSchema = z.object({
+  // base64 of the raw image bytes (no data: prefix).
+  image: z.string().min(1),
+  side: z.enum(["front", "back"]),
+  contentType: z.enum(["image/jpeg", "image/png"]),
+});
+export type KycDocumentUploadInput = z.infer<typeof kycDocumentUploadSchema>;
 
 /** Admin action on a KYC submission. */
 export const kycReviewSchema = z.object({
@@ -223,14 +247,19 @@ export const userTransferSchema = z.object({
   note: z.string().trim().max(140).optional(),
 });
 
-/** Update editable profile fields. Username is normalized (leading @ stripped). */
+/**
+ * Update editable profile fields. Username is normalized: leading @ stripped and
+ * LOWERCASED. Lookups are case-insensitive but the unique index is not, so a
+ * canonical case is what stops "Victor" and "victor" existing as two accounts
+ * that a single lookup could resolve to either of.
+ */
 export const profileUpdateSchema = z
   .object({
     username: z
       .string()
       .trim()
-      .transform((v) => v.replace(/^@+/, ""))
-      .pipe(z.string().regex(/^[a-zA-Z0-9_]{3,20}$/, "3–20 letters, numbers or underscores"))
+      .transform((v) => v.replace(/^@+/, "").toLowerCase())
+      .pipe(z.string().regex(/^[a-z0-9_]{3,20}$/, "3–20 letters, numbers or underscores"))
       .optional(),
     dateOfBirth: z
       .string()

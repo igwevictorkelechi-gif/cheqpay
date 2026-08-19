@@ -5,10 +5,34 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/services/supabase";
 
 // Routes reachable without a session.
-const PUBLIC_EXACT = new Set(["/login", "/signup", "/verify-otp"]);
+const PUBLIC_EXACT = new Set(["/login", "/signup", "/verify-otp", "/welcome"]);
 const PUBLIC_PREFIX = ["/legal", "/privacy", "/terms", "/about", "/support", "/faq", "/contact"];
 
-function isPublic(path: string): boolean {
+/** Where a signed-out visitor to the app root is sent. */
+const LANDING = "/welcome";
+
+/**
+ * Strip a trailing slash so "/login" and "/login/" are the same route.
+ *
+ * They are not the same string, and that mattered: the static export is built
+ * with `trailingSlash`, so usePathname() returns "/login/", which failed the
+ * exact-match check below. The guard then treated the login page as protected,
+ * rendered a blank screen and redirected to /login — which was also "/login/",
+ * so it looped. Normalizing here keeps the guard correct whichever way a URL
+ * arrives, rather than making it depend on the build config.
+ */
+function normalize(path: string): string {
+  // Also resolve an RSC payload URL to the route it belongs to. A failed
+  // prefetch can land the browser on /crypto/index.txt; without this the guard
+  // sees a path matching nothing public and bounces a signed-out visitor to
+  // /login?next=%2Fcrypto%2Findex.txt. The .htaccess rule should redirect that
+  // request before it ever reaches us — this is the belt to its braces.
+  const p = path.endsWith("/index.txt") ? path.slice(0, -"index.txt".length) : path;
+  return p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
+}
+
+function isPublic(rawPath: string): boolean {
+  const path = normalize(rawPath);
   return (
     PUBLIC_EXACT.has(path) ||
     PUBLIC_PREFIX.some((p) => path === p || path.startsWith(p + "/"))
@@ -34,9 +58,17 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       if (!active) return;
       setAuthed(ok);
       setReady(true);
+      const path = normalize(pathname);
       if (!ok && !isPublic(pathname)) {
-        router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-      } else if (ok && (pathname === "/login" || pathname === "/signup")) {
+        // A signed-out visitor to the app root gets the landing page, not a
+        // login form: arriving at cheqpay.com without an account is the normal
+        // case for a browser, and a bare password box explains nothing about
+        // what this is. Deep links still go to /login with ?next, because
+        // somebody asking for /withdraw does want to sign in.
+        router.replace(
+          path === "/" ? LANDING : `/login?next=${encodeURIComponent(path)}`
+        );
+      } else if (ok && (path === "/login" || path === "/signup" || path === LANDING)) {
         router.replace("/");
       }
     };

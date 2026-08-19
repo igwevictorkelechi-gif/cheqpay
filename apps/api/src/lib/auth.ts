@@ -2,6 +2,7 @@ import { decodeJwt } from "jose";
 import { prisma } from "@cheqpay/db";
 import { getEnv } from "./env";
 import { AuthError, ForbiddenError } from "./http";
+import { touchActivity } from "./activity";
 
 export interface AuthUser {
   id: string;
@@ -102,7 +103,15 @@ export async function requireUser(req: Request): Promise<AuthUser> {
   if (scheme !== "Bearer" || !token) {
     throw new AuthError("Missing or malformed Authorization header");
   }
-  return verifySupabaseJwt(token);
+  const user = await verifySupabaseJwt(token);
+
+  // Record the IP, device and route for the security history. Placed here so
+  // every authenticated route is covered without each one remembering.
+  // Fire-and-forget and internally throttled: a security log must never be able
+  // to slow down or fail the request it is observing.
+  touchActivity(req, user.id);
+
+  return user;
 }
 
 /** True if the email is in the DB-managed admin allowlist (platform_settings). */

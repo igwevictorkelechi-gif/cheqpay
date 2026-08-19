@@ -3,11 +3,12 @@
 // Maplerad is the NGN rail, implementing PaymentProvider (see ./types).
 //
 // Supported: bills (airtime, data, electricity, cable TV), bank payouts, name
-// enquiry and the bank list.
+// enquiry, the bank list, and NGN deposits via dedicated collection accounts.
 //
-// NOT supported yet: NGN deposits. Maplerad has not enabled collections on the
-// business, so virtual-account creation fails for every bank; createVirtualAccount
-// throws a clear error until that is switched on.
+// NGN deposits need collections enabled on the Maplerad business AND a KYC'd
+// Maplerad customer per user — a static NUBAN hangs off a customer id. The
+// account is opened at KYC approval and reused forever; incoming money arrives
+// as a `collection.successful` webhook that credits the user's balance.
 //
 // Betting and food have no Maplerad biller at all — they are marked "coming soon"
 // in the catalog (lib/bills.ts) and never reach this rail.
@@ -33,13 +34,33 @@ import {
   type VirtualAccountResult,
 } from "./types";
 
+// Named for what the user has to do about it. A Maplerad customer now exists
+// from the moment someone signs up (POST /customers needs only a name and an
+// email); what a deposit account needs on top is the tier 1 upgrade, and that
+// is what is missing here.
+// The condition this guards is `!mapleradCustomerId` — no customer record at
+// all — so it must not claim a tier problem. It used to say "not yet tier 1",
+// which sent an operator looking for a failed upgrade when the truth was that
+// the user had never submitted the KYC form: POST /api/kyc is the only thing
+// that creates the customer, and the deposit screen does not create one.
 const DEPOSITS_UNAVAILABLE =
-  "NGN deposits are temporarily unavailable: Maplerad has not enabled collections on this business yet.";
+  "Cannot open a deposit account: this user has no Maplerad customer record. " +
+  "One is created when the KYC form is submitted (POST /api/kyc) — opening the " +
+  "deposit screen does not create it. Submit KYC with BVN, date of birth, phone " +
+  "and full street address, which is also what the tier 1 upgrade collections " +
+  "require.";
 
 /** NGN decimal string -> kobo integer. "100" -> 10000. */
 function toKobo(amount: string): number {
   return Math.round(parseFloat(amount) * 100);
 }
+
+/**
+ * The one Maplerad identifier for Nigerian airtime, for every network. Maplerad
+ * derives the carrier from the phone number; there are no per-network airtime
+ * codes. (Data is different — it has real per-network billers like mtn-data-ng.)
+ */
+const NG_AIRTIME_IDENTIFIER = "ng-airtime";
 
 export class MapleradProvider implements PaymentProvider {
   readonly name = "maplerad";
@@ -58,6 +79,15 @@ export class MapleradProvider implements PaymentProvider {
         Authorization: `Bearer ${this.secretKey}`,
         Accept: "application/json",
         ...(body ? { "Content-Type": "application/json" } : {}),
+        // This provider has its own fetch rather than going through
+        // lib/maplerad/client, so the egress-proxy secret has to be repeated
+        // here. Without it the proxy rejects exactly the calls that move money
+        // — bills, transfers, virtual accounts, name enquiry, the bank list —
+        // while the stablecoin calls that DO use the shared client succeed,
+        // which reads as "Maplerad is half broken" rather than a config gap.
+        ...(process.env.MAPLERAD_PROXY_SECRET
+          ? { "X-Proxy-Secret": process.env.MAPLERAD_PROXY_SECRET }
+          : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -129,10 +159,20 @@ export class MapleradProvider implements PaymentProvider {
     }
   }
 
-  /** Airtime: no plan to resolve — the amount is whatever the user typed. */
+  /**
+   * Airtime: no plan to resolve — the amount is whatever the user typed.
+   *
+   * The identifier is pinned rather than taken from the catalog, which is the
+   * one place in this class that ignores `billerCode`. Maplerad accepts a single
+   * country-level airtime identifier and works the network out from the phone
+   * number, so the network the user tapped is a display choice with no bearing
+   * on the request. Reading it from the catalog would let a stale per-network
+   * code reach the provider and fail the purchase AFTER the customer is debited
+   * — and the refund is not the same thing as the airtime arriving.
+   */
   private async payAirtime(input: BillPayInput, kobo: number): Promise<BillPayResult> {
     const r = await this.req<{ id: string; status: string }>("/bills/airtime", "POST", {
-      identifier: this.identifier(input), // e.g. "mtn-ng"
+      identifier: NG_AIRTIME_IDENTIFIER,
       phone_number: input.customer,
       amount: kobo,
     });
@@ -237,18 +277,45 @@ export class MapleradProvider implements PaymentProvider {
 
   // ---- Payouts (money out) ------------------------------------------------
 
+  /**
+   * Every NGN payout bank, following pagination to the end.
+   *
+   * This used to request one page of 100 and return it. GET /institutions
+   * paginates (the envelope carries page/page_size/total, which this client
+   * discards along with the rest of the envelope), and Nigeria has more than 100
+   * NUBAN institutions once microfinance banks are counted — so the tail was
+   * being dropped silently. A user whose bank fell past the cut saw no error,
+   * just a bank missing from the list, which reads as "Cheqpay doesn't support
+   * my bank" rather than as the bug it is.
+   */
   async listBanks(): Promise<Bank[]> {
-    const banks = await this.req<Array<{ name: string; code: string }>>(
-      "/institutions?type=NUBAN&country=NG&page=1&page_size=100",
-    );
-    return banks.map((b) => ({ code: b.code, name: b.name }));
+    const PAGE_SIZE = 100;
+    const MAX_PAGES = 20; // hard stop if `page` is ever ignored
+    const banks: Bank[] = [];
+
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const batch = await this.req<Array<{ name: string; code: string }>>(
+        `/institutions?type=NUBAN&country=NG&page=${page}&page_size=${PAGE_SIZE}`,
+      );
+      banks.push(...batch.map((b) => ({ code: b.code, name: b.name })));
+      if (batch.length < PAGE_SIZE) break; // a short page is the last page
+    }
+
+    return banks;
   }
 
+  /**
+   * Name enquiry. POST /institutions/resolve takes `account_number` and
+   * `bank_code` and nothing else — we used to also send `currency`, which is
+   * absent from the request schema and so was never read.
+   *
+   * Note the endpoint returns a dummy name in sandbox; only Live resolves a real
+   * account, so a sandbox "match" proves nothing about a real NUBAN.
+   */
   async resolveBankAccount(input: ResolveAccountInput): Promise<ResolveAccountResult> {
     const r = await this.req<{ account_name: string }>("/institutions/resolve", "POST", {
       bank_code: input.bankCode,
       account_number: input.accountNumber,
-      currency: "NGN",
     });
     return { accountName: r.account_name };
   }
@@ -265,7 +332,7 @@ export class MapleradProvider implements PaymentProvider {
     reference: string;
     narration?: string;
   }): Promise<TransferResult> {
-    const r = await this.req<{ id: string; status?: string }>("/transfers", "POST", {
+    const r = await this.req<{ id?: string; status?: string }>("/transfers", "POST", {
       bank_code: input.bankCode,
       account_number: input.accountNumber,
       amount: toKobo(input.amount),
@@ -274,7 +341,13 @@ export class MapleradProvider implements PaymentProvider {
       reference: input.reference,
     });
     return {
-      providerRef: r.id,
+      // Maplerad's documented 200 body for this endpoint is an echo of the
+      // request — no id, no status — which is almost certainly a copy-paste slip
+      // in their docs, but it costs nothing to survive being right. Settlement
+      // matches on OUR reference (the transfer.* webhook carries it back), so a
+      // missing id loses nothing that matters; falling back to the reference
+      // keeps externalRef populated instead of writing undefined.
+      providerRef: r.id ?? input.reference,
       status: r.status ? normalizeStatus(r.status) : "pending",
     };
   }
@@ -282,18 +355,70 @@ export class MapleradProvider implements PaymentProvider {
   // ---- Deposits (money in) — BLOCKED --------------------------------------
 
   /**
-   * Maplerad NGN virtual accounts are not yet usable: collections are not
-   * enabled on the business, so POST /collections/virtual-account returns 400
-   * for every bank, even at KYC tier 2. Rather than half-create Maplerad
-   * customers we cannot collect against, we fail loudly and explain why.
+   * Open the user's dedicated NGN collection account (a permanent NUBAN).
    *
-   * To finish this once Maplerad enables collections: enroll the user as a
-   * Maplerad customer (lib/maplerad/customers.ts), persist the customer id on
-   * the User record, create a static account (lib/maplerad/accounts.ts), and
-   * credit on the `collection.successful` webhook.
+   * Maplerad hangs a collection account off a *customer*, so the caller must
+   * have enrolled one first and passed its id — see lib/virtualAccounts.ts.
+   * Without it there is nothing to attach the account to, and Maplerad's own
+   * error for the missing field is not one an operator can act on, so we say
+   * plainly what is missing instead.
+   *
+   * Money paid into the returned NUBAN lands in the business wallet and arrives
+   * back as a `collection.successful` webhook, which is what actually credits
+   * the user (app/api/webhooks/maplerad/route.ts). Creating the account here
+   * and crediting there are two halves of one feature: neither is any use alone.
    */
-  async createVirtualAccount(_i: CreateVirtualAccountInput): Promise<VirtualAccountResult> {
-    throw new Error(DEPOSITS_UNAVAILABLE);
+  async createVirtualAccount(i: CreateVirtualAccountInput): Promise<VirtualAccountResult> {
+    if (!i.mapleradCustomerId) {
+      throw new Error(DEPOSITS_UNAVAILABLE);
+    }
+
+    // customer_id and currency are the only required fields. preferred_bank is
+    // an optional VIRTUAL-institution identifier that picks which bank mints the
+    // NUBAN; when MAPLERAD_PREFERRED_BANK is set (e.g. to Moniepoint's), we send
+    // it so every deposit account is opened there. It is omitted entirely when
+    // unset — an unexpected field is exactly the kind of thing a provider
+    // rejects with a 400 naming a parameter nobody here has heard of.
+    //
+    // We used to also send a `reference`, on the belief that it came back on the
+    // collection webhook and gave a second way to place a payment. It is not in
+    // the request schema at all, so it was never stored and never echoed — and
+    // the webhook matches on the NUBAN regardless, which is the stronger signal.
+    //
+    // Note there is no bank_code in the response, only bank_name. Nothing here
+    // may pretend otherwise: the admin account list shows the code as blank,
+    // which is honest, rather than a value invented from the name.
+    const preferredBank = process.env.MAPLERAD_PREFERRED_BANK?.trim();
+    const acct = await this.req<{
+      id: string;
+      account_number: string;
+      bank_name?: string;
+      account_name?: string;
+    }>("/collections/virtual-account", "POST", {
+      customer_id: i.mapleradCustomerId,
+      currency: "NGN",
+      ...(preferredBank ? { preferred_bank: preferredBank } : {}),
+    });
+
+    if (!acct?.account_number) {
+      throw new Error(
+        "Maplerad created a collection account but returned no account number",
+      );
+    }
+
+    return {
+      accountNumber: acct.account_number,
+      bankName: acct.bank_name ?? "Maplerad",
+      // The account holder name Maplerad assigned to the NUBAN — stored so the
+      // user can confirm the account is theirs.
+      accountName: acct.account_name,
+      // Not returned by this endpoint; left undefined rather than guessed.
+      bankCode: undefined,
+      providerRef: acct.id,
+      // Always permanent: a static account is created once per user and reused
+      // forever, which is the whole reason it is tied to a KYC'd customer.
+      permanent: true,
+    };
   }
 
   // ---- Webhooks -----------------------------------------------------------

@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { colors } from '@/components/brand';
+import DateField from '@/components/DateField';
 import { api, ApiError } from '@/services/api';
 import { setPin } from '@/lib/applock';
 
@@ -53,7 +54,7 @@ function Field({
   value: string;
   onChangeText: (t: string) => void;
   placeholder?: string;
-  keyboardType?: 'default' | 'number-pad';
+  keyboardType?: 'default' | 'number-pad' | 'phone-pad';
 }) {
   return (
     <View className="rounded-2xl px-4 py-3 bg-card dark:bg-card-dark" style={{ borderWidth: 1, borderColor: colors.border }}>
@@ -80,7 +81,6 @@ export default function OnboardingScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [dob, setDob] = useState('');
-  const [bvn, setBvn] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -98,12 +98,12 @@ export default function OnboardingScreen() {
     setSubmitting(true);
     setError(null);
     try {
-      await api.submitKyc({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        dateOfBirth: /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : undefined,
-        bvn: bvn.trim() || undefined,
-      });
+      // Full KYC (BVN + government ID with document photos) happens on the Verify
+      // screen, which needs image uploads. Here we only save the date of birth so
+      // the Verify screen can prefill it; the name is already on the auth profile.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+        await api.updateProfile({ dateOfBirth: dob });
+      }
       setStep('pin');
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not submit. Please try again.');
@@ -135,17 +135,22 @@ export default function OnboardingScreen() {
 
           {step === 'kyc' ? (
             <>
-              <Text className="text-ink dark:text-ink-dark text-3xl font-extrabold mb-2">Verify your identity</Text>
+              <Text className="text-ink dark:text-ink-dark text-3xl font-extrabold mb-2">Tell us about you</Text>
               <Text className="text-muted dark:text-muted-dark text-base mb-6">
-                A quick check unlocks higher limits and crypto withdrawals. Your BVN name is matched
-                automatically.
+                Just your name to get started. You&apos;ll verify your identity with a BVN and a
+                government ID from the Verify screen, which unlocks higher limits, deposits and crypto
+                withdrawals.
               </Text>
 
               <View style={{ gap: 14 }}>
                 <Field label="First name" value={firstName} onChangeText={setFirstName} placeholder="First name" />
                 <Field label="Last name" value={lastName} onChangeText={setLastName} placeholder="Last name" />
-                <Field label="Date of birth (optional)" value={dob} onChangeText={setDob} placeholder="YYYY-MM-DD" />
-                <Field label="BVN (optional)" value={bvn} onChangeText={(t) => setBvn(t.replace(/\D/g, '').slice(0, 11))} placeholder="11-digit BVN" keyboardType="number-pad" />
+                <DateField
+                  label="Date of birth (optional)"
+                  value={dob}
+                  onChange={setDob}
+                  hint="We'll prefill it on the Verify screen."
+                />
               </View>
 
               {error && <Text className="text-sm mt-3" style={{ color: '#EF4444' }}>{error}</Text>}

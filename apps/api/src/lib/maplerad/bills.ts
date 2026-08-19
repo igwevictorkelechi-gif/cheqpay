@@ -3,16 +3,31 @@
 // Bill payments: data, cable TV, electricity. These debit the business wallet
 // directly (no per-customer account needed). All amounts are minor units (kobo).
 //
-// NOTE: the public reference lists data / cable / electricity billers only.
-// Airtime is not documented there — confirm with Maplerad whether airtime is a
-// `data` biller variant before enabling it.
-
 import { mapleradRequest } from "./client";
 import type { Minor } from "./types";
 
 // ---- Discovery ------------------------------------------------------------
 
-export type BillType = "data" | "cable" | "electricity";
+/**
+ * Airtime is documented separately from the other three: the "Get Billers By
+ * Type and Country" endpoint enumerates data / cable / electricity, while
+ * airtime has its own page pinned to /bills/airtime/billers/{country}. Both are
+ * the same URL shape, so one function serves them.
+ *
+ * RESOLVED — airtime has no per-network billers. This page's worked example
+ * returns one country-level biller, `{ name: "Airtime NG", identifier:
+ * "ng-airtime", commission: 1 }`, and an example alone could not prove that was
+ * the whole list. POST /bills/airtime settles it: its identifier enum is
+ * ["ng-airtime", "airteltigo-gh", "mtn-gh", "vodafone-gh"], so Nigeria has
+ * exactly one value and Maplerad reads the carrier off the phone number. An
+ * enum is the contract; a biller list is a sample. lib/bills.ts and
+ * payments/maplerad.ts now both send `ng-airtime` — do not reintroduce
+ * "mtn-ng" and friends. (Data is unaffected: its per-network billers are real.)
+ *
+ * The provider-check airtime probe is still worth running — it costs nothing
+ * and would catch this being wrong.
+ */
+export type BillType = "airtime" | "data" | "cable" | "electricity";
 
 export interface Biller {
   name: string;
@@ -20,7 +35,10 @@ export interface Biller {
   commission: number;
 }
 
-/** GET /bills/{type}/billers/{country} */
+/**
+ * GET /bills/{type}/billers/{country}
+ * (and GET /bills/airtime/billers/{country}, which is the same shape)
+ */
 export async function getBillers(
   type: BillType,
   country = "NG",

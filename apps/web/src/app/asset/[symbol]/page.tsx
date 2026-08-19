@@ -13,6 +13,7 @@ import {
 } from "@/services/api";
 import { useFeatures } from "@/lib/useFeatures";
 import { readCache, writeCache, invalidateMoneyCaches } from "@/lib/cache";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 interface AssetSnapshot {
   priceNgn: string | null;
@@ -263,7 +264,7 @@ export default function AssetPage() {
 
       {/* Buy / Sell action bar — hidden when trading is switched off */}
       {!error && features.crypto_trading && (
-        <div className="fixed inset-x-0 bottom-5 z-30 mx-auto flex max-w-[480px] gap-3 px-5">
+        <div className="fixed inset-x-0 bottom-5 z-30 mx-auto flex max-w-[480px] gap-3 px-5 lg:left-64">
           <button
             onClick={() => setShowTrade("sell")}
             className="flex-1 rounded-full border border-border bg-card py-4 font-bold text-ink active:scale-[0.98]"
@@ -336,8 +337,9 @@ function Sparkline({ values, up }: { values: number[]; up: boolean }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen w-full justify-center bg-black">
-      <div className="relative min-h-screen w-full max-w-[480px] bg-surface pb-28">{children}</div>
+    <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative min-h-screen w-full max-w-[480px] bg-surface pb-28 lg:max-w-3xl">{children}</div>
     </div>
   );
 }
@@ -405,9 +407,9 @@ function TradeSheet({
     : "";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm lg:items-center" onClick={onClose}>
       <div
-        className="w-full max-w-[480px] rounded-t-[28px] border-t border-border bg-card p-6 pb-8"
+        className="w-full max-w-[480px] rounded-t-[28px] border-t border-border bg-card p-6 pb-8 lg:rounded-[28px] lg:border"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-5 h-1.5 w-10 rounded-full bg-border" />

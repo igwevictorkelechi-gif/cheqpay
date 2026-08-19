@@ -14,6 +14,7 @@ import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { isSupportedWallet } from "@/lib/assets";
 import { getTierLimits, MAX_TIER } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
+import { requestContext } from "@/lib/requestContext";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { notifyUser } from "@/lib/alerts";
 import { notifyAdminAlert } from "@/lib/adminAlert";
@@ -42,6 +43,9 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request) {
   try {
+    // The address that initiated this withdrawal, kept on the transaction and on
+    // every audit row below so an investigation can place the request.
+    const { ip: initiatorIp } = requestContext(req);
     const auth = await requireUser(req);
     await assertFeatureEnabled("crypto_withdrawals");
     const relaxGuards = getEnv().RELAX_WITHDRAWAL_GUARDS;
@@ -98,6 +102,7 @@ export async function POST(req: Request) {
       await prisma.auditLog.create({
         data: {
           userId: auth.id,
+          ipAddress: initiatorIp,
           action: "aml.withdrawal.blocked",
           resourceType: "User",
           resourceId: auth.id,
@@ -140,6 +145,7 @@ export async function POST(req: Request) {
           status: initialStatus,
           idempotencyKey,
           metadata: {
+            ip: initiatorIp,
             toAddress: body.toAddress,
             ngnValueKobo: ngnValueKobo.toString(),
             amlReview: aml.holdForReview,
@@ -154,6 +160,7 @@ export async function POST(req: Request) {
       await prisma.auditLog.create({
         data: {
           userId: auth.id,
+          ipAddress: initiatorIp,
           action: "aml.withdrawal.held",
           resourceType: "Transaction",
           resourceId: tx.id,
@@ -178,6 +185,7 @@ export async function POST(req: Request) {
       await prisma.auditLog.create({
         data: {
           userId: auth.id,
+          ipAddress: initiatorIp,
           action: "crypto.withdrawal.queued_manual",
           resourceType: "Transaction",
           resourceId: tx.id,
@@ -221,6 +229,7 @@ export async function POST(req: Request) {
       await prisma.auditLog.create({
         data: {
           userId: auth.id,
+          ipAddress: initiatorIp,
           action: "crypto.withdrawal.broadcast",
           resourceType: "Transaction",
           resourceId: tx.id,

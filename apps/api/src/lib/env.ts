@@ -1,22 +1,86 @@
 import { z } from "zod";
 
 /**
+ * Provider vars whose configured value was not in the allow-list, so the
+ * fallback was used. Recorded rather than thrown: a bad value must not stop the
+ * API booting (health checks, login and history have nothing to do with
+ * providers), but it must not quietly select the mock money rails either.
+ * assertProviderConfigured() turns it into a loud failure at the point of use.
+ */
+const invalidProviderVars = new Set<string>();
+
+/**
  * A provider-mode selector that is forgiving of misconfiguration: values are
  * trimmed + lowercased, and anything not in the allow-list falls back to a safe
  * default (with a warning) instead of throwing. This prevents a single bad env
  * var (e.g. a secret key pasted into CUSTODY_PROVIDER) from crashing the whole
  * API. The invalid value is never logged (it may be a secret).
+ *
+ * Forgiving about BOOTING is not the same as forgiving about USE — see
+ * assertProviderConfigured.
  */
 function providerEnum<T extends [string, ...string[]]>(name: string, values: T, fallback: T[number]) {
   return z.preprocess(
     (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
     z.enum(values).catch(() => {
+      invalidProviderVars.add(name);
       console.warn(
         `[env] Invalid ${name}; expected one of ${values.join(", ")}. Falling back to "${fallback}".`
       );
       return fallback;
     })
   );
+}
+
+/**
+ * True when this process is the live production deployment.
+ *
+ * VERCEL_ENV distinguishes production from preview; NODE_ENV cannot, because
+ * Vercel sets it to "production" for preview builds too. Falls back to NODE_ENV
+ * for hosts that do not set VERCEL_ENV (e.g. Render), where a production build
+ * IS the production deployment.
+ */
+export function isLiveDeployment(): boolean {
+  const vercel = process.env.VERCEL_ENV;
+  if (vercel) return vercel === "production";
+  return process.env.NODE_ENV === "production";
+}
+
+/**
+ * Refuse to serve a money path whose provider var is misconfigured.
+ *
+ * A typo in PAYMENT_PROVIDER used to silently select the mock rail, which
+ * answers a deposit request with an invented 10-digit "Mock Test Bank" account
+ * number. Nothing errors; the screen looks correct; money sent there is gone.
+ * Failing loudly here is strictly better than any amount of fake success.
+ */
+export function assertProviderConfigured(name: string): void {
+  if (invalidProviderVars.has(name)) {
+    throw new Error(
+      `${name} is set to a value that is not recognised, so it fell back to a ` +
+        `mock provider. Mock providers invent account numbers and auto-approve ` +
+        `identities, so this request is refused rather than served with fake ` +
+        `data. Fix ${name} in the deployment's environment variables.`
+    );
+  }
+}
+
+/**
+ * Refuse a mock provider on the live deployment.
+ *
+ * Explicitly choosing mock is legitimate locally and on previews; on the
+ * production deployment it means real users are being handed fake bank
+ * accounts and auto-approved KYC. Separate from assertProviderConfigured,
+ * which catches typos rather than deliberate choices.
+ */
+export function assertNotMockInProduction(name: string, value: string): void {
+  if (value === "mock" && isLiveDeployment()) {
+    throw new Error(
+      `${name}=mock on the production deployment. Mock providers invent account ` +
+        `numbers, auto-approve identities and settle nothing, so they must never ` +
+        `serve real users. Set ${name} to a real provider.`
+    );
+  }
 }
 
 /**
@@ -71,6 +135,12 @@ const envSchema = z.object({
   // Svix signing secret — verifies inbound Maplerad webhooks (payout settlement
   // today; deposits once Maplerad enables collections).
   MAPLERAD_WEBHOOK_SECRET: z.string().optional(),
+  // Optional VIRTUAL-institution identifier for the bank that should mint each
+  // NGN deposit account (e.g. Moniepoint's). Sent as `preferred_bank` on
+  // /collections/virtual-account when set; read directly from process.env in the
+  // provider, so this entry is for documentation/validation. Unset → Maplerad
+  // picks the bank, exactly as before.
+  MAPLERAD_PREFERRED_BANK: z.string().optional(),
 
   // Phase 4 (rates / market data)
   PRICE_FEED: providerEnum("PRICE_FEED", ["live", "mock"], "live"),
@@ -90,7 +160,7 @@ const envSchema = z.object({
 
   // KYC / identity verification. `mock` auto-verifies on a well-formed BVN;
   // `dojah` performs a real BVN lookup + name match (requires Dojah keys).
-  KYC_PROVIDER: providerEnum("KYC_PROVIDER", ["mock", "dojah"], "mock"),
+  KYC_PROVIDER: providerEnum("KYC_PROVIDER", ["mock", "dojah", "maplerad"], "mock"),
   DOJAH_APP_ID: z.string().optional(),
   DOJAH_API_KEY: z.string().optional(),
   DOJAH_API_BASE: z.string().url().default("https://api.dojah.io"),

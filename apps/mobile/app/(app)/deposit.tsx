@@ -10,7 +10,6 @@ export default function AddMoneyScreen() {
   const insets = useSafeAreaInsets();
   const [amount, setAmount] = useState('1000');
   const [balance, setBalance] = useState(0);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -28,17 +27,11 @@ export default function AddMoneyScreen() {
   const display = digits ? Number(digits).toLocaleString('en-NG') : '0';
   const valid = Number(digits) > 0;
 
-  async function proceed() {
-    if (!valid || busy) return;
-    setBusy(true);
-    // Record a custody deposit intent (credited later by the PSP webhook).
-    try {
-      await api.initDeposit(digits);
-    } catch {
-      /* fall through — the account screen still shows funding details */
-    }
-    setBusy(false);
-    // Fund via the user's NGN virtual account (KYC-gated; created if needed).
+  function proceed() {
+    if (!valid) return;
+    // Deposits arrive by bank transfer into the user's NGN virtual account and
+    // are credited by the Maplerad collection webhook. There is nothing to
+    // record up front, so go straight to the funding details.
     router.push({ pathname: '/(app)/virtual-account', params: { amount: digits } });
   }
 
@@ -99,13 +92,13 @@ export default function AddMoneyScreen() {
       {/* CTA */}
       <View className="flex-1 justify-end">
         <TouchableOpacity
-          disabled={!valid || busy}
+          disabled={!valid}
           onPress={proceed}
           className="rounded-full py-4 items-center"
-          style={{ backgroundColor: colors.brand, opacity: valid && !busy ? 1 : 0.5 }}
+          style={{ backgroundColor: colors.brand, opacity: valid ? 1 : 0.5 }}
           activeOpacity={0.85}
         >
-          <Text className="text-white text-base font-bold">{busy ? 'Please wait…' : 'Continue'}</Text>
+          <Text className="text-white text-base font-bold">Continue</Text>
         </TouchableOpacity>
       </View>
     </View>

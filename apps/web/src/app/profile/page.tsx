@@ -18,6 +18,7 @@ import { api, getAccessToken } from "@/services/api";
 import { tierInfo } from "@/lib/tier";
 import { readCache, writeCache } from "@/lib/cache";
 import { useFeatures } from "@/lib/useFeatures";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 type Item = {
   title: string;
@@ -160,8 +161,9 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-8 pt-3">
+    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-8 pt-3 lg:max-w-3xl">
         {/* Close */}
         <button
           onClick={() => router.back()}

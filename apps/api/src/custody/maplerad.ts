@@ -24,13 +24,48 @@ import type {
  * Maplerad's side with a SQL error ("column supported_chains does not exist")
  * for every valid coin/chain pair — their bug, ticket-worthy. The request
  * contract itself is confirmed: invalid pairs get proper validation errors.
+ *
+ * DISABLED PENDING A CHAIN FIX: both pairs below are ERC-20, and Maplerad's
+ * withdrawal endpoint documents Solana as its only destination chain, so neither
+ * pair can currently complete a round trip. See COIN_CHAIN. Nothing observable
+ * changes today — address creation is broken provider-side regardless — but the
+ * guard means the trap cannot open the moment their bug is fixed.
  */
 
-/** Asset/network pairs Maplerad can custody, and the API names they map to. */
-const COIN_CHAIN: Partial<Record<Asset, Partial<Record<Network, { coin: string; chain: string }>>>> = {
-  [Asset.USDT]: { [Network.ETHEREUM]: { coin: "USDT", chain: "eth" } },
-  [Asset.USDC]: { [Network.ETHEREUM]: { coin: "USDC", chain: "eth" } },
+/**
+ * Asset/network pairs Maplerad can custody, and the API names they map to.
+ *
+ * `withdrawable` is the important column. POST /crypto (address generation)
+ * documents six chains — solana, base, polygon, eth, tron, bsc — but
+ * POST /crypto/transfer (withdrawal) documents exactly one: solana. A pair that
+ * can receive but cannot send is a trap: the user's money arrives and has no
+ * documented way out, and they only discover it at the moment they try to
+ * leave. So the flag gates address creation too, not just withdrawal.
+ *
+ * To widen this, run ONE sandbox withdrawal on the chain in question and
+ * confirm it is accepted. Do not widen it because address generation accepted
+ * the chain — that is the very mismatch this guards.
+ */
+export const COIN_CHAIN: Partial<
+  Record<Asset, Partial<Record<Network, { coin: string; chain: string; withdrawable: boolean }>>>
+> = {
+  [Asset.USDT]: { [Network.ETHEREUM]: { coin: "USDT", chain: "eth", withdrawable: false } },
+  [Asset.USDC]: { [Network.ETHEREUM]: { coin: "USDC", chain: "eth", withdrawable: false } },
 };
+
+/**
+ * Both halves of the trap say the same thing, so they say it once. Named for
+ * what an operator has to do about it.
+ */
+function oneWayChain(asset: Asset, network: Network, chain: string): Error {
+  return new Error(
+    `${asset} on ${network} maps to Maplerad chain "${chain}", which POST /crypto/transfer ` +
+      `does not document as a withdrawal destination (it lists "solana" only). Funds sent to ` +
+      `such an address could not be withdrawn, so this pair is disabled. Verify the chain with ` +
+      `a sandbox withdrawal and set withdrawable: true in custody/maplerad.ts, or move the ` +
+      `pair to a chain the transfer endpoint accepts.`
+  );
+}
 
 interface MapleradCryptoAddress {
   id: string;
@@ -60,15 +95,23 @@ export class MapleradCustodyProvider implements CustodyProvider {
       );
     }
 
+    // Refuse before minting, not at withdrawal time. An address handed to a user
+    // is a promise that money sent to it can come back out; making that promise
+    // and breaking it later is worse than never making it.
+    if (!pair.withdrawable) {
+      throw oneWayChain(input.asset, input.network, pair.chain);
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: input.userId },
       select: { mapleradCustomerId: true },
     });
     if (!user?.mapleradCustomerId) {
-      // Enrollment happens at KYC approval and needs phone + address; without
-      // it there is no Maplerad customer to attach an address to.
+      // The customer record is created from name and email alone, so reaching
+      // here means even that has not happened yet — a provider failure or a
+      // profile that predates it, not missing identity details.
       throw new Error(
-        "User has no Maplerad customer id yet (KYC with phone + address required)"
+        "User has no Maplerad customer id yet (customer record was never created)"
       );
     }
 
@@ -106,9 +149,18 @@ export class MapleradCustodyProvider implements CustodyProvider {
       throw new Error(`${input.asset}/${input.network} is not available on Maplerad custody`);
     }
 
+    // Amount first: a malformed amount is the caller's mistake and deserves to
+    // be named as such, whereas an unwithdrawable chain is ours.
     const cents = toCents(input.amount);
     if (cents === null || cents <= 0) {
       throw new Error(`Invalid withdrawal amount "${input.amount}"`);
+    }
+
+    // A legacy address minted before the address-side guard existed must not be
+    // able to send an undocumented chain to the transfer endpoint and come back
+    // with an opaque provider refusal.
+    if (!pair.withdrawable) {
+      throw oneWayChain(input.asset, input.network, pair.chain);
     }
 
     const transfer = await mapleradRequest<MapleradCryptoTransfer>("/crypto/transfer", {

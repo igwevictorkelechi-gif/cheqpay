@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store";
 import { api, ApiError, getAccessToken, type Me } from "@/services/api";
+import DesktopSidebar from "@/components/DesktopSidebar";
 
 function LockedField({ label, value }: { label: string; value: string }) {
   return (
@@ -56,7 +57,10 @@ export default function PersonalDetailsPage() {
         if (!(await getAccessToken())) return;
         const data = await api.getMe();
         setMe(data);
-        setUsername(data.username ?? "@" + (data.email?.split("@")[0] ?? "cheqpay"));
+        // Show the stored username or nothing. It used to fall back to the
+        // email's local part, which looked like a real handle but had never
+        // been saved — users handed it out and the sender got "no such user".
+        setUsername(data.username ?? "");
         setDob(data.dateOfBirth ?? "");
         setNextOfKin(data.nextOfKin ?? "");
       } catch {
@@ -102,8 +106,9 @@ export default function PersonalDetailsPage() {
   };
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-10 pt-3">
+    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <DesktopSidebar />
+      <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-10 pt-3 lg:max-w-3xl">
         <button
           onClick={() => router.back()}
           className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink"
@@ -122,7 +127,12 @@ export default function PersonalDetailsPage() {
           <>
             <div className="space-y-3.5">
               <LockedField label="Full Name" value={fullName} />
-              <EditField label="Username" value={username} onChange={setUsername} />
+              <EditField
+                label="Username"
+                value={username}
+                onChange={setUsername}
+                placeholder="Username (how others send you money)"
+              />
 
               {verified ? (
                 <LockedField label="Date of birth" value={dob} />
