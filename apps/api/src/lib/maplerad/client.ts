@@ -96,6 +96,11 @@ export async function mapleradRequest<T>(
       const text = await res.text();
       const parsed = text ? safeJson(text) : undefined;
 
+      // Log every Maplerad response for diagnosis. Successful calls otherwise
+      // leave no trace, which is exactly what made the tier-0 enrolments so hard
+      // to explain. On by default; set MAPLERAD_LOG_RESPONSES=0 to silence it.
+      logMaplerad(method, path, res.status, res.ok, opts.body, parsed);
+
       if (!res.ok) {
         // Retry 5xx on idempotent calls; fail fast on 4xx.
         if (isRetryable && res.status >= 500 && attempt < maxAttempts) {
@@ -119,6 +124,9 @@ export async function mapleradRequest<T>(
       if (err instanceof MapleradError) throw err;
       // Network/abort error — retry idempotent calls.
       lastError = err;
+      logMaplerad(method, path, 0, false, opts.body, {
+        networkError: err instanceof Error ? err.message : String(err),
+      });
       if (isRetryable && attempt < maxAttempts) {
         await sleep(250 * attempt);
         continue;
@@ -134,6 +142,73 @@ export async function mapleradRequest<T>(
   throw lastError instanceof Error
     ? lastError
     : new MapleradError("Maplerad request failed", 0, lastError);
+}
+
+/**
+ * Log one Maplerad exchange for diagnosis.
+ *
+ * Every call is logged — request context and the full response body — so a
+ * tier-0 enrolment or a skipped upgrade can be explained from the logs rather
+ * than guessed at. Two deliberate limits:
+ *
+ *  - The request body is redacted before logging: the BVN / identification
+ *    number, the ID image and any secret are masked. The phone, name, dob and
+ *    address are kept, because those are exactly what a "why is this tier 0"
+ *    investigation needs to see. The RESPONSE is logged as-is.
+ *  - It never throws: a logging failure must not affect the call. Silenced with
+ *    MAPLERAD_LOG_RESPONSES=0 without a redeploy.
+ */
+function logMaplerad(
+  method: string,
+  path: string,
+  status: number,
+  ok: boolean,
+  reqBody: unknown,
+  resBody: unknown,
+): void {
+  if (process.env.MAPLERAD_LOG_RESPONSES === "0" || process.env.MAPLERAD_LOG_RESPONSES === "false") {
+    return;
+  }
+  try {
+    const line = `[maplerad] ${method} ${path} -> HTTP ${status || "network-error"} ok=${ok}`;
+    const payload = {
+      request: redactForLog(reqBody),
+      response: resBody,
+    };
+    const detail = truncate(JSON.stringify(payload));
+    if (ok) console.log(line, detail);
+    else console.error(line, detail);
+  } catch {
+    // Never let logging break a request.
+  }
+}
+
+/** Mask the fields that must not reach the logs, leaving the rest for context. */
+const REDACTED_KEYS = new Set([
+  "identification_number",
+  "bvn",
+  "image",
+  "secret",
+  "secret_key",
+  "card_number",
+  "cvv",
+  "pin",
+]);
+function redactForLog(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactForLog);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = REDACTED_KEYS.has(k) ? "[redacted]" : redactForLog(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+/** Keep a single log line from swallowing the whole log budget. */
+function truncate(s: string, max = 4000): string {
+  return s.length > max ? `${s.slice(0, max)}…(${s.length} chars)` : s;
 }
 
 function safeJson(text: string): unknown {
