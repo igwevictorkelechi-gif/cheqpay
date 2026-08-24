@@ -85,6 +85,11 @@ export default function KYCPage() {
   // enrollment was skipped for every user who ever verified — they passed KYC
   // and still got no account number.
   const [phone, setPhone] = useState("");
+  // Maplerad's enroll requires the phone as { phone_country_code, phone_number },
+  // so the dial code is captured explicitly rather than guessed. CheqPay is
+  // Nigeria-only (the customer's country is always NG), so +234 is the only
+  // option today; the control exists so the country code is never ambiguous.
+  const [dialCode, setDialCode] = useState("+234");
   const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
   const [addrState, setAddrState] = useState("");
@@ -134,9 +139,15 @@ export default function KYCPage() {
   }, []);
 
   const bvnValid = bvn === "" || /^\d{11}$/.test(bvn);
-  // Accepts 08031234567, +2348031234567 and 2348031234567 — the server
-  // normalizes to Maplerad's +234 / subscriber split.
-  const phoneValid = phone === "" || /^(\+?234|0)?\d{10}$/.test(phone.replace(/[\s-]/g, ""));
+  // The 10-digit subscriber number, with any leading 0 or country digits the
+  // user typed anyway stripped, so it can be recombined with the chosen dial
+  // code. Required now, not optional: an empty phone is what left the last
+  // enrolment stuck at Maplerad tier 0 (no phone -> no tier-1 -> no NGN account).
+  const subscriber = phone.replace(/\D/g, "").replace(/^234/, "").replace(/^0/, "");
+  const phoneValid = /^\d{10}$/.test(subscriber);
+  // What we send: dial code + subscriber, e.g. "+2348031234567". The server
+  // splits this into Maplerad's { phone_country_code, phone_number }.
+  const fullPhone = `${dialCode}${subscriber}`;
   // Date of birth is mandatory: the full Maplerad enrolment requires it. A
   // plausible date, in the past, roughly within a human lifespan.
   const dobValid = /^\d{4}-\d{2}-\d{2}$/.test(dob) && (() => {
@@ -167,10 +178,10 @@ export default function KYCPage() {
     idComplete &&
     bvnValid &&
     phoneValid &&
-    // When the ONLY reason the user is here is the missing details, letting
-    // them submit without those details would repeat the exact failure that
-    // sent them here.
-    (!needsDetails || (phone.trim() !== "" && addressComplete)) &&
+    // When the ONLY reason the user is here is the missing details, the address
+    // must be complete too — submitting without it would repeat the exact
+    // failure that sent them here. The phone is already required above.
+    (!needsDetails || addressComplete) &&
     !submitting;
 
   /**
@@ -212,7 +223,7 @@ export default function KYCPage() {
           frontRef: frontRef as string,
           backRef: backRef as string,
         },
-        phone: phone.trim() || undefined,
+        phone: fullPhone,
         address: addressComplete
           ? {
               street: street.trim(),
@@ -458,7 +469,7 @@ export default function KYCPage() {
                 <p className="mt-1 text-xs text-muted">
                   {needsDetails
                     ? "This is all that's missing. Your BVN is already on file — you don't need to enter it again."
-                    : "Needed to open your dedicated Naira account number and your crypto wallet. You can skip these, but those two stay locked until you add them."}
+                    : "Your phone number is required. Your address opens your dedicated Naira account number and crypto wallet — you can add it later, but those stay locked until you do."}
                 </p>
 
                 <div className="mt-4 space-y-4">
@@ -466,15 +477,30 @@ export default function KYCPage() {
                     <label className="mb-1.5 block text-sm font-semibold text-muted">
                       Phone number
                     </label>
-                    <input
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      inputMode="tel"
-                      placeholder="080 1234 5678"
-                      className={`w-full rounded-2xl border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand ${
-                        phoneValid ? "border-border" : "border-red-500/60"
-                      }`}
-                    />
+                    <div className="flex gap-2">
+                      <select
+                        value={dialCode}
+                        onChange={(e) => setDialCode(e.target.value)}
+                        aria-label="Country code"
+                        className="shrink-0 rounded-2xl border border-border bg-card px-3 py-3.5 text-ink outline-none focus:border-brand"
+                      >
+                        <option value="+234">🇳🇬 +234</option>
+                      </select>
+                      <input
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        inputMode="tel"
+                        placeholder="801 234 5678"
+                        className={`w-full rounded-2xl border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand ${
+                          phoneValid || phone === "" ? "border-border" : "border-red-500/60"
+                        }`}
+                      />
+                    </div>
+                    {phone !== "" && !phoneValid && (
+                      <p className="mt-1.5 text-xs text-red-500/80">
+                        Enter your 10-digit number without the leading 0 (e.g. 801 234 5678).
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="mb-1.5 block text-sm font-semibold text-muted">

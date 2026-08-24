@@ -60,6 +60,10 @@ export default function KYCScreen() {
   // them, so enrollment was skipped for every user who ever verified — they
   // passed KYC and still got no account number.
   const [phone, setPhone] = useState('');
+  // The provider's enroll requires the phone as { phone_country_code,
+  // phone_number }, so the dial code is captured explicitly. CheqPay is
+  // Nigeria-only (the customer's country is always NG), so +234 is fixed today.
+  const [dialCode] = useState('+234');
   const [street, setStreet] = useState('');
   const [city, setCity] = useState('');
   const [addrState, setAddrState] = useState('');
@@ -105,9 +109,14 @@ export default function KYCScreen() {
   }, []);
 
   const bvnValid = bvn === '' || /^\d{11}$/.test(bvn);
-  // Accepts 08031234567, +2348031234567 and 2348031234567 — the server
-  // normalizes to the provider's +234 / subscriber split.
-  const phoneValid = phone === '' || /^(\+?234|0)?\d{10}$/.test(phone.replace(/[\s-]/g, ''));
+  // The 10-digit subscriber, with a leading 0 or country digits the user typed
+  // stripped, recombined with the dial code below. Required now, not optional:
+  // an empty phone is what left enrolment stuck at provider tier 0 (no phone ->
+  // no tier-1 -> no NGN account).
+  const subscriber = phone.replace(/\D/g, '').replace(/^234/, '').replace(/^0/, '');
+  const phoneValid = /^\d{10}$/.test(subscriber);
+  // Sent to the server, which splits it into { phone_country_code, phone_number }.
+  const fullPhone = `${dialCode}${subscriber}`;
   // Date of birth is mandatory: the full provider enrolment requires it.
   const dobValid = /^\d{4}-\d{2}-\d{2}$/.test(dob) && (() => {
     const d = new Date(dob);
@@ -136,9 +145,9 @@ export default function KYCScreen() {
     idComplete &&
     bvnValid &&
     phoneValid &&
-    // When the ONLY reason the user is here is the missing details, letting
-    // them submit without those details repeats the failure that sent them.
-    (!needsDetails || (phone.trim() !== '' && addressComplete)) &&
+    // When the ONLY reason the user is here is the missing details, the address
+    // must be complete too — the phone is already required above.
+    (!needsDetails || addressComplete) &&
     !submitting;
 
   async function pickAndUpload(side: 'front' | 'back') {
@@ -182,7 +191,7 @@ export default function KYCScreen() {
           frontRef: frontRef as string,
           backRef: backRef as string,
         },
-        phone: phone.trim() || undefined,
+        phone: fullPhone,
         address: addressComplete
           ? {
               street: street.trim(),
@@ -388,15 +397,28 @@ export default function KYCScreen() {
                     />
                     <View>
                       <Text className="text-muted dark:text-muted-dark text-sm font-semibold mb-1.5">Phone number</Text>
-                      <TextInput
-                        value={phone}
-                        onChangeText={setPhone}
-                        keyboardType="phone-pad"
-                        placeholder="080 1234 5678"
-                        placeholderTextColor={colors.muted}
-                        className="rounded-2xl px-4 py-3.5 text-ink dark:text-ink-dark"
-                        style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: phoneValid ? colors.border : '#EF4444' }}
-                      />
+                      <View className="flex-row" style={{ gap: 8 }}>
+                        <View
+                          className="rounded-2xl px-3 justify-center"
+                          style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+                        >
+                          <Text className="text-ink dark:text-ink-dark font-semibold">🇳🇬 {dialCode}</Text>
+                        </View>
+                        <TextInput
+                          value={phone}
+                          onChangeText={setPhone}
+                          keyboardType="phone-pad"
+                          placeholder="801 234 5678"
+                          placeholderTextColor={colors.muted}
+                          className="flex-1 rounded-2xl px-4 py-3.5 text-ink dark:text-ink-dark"
+                          style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: phoneValid || phone === '' ? colors.border : '#EF4444' }}
+                        />
+                      </View>
+                      {phone !== '' && !phoneValid && (
+                        <Text className="text-xs mt-1.5" style={{ color: '#EF4444' }}>
+                          Enter your 10-digit number without the leading 0 (e.g. 801 234 5678).
+                        </Text>
+                      )}
                     </View>
                     <Input label="Street address" value={street} onChangeText={setStreet} placeholder="12 Adeola Odeku Street" />
                     <View className="flex-row" style={{ gap: 12 }}>
