@@ -26,6 +26,8 @@ export default function HomeScreen() {
   const { showBalance, toggleBalance } = useUIStore();
   const features = useFeatures();
   const [ngn, setNgn] = useState(0);
+  const [usd, setUsd] = useState(0);
+  const [currency, setCurrency] = useState<'NGN' | 'USD'>('NGN');
   const [txns, setTxns] = useState<LedgerTransaction[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -37,7 +39,9 @@ export default function HomeScreen() {
           api.getTransactions(6),
         ]);
         const cash = Number(balances.find((b) => b.asset === 'NGN')?.availableFormatted ?? 0);
+        const dollars = Number(balances.find((b) => b.asset === 'USD')?.availableFormatted ?? 0);
         setNgn(cash);
+        setUsd(dollars);
         setTxns(transactions);
       };
       try {
@@ -63,9 +67,16 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
+  const isUsd = currency === 'USD';
+  const value = isUsd ? usd : ngn;
+  const symbol = isUsd ? '$' : '₦';
   const formattedBalance = showBalance
-    ? '₦' + ngn.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : '₦••••';
+    ? symbol +
+      value.toLocaleString(isUsd ? 'en-US' : 'en-NG', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : `${symbol}••••`;
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
@@ -84,7 +95,29 @@ export default function HomeScreen() {
           ]}
         />
 
-        <BalanceBlock label="Total Cash Balance" amount={formattedBalance} />
+        {/* Currency tab — switch the balance block between naira and dollars. */}
+        <View className="items-center mt-4">
+          <View className="flex-row rounded-full p-1" style={{ backgroundColor: colors.card }}>
+            {(['NGN', 'USD'] as const).map((c) => {
+              const active = currency === c;
+              return (
+                <TouchableOpacity
+                  key={c}
+                  onPress={() => setCurrency(c)}
+                  className="flex-row items-center rounded-full px-5 py-2"
+                  style={{ backgroundColor: active ? colors.brand : 'transparent', gap: 6 }}
+                >
+                  <Text>{c === 'NGN' ? '🇳🇬' : '🇺🇸'}</Text>
+                  <Text style={{ color: active ? '#fff' : colors.muted, fontWeight: '700', fontSize: 13 }}>
+                    {c}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <BalanceBlock label={isUsd ? 'USD Balance' : 'Total Cash Balance'} amount={formattedBalance} />
 
         <KycBanner />
 

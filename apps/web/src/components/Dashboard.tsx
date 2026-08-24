@@ -35,6 +35,7 @@ import { api, ApiError, type LedgerTransaction } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
 
 const CASH_CACHE = "cheqpay:cash";
+const USD_CACHE = "cheqpay:usd";
 const HOME_TX_CACHE = "cheqpay:home:txns";
 
 export default function Dashboard() {
@@ -47,6 +48,10 @@ export default function Dashboard() {
 
   // NGN cash balance from the custody ledger (where deposits + crypto sells land).
   const [ngn, setNgn] = useState<number>(() => readCache<number>(CASH_CACHE) ?? 0);
+  // USD balance (from USD virtual-account deposits), and which currency the
+  // balance block is showing.
+  const [usd, setUsd] = useState<number>(() => readCache<number>(USD_CACHE) ?? 0);
+  const [currency, setCurrency] = useState<"NGN" | "USD">("NGN");
   const [txns, setTxns] = useState<LedgerTransaction[]>(
     () => readCache<LedgerTransaction[]>(HOME_TX_CACHE) ?? []
   );
@@ -69,9 +74,12 @@ export default function Dashboard() {
       ]);
       if (!active) return;
       const cash = Number(balances.find((b) => b.asset === "NGN")?.availableFormatted ?? 0);
+      const dollars = Number(balances.find((b) => b.asset === "USD")?.availableFormatted ?? 0);
       setNgn(cash);
+      setUsd(dollars);
       setTxns(transactions);
       writeCache(CASH_CACHE, cash);
+      writeCache(USD_CACHE, dollars);
       writeCache(HOME_TX_CACHE, transactions);
     }
 
@@ -94,9 +102,16 @@ export default function Dashboard() {
     };
   }, []);
 
+  const isUsd = currency === "USD";
+  const value = isUsd ? usd : ngn;
+  const symbol = isUsd ? "$" : "₦";
   const formattedBalance = showBalance
-    ? "₦" + ngn.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : "₦••••";
+    ? symbol +
+      value.toLocaleString(isUsd ? "en-US" : "en-NG", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : `${symbol}••••`;
 
   return (
     <AppShell>
@@ -110,7 +125,32 @@ export default function Dashboard() {
         ]}
       />
 
-      <BalanceBlock label="Total Cash Balance" amount={formattedBalance} />
+      {/* Currency tab — switch the balance block between naira and dollars. */}
+      <div className="mt-5 flex justify-center">
+        <div className="inline-flex rounded-full bg-card p-1">
+          {(["NGN", "USD"] as const).map((c) => {
+            const active = currency === c;
+            return (
+              <button
+                key={c}
+                onClick={() => setCurrency(c)}
+                aria-pressed={active}
+                className={`flex items-center gap-1.5 rounded-full px-5 py-2 text-sm font-bold transition-colors ${
+                  active ? "bg-brand text-white shadow-sm" : "text-muted hover:text-ink"
+                }`}
+              >
+                <span>{c === "NGN" ? "🇳🇬" : "🇺🇸"}</span>
+                {c}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <BalanceBlock
+        label={isUsd ? "USD Balance" : "Total Cash Balance"}
+        amount={formattedBalance}
+      />
 
       <KycBanner />
 
