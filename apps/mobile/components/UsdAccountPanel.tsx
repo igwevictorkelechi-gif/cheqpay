@@ -36,6 +36,7 @@ export default function UsdAccountPanel() {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [account, setAccount] = useState<UsdAccount | null>(null);
+  const [balance, setBalance] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -51,8 +52,12 @@ export default function UsdAccountPanel() {
     setLoading(true);
     setError(null);
     try {
-      const { usdAccount } = await api.getUsdAccount();
+      const [{ usdAccount }, balancesRes] = await Promise.all([
+        api.getUsdAccount(),
+        api.getBalances().catch(() => ({ balances: [] })),
+      ]);
       setAccount(usdAccount);
+      setBalance(balancesRes.balances.find((b) => b.asset === 'USD')?.availableFormatted ?? '0.00');
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not load your USD account.');
     } finally {
@@ -180,6 +185,12 @@ export default function UsdAccountPanel() {
             <ActivityIndicator color={colors.brand} />
           ) : account ? (
             <>
+              <View className="rounded-2xl px-4 py-3 mb-4" style={{ backgroundColor: 'rgba(34,197,94,0.10)' }}>
+                <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '700' }}>USD BALANCE</Text>
+                <Text className="text-ink dark:text-ink-dark font-extrabold" style={{ fontSize: 22, marginTop: 2 }}>
+                  ${balance ?? '0.00'}
+                </Text>
+              </View>
               <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '700' }}>BANK NAME</Text>
               <Text className="text-ink dark:text-ink-dark font-semibold mt-1">{account.bankName}</Text>
               <View className="my-3 h-px" style={{ backgroundColor: colors.border }} />

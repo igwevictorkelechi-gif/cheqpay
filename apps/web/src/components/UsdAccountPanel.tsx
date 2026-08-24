@@ -30,6 +30,7 @@ export default function UsdAccountPanel() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [account, setAccount] = useState<UsdAccount | null>(null);
+  const [balance, setBalance] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -47,8 +48,12 @@ export default function UsdAccountPanel() {
     setLoading(true);
     setError(null);
     try {
-      const { usdAccount } = await api.getUsdAccount();
+      const [{ usdAccount }, { balances }] = await Promise.all([
+        api.getUsdAccount(),
+        api.getBalances().catch(() => ({ balances: [] })),
+      ]);
       setAccount(usdAccount);
+      setBalance(balances.find((b) => b.asset === "USD")?.availableFormatted ?? "0.00");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load your USD account.");
     } finally {
@@ -144,6 +149,14 @@ export default function UsdAccountPanel() {
             </div>
           ) : account ? (
             <>
+              <div className="mb-4 rounded-2xl bg-green-500/10 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  USD balance
+                </p>
+                <p className="mt-0.5 text-2xl font-extrabold text-ink">
+                  ${balance ?? "0.00"}
+                </p>
+              </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Bank name</p>
                 <p className="mt-1 text-sm font-semibold text-ink">{account.bankName}</p>
