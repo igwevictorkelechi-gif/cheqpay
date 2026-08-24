@@ -4,6 +4,8 @@ import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
 import { ensureMapleradCustomer, ensureMapleradSchema } from "@/lib/mapleradCustomer";
 import { grantTierFromEnrolment } from "@/lib/kycAutoTier";
+import { upgradeToTier2 } from "@/lib/mapleradTier2";
+import { resolveApiOrigin } from "@/lib/kycDocuments";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +13,7 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
 /**
- * Admin repair: set a phone and drive a stuck account to Maplerad tier 1.
+ * Admin repair: set a phone and drive a stuck account up the Maplerad tiers.
  *
  * Why this exists. A KYC submission that carries no phone enrols only at tier 0,
  * and tier 0 gets no NGN collection account. Recovering from that needed the user
@@ -25,8 +27,13 @@ type Ctx = { params: Promise<{ id: string }> };
  * rejected because another account already holds it" looked identical from the
  * outside. Here the collision is checked explicitly and named in the response.
  *
+ * It then attempts tier 2 with the government ID already on file — that is what
+ * raises limits and unlocks crypto withdrawals — and finally opens the NGN
+ * deposit account. Pass tier2: false to stop at tier 1.
+ *
  * Idempotent: ensureMapleradCustomer returns the existing customer when one is
- * already enrolled, and createVirtualAccount returns the existing account.
+ * already enrolled, upgradeToTier2 refuses when the customer is already there,
+ * and createVirtualAccount returns the existing account.
  */
 export async function POST(req: Request, { params }: Ctx) {
   try {
@@ -36,6 +43,8 @@ export async function POST(req: Request, { params }: Ctx) {
     const body = (await req.json().catch(() => ({}))) as {
       phone?: unknown;
       createAccount?: unknown;
+      /** Set false to stop at tier 1 and skip the government-ID upgrade. */
+      tier2?: unknown;
     };
 
     await ensureMapleradSchema();
@@ -157,6 +166,17 @@ export async function POST(req: Request, { params }: Ctx) {
       address,
     });
 
+    // ---- Step 3b: tier 2 -----------------------------------------------------
+    // Attempted whenever the customer has reached tier 1 and a government ID is
+    // on file, unless the caller explicitly opted out. Tier 2 is what raises
+    // limits and unlocks crypto withdrawals. Never throws; its reason is
+    // reported so an operator can see exactly what is missing.
+    let tier2Reason: string | null = null;
+    if (body.tier2 !== false) {
+      const t2 = await upgradeToTier2(id, resolveApiOrigin(req));
+      tier2Reason = t2.reason;
+    }
+
     const after = await prisma.user.findUnique({
       where: { id },
       select: { mapleradCustomerId: true, mapleradTier: true },
@@ -164,7 +184,7 @@ export async function POST(req: Request, { params }: Ctx) {
 
     // Internal KYC tier (transaction limits) follows the provider's verdict, so
     // a repaired account is usable rather than holding a NUBAN it is not allowed
-    // to transact on. Only ever raises, and only to 1.
+    // to transact on. Only ever raises, and never past 2.
     const promotion = await grantTierFromEnrolment(id);
 
     // ---- Step 4: the NGN deposit account -----------------------------------
@@ -196,12 +216,15 @@ export async function POST(req: Request, { params }: Ctx) {
       tier: after?.mapleradTier ?? user.mapleradTier,
       kycTier: promotion.tier,
       kycTierGranted: promotion.granted,
+      tier2Reason,
       account,
       accountError,
       message:
-        (after?.mapleradTier ?? 0) >= 1
-          ? "Customer is at tier 1 or above."
-          : "Still tier 0 — the provider did not accept the upgrade. The Maplerad response is in the API logs.",
+        (after?.mapleradTier ?? 0) >= 2
+          ? "Customer is at tier 2 — limits raised and crypto withdrawals unlocked."
+          : (after?.mapleradTier ?? 0) >= 1
+            ? `Customer is at tier 1.${tier2Reason ? ` Tier 2 not granted: ${tier2Reason}.` : ""}`
+            : "Still tier 0 — the provider did not accept the upgrade. The Maplerad response is in the API logs.",
     });
   } catch (err) {
     return toErrorResponse(err);

@@ -11,6 +11,8 @@ import type {
   EnrollCustomerInput,
   MapleradCustomerDetail,
   UpgradeCustomerTier1Input,
+  UpgradeCustomerTier2Input,
+  UpgradeCustomerTier2Result,
 } from "./types";
 
 /**
@@ -74,18 +76,28 @@ export async function upgradeCustomerTier1(
 }
 
 /**
- * Tier 2 is PATCH /customers/upgrade/tier2 and is deliberately not implemented
- * here, because it would have no caller: it requires a government ID as
- * { type: NIN | PASSPORT | VOTERS_CARD | DRIVERS_LICENSE, image, number,
- * country } where `image` is a URL to a hosted document, and this app has no
- * document upload. kycTier1Schema carries a documentRefs array, but nothing in
- * either client populates it.
+ * Lift a tier 1 customer to tier 2, which is what raises transaction limits and
+ * unlocks crypto withdrawals on our side.
  *
- * Recorded rather than written so whoever wires card issuing has the contract
- * to hand. One asymmetry to note when they do: unlike tier 1, tier 2 returns a
- * body — data: { id, status } — so its result can be read rather than inferred
- * from the call not throwing.
+ * PATCH /customers/upgrade/tier2
+ *
+ * Needs a government ID: the document image as a URL Maplerad fetches, plus its
+ * number and country. Both are things we now hold — the KYC form collects an ID
+ * type, number and front/back images, and lib/kycDocuments serves each image
+ * over a short-lived signed URL. (This was previously left unimplemented on the
+ * grounds that the app had no document upload; that is no longer true.)
+ *
+ * Unlike the tier 1 upgrade this returns a body — data: { id, status } — so the
+ * result is read rather than inferred from the call not throwing.
  */
+export async function upgradeCustomerTier2(
+  input: UpgradeCustomerTier2Input,
+): Promise<UpgradeCustomerTier2Result> {
+  return mapleradRequest<UpgradeCustomerTier2Result>("/customers/upgrade/tier2", {
+    method: "PATCH",
+    body: input,
+  });
+}
 
 /**
  * Fetch what Maplerad holds for a customer.

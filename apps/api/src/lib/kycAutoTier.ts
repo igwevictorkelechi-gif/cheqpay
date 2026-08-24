@@ -17,8 +17,11 @@ import { KycStatus, prisma } from "@cheqpay/db";
  * endpoint we cannot currently call.
  *
  * Deliberately conservative:
- *  - Only ever RAISES the tier, and only to 1. A tier 2+ user is left alone, and
- *    nothing here can undo an admin's decision to lower someone.
+ *  - Only ever RAISES the tier, and never past 2. Tier 3 is enhanced due
+ *    diligence and stays a human decision; nothing here can undo an admin's
+ *    decision to lower someone.
+ *  - Mirrors the provider: tier 2 is granted only when Maplerad itself reached
+ *    tier 2 (it validated a government ID), otherwise tier 1.
  *  - Requires mapleradTier >= 1. A tier-0 customer proves nothing.
  *  - Never throws: this runs after the money-adjacent work is done, and a
  *    failure to promote must not fail a KYC submission that otherwise worked.
@@ -42,17 +45,25 @@ export async function grantTierFromEnrolment(userId: string): Promise<{
         reason: "provider customer is still tier 0",
       };
     }
-    if (user.kycTier >= 1) {
+
+    // Internal tier tracks the provider's, capped at 2. Tier 2 is the stronger
+    // claim — the provider validated a government ID document, not just the BVN
+    // — and on our side it is what raises limits and unlocks crypto
+    // withdrawals, so it is granted only when Maplerad actually reached tier 2.
+    // Tier 3 is enhanced due diligence and stays a deliberate human decision.
+    const target = user.mapleradTier >= 2 ? 2 : 1;
+
+    if (user.kycTier >= target) {
       return {
         granted: false,
         tier: user.kycTier,
-        reason: "already at tier 1 or above",
+        reason: `already at tier ${user.kycTier}`,
       };
     }
 
     await prisma.user.update({
       where: { id: userId },
-      data: { kycTier: 1 },
+      data: { kycTier: target },
     });
 
     // Approve the submission that is sitting in review, so the admin page and
@@ -78,15 +89,17 @@ export async function grantTierFromEnrolment(userId: string): Promise<{
         resourceType: "user",
         resourceId: userId,
         details: {
-          grantedTier: 1,
+          grantedTier: target,
           mapleradTier: user.mapleradTier,
           basis:
-            "Maplerad accepted the full identity (BVN, date of birth, name, address) and enrolled the customer at tier 1 or above.",
+            target >= 2
+              ? "Maplerad accepted the government ID document and upgraded the customer to tier 2."
+              : "Maplerad accepted the full identity (BVN, date of birth, name, address) and enrolled the customer at tier 1 or above.",
         },
       },
     });
 
-    return { granted: true, tier: 1, reason: "granted from provider enrolment" };
+    return { granted: true, tier: target, reason: `granted tier ${target} from provider enrolment` };
   } catch (err) {
     console.error("[kyc] could not grant tier from enrolment", {
       userId,

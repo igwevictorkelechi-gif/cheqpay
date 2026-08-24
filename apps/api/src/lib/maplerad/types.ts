@@ -129,6 +129,29 @@ export interface UpgradeCustomerTier1Input {
   photo?: string; // URL to selfie
 }
 
+/**
+ * PATCH /customers/upgrade/tier2 — lift a tier 1 customer to tier 2.
+ *
+ * Needs a government ID: the document itself (a URL Maplerad fetches), its
+ * number, and the issuing country. Unlike the tier 1 upgrade this one returns a
+ * body — data: { id, status } — so the outcome can be read rather than inferred
+ * from the call not throwing.
+ */
+export interface UpgradeCustomerTier2Input {
+  customer_id: string;
+  identity: {
+    type: "NIN" | "PASSPORT" | "VOTERS_CARD" | "DRIVERS_LICENSE";
+    image: string; // URL to the uploaded document
+    number: string;
+    country: string; // "NG"
+  };
+}
+
+export interface UpgradeCustomerTier2Result {
+  id?: string;
+  status?: string;
+}
+
 export interface Customer {
   id: string;
   first_name: string;

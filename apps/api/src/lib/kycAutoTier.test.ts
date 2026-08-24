@@ -46,6 +46,50 @@ describe("grantTierFromEnrolment", () => {
     );
   });
 
+  it("grants tier 2 when the provider reached tier 2", async () => {
+    findUnique.mockResolvedValue({ kycTier: 0, mapleradTier: 2 });
+
+    const r = await grantTierFromEnrolment("u1");
+
+    // Tier 2 is what raises limits and unlocks crypto withdrawals, so it is
+    // granted only because Maplerad itself validated a government ID.
+    expect(r).toMatchObject({ granted: true, tier: 2 });
+    expect(update).toHaveBeenCalledWith({ where: { id: "u1" }, data: { kycTier: 2 } });
+    expect(auditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          details: expect.objectContaining({ grantedTier: 2 }),
+        }),
+      }),
+    );
+  });
+
+  it("raises tier 1 to tier 2 once the provider gets there", async () => {
+    findUnique.mockResolvedValue({ kycTier: 1, mapleradTier: 2 });
+
+    const r = await grantTierFromEnrolment("u1");
+
+    expect(r).toMatchObject({ granted: true, tier: 2 });
+  });
+
+  it("does not grant tier 2 while the provider is only at tier 1", async () => {
+    findUnique.mockResolvedValue({ kycTier: 1, mapleradTier: 1 });
+
+    const r = await grantTierFromEnrolment("u1");
+
+    expect(r.granted).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("never grants tier 3 — enhanced due diligence stays a human decision", async () => {
+    findUnique.mockResolvedValue({ kycTier: 0, mapleradTier: 3 });
+
+    const r = await grantTierFromEnrolment("u1");
+
+    expect(r.tier).toBe(2);
+    expect(update).toHaveBeenCalledWith({ where: { id: "u1" }, data: { kycTier: 2 } });
+  });
+
   it("does nothing while the provider customer is still tier 0", async () => {
     findUnique.mockResolvedValue({ kycTier: 0, mapleradTier: 0 });
 
