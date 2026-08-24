@@ -7,7 +7,7 @@ import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
 import { persistKycIdentity } from "@/lib/kycIdentity";
-import { signKycDocument } from "@/lib/storage";
+import { kycDocumentOwner, moveKycDocument, signKycDocument } from "@/lib/storage";
 import { kycTier1Schema } from "@/lib/validation";
 import { decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
 
@@ -70,6 +70,20 @@ export async function POST(req: Request) {
     }
 
     const body = kycTier1Schema.parse(await req.json());
+
+    // The document refs made a round trip through the client, so check the
+    // caller owns them before anything is stored or signed. Without this, a
+    // submission could attach somebody else's ID images to its own KYC record —
+    // and the admin reviewer would then be shown those images as this user's.
+    for (const ref of [body.identity.frontRef, body.identity.backRef]) {
+      if (kycDocumentOwner(ref) !== auth.id) {
+        throw new ApiError(
+          422,
+          "Those ID uploads don't belong to this account — please upload them again",
+          "bad_document_ref"
+        );
+      }
+    }
 
     // A returning user completing their details won't retype the BVN, but the
     // identity check needs one. We retained it encrypted at first verification
@@ -193,7 +207,7 @@ export async function POST(req: Request) {
       //
       // Idempotent: when the check above already enrolled the user this finds
       // the persisted customer id and returns without calling the provider.
-      await ensureMapleradCustomer(auth.id, user.email, {
+      const customerId = await ensureMapleradCustomer(auth.id, user.email, {
         firstName: body.firstName,
         lastName: body.lastName,
         bvn,
@@ -202,6 +216,30 @@ export async function POST(req: Request) {
         address: body.address,
         identity,
       });
+
+      // The documents have now been part of a submission the provider accepted,
+      // so move them out of the pending folder — that folder means "uploaded,
+      // not sent anywhere", and leaving them there would make it a lie. Gated on
+      // `identity` as well as the customer id because without it there was no
+      // image to send. See lib/storage.ts for the two folders.
+      //
+      // The record's refs are rewritten to the new paths because the object is
+      // moved, not copied. Best-effort, like the deposit account below: a storage
+      // hiccup must not fail a KYC that has already succeeded, and the next
+      // submission promotes whatever was left behind.
+      if (customerId && identity) {
+        try {
+          const promoted = await Promise.all(
+            [body.identity.frontRef, body.identity.backRef].map(moveKycDocument)
+          );
+          await prisma.kycRecord.update({
+            where: { id: record.id },
+            data: { documentRefs: promoted },
+          });
+        } catch (err) {
+          console.error("[kyc] could not promote the ID documents out of staging", err);
+        }
+      }
 
       // Open the permanent, dedicated NGN deposit account now, using the BVN
       // and name we already have in hand. It's persisted (idempotent) and

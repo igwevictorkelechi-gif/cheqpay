@@ -16,7 +16,11 @@ const MAX_BYTES = 3 * 1024 * 1024;
  * PATH (a ref), which the client then sends back in the KYC submission's
  * `identity` block. The image itself never becomes public — it lives in a
  * private bucket and is only ever reached through a short-lived signed URL minted
- * server-side at enrolment. See lib/storage.ts.
+ * server-side at enrolment.
+ *
+ * The image lands in the `kyc/pending/` staging folder — received, not sent
+ * anywhere — and is moved to `kyc/submitted/` once the KYC submission it belongs
+ * to has been accepted by Maplerad. See lib/storage.ts.
  */
 export async function POST(req: Request) {
   try {
