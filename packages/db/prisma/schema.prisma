@@ -30,6 +30,7 @@ enum Asset {
   BTC
   USDT
   USDC
+  USD // fiat USD — held via a Maplerad USD virtual account
 }
 
 enum Network {

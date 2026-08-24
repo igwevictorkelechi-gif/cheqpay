@@ -77,6 +77,31 @@ export const createVirtualAccountSchema = z.object({
 });
 export type VirtualAccountRequestInput = z.infer<typeof createVirtualAccountSchema>;
 
+/**
+ * A USD virtual account needs US-banking KYC that the NGN one does not: a tax /
+ * ID number, employment and residency. Enums mirror Maplerad's; nationality is
+ * an ISO-2 country code defaulting to NG.
+ */
+export const createUsdAccountSchema = z.object({
+  identificationNumber: z.string().trim().min(3).max(40),
+  employmentStatus: z.enum([
+    "EMPLOYED",
+    "SELF_EMPLOYED",
+    "UNEMPLOYED",
+    "STUDENT",
+    "RETIRED",
+  ]),
+  employmentDescription: z.string().trim().min(2).max(100),
+  nationality: z.string().trim().length(2).default("NG"),
+  employerName: z.string().trim().min(1).max(100),
+  usResidencyStatus: z.enum([
+    "NON_RESIDENT_ALIEN",
+    "RESIDENT_ALIEN",
+    "US_CITIZEN",
+  ]),
+});
+export type CreateUsdAccountInput = z.infer<typeof createUsdAccountSchema>;
+
 /** Resolve a bank account holder's name before a withdrawal. */
 export const resolveAccountSchema = z.object({
   accountNumber: z.string().regex(/^\d{10}$/, "Expected a 10-digit NUBAN"),
