@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { Asset, Prisma } from "@cheqpay/db";
-import { computeSwap, cryptoToNgnKobo, effectivePrice } from "./rates";
+import {
+  classifySwap,
+  computeCryptoConvert,
+  computeSwap,
+  cryptoToNgnKobo,
+  effectivePrice,
+  fiatUsdtPrice,
+} from "./rates";
 
 const D = (v: string | number) => new Prisma.Decimal(v);
 
@@ -102,5 +109,96 @@ describe("computeSwap", () => {
         spreadBps: 0,
       })
     ).toThrow();
+  });
+});
+
+describe("fiatUsdtPrice", () => {
+  const rate = D("2000"); // NGN per USDT
+
+  it("prices USD 1:1 with USDT", () => {
+    expect(fiatUsdtPrice(Asset.USD, rate)!.toString()).toBe("1");
+  });
+
+  it("prices NGN as the inverse of the USDT→NGN rate", () => {
+    expect(fiatUsdtPrice(Asset.NGN, rate)!.toString()).toBe("0.0005");
+  });
+
+  it("returns null for a crypto asset (feed must price it)", () => {
+    expect(fiatUsdtPrice(Asset.BTC, rate)).toBeNull();
+    expect(fiatUsdtPrice(Asset.USDT, rate)).toBeNull();
+  });
+});
+
+describe("classifySwap", () => {
+  it("NGN → crypto is a buy", () => {
+    expect(classifySwap(Asset.NGN, Asset.BTC)).toBe("buy");
+    expect(classifySwap(Asset.NGN, Asset.USDT)).toBe("buy");
+  });
+
+  it("crypto → NGN is a sell", () => {
+    expect(classifySwap(Asset.USDT, Asset.NGN)).toBe("sell");
+  });
+
+  it("anything touching USD, or crypto↔crypto, is a convert", () => {
+    expect(classifySwap(Asset.USD, Asset.NGN)).toBe("convert");
+    expect(classifySwap(Asset.NGN, Asset.USD)).toBe("convert");
+    expect(classifySwap(Asset.USD, Asset.BTC)).toBe("convert");
+    expect(classifySwap(Asset.BTC, Asset.USD)).toBe("convert");
+    expect(classifySwap(Asset.BTC, Asset.USDT)).toBe("convert");
+  });
+});
+
+describe("computeCryptoConvert with fiat legs", () => {
+  // usdtNgnRate 2000, so NGN price = 0.0005 USDT/NGN, USD price = 1.
+  const ngn = fiatUsdtPrice(Asset.NGN, D("2000"))!;
+  const usd = fiatUsdtPrice(Asset.USD, D("2000"))!;
+
+  it("USD → NGN: 100 USD becomes ₦200,000 (no spread)", () => {
+    const r = computeCryptoConvert({
+      fromAsset: Asset.USD,
+      toAsset: Asset.NGN,
+      amountInMinor: 10_000n, // $100.00
+      fromUsdtPrice: usd,
+      toUsdtPrice: ngn,
+      spreadBps: 0,
+    });
+    expect(r.amountOutMinor).toBe(20_000_000n); // ₦200,000 in kobo
+  });
+
+  it("NGN → USD: ₦200,000 becomes $100 (no spread)", () => {
+    const r = computeCryptoConvert({
+      fromAsset: Asset.NGN,
+      toAsset: Asset.USD,
+      amountInMinor: 20_000_000n, // ₦200,000
+      fromUsdtPrice: ngn,
+      toUsdtPrice: usd,
+      spreadBps: 0,
+    });
+    expect(r.amountOutMinor).toBe(10_000n); // $100.00
+  });
+
+  it("USD → BTC at 60,000 USDT/BTC: $60,000 becomes 1 BTC", () => {
+    const r = computeCryptoConvert({
+      fromAsset: Asset.USD,
+      toAsset: Asset.BTC,
+      amountInMinor: 6_000_000n, // $60,000.00
+      fromUsdtPrice: usd,
+      toUsdtPrice: D("60000"),
+      spreadBps: 0,
+    });
+    expect(r.amountOutMinor).toBe(100_000_000n); // 1 BTC (8dp)
+  });
+
+  it("applies the spread once on a USD → NGN convert", () => {
+    // 1% spread: 100 USD → 200,000 * 0.99 = ₦198,000
+    const r = computeCryptoConvert({
+      fromAsset: Asset.USD,
+      toAsset: Asset.NGN,
+      amountInMinor: 10_000n,
+      fromUsdtPrice: usd,
+      toUsdtPrice: ngn,
+      spreadBps: 100,
+    });
+    expect(r.amountOutMinor).toBe(19_800_000n); // ₦198,000
   });
 });

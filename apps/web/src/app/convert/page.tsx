@@ -10,6 +10,7 @@ import {
   CONVERT_ASSETS,
   ASSET_NAMES,
   formatMinor,
+  resolveConvertMode,
   type ConvertSymbol,
 } from "@/lib/cryptoAssets";
 
@@ -52,14 +53,6 @@ function AssetCard({
       </p>
     </div>
   );
-}
-
-/** Resolve which API call a from/to pair uses. */
-type CryptoLeg = Exclude<ConvertSymbol, "NGN">;
-function resolveMode(fromSym: ConvertSymbol, toSym: ConvertSymbol) {
-  if (fromSym === "NGN") return { kind: "buy" as const, crypto: toSym as CryptoLeg };
-  if (toSym === "NGN") return { kind: "sell" as const, crypto: fromSym as CryptoLeg };
-  return { kind: "convert" as const, crypto: fromSym as CryptoLeg };
 }
 
 export default function ConvertPage() {
@@ -116,7 +109,7 @@ export default function ConvertPage() {
     reset();
   }
 
-  const mode = resolveMode(fromSym, toSym);
+  const mode = resolveConvertMode(fromSym, toSym);
 
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requote = useCallback(
@@ -133,10 +126,10 @@ export default function ConvertPage() {
         setQuoting(true);
         setError(null);
         try {
-          const m = resolveMode(f, t);
+          const m = resolveConvertMode(f, t);
           const q =
             m.kind === "convert"
-              ? await api.createConvertQuote(f as CryptoLeg, t as CryptoLeg, amt)
+              ? await api.createConvertQuote(f, t, amt)
               : await api.createQuote(m.kind, m.crypto, amt);
           setOut(formatMinor(q.amountOut, t));
           setRate(q.rate);

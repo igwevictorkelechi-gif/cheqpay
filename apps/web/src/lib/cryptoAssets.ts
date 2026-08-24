@@ -67,13 +67,14 @@ export function isAssetEnabled(symbol: string): boolean {
   return ENABLED_CRYPTO.has(symbol.toUpperCase());
 }
 
-/** All assets the convert/swap flow can switch between. NGN is the fiat leg. */
-export type ConvertSymbol = "NGN" | "BTC" | "USDT" | "USDC";
+/** All assets the convert/swap flow can switch between. NGN and USD are fiat. */
+export type ConvertSymbol = "NGN" | "USD" | "BTC" | "USDT" | "USDC";
 
-export const CONVERT_ASSETS: ConvertSymbol[] = ["NGN", "BTC", "USDT", "USDC"];
+export const CONVERT_ASSETS: ConvertSymbol[] = ["NGN", "USD", "BTC", "USDT", "USDC"];
 
 export const ASSET_DECIMALS: Record<ConvertSymbol, number> = {
   NGN: 2,
+  USD: 2,
   BTC: 8,
   USDT: 6,
   USDC: 6,
@@ -81,10 +82,35 @@ export const ASSET_DECIMALS: Record<ConvertSymbol, number> = {
 
 export const ASSET_NAMES: Record<ConvertSymbol, string> = {
   NGN: "Nigerian Naira",
+  USD: "US Dollar",
   BTC: "Bitcoin",
   USDT: "Tether",
   USDC: "USD Coin",
 };
+
+/** The crypto legs (everything that isn't fiat). */
+export type CryptoLeg = Exclude<ConvertSymbol, "NGN" | "USD">;
+const CRYPTO_SYMBOLS: CryptoLeg[] = ["BTC", "USDT", "USDC"];
+
+/**
+ * Which API a from/to pair uses. Buy spends NGN for crypto and sell returns
+ * crypto to NGN — both go through /api/quotes. Everything else (crypto↔crypto,
+ * and anything touching USD, including NGN↔USD) is a convert through
+ * /api/quotes/convert. Mirrors the server's classifySwap so the two agree.
+ */
+export function resolveConvertMode(
+  fromSym: ConvertSymbol,
+  toSym: ConvertSymbol
+):
+  | { kind: "buy"; crypto: CryptoLeg }
+  | { kind: "sell"; crypto: CryptoLeg }
+  | { kind: "convert" } {
+  const isCrypto = (s: ConvertSymbol): s is CryptoLeg =>
+    (CRYPTO_SYMBOLS as string[]).includes(s);
+  if (fromSym === "NGN" && isCrypto(toSym)) return { kind: "buy", crypto: toSym };
+  if (toSym === "NGN" && isCrypto(fromSym)) return { kind: "sell", crypto: fromSym };
+  return { kind: "convert" };
+}
 
 /** Format a minor-unit string/bigint into a human decimal string for display. */
 export function formatMinor(minor: string | bigint, symbol: ConvertSymbol): string {

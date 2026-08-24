@@ -231,7 +231,7 @@ export const api = {
     });
   },
 
-  createConvertQuote(fromAsset: AssetSymbol, toAsset: AssetSymbol, amount: string): Promise<Quote> {
+  createConvertQuote(fromAsset: string, toAsset: string, amount: string): Promise<Quote> {
     return apiFetch('/api/quotes/convert', {
       method: 'POST',
       body: JSON.stringify({ fromAsset, toAsset, amount }),

@@ -373,10 +373,10 @@ export const api = {
     });
   },
 
-  /** Crypto-to-crypto convert quote, e.g. BTC -> USDT. */
+  /** Convert quote between any two supported assets, e.g. BTC -> USDT or USD -> NGN. */
   createConvertQuote(
-    fromAsset: AssetSymbol,
-    toAsset: AssetSymbol,
+    fromAsset: string,
+    toAsset: string,
     amount: string
   ): Promise<Quote> {
     return apiFetch("/api/quotes/convert", {

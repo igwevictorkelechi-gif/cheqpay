@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/components/brand';
 import { api, ApiError } from '@/services/api';
-import { ASSET_META, formatMinor, type ConvertSymbol } from '@/lib/assets';
+import { ASSET_META, formatMinor, resolveConvertMode, type ConvertSymbol } from '@/lib/assets';
 
 function CoinBadge({ symbol, size = 44 }: { symbol: string; size?: number }) {
   const m = ASSET_META[symbol as ConvertSymbol] ?? { bg: colors.brand, glyph: symbol.charAt(0) };
@@ -47,9 +47,7 @@ export default function SwapConfirmScreen() {
     toSym: ConvertSymbol;
   }>();
 
-  const isConvert = fromSym !== 'NGN' && toSym !== 'NGN';
-  const side: 'buy' | 'sell' = fromSym === 'NGN' ? 'buy' : 'sell';
-  const cryptoAsset = (fromSym === 'NGN' ? toSym : fromSym) as 'BTC' | 'USDT';
+  const mode = resolveConvertMode(fromSym as ConvertSymbol, toSym as ConvertSymbol);
 
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [out, setOut] = useState('0');
@@ -63,9 +61,10 @@ export default function SwapConfirmScreen() {
     setError(null);
     try {
       await api.ensureProvisioned();
-      const q = isConvert
-        ? await api.createConvertQuote(fromSym as 'BTC' | 'USDT', toSym as 'BTC' | 'USDT', String(amount))
-        : await api.createQuote(side, cryptoAsset, String(amount));
+      const q =
+        mode.kind === 'convert'
+          ? await api.createConvertQuote(String(fromSym), String(toSym), String(amount))
+          : await api.createQuote(mode.kind, mode.crypto, String(amount));
       setQuoteId(q.quoteId);
       setOut(formatMinor(q.amountOut, toSym as ConvertSymbol));
       setRate(q.rate);
@@ -74,7 +73,7 @@ export default function SwapConfirmScreen() {
     } finally {
       setLoading(false);
     }
-  }, [amount, fromSym, toSym, isConvert, side, cryptoAsset]);
+  }, [amount, fromSym, toSym, mode]);
 
   useEffect(() => {
     fetchQuote();
@@ -102,9 +101,9 @@ export default function SwapConfirmScreen() {
 
   const rateValue = !rate
     ? '—'
-    : isConvert
+    : mode.kind === 'convert'
     ? `1 ${fromSym} = ${Number(rate).toLocaleString('en-US', { maximumFractionDigits: 8 })} ${toSym}`
-    : `1 ${cryptoAsset} = ₦${Number(rate).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
+    : `1 ${mode.crypto} = ₦${Number(rate).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>

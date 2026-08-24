@@ -1,15 +1,39 @@
-export type ConvertSymbol = 'NGN' | 'BTC' | 'USDT';
+export type ConvertSymbol = 'NGN' | 'USD' | 'BTC' | 'USDT';
 
-export const CONVERT_ASSETS: ConvertSymbol[] = ['NGN', 'BTC', 'USDT'];
+export const CONVERT_ASSETS: ConvertSymbol[] = ['NGN', 'USD', 'BTC', 'USDT'];
 
-export const ASSET_DECIMALS: Record<ConvertSymbol, number> = { NGN: 2, BTC: 8, USDT: 6 };
+export const ASSET_DECIMALS: Record<ConvertSymbol, number> = { NGN: 2, USD: 2, BTC: 8, USDT: 6 };
 
 export const ASSET_META: Record<ConvertSymbol | 'USDC', { name: string; bg: string; glyph: string }> = {
   NGN: { name: 'Naira', bg: '#2E8B57', glyph: '₦' },
+  USD: { name: 'US Dollar', bg: '#22C55E', glyph: '$' },
   BTC: { name: 'Bitcoin', bg: '#F7931A', glyph: '₿' },
   USDT: { name: 'Tether', bg: '#26A17B', glyph: '₮' },
   USDC: { name: 'USD Coin', bg: '#2775CA', glyph: '$' },
 };
+
+/** The crypto legs (everything that isn't fiat). */
+export type CryptoLeg = 'BTC' | 'USDT';
+const CRYPTO_SYMBOLS: CryptoLeg[] = ['BTC', 'USDT'];
+
+/**
+ * Which API a from/to pair uses. Buy spends NGN for crypto, sell returns crypto
+ * to NGN (both through /api/quotes); everything else — crypto↔crypto and
+ * anything touching USD, incl. NGN↔USD — is a convert. Mirrors the server's
+ * classifySwap so the two agree.
+ */
+export function resolveConvertMode(
+  fromSym: ConvertSymbol,
+  toSym: ConvertSymbol,
+):
+  | { kind: 'buy'; crypto: CryptoLeg }
+  | { kind: 'sell'; crypto: CryptoLeg }
+  | { kind: 'convert' } {
+  const isCrypto = (s: ConvertSymbol): s is CryptoLeg => (CRYPTO_SYMBOLS as string[]).includes(s);
+  if (fromSym === 'NGN' && isCrypto(toSym)) return { kind: 'buy', crypto: toSym };
+  if (toSym === 'NGN' && isCrypto(fromSym)) return { kind: 'sell', crypto: fromSym };
+  return { kind: 'convert' };
+}
 
 /** Format a minor-unit string/bigint into a human decimal string. */
 export function formatMinor(minor: string | bigint, symbol: ConvertSymbol): string {
