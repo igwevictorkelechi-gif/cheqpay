@@ -56,3 +56,5 @@ next-env.d.ts
 
 # Static export output (apps/web/build:static) — a build artefact, not source.
 apps/web/out/
+# The zipped static export, produced for manual cPanel upload — also an artefact.
+apps/web/*.zip
