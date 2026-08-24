@@ -5,7 +5,7 @@ import { fromMinorUnits } from "@/lib/money";
 import { requestContext } from "@/lib/requestContext";
 import { ensureActivitySchema } from "@/lib/activity";
 import { ensureKycDocSchema, ensureMapleradSchema } from "@/lib/mapleradCustomer";
-import { signKycDocument } from "@/lib/storage";
+import { resolveApiOrigin, signKycDocumentUrl } from "@/lib/kycDocuments";
 
 export const dynamic = "force-dynamic";
 
@@ -117,11 +117,12 @@ export async function GET(req: Request, { params }: Ctx) {
     // Document images. Signed per-document and best-effort: a storage problem
     // costs that thumbnail, never the whole page.
     const refs = latestKyc?.documentRefs ?? [];
+    const origin = resolveApiOrigin(req);
     const [front, back] = await Promise.all(
       [refs[0], refs[1]].map(async (ref) => {
         if (!ref) return null;
         try {
-          return await signKycDocument(ref, DOCUMENT_URL_TTL_SECONDS);
+          return signKycDocumentUrl(ref, DOCUMENT_URL_TTL_SECONDS, origin);
         } catch (err) {
           console.error("[admin] could not sign a KYC document", { userId: id, ref, err });
           return null;

@@ -109,6 +109,11 @@ async function ensureSchema(): Promise<void> {
       // The government-ID columns, same hazard: every User query selects them.
       ensureKycDocSchema(),
     ]);
+    // NB: the KYC document TABLE (image bytes) is created lazily by
+    // lib/kycDocuments on first use, not here. It is a new table, so it is
+    // select-all-safe, and that module reaches node:crypto — which the Edge
+    // compile of this file cannot bundle. Keeping it out of the boot graph is
+    // deliberate (see retention.ts, which uses Web Crypto for the same reason).
   } catch (err) {
     console.error("[bootstrap] schema preparation failed; will retry on next start", err);
   }

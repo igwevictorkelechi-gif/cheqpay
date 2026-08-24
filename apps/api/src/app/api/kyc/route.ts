@@ -7,7 +7,12 @@ import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
 import { persistKycIdentity } from "@/lib/kycIdentity";
-import { kycDocumentOwner, moveKycDocument, signKycDocument } from "@/lib/storage";
+import {
+  kycDocumentOwner,
+  markKycDocumentSubmitted,
+  resolveApiOrigin,
+  signKycDocumentUrl,
+} from "@/lib/kycDocuments";
 import { kycTier1Schema } from "@/lib/validation";
 import { decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
 
@@ -196,7 +201,7 @@ export async function POST(req: Request) {
       // the whole KYC — the customer is still created and the ID is on file.
       let identity: { type: typeof body.identity.type; number: string; imageUrl: string } | undefined;
       try {
-        const imageUrl = await signKycDocument(body.identity.frontRef, 3600);
+        const imageUrl = signKycDocumentUrl(body.identity.frontRef, 3600, resolveApiOrigin(req));
         identity = { type: body.identity.type, number: body.identity.number, imageUrl };
       } catch (err) {
         console.error("[kyc] could not sign the ID document for enrollment", err);
@@ -218,26 +223,20 @@ export async function POST(req: Request) {
       });
 
       // The documents have now been part of a submission the provider accepted,
-      // so move them out of the pending folder — that folder means "uploaded,
-      // not sent anywhere", and leaving them there would make it a lie. Gated on
-      // `identity` as well as the customer id because without it there was no
-      // image to send. See lib/storage.ts for the two folders.
-      //
-      // The record's refs are rewritten to the new paths because the object is
-      // moved, not copied. Best-effort, like the deposit account below: a storage
-      // hiccup must not fail a KYC that has already succeeded, and the next
-      // submission promotes whatever was left behind.
+      // so mark them submitted — until now they were "uploaded, not sent
+      // anywhere". Gated on `identity` as well as the customer id because without
+      // it there was no image to send. The ref is unchanged (the row stays put;
+      // only its flag flips), so KycRecord.documentRefs need no rewrite. See
+      // lib/kycDocuments.ts. Best-effort, like the deposit account below: a
+      // storage hiccup must not fail a KYC that has already succeeded, and the
+      // next submission marks whatever was left behind.
       if (customerId && identity) {
         try {
-          const promoted = await Promise.all(
-            [body.identity.frontRef, body.identity.backRef].map(moveKycDocument)
+          await Promise.all(
+            [body.identity.frontRef, body.identity.backRef].map(markKycDocumentSubmitted)
           );
-          await prisma.kycRecord.update({
-            where: { id: record.id },
-            data: { documentRefs: promoted },
-          });
         } catch (err) {
-          console.error("[kyc] could not promote the ID documents out of staging", err);
+          console.error("[kyc] could not mark the ID documents submitted", err);
         }
       }
 

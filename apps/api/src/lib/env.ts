@@ -103,6 +103,10 @@ const envSchema = z.object({
   SUPABASE_JWT_SECRET: z.string().min(16).optional(),
   // Service-role access to the Supabase Admin API (used to delete the auth
   // user on permanent account deletion). Both must be set to take effect.
+  // Public origin of this API, used to build the signed URLs Maplerad and the
+  // admin browser fetch KYC document images from. Falls back to Vercel’s
+  // production URL, then the request host, so it is optional.
+  PUBLIC_API_URL: z.string().url().optional(),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   // Admin auth: a trusted service secret (backend-to-backend, e.g. the admin

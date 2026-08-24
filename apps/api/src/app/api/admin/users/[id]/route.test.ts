@@ -10,7 +10,8 @@ const {
   txFindMany,
   walletFindUnique,
   auditCreate,
-  signKycDocument,
+  signKycDocumentUrl,
+  resolveApiOrigin,
   ensureActivitySchema,
   ensureMapleradSchema,
   ensureKycDocSchema,
@@ -24,7 +25,8 @@ const {
   txFindMany: vi.fn(),
   walletFindUnique: vi.fn(),
   auditCreate: vi.fn(),
-  signKycDocument: vi.fn(),
+  signKycDocumentUrl: vi.fn(),
+  resolveApiOrigin: vi.fn(),
   ensureActivitySchema: vi.fn(),
   ensureMapleradSchema: vi.fn(),
   ensureKycDocSchema: vi.fn(),
@@ -48,7 +50,7 @@ vi.mock("@cheqpay/db", () => ({
   },
 }));
 vi.mock("@/lib/auth", () => ({ requireAdmin }));
-vi.mock("@/lib/storage", () => ({ signKycDocument }));
+vi.mock("@/lib/kycDocuments", () => ({ signKycDocumentUrl, resolveApiOrigin }));
 vi.mock("@/lib/activity", () => ({ ensureActivitySchema }));
 vi.mock("@/lib/mapleradCustomer", () => ({ ensureMapleradSchema, ensureKycDocSchema }));
 
@@ -131,7 +133,8 @@ describe("GET /api/admin/users/[id]", () => {
       txFindMany,
       walletFindUnique,
       auditCreate,
-      signKycDocument,
+      signKycDocumentUrl,
+      resolveApiOrigin,
       ensureActivitySchema,
       ensureMapleradSchema,
       ensureKycDocSchema,
@@ -175,7 +178,8 @@ describe("GET /api/admin/users/[id]", () => {
     ]);
     walletFindUnique.mockResolvedValue({ address: "9900000001" });
     auditCreate.mockResolvedValue({});
-    signKycDocument.mockImplementation(async (ref: string) => `https://signed/${ref}`);
+    signKycDocumentUrl.mockImplementation((ref: string) => `https://signed/${ref}`);
+    resolveApiOrigin.mockReturnValue("https://api.example.com");
   });
 
   it("returns the KYC details the user submitted", async () => {
@@ -236,7 +240,7 @@ describe("GET /api/admin/users/[id]", () => {
   });
 
   it("still renders when a document cannot be signed", async () => {
-    signKycDocument.mockRejectedValue(new Error("storage down"));
+    signKycDocumentUrl.mockImplementation(() => { throw new Error("storage down"); });
     const res = await call();
     expect(res.status).toBe(200);
     const body = await res.json();
