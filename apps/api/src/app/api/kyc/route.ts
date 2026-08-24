@@ -7,7 +7,12 @@ import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
 import { persistKycIdentity } from "@/lib/kycIdentity";
-import { signKycDocument } from "@/lib/storage";
+import {
+  kycDocumentOwner,
+  markKycDocumentSubmitted,
+  resolveApiOrigin,
+  signKycDocumentUrl,
+} from "@/lib/kycDocuments";
 import { kycTier1Schema } from "@/lib/validation";
 import { decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
 
@@ -70,6 +75,20 @@ export async function POST(req: Request) {
     }
 
     const body = kycTier1Schema.parse(await req.json());
+
+    // The document refs made a round trip through the client, so check the
+    // caller owns them before anything is stored or signed. Without this, a
+    // submission could attach somebody else's ID images to its own KYC record —
+    // and the admin reviewer would then be shown those images as this user's.
+    for (const ref of [body.identity.frontRef, body.identity.backRef]) {
+      if (kycDocumentOwner(ref) !== auth.id) {
+        throw new ApiError(
+          422,
+          "Those ID uploads don't belong to this account — please upload them again",
+          "bad_document_ref"
+        );
+      }
+    }
 
     // A returning user completing their details won't retype the BVN, but the
     // identity check needs one. We retained it encrypted at first verification
@@ -182,7 +201,7 @@ export async function POST(req: Request) {
       // the whole KYC — the customer is still created and the ID is on file.
       let identity: { type: typeof body.identity.type; number: string; imageUrl: string } | undefined;
       try {
-        const imageUrl = await signKycDocument(body.identity.frontRef, 3600);
+        const imageUrl = signKycDocumentUrl(body.identity.frontRef, 3600, resolveApiOrigin(req));
         identity = { type: body.identity.type, number: body.identity.number, imageUrl };
       } catch (err) {
         console.error("[kyc] could not sign the ID document for enrollment", err);
@@ -193,7 +212,7 @@ export async function POST(req: Request) {
       //
       // Idempotent: when the check above already enrolled the user this finds
       // the persisted customer id and returns without calling the provider.
-      await ensureMapleradCustomer(auth.id, user.email, {
+      const customerId = await ensureMapleradCustomer(auth.id, user.email, {
         firstName: body.firstName,
         lastName: body.lastName,
         bvn,
@@ -202,6 +221,24 @@ export async function POST(req: Request) {
         address: body.address,
         identity,
       });
+
+      // The documents have now been part of a submission the provider accepted,
+      // so mark them submitted — until now they were "uploaded, not sent
+      // anywhere". Gated on `identity` as well as the customer id because without
+      // it there was no image to send. The ref is unchanged (the row stays put;
+      // only its flag flips), so KycRecord.documentRefs need no rewrite. See
+      // lib/kycDocuments.ts. Best-effort, like the deposit account below: a
+      // storage hiccup must not fail a KYC that has already succeeded, and the
+      // next submission marks whatever was left behind.
+      if (customerId && identity) {
+        try {
+          await Promise.all(
+            [body.identity.frontRef, body.identity.backRef].map(markKycDocumentSubmitted)
+          );
+        } catch (err) {
+          console.error("[kyc] could not mark the ID documents submitted", err);
+        }
+      }
 
       // Open the permanent, dedicated NGN deposit account now, using the BVN
       // and name we already have in hand. It's persisted (idempotent) and

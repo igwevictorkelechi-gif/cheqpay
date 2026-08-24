@@ -67,15 +67,23 @@ on its main page. If the API is on a different box, give it its own subdomain �
 
 ## Check it worked
 
-1. `https://mycheqpay.com` loads. Signed out, it redirects to `/welcome/` — the
-   public landing page. Signed in, it goes straight to the wallet.
+1. `https://mycheqpay.com` loads and shows the landing page directly — no
+   redirect. Signed in, the same URL renders the wallet instead.
+
+   This changed: `/` used to serve an empty shell and bounce signed-out visitors
+   to `/welcome/`, which meant the homepage had nothing for a search engine to
+   index. It now renders the landing page itself, and `/welcome/` is kept as a
+   duplicate that canonicalises to `/`.
 2. `https://mycheqpay.com/welcome/` and `https://mycheqpay.com/login/` load
    directly — not a 404. This is what proves the directory structure survived
    the upload.
-3. `http://mycheqpay.com` redirects to `https://`.
-4. Sign in. If the code never arrives, the build has the wrong
+3. `http://mycheqpay.com` redirects to `https://`, and `www.mycheqpay.com`
+   redirects to the apex.
+4. `https://mycheqpay.com/robots.txt` and `/sitemap.xml` load. Both are needed
+   before submitting the site to Google Search Console.
+5. Sign in. If the code never arrives, the build has the wrong
    `NEXT_PUBLIC_SUPABASE_URL` or anon key.
-5. Open the browser console. `Failed to fetch` against the API means either the
+6. Open the browser console. `Failed to fetch` against the API means either the
    wrong `NEXT_PUBLIC_API_URL` or the API's `ALLOWED_ORIGINS` does not include
    `https://mycheqpay.com`.
 

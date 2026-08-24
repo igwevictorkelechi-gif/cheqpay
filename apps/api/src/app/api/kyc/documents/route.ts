@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { kycDocumentUploadSchema } from "@/lib/validation";
-import { uploadKycDocument } from "@/lib/storage";
+import { storeKycDocument } from "@/lib/kycDocuments";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +15,12 @@ const MAX_BYTES = 3 * 1024 * 1024;
  * Upload one government-ID image (front or back) for KYC. Returns the storage
  * PATH (a ref), which the client then sends back in the KYC submission's
  * `identity` block. The image itself never becomes public — it lives in a
- * private bucket and is only ever reached through a short-lived signed URL minted
- * server-side at enrolment. See lib/storage.ts.
+ * Postgres and is only ever reached through a short-lived, signed URL minted
+ * server-side (for Maplerad at enrolment, and for the admin reviewer on demand).
+ *
+ * The stored row starts unsubmitted — received, not sent anywhere — and is
+ * marked submitted once the KYC submission it belongs to has been accepted by
+ * Maplerad. See lib/kycDocuments.ts.
  */
 export async function POST(req: Request) {
   try {
@@ -43,7 +47,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const ref = await uploadKycDocument(auth.id, bytes, body.contentType);
+    const ref = await storeKycDocument(auth.id, bytes, body.contentType);
     return jsonOk({ ref, side: body.side }, 201);
   } catch (err) {
     return toErrorResponse(err);
