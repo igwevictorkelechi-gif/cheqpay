@@ -55,6 +55,38 @@ export async function createDynamicAccount(input: {
 }
 
 /**
+ * Open a USD virtual account for a customer.
+ * POST /collections/virtual-account/usd
+ *
+ * Unlike the NGN account this needs a `meta` block of US-banking KYC — the tax
+ * ID, employment and residency — because a USD account is a real correspondent
+ * account, not a local NUBAN. The response may carry a consent flow
+ * (require_consent + consent_url): the user has to accept US banking terms
+ * before the account activates, so callers must surface consent_url when set.
+ */
+export interface UsdAccountMeta {
+  identification_number: string;
+  employment_status: string;
+  employment_description: string;
+  nationality: string;
+  employer_name: string;
+  us_residency_status: string;
+}
+
+export async function createUsdAccount(input: {
+  customerId: string;
+  meta: UsdAccountMeta;
+}): Promise<VirtualAccount> {
+  return mapleradRequest<VirtualAccount>("/collections/virtual-account/usd", {
+    method: "POST",
+    body: {
+      customer_id: input.customerId,
+      meta: input.meta,
+    },
+  });
+}
+
+/**
  * List all virtual accounts for a customer.
  * GET /customers/{customer_id}/virtual-account
  */

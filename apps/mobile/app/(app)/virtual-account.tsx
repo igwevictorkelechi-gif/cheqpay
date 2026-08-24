@@ -17,6 +17,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useAuthStore } from '@/store';
 import { colors } from '@/components/brand';
 import { api, ApiError, type VirtualAccount } from '@/services/api';
+import UsdAccountPanel from '@/components/UsdAccountPanel';
 import { authService } from '@/services/auth';
 
 export default function VirtualAccountScreen() {
@@ -204,6 +205,8 @@ export default function VirtualAccountScreen() {
                   </Text>
                 </View>
               )}
+
+              <UsdAccountPanel />
 
               <View className="flex-row mt-6" style={{ gap: 12 }}>
                 <TouchableOpacity

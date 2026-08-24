@@ -141,6 +141,25 @@ export interface VirtualAccount {
   permanent: boolean;
 }
 
+export interface UsdAccount {
+  accountNumber: string;
+  bankName: string;
+  accountName?: string;
+  currency: string;
+  status?: string;
+  consentRequired: boolean;
+  consentUrl?: string | null;
+}
+
+export interface UsdAccountInput {
+  identificationNumber: string;
+  employmentStatus: string;
+  employmentDescription: string;
+  nationality: string;
+  employerName: string;
+  usResidencyStatus: string;
+}
+
 export interface BillBiller {
   id: string;
   name: string;
@@ -321,6 +340,19 @@ export const api = {
     bvn?: string;
   }): Promise<{ virtualAccount: VirtualAccount }> {
     return apiFetch("/api/virtual-accounts", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  /** The user's USD virtual account, or null if not opened. */
+  getUsdAccount(): Promise<{ usdAccount: UsdAccount | null }> {
+    return apiFetch("/api/virtual-accounts/usd");
+  },
+
+  /** Open the USD virtual account. Requires a verified (enrolled) profile. */
+  createUsdAccount(input: UsdAccountInput): Promise<{ usdAccount: UsdAccount }> {
+    return apiFetch("/api/virtual-accounts/usd", {
       method: "POST",
       body: JSON.stringify(input),
     });

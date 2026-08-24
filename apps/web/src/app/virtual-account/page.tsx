@@ -15,6 +15,7 @@ import { api, ApiError, type VirtualAccount } from "@/services/api";
 import { supabase } from "@/services/supabase";
 import { useAuthStore } from "@/store";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import UsdAccountPanel from "@/components/UsdAccountPanel";
 
 export default function VirtualAccountPage() {
   const router = useRouter();
@@ -245,6 +246,9 @@ export default function VirtualAccountPage() {
                 </p>
               </div>
             )}
+
+            {/* Optionally also open a USD account — self-contained switch. */}
+            <UsdAccountPanel />
 
             <button
               onClick={() => router.push("/")}
