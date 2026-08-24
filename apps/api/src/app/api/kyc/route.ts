@@ -8,6 +8,7 @@ import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
 import { persistKycIdentity } from "@/lib/kycIdentity";
 import { grantTierFromEnrolment } from "@/lib/kycAutoTier";
+import { upgradeToTier2 } from "@/lib/mapleradTier2";
 import {
   kycDocumentOwner,
   markKycDocumentSubmitted,
@@ -251,9 +252,22 @@ export async function POST(req: Request) {
         }
       }
 
-      // Internal KYC tier from the provider's verdict. ensureMapleradCustomer
-      // has just written the customer's tier, so this reads the result of the
-      // call above rather than guessing. Only ever raises, and only to 1.
+      // Go straight on to tier 2 while the government ID is in hand. Tier 2 is
+      // what raises limits and unlocks crypto withdrawals, and it needs exactly
+      // what this submission just stored — an ID type, number and document
+      // image. Best-effort by contract: a refusal leaves the user at tier 1 with
+      // a working deposit account, and the admin page can retry.
+      if (customerId) {
+        const tier2 = await upgradeToTier2(auth.id, resolveApiOrigin(req));
+        if (!tier2.upgraded) {
+          console.warn("[kyc] tier 2 not granted", { userId: auth.id, reason: tier2.reason });
+        }
+      }
+
+      // Internal KYC tier from the provider's verdict. The enrolment and the
+      // tier 2 attempt above have both written the customer's tier by now, so
+      // this reads the result rather than guessing. Only ever raises, never
+      // past 2, and mirrors whatever tier the provider actually reached.
       const promotion = await grantTierFromEnrolment(auth.id);
       if (promotion.granted) {
         console.info("[kyc] tier 1 granted from the provider enrolment", { userId: auth.id });

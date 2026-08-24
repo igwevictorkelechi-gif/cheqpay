@@ -109,6 +109,7 @@ type MapleradEnroll = {
   tier: number;
   kycTier?: number;
   kycTierGranted?: boolean;
+  tier2Reason?: string | null;
   missing?: string[];
   account?: { accountNumber: string; bankName: string; accountName?: string } | null;
   accountError?: string | null;
@@ -545,11 +546,14 @@ export default function UserDetailPage() {
                 of birth, ID and address can sit stuck at tier 0 purely because
                 the phone never arrived, and tier 0 gets no NGN account. */}
             <div className="mt-6 border-t border-gray-200 pt-6">
-              <h3 className="text-sm font-semibold text-gray-900">Enrol / upgrade to tier 1</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Enrol / upgrade tier</h3>
               <p className="mt-1 text-sm text-gray-500">
-                Re-runs the enrolment using the BVN, date of birth and address already stored.
-                Supply a phone number if one is missing — that is usually the only thing
-                blocking tier 1, and tier 1 is what issues the NGN account.
+                Re-runs the enrolment using the BVN, date of birth and address already stored,
+                then attempts tier 2 with the government ID on file. Supply a phone number if
+                one is missing — that is usually the only thing blocking tier 1.
+                <br />
+                <strong>Tier 1</strong> issues the NGN account. <strong>Tier 2</strong> raises
+                limits (₦50k → ₦1m per transaction) and unlocks crypto withdrawals.
               </p>
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -568,7 +572,7 @@ export default function UserDetailPage() {
                   disabled={enrolling}
                   className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {enrolling ? 'Working…' : 'Enrol / upgrade to tier 1'}
+                  {enrolling ? 'Working…' : 'Enrol / upgrade tier'}
                 </button>
               </div>
               <p className="mt-1.5 text-xs text-gray-500">
@@ -622,6 +626,11 @@ export default function UserDetailPage() {
                       }
                     />
                   </dl>
+                  {enroll.tier2Reason && enroll.tier < 2 && (
+                    <p className="mt-3">
+                      Tier 2 not granted: <strong>{enroll.tier2Reason}</strong>
+                    </p>
+                  )}
                   {enroll.missing && enroll.missing.length > 0 && (
                     <p className="mt-3">
                       Still missing: <strong>{enroll.missing.join(', ')}</strong>
