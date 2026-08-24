@@ -7,6 +7,7 @@ import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
 import { persistKycIdentity } from "@/lib/kycIdentity";
+import { grantTierFromEnrolment } from "@/lib/kycAutoTier";
 import {
   kycDocumentOwner,
   markKycDocumentSubmitted,
@@ -174,8 +175,18 @@ export async function POST(req: Request) {
     // never get a deposit account or a crypto wallet — the approved screen
     // never shows them the form again. Re-submitting the missing details now
     // completes their setup.
+    //
+    // Enrolment is NO LONGER gated on the registry lookup succeeding. That gate
+    // meant a failed lookup denied the user a provider customer entirely — and
+    // the lookup is currently refused for this account (POST /identity/bvn
+    // returns Unauthorized while POST /customers/enroll succeeds on the same
+    // key), so no new user could be enrolled at all. Enrolment is itself an
+    // identity check: Maplerad rejects a BVN, name and date of birth that do not
+    // hang together. Attempting it for every complete submission is what lets a
+    // user reach tier 1 without a lookup we cannot currently make. Everything
+    // inside is best-effort and idempotent, so a repeat submission is safe.
     const alreadyVerified = user.kycTier >= 1;
-    if (verdict.verified || alreadyVerified) {
+    {
       if (verdict.verified) {
         await prisma.user.update({
           where: { id: auth.id },
@@ -238,6 +249,14 @@ export async function POST(req: Request) {
         } catch (err) {
           console.error("[kyc] could not mark the ID documents submitted", err);
         }
+      }
+
+      // Internal KYC tier from the provider's verdict. ensureMapleradCustomer
+      // has just written the customer's tier, so this reads the result of the
+      // call above rather than guessing. Only ever raises, and only to 1.
+      const promotion = await grantTierFromEnrolment(auth.id);
+      if (promotion.granted) {
+        console.info("[kyc] tier 1 granted from the provider enrolment", { userId: auth.id });
       }
 
       // Open the permanent, dedicated NGN deposit account now, using the BVN

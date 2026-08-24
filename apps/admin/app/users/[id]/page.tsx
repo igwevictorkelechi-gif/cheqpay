@@ -107,6 +107,8 @@ type MapleradEnroll = {
   customerId?: string | null;
   tierBefore?: number;
   tier: number;
+  kycTier?: number;
+  kycTierGranted?: boolean;
   missing?: string[];
   account?: { accountNumber: string; bankName: string; accountName?: string } | null;
   accountError?: string | null;
@@ -596,6 +598,16 @@ export default function UserDetailPage() {
                         enroll.tierBefore !== undefined && enroll.tierBefore !== enroll.tier
                           ? `${enroll.tierBefore} → ${enroll.tier}`
                           : enroll.tier
+                      }
+                    />
+                    <Field
+                      label="KYC tier (limits)"
+                      value={
+                        enroll.kycTier === undefined
+                          ? DASH
+                          : enroll.kycTierGranted
+                            ? `${enroll.kycTier} (granted now)`
+                            : enroll.kycTier
                       }
                     />
                     <Field label="Customer" value={show(enroll.customerId)} />

@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
 import { ensureMapleradCustomer, ensureMapleradSchema } from "@/lib/mapleradCustomer";
+import { grantTierFromEnrolment } from "@/lib/kycAutoTier";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 
 export const dynamic = "force-dynamic";
@@ -161,6 +162,11 @@ export async function POST(req: Request, { params }: Ctx) {
       select: { mapleradCustomerId: true, mapleradTier: true },
     });
 
+    // Internal KYC tier (transaction limits) follows the provider's verdict, so
+    // a repaired account is usable rather than holding a NUBAN it is not allowed
+    // to transact on. Only ever raises, and only to 1.
+    const promotion = await grantTierFromEnrolment(id);
+
     // ---- Step 4: the NGN deposit account -----------------------------------
     let account: unknown = null;
     let accountError: string | null = null;
@@ -188,6 +194,8 @@ export async function POST(req: Request, { params }: Ctx) {
       customerId: after?.mapleradCustomerId ?? customerId,
       tierBefore: user.mapleradTier,
       tier: after?.mapleradTier ?? user.mapleradTier,
+      kycTier: promotion.tier,
+      kycTierGranted: promotion.granted,
       account,
       accountError,
       message:
