@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 /**
  * The client logs every Maplerad exchange for diagnosis (see logMaplerad).
@@ -17,8 +17,8 @@ async function load() {
   return import("./client");
 }
 
-let logSpy: ReturnType<typeof vi.spyOn>;
-let errSpy: ReturnType<typeof vi.spyOn>;
+let logSpy: MockInstance<any[], any>;
+let errSpy: MockInstance<any[], any>;
 
 beforeEach(() => {
   logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
