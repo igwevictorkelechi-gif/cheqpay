@@ -87,6 +87,18 @@ type UserDetail = {
   }[];
 };
 
+/** Result of POST /api/maplerad/customers/{id}/sync. */
+type MapleradSync = {
+  customerId: string;
+  snapshotId: string;
+  tier: number;
+  hasTier1Evidence: boolean;
+  accountsFetched: number;
+  linkedUserUpdated: boolean;
+  customer: Record<string, unknown>;
+  accounts: unknown[];
+};
+
 /** Anything not captured shows a dash rather than an empty cell. */
 const DASH = '—';
 function show(v: string | number | null | undefined): string {
@@ -170,6 +182,12 @@ export default function UserDetailPage() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Live Maplerad sync: pull the customer + its accounts from the provider and
+  // snapshot them. Lets an operator test the enrolment result from this page.
+  const [syncing, setSyncing] = useState(false);
+  const [sync, setSync] = useState<MapleradSync | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
   const load = useCallback(() => {
     if (!id) return;
     setLoading(true);
@@ -212,6 +230,25 @@ export default function UserDetailPage() {
     },
     [id, load],
   );
+
+  const syncMaplerad = useCallback(async () => {
+    const cid = data?.kyc.mapleradCustomerId;
+    if (!cid) return;
+    setSyncing(true);
+    setSyncError(null);
+    setSync(null);
+    try {
+      const r = await fetch(`/api/maplerad/customers/${cid}/sync`, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || `Sync failed (${r.status})`);
+      setSync(d as MapleradSync);
+      load(); // tier may have moved; refresh the page data.
+    } catch (e) {
+      setSyncError((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  }, [data, load]);
 
   const u = data?.user;
 
@@ -404,6 +441,56 @@ export default function UserDetailPage() {
                 })}
               </div>
             </div>
+          </section>
+
+          {/* Live provider sync — pull the Maplerad customer + accounts on demand. */}
+          <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Provider (Maplerad)</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {data.kyc.mapleradCustomerId
+                    ? `Fetch GET /customers/${data.kyc.mapleradCustomerId} and its accounts, store a snapshot, and reconcile the tier.`
+                    : 'This user has no Maplerad customer yet — nothing to sync until they enrol.'}
+                </p>
+              </div>
+              <button
+                onClick={syncMaplerad}
+                disabled={!data.kyc.mapleradCustomerId || syncing}
+                className="inline-flex items-center gap-2 rounded-lg border border-brand-500 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {syncing ? 'Syncing…' : 'Sync from Maplerad'}
+              </button>
+            </div>
+
+            {syncError && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {syncError}
+              </div>
+            )}
+
+            {sync && (
+              <>
+                <dl className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <Field label="Tier" value={sync.tier} />
+                  <Field label="Tier-1 evidence" value={sync.hasTier1Evidence ? 'Yes' : 'No'} />
+                  <Field label="Accounts" value={sync.accountsFetched} />
+                  <Field label="User updated" value={sync.linkedUserUpdated ? 'Yes' : 'No'} />
+                </dl>
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Customer (ID number &amp; image redacted)
+                </p>
+                <pre className="mb-4 max-h-72 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-800">
+                  {JSON.stringify(sync.customer, null, 2)}
+                </pre>
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Accounts
+                </p>
+                <pre className="max-h-72 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-800">
+                  {JSON.stringify(sync.accounts, null, 2)}
+                </pre>
+              </>
+            )}
           </section>
 
           {/* Where this account connects from. */}
