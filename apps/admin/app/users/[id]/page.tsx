@@ -99,6 +99,20 @@ type MapleradSync = {
   accounts: unknown[];
 };
 
+/** Result of POST /api/users/{id}/maplerad-enroll. */
+type MapleradEnroll = {
+  userId: string;
+  phoneOutcome: string;
+  enrolled: boolean;
+  customerId?: string | null;
+  tierBefore?: number;
+  tier: number;
+  missing?: string[];
+  account?: { accountNumber: string; bankName: string; accountName?: string } | null;
+  accountError?: string | null;
+  message: string;
+};
+
 /** Anything not captured shows a dash rather than an empty cell. */
 const DASH = '—';
 function show(v: string | number | null | undefined): string {
@@ -188,6 +202,14 @@ export default function UserDetailPage() {
   const [sync, setSync] = useState<MapleradSync | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
 
+  // Repair path: supply the one missing field (the phone) and re-run the
+  // enrolment from data already on file, rather than making the user resubmit
+  // the whole KYC form from a newer client.
+  const [enrollPhone, setEnrollPhone] = useState('');
+  const [enrolling, setEnrolling] = useState(false);
+  const [enroll, setEnroll] = useState<MapleradEnroll | null>(null);
+  const [enrollError, setEnrollError] = useState<string | null>(null);
+
   const load = useCallback(() => {
     if (!id) return;
     setLoading(true);
@@ -249,6 +271,30 @@ export default function UserDetailPage() {
       setSyncing(false);
     }
   }, [data, load]);
+
+  const runEnroll = useCallback(async () => {
+    setEnrolling(true);
+    setEnrollError(null);
+    setEnroll(null);
+    try {
+      const r = await fetch(`/api/users/${id}/maplerad-enroll`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          phone: enrollPhone.trim() || undefined,
+          createAccount: true,
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || d?.message || `Enrol failed (${r.status})`);
+      setEnroll(d as MapleradEnroll);
+      load(); // tier / account may have changed.
+    } catch (e) {
+      setEnrollError((e as Error).message);
+    } finally {
+      setEnrolling(false);
+    }
+  }, [id, enrollPhone, load]);
 
   const u = data?.user;
 
@@ -491,6 +537,87 @@ export default function UserDetailPage() {
                 </pre>
               </>
             )}
+
+            {/* Repair: supply the one missing field and re-run the enrolment
+                from data already on file. An account with a complete BVN, date
+                of birth, ID and address can sit stuck at tier 0 purely because
+                the phone never arrived, and tier 0 gets no NGN account. */}
+            <div className="mt-6 border-t border-gray-200 pt-6">
+              <h3 className="text-sm font-semibold text-gray-900">Enrol / upgrade to tier 1</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Re-runs the enrolment using the BVN, date of birth and address already stored.
+                Supply a phone number if one is missing — that is usually the only thing
+                blocking tier 1, and tier 1 is what issues the NGN account.
+              </p>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                  +234
+                </span>
+                <input
+                  value={enrollPhone}
+                  onChange={(e) => setEnrollPhone(e.target.value)}
+                  inputMode="tel"
+                  placeholder="801 234 5678"
+                  className="w-48 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
+                />
+                <button
+                  onClick={runEnroll}
+                  disabled={enrolling}
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {enrolling ? 'Working…' : 'Enrol / upgrade to tier 1'}
+                </button>
+              </div>
+              <p className="mt-1.5 text-xs text-gray-500">
+                Leave the number blank to retry with whatever is already on file.
+              </p>
+
+              {enrollError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {enrollError}
+                </div>
+              )}
+
+              {enroll && (
+                <div
+                  className={`mt-3 rounded-lg border p-4 text-sm ${
+                    enroll.tier >= 1
+                      ? 'border-green-200 bg-green-50 text-green-800'
+                      : 'border-yellow-200 bg-yellow-50 text-yellow-800'
+                  }`}
+                >
+                  <p className="font-medium">{enroll.message}</p>
+                  <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <Field label="Phone" value={enroll.phoneOutcome} />
+                    <Field
+                      label="Tier"
+                      value={
+                        enroll.tierBefore !== undefined && enroll.tierBefore !== enroll.tier
+                          ? `${enroll.tierBefore} → ${enroll.tier}`
+                          : enroll.tier
+                      }
+                    />
+                    <Field label="Customer" value={show(enroll.customerId)} />
+                    <Field
+                      label="Deposit account"
+                      value={
+                        enroll.account
+                          ? `${enroll.account.accountNumber} · ${enroll.account.bankName}`
+                          : enroll.accountError
+                            ? `Failed: ${enroll.accountError}`
+                            : DASH
+                      }
+                    />
+                  </dl>
+                  {enroll.missing && enroll.missing.length > 0 && (
+                    <p className="mt-3">
+                      Still missing: <strong>{enroll.missing.join(', ')}</strong>
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           </section>
 
           {/* Where this account connects from. */}
