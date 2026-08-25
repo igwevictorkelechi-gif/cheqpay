@@ -56,8 +56,8 @@ const RESIDENCY = [
  * number, employment, residency), and it can require the holder to consent to US
  * banking terms before it activates — surfaced here as a link rather than hidden.
  */
-export default function UsdAccountPanel() {
-  const [open, setOpen] = useState(false);
+export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?: boolean } = {}) {
+  const [open, setOpen] = useState(defaultOpen);
   const [loading, setLoading] = useState(false);
   const [account, setAccount] = useState<UsdAccount | null>(null);
   const [balance, setBalance] = useState<string | null>(null);

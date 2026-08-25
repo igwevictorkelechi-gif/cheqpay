@@ -38,8 +38,8 @@ const RESIDENCY = [
  * is untouched. A USD account needs US-banking KYC the NGN one never asked for,
  * and may require the holder to consent to US banking terms before it activates.
  */
-export default function UsdAccountPanel() {
-  const [open, setOpen] = useState(false);
+export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?: boolean } = {}) {
+  const [open, setOpen] = useState(defaultOpen);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [account, setAccount] = useState<UsdAccount | null>(null);

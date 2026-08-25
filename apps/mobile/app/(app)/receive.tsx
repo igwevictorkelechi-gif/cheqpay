@@ -17,22 +17,41 @@ export default function ReceiveScreen() {
   const [selected, setSelected] = useState<Sym | null>(null);
   const [addresses, setAddresses] = useState<Record<string, string>>({});
   const [netLabels, setNetLabels] = useState<Record<string, string>>({});
+  // Every address per asset, one per chain. A stablecoin exists on several
+  // networks and sending on the wrong one loses the funds, so the chain is an
+  // explicit choice rather than an assumption.
+  const [byAsset, setByAsset] = useState<
+    Record<string, { address: string; network: string; networkLabel: string }[]>
+  >({});
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        // Manual custody: live assets are the ones the admin configured.
+        // Per-user addresses minted by custody, with manual wallets as fallback.
         const { addresses } = await api.getCryptoDepositAddresses();
         const map: Record<string, string> = {};
         const labels: Record<string, string> = {};
+        const grouped: Record<
+          string,
+          { address: string; network: string; networkLabel: string }[]
+        > = {};
         for (const e of addresses) {
-          map[e.asset] = e.address;
-          labels[e.asset] = e.networkLabel;
+          // First address per asset is the default shown.
+          if (!map[e.asset]) {
+            map[e.asset] = e.address;
+            labels[e.asset] = e.networkLabel;
+          }
+          (grouped[e.asset] ??= []).push({
+            address: e.address,
+            network: e.network,
+            networkLabel: e.networkLabel,
+          });
         }
         setAddresses(map);
         setNetLabels(labels);
+        setByAsset(grouped);
       } catch {
         setError('We couldn’t load deposit addresses. Please try again shortly.');
       }
@@ -70,6 +89,43 @@ export default function ReceiveScreen() {
             <Text className="text-ink dark:text-ink-dark text-lg font-bold mt-3">{meta.name}</Text>
             <Text className="text-muted dark:text-muted-dark text-sm">{netLabels[selected] ?? info.networkLabel}</Text>
           </View>
+
+          {/* Network selector — the address differs per chain, so picking one
+              swaps the QR and the address below it. */}
+          {(byAsset[selected]?.length ?? 0) > 1 && (
+            <View className="mt-5">
+              <Text className="text-muted dark:text-muted-dark text-xs font-semibold uppercase mb-2">
+                Network
+              </Text>
+              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+                {byAsset[selected].map((o) => {
+                  const active = o.address === addr;
+                  return (
+                    <TouchableOpacity
+                      key={o.network}
+                      onPress={() => {
+                        setAddresses((m) => ({ ...m, [selected]: o.address }));
+                        setNetLabels((m) => ({ ...m, [selected]: o.networkLabel }));
+                      }}
+                      className="rounded-full px-4 py-2"
+                      style={{ backgroundColor: active ? colors.brand : colors.card }}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={{
+                          color: active ? '#fff' : colors.muted,
+                          fontSize: 13,
+                          fontWeight: '700',
+                        }}
+                      >
+                        {o.networkLabel}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
           <View className="items-center mt-6">
             <View className="bg-white rounded-3xl p-5">
@@ -110,14 +166,14 @@ export default function ReceiveScreen() {
           </View>
 
           <View className="rounded-2xl overflow-hidden mt-6" style={{ backgroundColor: colors.card }}>
-            <DetailRow label="Network" value={info.networkLabel} />
+            <DetailRow label="Network" value={netLabels[selected] ?? info.networkLabel} />
             <DetailRow label="Minimum deposit" value={`${info.minSend} ${selected}`} bordered />
           </View>
 
           <View className="rounded-2xl p-4 mt-6 flex-row" style={{ backgroundColor: 'rgba(245,166,35,0.1)', borderWidth: 1, borderColor: 'rgba(245,166,35,0.3)' }}>
             <Ionicons name="warning-outline" size={20} color="#F5A623" />
             <Text className="text-xs ml-3 flex-1" style={{ color: '#F5C97B', lineHeight: 18 }}>
-              Send only {selected} on the {info.networkLabel} network to this address. Using the wrong
+              Send only {selected} on the {netLabels[selected] ?? info.networkLabel} network to this address. Using the wrong
               coin or network will result in permanent loss of funds.
             </Text>
           </View>

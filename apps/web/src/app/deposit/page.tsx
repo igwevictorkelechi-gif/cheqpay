@@ -117,7 +117,7 @@ export default function AddMoneyPage() {
 
             <div className="mt-auto pt-6">
               <button
-                onClick={() => router.push("/virtual-account")}
+                onClick={() => router.push("/usd-account")}
                 className="w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white shadow-lg shadow-brand/30 active:scale-[0.98]"
               >
                 {usdAccount ? "Check status" : "Verify my dollar account"}
@@ -176,7 +176,7 @@ export default function AddMoneyPage() {
                 disabled={!valid}
                 onClick={() =>
                   router.push(
-                    isUsd ? "/virtual-account" : `/virtual-account?amount=${digits}`
+                    isUsd ? "/usd-account" : `/virtual-account?amount=${digits}`
                   )
                 }
                 className="w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white shadow-lg shadow-brand/30 active:scale-[0.98] disabled:opacity-50"

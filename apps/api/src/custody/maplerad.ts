@@ -25,27 +25,12 @@ import type {
  * for every valid coin/chain pair — their bug, ticket-worthy. The request
  * contract itself is confirmed: invalid pairs get proper validation errors.
  *
- * DISABLED PENDING A CHAIN FIX: both pairs below are ERC-20, and Maplerad's
- * withdrawal endpoint documents Solana as its only destination chain, so neither
- * pair can currently complete a round trip. See COIN_CHAIN. Nothing observable
- * changes today — address creation is broken provider-side regardless — but the
- * guard means the trap cannot open the moment their bug is fixed.
+ * CHAINS: addresses can be minted on all six chains POST /crypto documents, but
+ * POST /crypto/transfer accepts only Solana. Holding coin anywhere else would be
+ * a one-way trip, so a non-Solana address is minted only as an offramp address
+ * (arrivals convert to USD). See COIN_CHAIN and DEFAULT_OFFRAMP.
  */
 
-/**
- * Asset/network pairs Maplerad can custody, and the API names they map to.
- *
- * `withdrawable` is the important column. POST /crypto (address generation)
- * documents six chains — solana, base, polygon, eth, tron, bsc — but
- * POST /crypto/transfer (withdrawal) documents exactly one: solana. A pair that
- * can receive but cannot send is a trap: the user's money arrives and has no
- * documented way out, and they only discover it at the moment they try to
- * leave. So the flag gates address creation too, not just withdrawal.
- *
- * To widen this, run ONE sandbox withdrawal on the chain in question and
- * confirm it is accepted. Do not widen it because address generation accepted
- * the chain — that is the very mismatch this guards.
- */
 /**
  * The chains POST /crypto accepts, and whether POST /crypto/transfer documents
  * each as a withdrawal destination. Solana is the only `withdrawable: true`
@@ -126,7 +111,7 @@ export class MapleradCustodyProvider implements CustodyProvider {
     userId: string;
     asset: Asset;
     network: Network;
-    /** Auto-convert arrivals to USD. Defaults to DEFAULT_OFFRAMP (true). */
+    /** Auto-convert arrivals to USD. Defaults to DEFAULT_OFFRAMP (false). */
     offramp?: boolean;
   }): Promise<DepositAddress> {
     const pair = COIN_CHAIN[input.asset]?.[input.network];

@@ -35,6 +35,14 @@ export default function ReceiveDetailPage() {
   // deposit wallet; otherwise it renders as "Coming soon".
   const [notLive, setNotLive] = useState(false);
   const [netLabel, setNetLabel] = useState<string | null>(null);
+  // Every address this user holds for the asset, one per chain, plus the chains
+  // they could still mint. A stablecoin exists on several networks and sending
+  // on the wrong one loses the funds, so the choice is explicit and visible.
+  const [options, setOptions] = useState<
+    { address: string; network: string; networkLabel: string }[]
+  >([]);
+  const [mintable, setMintable] = useState<{ network: string; label: string }[]>([]);
+  const [minting, setMinting] = useState<string | null>(null);
 
   useEffect(() => {
     if (!meta) {
@@ -49,12 +57,17 @@ export default function ReceiveDetailPage() {
     setNotLive(false);
     (async () => {
       try {
-        const { addresses } = await api.getCryptoDepositAddresses();
+        const { addresses, networks } = await api.getCryptoDepositAddresses();
         if (!active) return;
-        const entry = addresses.find((x) => x.asset === meta.symbol);
-        if (entry) {
-          setAddress(entry.address);
-          setNetLabel(entry.networkLabel);
+        const mine = addresses.filter((x) => x.asset === meta.symbol);
+        setOptions(mine);
+        // Chains with no address yet — offered as "generate" so a user is never
+        // stuck because their preferred network was added after they signed up.
+        const have = new Set(mine.map((m) => m.network));
+        setMintable((networks ?? []).filter((n) => !have.has(n.network)));
+        if (mine.length > 0) {
+          setAddress(mine[0].address);
+          setNetLabel(mine[0].networkLabel);
         } else {
           setNotLive(true);
         }
@@ -97,6 +110,26 @@ export default function ReceiveDetailPage() {
         .catch(() => undefined);
     } else {
       copy();
+    }
+  }
+
+  /** Mint an address on a chain the user does not have yet. */
+  async function generate(network: string) {
+    if (!meta) return;
+    setMinting(network);
+    setError(null);
+    try {
+      await api.createWallet(meta.symbol, network);
+      // Re-read rather than trusting the POST response shape.
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setError(
+        e instanceof ApiError
+          ? e.message
+          : "We couldn’t create that address. Please try again."
+      );
+    } finally {
+      setMinting(null);
     }
   }
 
@@ -172,6 +205,48 @@ export default function ReceiveDetailPage() {
           <p className="mt-3 text-lg font-bold text-ink">{meta.name}</p>
           <p className="text-sm text-muted">{netLabel ?? meta.networkLabel}</p>
         </div>
+
+        {/* Network selector. A stablecoin lives on several chains and the
+            address differs per chain, so the choice is explicit — picking one
+            swaps the QR and the address below it. */}
+        {(options.length > 1 || mintable.length > 0) && (
+          <div className="mt-5">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+              Network
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {options.map((o) => {
+                const active = o.address === address;
+                return (
+                  <button
+                    key={o.network}
+                    onClick={() => {
+                      setAddress(o.address);
+                      setNetLabel(o.networkLabel);
+                    }}
+                    className={`rounded-full px-4 py-2 text-sm font-bold transition-colors ${
+                      active
+                        ? "bg-brand text-white"
+                        : "bg-card text-muted hover:text-ink"
+                    }`}
+                  >
+                    {o.networkLabel}
+                  </button>
+                );
+              })}
+              {mintable.map((n) => (
+                <button
+                  key={n.network}
+                  onClick={() => generate(n.network)}
+                  disabled={minting !== null}
+                  className="rounded-full border border-dashed border-border px-4 py-2 text-sm font-semibold text-muted hover:text-ink disabled:opacity-50"
+                >
+                  {minting === n.network ? "Creating…" : `+ ${n.label}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* QR */}
         <div className="mt-6 flex justify-center">

@@ -59,7 +59,7 @@ export default function AddMoneyScreen() {
     // front, so go straight to the funding details.
     router.push(
       isUsd
-        ? '/(app)/virtual-account'
+        ? '/(app)/usd-account'
         : { pathname: '/(app)/virtual-account', params: { amount: digits } },
     );
   }
@@ -119,7 +119,7 @@ export default function AddMoneyScreen() {
 
           <View className="flex-1 justify-end">
             <TouchableOpacity
-              onPress={() => router.push('/(app)/virtual-account')}
+              onPress={() => router.push('/(app)/usd-account')}
               className="rounded-full py-4 items-center"
               style={{ backgroundColor: colors.brand }}
               activeOpacity={0.85}
