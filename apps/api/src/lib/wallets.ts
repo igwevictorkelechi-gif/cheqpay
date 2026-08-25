@@ -18,7 +18,13 @@ export interface WalletView {
 export async function provisionWallets(
   userId: string,
   /** Which pairs to mint. Defaults to the auto-provisioned launch set. */
-  pairs: ReadonlyArray<{ asset: Asset; network: Network }> = SUPPORTED_WALLETS
+  pairs: ReadonlyArray<{ asset: Asset; network: Network }> = SUPPORTED_WALLETS,
+  /**
+   * Convert arrivals to USD instead of crediting the coin. Off by default, so a
+   * wallet holds real crypto; only Solana can be minted that way (it is the one
+   * chain POST /crypto/transfer accepts). Pass true to mint on another chain.
+   */
+  offramp?: boolean
 ): Promise<WalletView[]> {
   // While crypto deposits are switched off (compliance / provider blockers),
   // don't create on-chain addresses at all — an address nobody may use is
@@ -53,7 +59,7 @@ export async function provisionWallets(
 
     let provisioned: { address: string; custodyRef: string };
     try {
-      provisioned = await custody.createDepositAddress({ userId, asset, network });
+      provisioned = await custody.createDepositAddress({ userId, asset, network, offramp });
     } catch (err) {
       console.error(
         `[wallets] custody provisioning failed for ${asset}/${network} (will retry)`,

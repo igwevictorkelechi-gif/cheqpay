@@ -79,19 +79,19 @@ export const COIN_CHAIN: Partial<
 );
 
 /**
- * Deposits auto-convert to USD by default.
+ * Deposits are credited as the coin itself, not converted to USD.
  *
- * This is what makes the non-Solana chains safe to offer. The hazard with a
- * receive-only chain is that a user's crypto arrives and has no documented way
- * out. With offramp on, the deposit is converted to USD by the provider on
- * arrival — it is never *held* as crypto on that chain, so there is nothing
- * stranded and nothing to withdraw on-chain. The user's exit is their USD
- * balance, which the convert engine already reaches.
+ * With offramp OFF the user really holds the stablecoin, which is the point of
+ * a crypto wallet — so the withdrawable guard applies in full and only Solana
+ * can be minted. That is not a limitation we invented: POST /crypto/transfer's
+ * `chain` enum is exactly ["solana"], so Solana is the only chain a user could
+ * ever send from.
  *
- * Turning offramp OFF means the user really does hold the coin, and the
- * withdrawable guard applies in full.
+ * Callers that genuinely want another chain must opt into offramp explicitly,
+ * which converts the arrival to USD — the user never holds coin on a chain we
+ * cannot send from, so nothing can be stranded.
  */
-export const DEFAULT_OFFRAMP = true;
+export const DEFAULT_OFFRAMP = false;
 
 /**
  * Both halves of the trap say the same thing, so they say it once. Named for
@@ -211,11 +211,18 @@ export class MapleradCustodyProvider implements CustodyProvider {
       throw oneWayChain(input.asset, input.network, pair.chain);
     }
 
+    // The provider's own dedupe key, documented on POST /crypto/transfer as "a
+    // unique identifier for the transaction". Same value as the header so both
+    // mechanisms agree on what "the same withdrawal" means: a retry of this
+    // transfer reuses it and cannot double-send.
+    const reference = `${input.userId}:${input.toAddress}:${cents}`;
+
     const transfer = await mapleradRequest<MapleradCryptoTransfer>("/crypto/transfer", {
       method: "POST",
-      idempotencyKey: `${input.userId}:${input.toAddress}:${cents}`,
+      idempotencyKey: reference,
       body: {
         amount: cents,
+        reference,
         address: input.toAddress,
         chain: pair.chain,
         coin: pair.coin.toLowerCase(),

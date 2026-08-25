@@ -76,10 +76,11 @@ afterEach(() => {
 });
 
 describe("MapleradCustodyProvider", () => {
-  it("refuses a NON-offramp address on a chain it could not withdraw from", async () => {
+  it("refuses a non-Solana chain BY DEFAULT — the user would hold unsendable coin", async () => {
     // The trap this guards: POST /crypto mints on eth happily, POST
-    // /crypto/transfer documents solana only. Holding coin there would take a
-    // user's money and have no documented way to give it back.
+    // /crypto/transfer's chain enum is exactly ["solana"]. Holding coin there
+    // would take a user's money and have no documented way to give it back.
+    // offramp is off by default, so no flag is passed here.
     findUnique.mockResolvedValue({ mapleradCustomerId: "cust-1" });
     const sent = stubFetch({ id: "addr-1", address: "0xabc", chain: "eth", coin: "USDT" });
     const psp = await makeProvider();
@@ -89,7 +90,6 @@ describe("MapleradCustodyProvider", () => {
         userId: "u1",
         asset: "USDT" as never,
         network: "ETHEREUM" as never,
-        offramp: false,
       })
     ).rejects.toThrow(/does not document as a withdrawal destination/);
 
@@ -97,7 +97,7 @@ describe("MapleradCustodyProvider", () => {
     expect(sent).toHaveLength(0);
   });
 
-  it("allows an offramp address on the same chain — nothing is held as coin", async () => {
+  it("allows an offramp address on that same chain — nothing is held as coin", async () => {
     // With offramp the deposit becomes USD on arrival, so there is no coin
     // stranded on an unsendable chain and the guard does not apply.
     findUnique.mockResolvedValue({ mapleradCustomerId: "cust-1" });
@@ -115,7 +115,7 @@ describe("MapleradCustodyProvider", () => {
     expect(sent[0].body).toMatchObject({ chain: "eth", coin: "USDT", offramp: true });
   });
 
-  it("offramps by default, so every documented chain can be minted", async () => {
+  it("mints every documented chain when the caller opts into offramp", async () => {
     findUnique.mockResolvedValue({ mapleradCustomerId: "cust-1" });
     const sent = stubFetch({ id: "addr-1", address: "0xabc" });
     const psp = await makeProvider();
@@ -128,27 +128,27 @@ describe("MapleradCustodyProvider", () => {
       ["TRON", "tron"],
       ["BSC", "bsc"],
     ]) {
-      // No `offramp` passed — the default must carry it.
       await psp.createDepositAddress({
         userId: "u1",
         asset: "USDC" as never,
         network: network as never,
+        offramp: true,
       });
       expect(sent.at(-1)!.body).toMatchObject({ chain, coin: "USDC", offramp: true });
     }
     expect(sent).toHaveLength(6);
   });
 
-  it("mints a non-offramp address on solana, the one withdrawable chain", async () => {
+  it("mints solana by default, holding real coin the user can withdraw", async () => {
     findUnique.mockResolvedValue({ mapleradCustomerId: "cust-1" });
     const sent = stubFetch({ id: "addr-2", address: "BvH5k" });
     const psp = await makeProvider();
 
+    // No `offramp` passed — the default (false) must carry through.
     const a = await psp.createDepositAddress({
       userId: "u1",
       asset: "USDT" as never,
       network: "SOLANA" as never,
-      offramp: false,
     });
 
     expect(a).toEqual({ address: "BvH5k", custodyRef: "addr-2" });
@@ -254,6 +254,9 @@ describe("MapleradCustodyProvider", () => {
     expect(sent[0].url).toContain("/crypto/transfer");
     expect(sent[0].body).toEqual({
       amount: 2550, // $25.50 in cents — never dollars, never 6dp token units
+      // The provider's documented dedupe key: a retry of this same withdrawal
+      // reuses it and cannot double-send.
+      reference: "u1:0xdead:2550",
       address: "0xdead",
       chain: "eth",
       coin: "usdc", // lower-case: the transfer endpoint's enum, not /crypto's

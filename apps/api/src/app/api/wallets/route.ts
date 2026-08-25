@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
     // Body is optional: an empty/absent body keeps the original behaviour.
     const body = (await req.json().catch(() => null)) as
-      | { asset?: string; network?: string }
+      | { asset?: string; network?: string; offramp?: boolean }
       | null;
 
     if (body?.asset || body?.network) {
@@ -51,7 +51,11 @@ export async function POST(req: Request) {
           "bad_pair",
         );
       }
-      return jsonOk({ wallets: await provisionWallets(auth.id, [{ asset, network }]) });
+      // A non-Solana chain is only mintable as an offramp address — the custody
+      // layer refuses otherwise, since the user could never send from it.
+      return jsonOk({
+        wallets: await provisionWallets(auth.id, [{ asset, network }], body.offramp),
+      });
     }
 
     return jsonOk({ wallets: await provisionWallets(auth.id) });
