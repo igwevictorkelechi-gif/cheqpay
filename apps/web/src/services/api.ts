@@ -168,6 +168,24 @@ export interface UsdAccountStatus {
   accountId?: string;
 }
 
+export interface UsdWireInstruction {
+  type: string;
+  routingNumber: string;
+  bankName: string;
+  accountType: string;
+  accountNumber: string;
+  accountName: string;
+  memo: string;
+  swiftCode: string;
+}
+
+export interface UsdWireDetails {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  instructions: UsdWireInstruction[];
+}
+
 export interface BillBiller {
   id: string;
   name: string;
@@ -369,6 +387,11 @@ export const api = {
   /** Check the approval status of the USD account request (null if not pollable). */
   getUsdAccountStatus(): Promise<{ usdStatus: UsdAccountStatus | null }> {
     return apiFetch("/api/virtual-accounts/usd/status");
+  },
+
+  /** ACH/FEDWIRE/SWIFT wire instructions for the USD account (null if none). */
+  getUsdAccountWire(): Promise<{ wire: UsdWireDetails | null }> {
+    return apiFetch("/api/virtual-accounts/usd/wire");
   },
 
   getPrice(asset: AssetSymbol): Promise<MarketPrice> {

@@ -11,7 +11,13 @@ import {
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/components/brand';
-import { api, ApiError, type UsdAccount, type UsdAccountStatus } from '@/services/api';
+import {
+  api,
+  ApiError,
+  type UsdAccount,
+  type UsdAccountStatus,
+  type UsdWireDetails,
+} from '@/services/api';
 
 const EMPLOYMENT = [
   { value: 'EMPLOYED', label: 'Employed' },
@@ -42,6 +48,9 @@ export default function UsdAccountPanel() {
   const [status, setStatus] = useState<UsdAccountStatus | null>(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [wire, setWire] = useState<UsdWireDetails | null>(null);
+  const [wireLoading, setWireLoading] = useState(false);
+  const [wireError, setWireError] = useState<string | null>(null);
 
   const [idNumber, setIdNumber] = useState('');
   const [employmentStatus, setEmploymentStatus] = useState('EMPLOYED');
@@ -128,6 +137,24 @@ export default function UsdAccountPanel() {
       setStatusError(e instanceof ApiError ? e.message : 'Could not check the status.');
     } finally {
       setCheckingStatus(false);
+    }
+  }
+
+  async function loadWire() {
+    if (wire) {
+      setWire(null);
+      return;
+    }
+    setWireError(null);
+    setWireLoading(true);
+    try {
+      const { wire: w } = await api.getUsdAccountWire();
+      if (w && w.instructions.length > 0) setWire(w);
+      else setWireError('Wire details are not available for this account yet.');
+    } catch (e) {
+      setWireError(e instanceof ApiError ? e.message : 'Could not load wire details.');
+    } finally {
+      setWireLoading(false);
     }
   }
 
@@ -251,6 +278,56 @@ export default function UsdAccountPanel() {
                   <Ionicons name="open-outline" size={16} color="#B45309" style={{ marginLeft: 6 }} />
                 </TouchableOpacity>
               ) : null}
+
+              {/* Wire / international transfer details (ACH / FEDWIRE / SWIFT). */}
+              <View className="mt-4 pt-4" style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
+                <TouchableOpacity onPress={loadWire} disabled={wireLoading}>
+                  <Text style={{ color: colors.brand, fontWeight: '700', opacity: wireLoading ? 0.5 : 1 }}>
+                    {wireLoading
+                      ? 'Loading…'
+                      : wire
+                        ? 'Hide wire details'
+                        : 'Show wire / international transfer details'}
+                  </Text>
+                </TouchableOpacity>
+                {wire
+                  ? wire.instructions.map((ins, i) => (
+                      <View
+                        key={i}
+                        className="rounded-2xl p-3 mt-3"
+                        style={{ backgroundColor: colors.surface }}
+                      >
+                        <Text style={{ color: colors.brand, fontWeight: '700', fontSize: 11 }}>
+                          {ins.type}
+                        </Text>
+                        {[
+                          ['Bank', ins.bankName],
+                          ['Account name', ins.accountName],
+                          ['Account number', ins.accountNumber],
+                          ['Routing', ins.routingNumber],
+                          ['SWIFT', ins.swiftCode],
+                          ['Account type', ins.accountType],
+                          ['Memo', ins.memo],
+                        ]
+                          .filter(([, v]) => v)
+                          .map(([label, v]) => (
+                            <View key={label} className="flex-row justify-between mt-1.5" style={{ gap: 12 }}>
+                              <Text style={{ color: colors.muted, fontSize: 12 }}>{label}</Text>
+                              <TouchableOpacity onPress={() => copy(String(v))} style={{ flexShrink: 1 }}>
+                                <Text
+                                  className="text-ink dark:text-ink-dark"
+                                  style={{ fontSize: 12, fontWeight: '600', textAlign: 'right' }}
+                                >
+                                  {v}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          ))}
+                      </View>
+                    ))
+                  : null}
+                {wireError ? <Text style={{ color: '#EF4444', marginTop: 8 }}>{wireError}</Text> : null}
+              </View>
 
               {/* Application status — Maplerad reviews the KYC before approval. */}
               <View className="mt-4 pt-4" style={{ borderTopWidth: 1, borderTopColor: colors.border }}>

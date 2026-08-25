@@ -103,6 +103,22 @@ export interface UsdAccountStatus {
   kycLink?: string | null;
   accountId?: string;
 }
+export interface UsdWireInstruction {
+  type: string;
+  routingNumber: string;
+  bankName: string;
+  accountType: string;
+  accountNumber: string;
+  accountName: string;
+  memo: string;
+  swiftCode: string;
+}
+export interface UsdWireDetails {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  instructions: UsdWireInstruction[];
+}
 export interface Quote {
   quoteId: string;
   side: 'buy' | 'sell' | 'convert';
@@ -397,6 +413,10 @@ export const api = {
 
   getUsdAccountStatus(): Promise<{ usdStatus: UsdAccountStatus | null }> {
     return apiFetch('/api/virtual-accounts/usd/status');
+  },
+
+  getUsdAccountWire(): Promise<{ wire: UsdWireDetails | null }> {
+    return apiFetch('/api/virtual-accounts/usd/wire');
   },
 
   getBillCatalog(): Promise<{ services: BillServiceConfig[] }> {

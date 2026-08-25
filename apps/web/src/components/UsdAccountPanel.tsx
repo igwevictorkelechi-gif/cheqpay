@@ -2,7 +2,37 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, DollarSign, ExternalLink, Loader2, RefreshCw } from "lucide-react";
-import { api, ApiError, type UsdAccount, type UsdAccountStatus } from "@/services/api";
+import {
+  api,
+  ApiError,
+  type UsdAccount,
+  type UsdAccountStatus,
+  type UsdWireDetails,
+} from "@/services/api";
+
+function WireRow({
+  label,
+  value,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  onCopy?: () => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="shrink-0 text-muted">{label}</dt>
+      <dd className="flex items-center gap-1.5 text-right font-semibold text-ink">
+        <span className="break-all">{value}</span>
+        {onCopy && (
+          <button onClick={onCopy} className="shrink-0 text-muted hover:text-ink" aria-label={`Copy ${label}`}>
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </dd>
+    </div>
+  );
+}
 
 const EMPLOYMENT = [
   { value: "EMPLOYED", label: "Employed" },
@@ -37,6 +67,9 @@ export default function UsdAccountPanel() {
   const [status, setStatus] = useState<UsdAccountStatus | null>(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [wire, setWire] = useState<UsdWireDetails | null>(null);
+  const [wireLoading, setWireLoading] = useState(false);
+  const [wireError, setWireError] = useState<string | null>(null);
 
   // Form state.
   const [idNumber, setIdNumber] = useState("");
@@ -129,6 +162,24 @@ export default function UsdAccountPanel() {
     }
   }
 
+  async function loadWire() {
+    if (wire) {
+      setWire(null); // toggle closed
+      return;
+    }
+    setWireError(null);
+    setWireLoading(true);
+    try {
+      const { wire: w } = await api.getUsdAccountWire();
+      if (w && w.instructions.length > 0) setWire(w);
+      else setWireError("Wire details are not available for this account yet.");
+    } catch (e) {
+      setWireError(e instanceof ApiError ? e.message : "Could not load wire details.");
+    } finally {
+      setWireLoading(false);
+    }
+  }
+
   // A green pill for APPROVED, amber for anything still in review.
   const statusTone = (s: string) =>
     /approv|active|success/i.test(s)
@@ -217,6 +268,44 @@ export default function UsdAccountPanel() {
               {account.status && !account.consentRequired && (
                 <p className="mt-3 text-xs text-muted">Status: {account.status}</p>
               )}
+
+              {/* Wire / international transfer details (ACH / FEDWIRE / SWIFT). */}
+              <div className="mt-4 border-t border-border pt-4">
+                <button
+                  onClick={loadWire}
+                  disabled={wireLoading}
+                  className="text-sm font-bold text-brand disabled:opacity-50"
+                >
+                  {wireLoading
+                    ? "Loading…"
+                    : wire
+                      ? "Hide wire details"
+                      : "Show wire / international transfer details"}
+                </button>
+                {wire && (
+                  <div className="mt-3 space-y-3">
+                    {wire.instructions.map((ins, i) => (
+                      <div key={i} className="rounded-2xl bg-surface p-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-brand">{ins.type}</p>
+                        <dl className="mt-2 space-y-1 text-sm">
+                          <WireRow label="Bank" value={ins.bankName} />
+                          <WireRow label="Account name" value={ins.accountName} />
+                          <WireRow label="Account number" value={ins.accountNumber} onCopy={() => copy(ins.accountNumber)} />
+                          {ins.routingNumber && (
+                            <WireRow label="Routing" value={ins.routingNumber} onCopy={() => copy(ins.routingNumber)} />
+                          )}
+                          {ins.swiftCode && (
+                            <WireRow label="SWIFT" value={ins.swiftCode} onCopy={() => copy(ins.swiftCode)} />
+                          )}
+                          {ins.accountType && <WireRow label="Account type" value={ins.accountType} />}
+                          {ins.memo && <WireRow label="Memo" value={ins.memo} />}
+                        </dl>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {wireError && <p className="mt-2 text-xs text-red-400">{wireError}</p>}
+              </div>
 
               {/* Application status — Maplerad reviews the KYC before approval. */}
               <div className="mt-4 border-t border-border pt-4">

@@ -7,6 +7,7 @@ import {
   cryptoToNgnKobo,
   effectivePrice,
   fiatUsdtPrice,
+  isNgnUsdPair,
 } from "./rates";
 
 const D = (v: string | number) => new Prisma.Decimal(v);
@@ -145,6 +146,18 @@ describe("classifySwap", () => {
     expect(classifySwap(Asset.USD, Asset.BTC)).toBe("convert");
     expect(classifySwap(Asset.BTC, Asset.USD)).toBe("convert");
     expect(classifySwap(Asset.BTC, Asset.USDT)).toBe("convert");
+  });
+});
+
+describe("isNgnUsdPair", () => {
+  it("is true only for NGN↔USD in either direction", () => {
+    expect(isNgnUsdPair(Asset.NGN, Asset.USD)).toBe(true);
+    expect(isNgnUsdPair(Asset.USD, Asset.NGN)).toBe(true);
+  });
+  it("is false for any pair with a crypto leg", () => {
+    expect(isNgnUsdPair(Asset.USD, Asset.BTC)).toBe(false);
+    expect(isNgnUsdPair(Asset.NGN, Asset.USDT)).toBe(false);
+    expect(isNgnUsdPair(Asset.BTC, Asset.USDT)).toBe(false);
   });
 });
 

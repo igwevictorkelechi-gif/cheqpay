@@ -2,6 +2,7 @@ import { Asset, Network, Prisma, prisma } from "@cheqpay/db";
 import {
   checkUsdAccountRequestStatus,
   createUsdAccount,
+  getVirtualAccountById,
   type UsdAccountMeta,
 } from "./maplerad/accounts";
 import { ensureUsdAsset } from "./ensureUsdAsset";
@@ -185,5 +186,57 @@ export async function checkUsdAccountStatus(
     currency: s.currency,
     kycLink: s.kyc_link ?? null,
     accountId: s.account_id,
+  };
+}
+
+/** One wire rail (ACH/FEDWIRE/SWIFT) the user can be paid on. */
+export interface UsdWireInstruction {
+  type: string;
+  routingNumber: string;
+  bankName: string;
+  accountType: string;
+  accountNumber: string;
+  accountName: string;
+  memo: string;
+  swiftCode: string;
+}
+
+export interface UsdWireDetails {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  instructions: UsdWireInstruction[];
+}
+
+/**
+ * The full wire instructions for the user's USD account (ACH/FEDWIRE/SWIFT), so
+ * they can receive international transfers. Fetched fresh from Maplerad by
+ * account id; returns null when the user has no USD account. `instructions` may
+ * be empty on an account that has not yet been provisioned with wire rails.
+ */
+export async function getUsdAccountWire(userId: string): Promise<UsdWireDetails | null> {
+  const w = await prisma.wallet.findUnique({
+    where: { userId_asset_network: { userId, asset: Asset.USD, network: Network.FIAT } },
+  });
+  if (!w) return null;
+
+  const meta = parseMeta(w.custodyRef);
+  if (!meta.providerRef) return null;
+
+  const account = await getVirtualAccountById(meta.providerRef);
+  return {
+    bankName: account.bank_name,
+    accountNumber: account.account_number,
+    accountName: account.account_name,
+    instructions: (account.iban ?? []).map((i) => ({
+      type: i.instruction_type,
+      routingNumber: i.routing_number,
+      bankName: i.bank_name,
+      accountType: i.account_type,
+      accountNumber: i.account_number,
+      accountName: i.account_name,
+      memo: i.memo,
+      swiftCode: i.swift_code,
+    })),
   };
 }

@@ -40,6 +40,18 @@ export function classifySwap(fromAsset: Asset, toAsset: Asset): "buy" | "sell" |
 }
 
 /**
+ * True for a NGN↔USD pair (in either direction). This is the one pair Maplerad's
+ * FX rail settles, so it is priced and executed against real FX rather than the
+ * synthetic USDT peg used for crypto legs.
+ */
+export function isNgnUsdPair(fromAsset: Asset, toAsset: Asset): boolean {
+  return (
+    (fromAsset === Asset.NGN && toAsset === Asset.USD) ||
+    (fromAsset === Asset.USD && toAsset === Asset.NGN)
+  );
+}
+
+/**
  * Effective NGN price per 1 whole crypto unit, with the business spread applied.
  * Buy = user pays a premium (mid × (1+s)); Sell = user receives less (mid × (1-s)).
  */
