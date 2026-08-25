@@ -34,7 +34,17 @@ const config: Config = {
         info: "#3B82F6",
       },
       fontFamily: {
-        sans: ["system-ui", "sans-serif"],
+        // The fallbacks matter: `font-display: swap` means the first paint uses
+        // one of these, so they are ordered to be the closest thing each OS has
+        // to Jakarta rather than whatever `sans-serif` resolves to.
+        sans: [
+          '"Plus Jakarta Sans"',
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Roboto",
+          "sans-serif",
+        ],
       },
     },
   },
