@@ -36,9 +36,12 @@ enum Asset {
 enum Network {
   FIAT // NGN
   BITCOIN // BTC
-  TRON // USDT TRC-20 (launch default)
-  BSC // USDT BEP-20 (future)
-  ETHEREUM // USDT ERC-20 (future)
+  TRON // USDT TRC-20
+  BSC // USDT BEP-20
+  ETHEREUM // USDT/USDC ERC-20
+  SOLANA // USDT/USDC SPL — the only chain Maplerad documents for withdrawal
+  BASE // USDT/USDC on Base
+  POLYGON // USDT/USDC on Polygon
 }
 
 enum UserStatus {

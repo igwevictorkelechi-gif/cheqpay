@@ -1,8 +1,35 @@
 /** Crypto assets the backend custodies (launch set). */
+/** The chains Maplerad mints stablecoin addresses on. */
+export type CryptoNetwork =
+  | "SOLANA"
+  | "BASE"
+  | "POLYGON"
+  | "ETHEREUM"
+  | "TRON"
+  | "BSC"
+  | "BITCOIN";
+
+/**
+ * Chains a user can receive USDT/USDC on, in the order they are offered.
+ *
+ * Solana is first and is the default: it is the only chain Maplerad documents
+ * for withdrawal as well as deposit. Deposits on the others auto-convert to USD
+ * on arrival (offramp), so the user is never left holding coin on a chain we
+ * cannot send from — which is what makes offering them safe.
+ */
+export const CRYPTO_NETWORKS: { network: CryptoNetwork; label: string; offramp: boolean }[] = [
+  { network: "SOLANA", label: "Solana (SPL)", offramp: false },
+  { network: "BASE", label: "Base", offramp: true },
+  { network: "POLYGON", label: "Polygon", offramp: true },
+  { network: "ETHEREUM", label: "Ethereum (ERC-20)", offramp: true },
+  { network: "TRON", label: "Tron (TRC-20)", offramp: true },
+  { network: "BSC", label: "BNB Smart Chain (BEP-20)", offramp: true },
+];
+
 export interface CryptoAssetMeta {
   symbol: "BTC" | "USDT" | "USDC";
   name: string;
-  network: "BITCOIN" | "TRON" | "ETHEREUM" | "BSC";
+  network: CryptoNetwork;
   networkLabel: string;
   color: string;
   glyph: string;
@@ -24,9 +51,9 @@ export const CRYPTO_ASSETS: CryptoAssetMeta[] = [
   {
     symbol: "USDT",
     name: "Tether",
-    // Maplerad custody mints ERC-20 addresses; it has no TRON product.
-    network: "ETHEREUM",
-    networkLabel: "Ethereum (ERC-20)",
+    // Default chain: the one Maplerad documents for withdrawal too.
+    network: "SOLANA",
+    networkLabel: "Solana (SPL)",
     color: "#26A17B",
     glyph: "₮",
     minSend: "2",
@@ -35,8 +62,8 @@ export const CRYPTO_ASSETS: CryptoAssetMeta[] = [
   {
     symbol: "USDC",
     name: "USD Coin",
-    network: "ETHEREUM",
-    networkLabel: "Ethereum (ERC-20)",
+    network: "SOLANA",
+    networkLabel: "Solana (SPL)",
     color: "#2775CA",
     glyph: "$",
     minSend: "2",

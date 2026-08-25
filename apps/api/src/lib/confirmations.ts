@@ -10,6 +10,12 @@ export const MIN_CONFIRMATIONS: Record<Network, number> = {
   [Network.TRON]: 20,
   [Network.BSC]: 15,
   [Network.ETHEREUM]: 12,
+  // Fast-finality chains. Solana finalizes in ~1 slot and Base/Polygon settle in
+  // seconds, so the deep counts used for Ethereum would only add latency; these
+  // are the thresholds their own explorers treat as settled.
+  [Network.SOLANA]: 1,
+  [Network.BASE]: 5,
+  [Network.POLYGON]: 30,
   [Network.FIAT]: 0,
 };
 

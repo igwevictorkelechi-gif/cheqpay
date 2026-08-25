@@ -138,7 +138,10 @@ export type ReviewActionInput = z.infer<typeof reviewActionSchema>;
 /** Request a crypto withdrawal to an external address. */
 export const cryptoWithdrawalSchema = z.object({
   asset: z.enum(["BTC", "USDT", "USDC"]),
-  network: z.enum(["BITCOIN", "TRON", "ETHEREUM", "BSC"]),
+  // Every chain we can hold coin on. Which of them can actually be sent from is
+  // enforced by the custody layer's withdrawable guard, not here — this is only
+  // the shape check.
+  network: z.enum(["BITCOIN", "TRON", "ETHEREUM", "BSC", "SOLANA", "BASE", "POLYGON"]),
   toAddress: z.string().min(20).max(120),
   amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount"),
 });

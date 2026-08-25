@@ -46,12 +46,52 @@ import type {
  * confirm it is accepted. Do not widen it because address generation accepted
  * the chain — that is the very mismatch this guards.
  */
+/**
+ * The chains POST /crypto accepts, and whether POST /crypto/transfer documents
+ * each as a withdrawal destination. Solana is the only `withdrawable: true`
+ * entry — see the note above; widen an entry only after a sandbox withdrawal on
+ * that chain is accepted, never because address generation accepted it.
+ */
+const CHAINS: ReadonlyArray<{ network: Network; chain: string; withdrawable: boolean }> = [
+  { network: Network.SOLANA, chain: "solana", withdrawable: true },
+  { network: Network.BASE, chain: "base", withdrawable: false },
+  { network: Network.POLYGON, chain: "polygon", withdrawable: false },
+  { network: Network.ETHEREUM, chain: "eth", withdrawable: false },
+  { network: Network.TRON, chain: "tron", withdrawable: false },
+  { network: Network.BSC, chain: "bsc", withdrawable: false },
+];
+
+/** The stablecoins we custody. Maplerad also lists PYUSD; we do not carry it. */
+const COINS: ReadonlyArray<{ asset: Asset; coin: string }> = [
+  { asset: Asset.USDT, coin: "USDT" },
+  { asset: Asset.USDC, coin: "USDC" },
+];
+
 export const COIN_CHAIN: Partial<
   Record<Asset, Partial<Record<Network, { coin: string; chain: string; withdrawable: boolean }>>>
-> = {
-  [Asset.USDT]: { [Network.ETHEREUM]: { coin: "USDT", chain: "eth", withdrawable: false } },
-  [Asset.USDC]: { [Network.ETHEREUM]: { coin: "USDC", chain: "eth", withdrawable: false } },
-};
+> = Object.fromEntries(
+  COINS.map(({ asset, coin }) => [
+    asset,
+    Object.fromEntries(
+      CHAINS.map(({ network, chain, withdrawable }) => [network, { coin, chain, withdrawable }])
+    ),
+  ])
+);
+
+/**
+ * Deposits auto-convert to USD by default.
+ *
+ * This is what makes the non-Solana chains safe to offer. The hazard with a
+ * receive-only chain is that a user's crypto arrives and has no documented way
+ * out. With offramp on, the deposit is converted to USD by the provider on
+ * arrival — it is never *held* as crypto on that chain, so there is nothing
+ * stranded and nothing to withdraw on-chain. The user's exit is their USD
+ * balance, which the convert engine already reaches.
+ *
+ * Turning offramp OFF means the user really does hold the coin, and the
+ * withdrawable guard applies in full.
+ */
+export const DEFAULT_OFFRAMP = true;
 
 /**
  * Both halves of the trap say the same thing, so they say it once. Named for
@@ -86,6 +126,8 @@ export class MapleradCustodyProvider implements CustodyProvider {
     userId: string;
     asset: Asset;
     network: Network;
+    /** Auto-convert arrivals to USD. Defaults to DEFAULT_OFFRAMP (true). */
+    offramp?: boolean;
   }): Promise<DepositAddress> {
     const pair = COIN_CHAIN[input.asset]?.[input.network];
     if (!pair) {
@@ -94,11 +136,17 @@ export class MapleradCustodyProvider implements CustodyProvider {
           (input.asset === Asset.BTC ? " (BTC is coming soon)" : "")
       );
     }
+    const offramp = input.offramp ?? DEFAULT_OFFRAMP;
 
     // Refuse before minting, not at withdrawal time. An address handed to a user
     // is a promise that money sent to it can come back out; making that promise
     // and breaking it later is worse than never making it.
-    if (!pair.withdrawable) {
+    //
+    // An offramp address makes that promise a different way: the deposit is
+    // converted to USD on arrival, so the user never holds coin on a chain we
+    // cannot send from, and their exit is the USD balance. The guard therefore
+    // applies only when the user really would hold the coin.
+    if (!offramp && !pair.withdrawable) {
       throw oneWayChain(input.asset, input.network, pair.chain);
     }
 
@@ -121,7 +169,7 @@ export class MapleradCustodyProvider implements CustodyProvider {
         customer_id: user.mapleradCustomerId,
         coin: pair.coin,
         chain: pair.chain,
-        offramp: false,
+        offramp,
       },
     });
     return { address: created.address, custodyRef: created.id };

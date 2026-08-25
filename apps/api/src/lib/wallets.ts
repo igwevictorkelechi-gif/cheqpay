@@ -1,7 +1,8 @@
 import { Asset, Network, Prisma, prisma } from "@cheqpay/db";
 import { getCustodyProvider } from "@/custody";
 import { getFeatureFlags } from "./features";
-import { SUPPORTED_WALLETS } from "./assets";
+import { isSupportedWallet, SUPPORTED_WALLETS } from "./assets";
+import { ensureNetworks } from "./ensureNetworks";
 
 export interface WalletView {
   asset: Asset;
@@ -14,12 +15,23 @@ export interface WalletView {
  * Idempotent: existing wallets are left untouched, and address provisioning is
  * only called for missing asset/network pairs. Safe to call on every login.
  */
-export async function provisionWallets(userId: string): Promise<WalletView[]> {
+export async function provisionWallets(
+  userId: string,
+  /** Which pairs to mint. Defaults to the auto-provisioned launch set. */
+  pairs: ReadonlyArray<{ asset: Asset; network: Network }> = SUPPORTED_WALLETS
+): Promise<WalletView[]> {
   // While crypto deposits are switched off (compliance / provider blockers),
   // don't create on-chain addresses at all — an address nobody may use is
   // pure liability, and retry logging on every login is noise.
   const flags = await getFeatureFlags().catch(() => null);
   if (flags && !flags.crypto_deposits) return listWallets(userId);
+
+  // Refuse a pair we cannot mint rather than logging a failure per login.
+  const wanted = pairs.filter((p) => isSupportedWallet(p.asset, p.network));
+  if (wanted.length === 0) return listWallets(userId);
+
+  // The Network enum values must exist before any typed write names them.
+  await ensureNetworks();
 
   // A custody misconfiguration/outage must not fail the whole provisioning
   // pass — that would break every flow that bootstraps via ensureProvisioned
@@ -33,7 +45,7 @@ export async function provisionWallets(userId: string): Promise<WalletView[]> {
     return listWallets(userId);
   }
 
-  for (const { asset, network } of SUPPORTED_WALLETS) {
+  for (const { asset, network } of wanted) {
     const existing = await prisma.wallet.findUnique({
       where: { userId_asset_network: { userId, asset, network } },
     });

@@ -51,10 +51,27 @@ export function formatMinor(minor: string | bigint, symbol: ConvertSymbol): stri
 /** Crypto send/receive metadata (networks + minimums) for the launch set. */
 export const CRYPTO_SEND = {
   BTC: { network: 'BITCOIN' as const, networkLabel: 'Bitcoin', minSend: '0.0001' },
-  // Maplerad custody mints ERC-20 addresses; it has no TRON product.
-  USDT: { network: 'ETHEREUM' as const, networkLabel: 'Ethereum (ERC-20)', minSend: '2' },
-  USDC: { network: 'ETHEREUM' as const, networkLabel: 'Ethereum (ERC-20)', minSend: '2' },
+  // Default chain: Solana is the one Maplerad documents for withdrawal too.
+  USDT: { network: 'SOLANA' as const, networkLabel: 'Solana (SPL)', minSend: '2' },
+  USDC: { network: 'SOLANA' as const, networkLabel: 'Solana (SPL)', minSend: '2' },
 };
+
+/**
+ * Chains a user can receive USDT/USDC on, in the order they are offered.
+ *
+ * Solana is the default: the only chain Maplerad documents for withdrawal as
+ * well as deposit. Deposits on the others auto-convert to USD on arrival
+ * (offramp), so the user is never left holding coin on a chain we cannot send
+ * from — which is what makes offering them safe.
+ */
+export const CRYPTO_NETWORKS: { network: string; label: string; offramp: boolean }[] = [
+  { network: 'SOLANA', label: 'Solana (SPL)', offramp: false },
+  { network: 'BASE', label: 'Base', offramp: true },
+  { network: 'POLYGON', label: 'Polygon', offramp: true },
+  { network: 'ETHEREUM', label: 'Ethereum (ERC-20)', offramp: true },
+  { network: 'TRON', label: 'Tron (TRC-20)', offramp: true },
+  { network: 'BSC', label: 'BNB Smart Chain (BEP-20)', offramp: true },
+];
 
 /**
  * Which crypto assets are live for deposits/sends. Custody is Maplerad
