@@ -6,7 +6,7 @@ const {
   findFirst,
   update,
   ensureMapleradSchema,
-  ensureMapleradCustomer,
+  ensureMapleradCustomerDetailed,
   createVirtualAccount,
   decryptPii,
   isPiiEncryptionConfigured,
@@ -16,7 +16,7 @@ const {
   findFirst: vi.fn(),
   update: vi.fn(),
   ensureMapleradSchema: vi.fn(),
-  ensureMapleradCustomer: vi.fn(),
+  ensureMapleradCustomerDetailed: vi.fn(),
   createVirtualAccount: vi.fn(),
   decryptPii: vi.fn(),
   isPiiEncryptionConfigured: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock("@cheqpay/db", () => ({ prisma: { user: { findUnique, findFirst, update 
 vi.mock("@/lib/pregenerateWallets", () => ({ pregenerateCryptoWallets: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requireAdmin }));
 vi.mock("@/lib/pii", () => ({ decryptPii, isPiiEncryptionConfigured }));
-vi.mock("@/lib/mapleradCustomer", () => ({ ensureMapleradCustomer, ensureMapleradSchema }));
+vi.mock("@/lib/mapleradCustomer", () => ({ ensureMapleradCustomerDetailed, ensureMapleradSchema }));
 vi.mock("@/lib/virtualAccounts", () => ({ createVirtualAccount }));
 
 import { POST } from "./route";
@@ -64,7 +64,7 @@ describe("POST /api/admin/users/[id]/maplerad/enroll", () => {
     findFirst.mockReset().mockResolvedValue(null);
     update.mockReset().mockResolvedValue({});
     ensureMapleradSchema.mockReset().mockResolvedValue(undefined);
-    ensureMapleradCustomer.mockReset().mockResolvedValue("cus_1");
+    ensureMapleradCustomerDetailed.mockReset().mockResolvedValue({ customerId: "cus_1" });
     createVirtualAccount.mockReset().mockResolvedValue({
       accountNumber: "9900000001",
       bankName: "Moniepoint MFB",
@@ -91,7 +91,7 @@ describe("POST /api/admin/users/[id]/maplerad/enroll", () => {
     expect(body.phoneOutcome).toContain("+2348031234567");
 
     // Enrolment used what was already on file, not anything re-typed.
-    const arg = ensureMapleradCustomer.mock.calls[0][2];
+    const arg = ensureMapleradCustomerDetailed.mock.calls[0][2];
     expect(arg).toMatchObject({
       firstName: "Ada",
       lastName: "Obi",
@@ -115,13 +115,13 @@ describe("POST /api/admin/users/[id]/maplerad/enroll", () => {
     const body = await res.json();
     expect(body.error).toContain("someone@else.com");
     expect(update).not.toHaveBeenCalled();
-    expect(ensureMapleradCustomer).not.toHaveBeenCalled();
+    expect(ensureMapleradCustomerDetailed).not.toHaveBeenCalled();
   });
 
   it("rejects a number that is not 10 digits", async () => {
     const res = await call({ phone: "0803" });
     expect(res.status).toBe(422);
-    expect(ensureMapleradCustomer).not.toHaveBeenCalled();
+    expect(ensureMapleradCustomerDetailed).not.toHaveBeenCalled();
   });
 
   it("reports what is still missing rather than calling the provider", async () => {
@@ -132,7 +132,7 @@ describe("POST /api/admin/users/[id]/maplerad/enroll", () => {
     const body = await res.json();
     expect(body.enrolled).toBe(false);
     expect(body.missing).toEqual(expect.arrayContaining(["bvn", "phone", "address"]));
-    expect(ensureMapleradCustomer).not.toHaveBeenCalled();
+    expect(ensureMapleradCustomerDetailed).not.toHaveBeenCalled();
   });
 
   it("does not provision an account while the customer is still tier 0", async () => {

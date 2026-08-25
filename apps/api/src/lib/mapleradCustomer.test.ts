@@ -40,7 +40,11 @@ vi.mock("@cheqpay/db", () => ({
 }));
 
 import { MapleradError } from "./maplerad/client";
-import { ensureMapleradCustomer } from "./mapleradCustomer";
+import {
+  describeProviderError,
+  ensureMapleradCustomer,
+  ensureMapleradCustomerDetailed,
+} from "./mapleradCustomer";
 
 const address = { street: "1 Awolowo Rd", city: "Ikoyi", state: "Lagos", postalCode: "101233" };
 const full = {
@@ -306,5 +310,106 @@ describe("ensureMapleradCustomer — reconciling an id it did not create", () =>
     expect(update).not.toHaveBeenCalledWith(
       expect.objectContaining({ data: { mapleradCustomerId: null, mapleradTier: 0 } })
     );
+  });
+});
+
+
+/**
+ * A user reported KYC stuck "under review". The admin repair tool answered
+ * "Still tier 0 — the provider did not accept the upgrade. The Maplerad
+ * response is in the API logs", with no customer id — so the enrolment call
+ * itself had failed and its reason was only ever written to a log the operator
+ * could not reach. These lock in that the reason travels with the result.
+ */
+describe("an enrolment failure carries the provider's reason", () => {
+  beforeEach(() => {
+    [createCustomer, enrollCustomer, upgradeCustomerTier1, getCustomer, findUnique, update, executeRawUnsafe]
+      .forEach((fn) => fn.mockReset());
+    executeRawUnsafe.mockResolvedValue(undefined);
+    update.mockResolvedValue({});
+    findUnique.mockResolvedValue(row());
+  });
+
+  it("reports Maplerad's own words when the full enrol is refused", async () => {
+    enrollCustomer.mockRejectedValue(
+      new MapleradError("Request failed", 400, {
+        message: "BVN does not match the name provided",
+      }),
+    );
+
+    const r = await ensureMapleradCustomerDetailed("u1", "ada@example.com", full);
+
+    expect(r.customerId).toBeNull();
+    expect(r.step).toBe("enroll");
+    expect(r.error).toMatch(/BVN does not match the name provided/);
+    expect(r.error).toMatch(/400/);
+  });
+
+  it("distinguishes the tier-0 create step from the full enrol", async () => {
+    createCustomer.mockRejectedValue(
+      new MapleradError("Conflict", 409, { message: "customer already exists" }),
+    );
+
+    // No BVN/dob/phone/address -> the create path, not the enrol path.
+    const r = await ensureMapleradCustomerDetailed("u1", "ada@example.com", {
+      firstName: "Ada",
+      lastName: "Obi",
+    });
+
+    expect(r.step).toBe("create");
+    expect(r.error).toMatch(/customer already exists/);
+  });
+
+  it("names the fields a tier 1 upgrade is still waiting on", async () => {
+    findUnique.mockResolvedValue(row({ mapleradCustomerId: "cus_1", mapleradTier: 0 }));
+    getCustomer.mockResolvedValue({ id: "cus_1" });
+
+    const r = await ensureMapleradCustomerDetailed("u1", "ada@example.com", {
+      firstName: "Ada",
+      lastName: "Obi",
+      bvn: "12345678901",
+    });
+
+    expect(r.customerId).toBe("cus_1");
+    expect(r.missing).toEqual(expect.arrayContaining(["dateOfBirth", "phone", "address"]));
+    expect(r.error).toMatch(/tier 1 upgrade needs/);
+  });
+
+  it("says so plainly when a stored customer id does not exist at Maplerad", async () => {
+    findUnique.mockResolvedValue(row({ mapleradCustomerId: "cus_typo", mapleradTier: 0 }));
+    getCustomer.mockRejectedValue(new MapleradError("Not found", 404));
+
+    const r = await ensureMapleradCustomerDetailed("u1", "ada@example.com", full);
+
+    expect(r.step).toBe("readback");
+    expect(r.error).toMatch(/does not exist at Maplerad/);
+    // And the bad id is cleared so the next attempt can create a real one.
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { mapleradCustomerId: null, mapleradTier: 0 } }),
+    );
+  });
+
+  it("keeps the old signature working for callers that only need the id", async () => {
+    enrollCustomer.mockResolvedValue({ id: "cus_9", tier: 1 });
+    await expect(ensureMapleradCustomer("u1", "ada@example.com", full)).resolves.toBe("cus_9");
+  });
+});
+
+describe("describeProviderError", () => {
+  it("digs the reason out of the response body, not just the status line", () => {
+    const e = new MapleradError("Request failed with status 400", 400, {
+      message: "phone number is invalid",
+    });
+    expect(describeProviderError(e)).toBe("HTTP 400 — phone number is invalid");
+  });
+
+  it("falls back to the error message when the body carries nothing useful", () => {
+    expect(describeProviderError(new MapleradError("Gateway timeout", 504, {}))).toMatch(
+      /504 — Gateway timeout/,
+    );
+  });
+
+  it("handles a plain Error without pretending it came from the provider", () => {
+    expect(describeProviderError(new Error("socket hang up"))).toBe("socket hang up");
   });
 });

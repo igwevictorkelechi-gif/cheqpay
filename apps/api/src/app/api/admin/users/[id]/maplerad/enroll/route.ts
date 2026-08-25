@@ -2,7 +2,7 @@ import { prisma } from "@cheqpay/db";
 import { requireAdmin } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
-import { ensureMapleradCustomer, ensureMapleradSchema } from "@/lib/mapleradCustomer";
+import { ensureMapleradCustomerDetailed, ensureMapleradSchema } from "@/lib/mapleradCustomer";
 import { grantTierFromEnrolment } from "@/lib/kycAutoTier";
 import { upgradeToTier2 } from "@/lib/mapleradTier2";
 import { resolveApiOrigin } from "@/lib/kycDocuments";
@@ -157,7 +157,7 @@ export async function POST(req: Request, { params }: Ctx) {
     // ---- Step 3: enrol / upgrade -------------------------------------------
     // No identity image: this is a repair from stored data, and Maplerad's
     // identity block is not required for the tier-1 upgrade path.
-    const customerId = await ensureMapleradCustomer(id, user.email, {
+    const enrolment = await ensureMapleradCustomerDetailed(id, user.email, {
       firstName,
       lastName,
       bvn,
@@ -165,6 +165,7 @@ export async function POST(req: Request, { params }: Ctx) {
       phone,
       address,
     });
+    const customerId = enrolment.customerId;
 
     // ---- Step 3b: tier 2 -----------------------------------------------------
     // Attempted whenever the customer has reached tier 1 and a government ID is
@@ -217,6 +218,12 @@ export async function POST(req: Request, { params }: Ctx) {
       kycTier: promotion.tier,
       kycTierGranted: promotion.granted,
       tier2Reason,
+      // Why the enrolment stopped, in Maplerad's own words. Without this the
+      // operator was told to go and read the API logs, which in practice meant
+      // the account stayed stuck.
+      enrollError: enrolment.error ?? null,
+      enrollStep: enrolment.step ?? null,
+      missing: enrolment.missing ?? undefined,
       account,
       accountError,
       message:
@@ -224,7 +231,9 @@ export async function POST(req: Request, { params }: Ctx) {
           ? "Customer is at tier 2 — limits raised and crypto withdrawals unlocked."
           : (after?.mapleradTier ?? 0) >= 1
             ? `Customer is at tier 1.${tier2Reason ? ` Tier 2 not granted: ${tier2Reason}.` : ""}`
-            : "Still tier 0 — the provider did not accept the upgrade. The Maplerad response is in the API logs.",
+            : enrolment.error
+              ? `Still tier 0 — Maplerad refused${enrolment.step ? ` at the ${enrolment.step} step` : ""}: ${enrolment.error}`
+              : "Still tier 0 — the provider did not accept the upgrade, and returned no reason.",
     });
   } catch (err) {
     return toErrorResponse(err);

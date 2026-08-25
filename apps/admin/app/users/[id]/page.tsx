@@ -111,6 +111,9 @@ type MapleradEnroll = {
   kycTierGranted?: boolean;
   tier2Reason?: string | null;
   missing?: string[];
+  /** Maplerad's own words when the enrolment itself failed. */
+  enrollError?: string | null;
+  enrollStep?: string | null;
   account?: { accountNumber: string; bankName: string; accountName?: string } | null;
   accountError?: string | null;
   message: string;
@@ -788,6 +791,20 @@ export default function UserDetailPage() {
                       }
                     />
                   </dl>
+                  {/* The provider's refusal, verbatim. This is the difference
+                      between "the upgrade did not work" and knowing whether the
+                      BVN mismatched, the customer already exists, or the phone
+                      was rejected. */}
+                  {enroll.enrollError && (
+                    <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-red-700">
+                        Maplerad said{enroll.enrollStep ? ` (${enroll.enrollStep} step)` : ''}
+                      </p>
+                      <p className="mt-1 break-words font-mono text-xs text-red-800">
+                        {enroll.enrollError}
+                      </p>
+                    </div>
+                  )}
                   {enroll.tier2Reason && enroll.tier < 2 && (
                     <p className="mt-3">
                       Tier 2 not granted: <strong>{enroll.tier2Reason}</strong>
