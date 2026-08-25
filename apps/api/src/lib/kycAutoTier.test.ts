@@ -8,6 +8,7 @@ const { findUnique, update, recordFindFirst, recordUpdate, auditCreate } = vi.ho
   auditCreate: vi.fn(),
 }));
 
+vi.mock("./pregenerateWallets", () => ({ pregenerateCryptoWallets: vi.fn() }));
 vi.mock("@cheqpay/db", () => ({
   KycStatus: { PENDING: "PENDING", APPROVED: "APPROVED", REJECTED: "REJECTED" },
   prisma: {

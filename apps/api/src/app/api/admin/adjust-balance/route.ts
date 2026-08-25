@@ -4,13 +4,17 @@ import { requireAdmin } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { consumeAdminOtp, isAdminOtpConfigured } from "@/lib/totp";
+import { ensureUsdAsset } from "@/lib/ensureUsdAsset";
 import { notifyUser } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 
 const adjustSchema = z.object({
   email: z.string().email(),
-  asset: z.enum(["NGN", "BTC", "USDT", "USDC"]),
+  // USD included: dollar balances are real now (FX converts and offramped
+  // crypto deposits both land there), and an asset an operator cannot correct
+  // is an asset with no way back out of a mistake.
+  asset: z.enum(["NGN", "USD", "BTC", "USDT", "USDC"]),
   amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount"),
   direction: z.enum(["credit", "debit"]),
   reason: z.string().trim().min(3).max(200),
@@ -46,6 +50,11 @@ export async function POST(req: Request) {
     const asset = body.asset as Asset;
     const amountMinor = toMinorUnits(body.amount, asset);
     if (amountMinor <= 0n) throw new ApiError(422, "Amount must be positive", "bad_amount");
+
+    // Migrations are not applied on deploy, so USD is added to the Asset enum
+    // lazily — and Postgres will not accept a value in the same transaction that
+    // added it, so this runs before the write below rather than inside it.
+    if (asset === Asset.USD) await ensureUsdAsset();
 
     const idempotencyKey = `admin-adjust:${crypto.randomUUID()}`;
     const metadata = {

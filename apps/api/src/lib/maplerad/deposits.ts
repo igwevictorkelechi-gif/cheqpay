@@ -29,11 +29,17 @@ export interface LedgerPort {
   /** True if we've already processed this Maplerad transaction id. */
   hasProcessed(providerTxId: string): Promise<boolean>;
 
-  /** Resolve the Cheqpay user that owns a virtual account. */
+  /**
+   * Resolve the Cheqpay user that owns a virtual account. `currency` is passed
+   * so matching can target the right wallet — an NGN and a USD account are
+   * different rows, and crediting the wrong one would put dollars on a naira
+   * balance.
+   */
   findUserByAccount(input: {
     accountId?: string;
     accountNumber?: string;
     customerId?: string;
+    currency?: string;
   }): Promise<{ userId: string } | null>;
 
   /**
@@ -85,6 +91,7 @@ export async function handleCollectionEvent(
     accountId: data.account_id,
     accountNumber: data.account_number,
     customerId: data.customer_id,
+    currency: data.currency,
   });
   if (!match) {
     // Don't throw — surface for manual reconciliation, still return 200 so

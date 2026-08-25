@@ -10,8 +10,20 @@ import { readCache, writeCache } from "@/lib/cache";
 
 const TX_CACHE = "cheqpay:txns";
 
+/**
+ * `?currency=USD` narrows the history to one currency, so the home screen's
+ * currency tab carries through to "See all". Read from location rather than
+ * useSearchParams so this page needs no Suspense boundary to prerender.
+ */
+function currencyFromQuery(): "USD" | null {
+  if (typeof window === "undefined") return null;
+  const raw = new URLSearchParams(window.location.search).get("currency");
+  return raw?.toUpperCase() === "USD" ? "USD" : null;
+}
+
 export default function TransactionsPage() {
   const router = useRouter();
+  const [currency, setCurrency] = useState<"USD" | null>(null);
   const [txns, setTxns] = useState<LedgerTransaction[]>(
     () => readCache<LedgerTransaction[]>(TX_CACHE) ?? []
   );
@@ -22,13 +34,20 @@ export default function TransactionsPage() {
   useEffect(() => {
     let active = true;
     (async () => {
+      const asset = currencyFromQuery();
+      if (active && asset) {
+        setCurrency(asset);
+        // A filtered view must not show the unfiltered cache while loading.
+        setTxns([]);
+        setLoading(true);
+      }
       try {
         const token = await getAccessToken();
         if (!token) {
           setNeedsLogin(true);
           return;
         }
-        const run = () => api.getTransactions(100);
+        const run = () => api.getTransactions(100, asset ?? undefined);
         let res;
         try {
           res = await run();
@@ -38,7 +57,9 @@ export default function TransactionsPage() {
         }
         if (!active) return;
         setTxns(res.transactions);
-        writeCache(TX_CACHE, res.transactions);
+        // Only the unfiltered list is cached — caching a filtered one under the
+        // same key would show a partial history on the next unfiltered visit.
+        if (!asset) writeCache(TX_CACHE, res.transactions);
       } catch (e) {
         // Only a real 401 means "sign in" — other failures are transient.
         if (!active) return;
@@ -65,7 +86,9 @@ export default function TransactionsPage() {
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-xl font-bold text-ink">Transactions</h1>
+          <h1 className="text-xl font-bold text-ink">
+            {currency === "USD" ? "Dollar transactions" : "Transactions"}
+          </h1>
         </div>
 
         <div className="mt-6">

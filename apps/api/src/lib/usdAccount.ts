@@ -1,5 +1,10 @@
 import { Asset, Network, Prisma, prisma } from "@cheqpay/db";
-import { createUsdAccount, type UsdAccountMeta } from "./maplerad/accounts";
+import {
+  checkUsdAccountRequestStatus,
+  createUsdAccount,
+  getVirtualAccountById,
+  type UsdAccountMeta,
+} from "./maplerad/accounts";
 import { ensureUsdAsset } from "./ensureUsdAsset";
 
 /**
@@ -23,6 +28,8 @@ export interface UsdAccountView {
 
 interface UsdMeta {
   providerRef: string;
+  /** The account-request reference, used to poll approval status. */
+  requestReference?: string | null;
   bankName: string;
   accountName?: string;
   currency: string;
@@ -36,6 +43,7 @@ function parseMeta(raw: string): UsdMeta {
     const m = JSON.parse(raw) as Partial<UsdMeta>;
     return {
       providerRef: m.providerRef ?? "",
+      requestReference: m.requestReference ?? null,
       bankName: m.bankName ?? "USD account",
       accountName: m.accountName,
       currency: m.currency ?? "USD",
@@ -95,6 +103,7 @@ export async function createUsdVirtualAccount(
 
   const stored: UsdMeta = {
     providerRef: result.id,
+    requestReference: result.reference ?? null,
     bankName: result.bank_name,
     accountName: result.account_name,
     currency: result.currency,
@@ -130,4 +139,104 @@ export async function createUsdVirtualAccount(
     address: result.account_number,
     custodyRef: JSON.stringify(stored),
   });
+}
+
+/** What the client learns when it polls a USD account request. */
+export interface UsdAccountStatusView {
+  status: string;
+  /** Any corrections the applicant must make (empty when there is nothing to do). */
+  messages: string[];
+  currency: string;
+  kycLink?: string | null;
+  accountId?: string;
+}
+
+/**
+ * Poll Maplerad for the approval status of the user's USD account request.
+ *
+ * Returns null when the user has no USD account, or when the account predates
+ * reference-tracking (older accounts stored no request reference, so there is
+ * nothing to poll). When the provider reports a new status we persist it on the
+ * wallet meta so the account view stays in step without a second round-trip.
+ */
+export async function checkUsdAccountStatus(
+  userId: string,
+): Promise<UsdAccountStatusView | null> {
+  const w = await prisma.wallet.findUnique({
+    where: { userId_asset_network: { userId, asset: Asset.USD, network: Network.FIAT } },
+  });
+  if (!w) return null;
+
+  const meta = parseMeta(w.custodyRef);
+  if (!meta.requestReference) return null;
+
+  const s = await checkUsdAccountRequestStatus(meta.requestReference);
+
+  // Keep the stored status current so getUsdAccount() reflects the latest review.
+  if (s.status && s.status !== meta.status) {
+    await prisma.wallet.update({
+      where: { userId_asset_network: { userId, asset: Asset.USD, network: Network.FIAT } },
+      data: { custodyRef: JSON.stringify({ ...meta, status: s.status }) },
+    });
+  }
+
+  return {
+    status: s.status,
+    messages: s.message ?? [],
+    currency: s.currency,
+    kycLink: s.kyc_link ?? null,
+    accountId: s.account_id,
+  };
+}
+
+/** One wire rail (ACH/FEDWIRE/SWIFT) the user can be paid on. */
+export interface UsdWireInstruction {
+  type: string;
+  routingNumber: string;
+  bankName: string;
+  accountType: string;
+  accountNumber: string;
+  accountName: string;
+  memo: string;
+  swiftCode: string;
+}
+
+export interface UsdWireDetails {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  instructions: UsdWireInstruction[];
+}
+
+/**
+ * The full wire instructions for the user's USD account (ACH/FEDWIRE/SWIFT), so
+ * they can receive international transfers. Fetched fresh from Maplerad by
+ * account id; returns null when the user has no USD account. `instructions` may
+ * be empty on an account that has not yet been provisioned with wire rails.
+ */
+export async function getUsdAccountWire(userId: string): Promise<UsdWireDetails | null> {
+  const w = await prisma.wallet.findUnique({
+    where: { userId_asset_network: { userId, asset: Asset.USD, network: Network.FIAT } },
+  });
+  if (!w) return null;
+
+  const meta = parseMeta(w.custodyRef);
+  if (!meta.providerRef) return null;
+
+  const account = await getVirtualAccountById(meta.providerRef);
+  return {
+    bankName: account.bank_name,
+    accountNumber: account.account_number,
+    accountName: account.account_name,
+    instructions: (account.iban ?? []).map((i) => ({
+      type: i.instruction_type,
+      routingNumber: i.routing_number,
+      bankName: i.bank_name,
+      accountType: i.account_type,
+      accountNumber: i.account_number,
+      accountName: i.account_name,
+      memo: i.memo,
+      swiftCode: i.swift_code,
+    })),
+  };
 }

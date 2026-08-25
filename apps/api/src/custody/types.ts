@@ -47,6 +47,11 @@ export interface CustodyProvider {
     userId: string;
     asset: Asset;
     network: Network;
+    /**
+     * Auto-convert arrivals to the USD balance instead of crediting the coin.
+     * Providers that cannot offramp may ignore it; the default is provider-set.
+     */
+    offramp?: boolean;
   }): Promise<DepositAddress>;
 
   /** Verify a webhook's signature against the raw request body. */

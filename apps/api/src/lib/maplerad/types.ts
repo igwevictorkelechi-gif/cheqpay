@@ -223,6 +223,24 @@ export interface Wallet {
 // ---- Virtual accounts / institutions -------------------------------------
 
 /** A collection (virtual) account. NGN accounts return account_number + bank. */
+/**
+ * One set of wire instructions for a USD account. A USD account can be reached
+ * by several rails (ACH, FEDWIRE, SWIFT), each with its own routing/account
+ * numbers and memo. Returned by Get Virtual Account by ID.
+ */
+export interface IbanInstruction {
+  instruction_type: string; // ACH | FEDWIRE | SWIFT
+  routing_number: string;
+  bank_name: string;
+  account_type: string;
+  account_number: string;
+  account_name: string;
+  memo: string;
+  swift_code: string;
+  account_holder_address: string;
+  institution_address: string;
+}
+
 export interface VirtualAccount {
   id: string;
   bank_name: string;
@@ -236,6 +254,49 @@ export interface VirtualAccount {
   consented?: boolean;
   consent_url?: string | null;
   reference?: string | null;
+  // Present on USD accounts (Get Virtual Account by ID): the wire rails.
+  iban?: IbanInstruction[];
+}
+
+/** Currencies Maplerad's FX rail exchanges between. */
+export type FxCurrency = "NGN" | "USD";
+
+/** One side of an FX quote/exchange (amounts are minor units of that currency). */
+export interface FxLeg {
+  currency: FxCurrency;
+  amount: number;
+  human_readable_amount: number;
+}
+
+/** POST /fx/quote result. `rate` is target whole units per 1 source whole unit. */
+export interface FxQuote {
+  reference: string;
+  source: FxLeg;
+  target: FxLeg;
+  rate: number;
+}
+
+/** POST /fx result — the executed exchange. */
+export interface FxExchangeResult {
+  source: FxLeg;
+  target: FxLeg;
+  rate: number;
+}
+
+/**
+ * Status of a USD account *request* (not the account itself). A USD account is
+ * reviewed by Maplerad before it is APPROVED; `message` carries any correction
+ * the applicant must make (e.g. a proof-of-address problem) and `kyc_link` is
+ * where to fix it.
+ * GET /collections/virtual-account/status/{reference}
+ */
+export interface UsdAccountRequestStatus {
+  reference: string;
+  account_id: string;
+  status: string; // APPROVED | PENDING | DECLINED | ...
+  message?: string[];
+  currency: Currency;
+  kyc_link?: string | null;
 }
 
 export interface Institution {

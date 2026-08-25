@@ -160,6 +160,32 @@ export interface UsdAccountInput {
   usResidencyStatus: string;
 }
 
+export interface UsdAccountStatus {
+  status: string;
+  messages: string[];
+  currency: string;
+  kycLink?: string | null;
+  accountId?: string;
+}
+
+export interface UsdWireInstruction {
+  type: string;
+  routingNumber: string;
+  bankName: string;
+  accountType: string;
+  accountNumber: string;
+  accountName: string;
+  memo: string;
+  swiftCode: string;
+}
+
+export interface UsdWireDetails {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  instructions: UsdWireInstruction[];
+}
+
 export interface BillBiller {
   id: string;
   name: string;
@@ -229,8 +255,10 @@ export const api = {
     return apiFetch("/api/wallets");
   },
 
-  getTransactions(limit = 50): Promise<{ transactions: LedgerTransaction[] }> {
-    return apiFetch(`/api/transactions?limit=${limit}`);
+  /** Ledger history. `asset` narrows to one currency (both legs of a convert count). */
+  getTransactions(limit = 50, asset?: string): Promise<{ transactions: LedgerTransaction[] }> {
+    const q = asset ? `&asset=${encodeURIComponent(asset)}` : "";
+    return apiFetch(`/api/transactions?limit=${limit}${q}`);
   },
 
   getTransaction(id: string): Promise<{ transaction: LedgerTransaction }> {
@@ -358,6 +386,16 @@ export const api = {
     });
   },
 
+  /** Check the approval status of the USD account request (null if not pollable). */
+  getUsdAccountStatus(): Promise<{ usdStatus: UsdAccountStatus | null }> {
+    return apiFetch("/api/virtual-accounts/usd/status");
+  },
+
+  /** ACH/FEDWIRE/SWIFT wire instructions for the USD account (null if none). */
+  getUsdAccountWire(): Promise<{ wire: UsdWireDetails | null }> {
+    return apiFetch("/api/virtual-accounts/usd/wire");
+  },
+
   getPrice(asset: AssetSymbol): Promise<MarketPrice> {
     return apiFetch(`/api/market/${asset}/price`);
   },
@@ -373,10 +411,10 @@ export const api = {
     });
   },
 
-  /** Crypto-to-crypto convert quote, e.g. BTC -> USDT. */
+  /** Convert quote between any two supported assets, e.g. BTC -> USDT or USD -> NGN. */
   createConvertQuote(
-    fromAsset: AssetSymbol,
-    toAsset: AssetSymbol,
+    fromAsset: string,
+    toAsset: string,
     amount: string
   ): Promise<Quote> {
     return apiFetch("/api/quotes/convert", {
@@ -437,9 +475,30 @@ export const api = {
 
   /** Live crypto deposit addresses (manual custody). Absent asset = coming soon. */
   getCryptoDepositAddresses(): Promise<{
-    addresses: { asset: string; address: string; network: string; networkLabel: string }[];
+    addresses: {
+      asset: string;
+      address: string;
+      network: string;
+      networkLabel: string;
+      /** Minted for this user — deposits credit automatically. */
+      managed?: boolean;
+    }[];
+    /** Chains the user can additionally request an address on. */
+    networks?: { network: string; label: string }[];
   }> {
     return apiFetch("/api/crypto/deposit-addresses");
+  },
+
+  /** Mint a deposit address for one asset/network pair. */
+  createWallet(
+    asset: string,
+    network: string,
+    offramp?: boolean
+  ): Promise<{ wallets: { asset: string; network: string; address: string }[] }> {
+    return apiFetch("/api/wallets", {
+      method: "POST",
+      body: JSON.stringify({ asset, network, offramp }),
+    });
   },
 
   // ---- NGN payout (withdrawal) ----

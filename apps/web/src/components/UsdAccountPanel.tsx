@@ -1,8 +1,38 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, DollarSign, ExternalLink, Loader2 } from "lucide-react";
-import { api, ApiError, type UsdAccount } from "@/services/api";
+import { Check, Copy, DollarSign, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import {
+  api,
+  ApiError,
+  type UsdAccount,
+  type UsdAccountStatus,
+  type UsdWireDetails,
+} from "@/services/api";
+
+function WireRow({
+  label,
+  value,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  onCopy?: () => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="shrink-0 text-muted">{label}</dt>
+      <dd className="flex items-center gap-1.5 text-right font-semibold text-ink">
+        <span className="break-all">{value}</span>
+        {onCopy && (
+          <button onClick={onCopy} className="shrink-0 text-muted hover:text-ink" aria-label={`Copy ${label}`}>
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </dd>
+    </div>
+  );
+}
 
 const EMPLOYMENT = [
   { value: "EMPLOYED", label: "Employed" },
@@ -19,20 +49,34 @@ const RESIDENCY = [
 ];
 
 /**
- * The USD account, behind a switch. Kept self-contained so the NGN flow on the
- * page is untouched: it loads its own state and only talks to /virtual-accounts/usd.
+ * The USD account. Kept self-contained so the NGN flow on the page is
+ * untouched: it loads its own state and only talks to /virtual-accounts/usd.
  *
  * A USD account needs US-banking KYC the NGN one never asked for (a tax/ID
  * number, employment, residency), and it can require the holder to consent to US
  * banking terms before it activates — surfaced here as a link rather than hidden.
+ *
+ * `defaultOpen` marks the dedicated /usd-account screen, where the user arrived
+ * to do exactly this: there the panel renders open with no switch at all. A
+ * switch there is a step between the user and the only thing on the page.
+ * Alongside the NGN account on /virtual-account it stays behind the switch,
+ * because there it is one option among several.
  */
-export default function UsdAccountPanel() {
-  const [open, setOpen] = useState(false);
+export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?: boolean } = {}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const collapsible = !defaultOpen;
   const [loading, setLoading] = useState(false);
   const [account, setAccount] = useState<UsdAccount | null>(null);
+  const [balance, setBalance] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<UsdAccountStatus | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [wire, setWire] = useState<UsdWireDetails | null>(null);
+  const [wireLoading, setWireLoading] = useState(false);
+  const [wireError, setWireError] = useState<string | null>(null);
 
   // Form state.
   const [idNumber, setIdNumber] = useState("");
@@ -47,8 +91,12 @@ export default function UsdAccountPanel() {
     setLoading(true);
     setError(null);
     try {
-      const { usdAccount } = await api.getUsdAccount();
+      const [{ usdAccount }, { balances }] = await Promise.all([
+        api.getUsdAccount(),
+        api.getBalances().catch(() => ({ balances: [] })),
+      ]);
       setAccount(usdAccount);
+      setBalance(balances.find((b) => b.asset === "USD")?.availableFormatted ?? "0.00");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load your USD account.");
     } finally {
@@ -107,43 +155,93 @@ export default function UsdAccountPanel() {
     }
   }
 
+  async function checkStatus() {
+    setStatusError(null);
+    setCheckingStatus(true);
+    try {
+      const { usdStatus } = await api.getUsdAccountStatus();
+      if (usdStatus) setStatus(usdStatus);
+      else setStatusError("Status is not available for this account yet.");
+    } catch (e) {
+      setStatusError(e instanceof ApiError ? e.message : "Could not check the status.");
+    } finally {
+      setCheckingStatus(false);
+    }
+  }
+
+  async function loadWire() {
+    if (wire) {
+      setWire(null); // toggle closed
+      return;
+    }
+    setWireError(null);
+    setWireLoading(true);
+    try {
+      const { wire: w } = await api.getUsdAccountWire();
+      if (w && w.instructions.length > 0) setWire(w);
+      else setWireError("Wire details are not available for this account yet.");
+    } catch (e) {
+      setWireError(e instanceof ApiError ? e.message : "Could not load wire details.");
+    } finally {
+      setWireLoading(false);
+    }
+  }
+
+  // A green pill for APPROVED, amber for anything still in review.
+  const statusTone = (s: string) =>
+    /approv|active|success/i.test(s)
+      ? "bg-green-500/15 text-green-600"
+      : /declin|reject|fail/i.test(s)
+        ? "bg-red-500/15 text-red-500"
+        : "bg-amber-500/15 text-amber-600";
+
   return (
     <div className="mt-6 rounded-3xl bg-card p-5">
-      {/* The switch. */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-500/15">
-            <DollarSign className="h-5 w-5 text-green-500" />
-          </span>
-          <div>
-            <p className="text-sm font-bold text-ink">USD account</p>
-            <p className="text-xs text-muted">Receive US dollars into your wallet</p>
+      {/* The switch — only where the panel is one option among several. */}
+      {collapsible && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-500/15">
+              <DollarSign className="h-5 w-5 text-green-500" />
+            </span>
+            <div>
+              <p className="text-sm font-bold text-ink">USD account</p>
+              <p className="text-xs text-muted">Receive US dollars into your wallet</p>
+            </div>
           </div>
-        </div>
-        <button
-          role="switch"
-          aria-checked={open}
-          onClick={() => setOpen((v) => !v)}
-          className={`relative h-7 w-12 rounded-full transition-colors ${
-            open ? "bg-brand" : "bg-border"
-          }`}
-        >
-          <span
-            className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${
-              open ? "translate-x-6" : "translate-x-1"
+          <button
+            role="switch"
+            aria-checked={open}
+            onClick={() => setOpen((v) => !v)}
+            className={`relative h-7 w-12 rounded-full transition-colors ${
+              open ? "bg-brand" : "bg-border"
             }`}
-          />
-        </button>
-      </div>
+          >
+            <span
+              className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${
+                open ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
+      )}
 
       {open && (
-        <div className="mt-5 border-t border-border pt-5">
+        <div className={collapsible ? "mt-5 border-t border-border pt-5" : ""}>
           {loading ? (
             <div className="flex justify-center py-4">
               <Loader2 className="h-6 w-6 animate-spin text-muted" />
             </div>
           ) : account ? (
             <>
+              <div className="mb-4 rounded-2xl bg-green-500/10 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  USD balance
+                </p>
+                <p className="mt-0.5 text-2xl font-extrabold text-ink">
+                  ${balance ?? "0.00"}
+                </p>
+              </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Bank name</p>
                 <p className="mt-1 text-sm font-semibold text-ink">{account.bankName}</p>
@@ -179,6 +277,100 @@ export default function UsdAccountPanel() {
               {account.status && !account.consentRequired && (
                 <p className="mt-3 text-xs text-muted">Status: {account.status}</p>
               )}
+
+              {/* USD payouts are not live — say so here rather than only on tap. */}
+              <p className="mt-4 rounded-2xl bg-surface px-4 py-3 text-xs leading-relaxed text-muted">
+                Dollar withdrawals aren’t available yet. You can{" "}
+                <a href="/convert?from=USD" className="font-bold text-brand">
+                  convert your dollars
+                </a>{" "}
+                to Naira or crypto and withdraw from there.
+              </p>
+
+              {/* Wire / international transfer details (ACH / FEDWIRE / SWIFT). */}
+              <div className="mt-4 border-t border-border pt-4">
+                <button
+                  onClick={loadWire}
+                  disabled={wireLoading}
+                  className="text-sm font-bold text-brand disabled:opacity-50"
+                >
+                  {wireLoading
+                    ? "Loading…"
+                    : wire
+                      ? "Hide wire details"
+                      : "Show wire / international transfer details"}
+                </button>
+                {wire && (
+                  <div className="mt-3 space-y-3">
+                    {wire.instructions.map((ins, i) => (
+                      <div key={i} className="rounded-2xl bg-surface p-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-brand">{ins.type}</p>
+                        <dl className="mt-2 space-y-1 text-sm">
+                          <WireRow label="Bank" value={ins.bankName} />
+                          <WireRow label="Account name" value={ins.accountName} />
+                          <WireRow label="Account number" value={ins.accountNumber} onCopy={() => copy(ins.accountNumber)} />
+                          {ins.routingNumber && (
+                            <WireRow label="Routing" value={ins.routingNumber} onCopy={() => copy(ins.routingNumber)} />
+                          )}
+                          {ins.swiftCode && (
+                            <WireRow label="SWIFT" value={ins.swiftCode} onCopy={() => copy(ins.swiftCode)} />
+                          )}
+                          {ins.accountType && <WireRow label="Account type" value={ins.accountType} />}
+                          {ins.memo && <WireRow label="Memo" value={ins.memo} />}
+                        </dl>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {wireError && <p className="mt-2 text-xs text-red-400">{wireError}</p>}
+              </div>
+
+              {/* Application status — Maplerad reviews the KYC before approval. */}
+              <div className="mt-4 border-t border-border pt-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    Application status
+                  </p>
+                  <button
+                    onClick={checkStatus}
+                    disabled={checkingStatus}
+                    className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-bold text-ink active:scale-95 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${checkingStatus ? "animate-spin" : ""}`} />
+                    {checkingStatus ? "Checking…" : "Check status"}
+                  </button>
+                </div>
+                {status && (
+                  <div className="mt-3">
+                    <span
+                      className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${statusTone(status.status)}`}
+                    >
+                      {status.status}
+                    </span>
+                    {status.messages.length > 0 && (
+                      <ul className="mt-3 space-y-1.5">
+                        {status.messages.map((m, i) => (
+                          <li key={i} className="text-sm text-muted">
+                            • {m}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {status.kycLink && (
+                      <a
+                        href={status.kycLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex items-center gap-2 rounded-full bg-brand/10 px-4 py-2 text-sm font-bold text-brand"
+                      >
+                        Complete verification
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                )}
+                {statusError && <p className="mt-2 text-xs text-red-400">{statusError}</p>}
+              </div>
             </>
           ) : (
             <>

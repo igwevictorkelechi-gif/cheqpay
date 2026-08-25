@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
-import { ChevronLeft, Copy, Share2, Check, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronDown, Copy, Share2, Check, AlertTriangle } from "lucide-react";
 import { api, ApiError } from "@/services/api";
 import { getAssetMeta } from "@/lib/cryptoAssets";
 import DesktopSidebar from "@/components/DesktopSidebar";
@@ -35,6 +35,14 @@ export default function ReceiveDetailPage() {
   // deposit wallet; otherwise it renders as "Coming soon".
   const [notLive, setNotLive] = useState(false);
   const [netLabel, setNetLabel] = useState<string | null>(null);
+  // Every address this user holds for the asset, one per chain, plus the chains
+  // they could still mint. A stablecoin exists on several networks and sending
+  // on the wrong one loses the funds, so the choice is explicit and visible.
+  const [options, setOptions] = useState<
+    { address: string; network: string; networkLabel: string }[]
+  >([]);
+  const [mintable, setMintable] = useState<{ network: string; label: string }[]>([]);
+  const [minting, setMinting] = useState<string | null>(null);
 
   useEffect(() => {
     if (!meta) {
@@ -49,12 +57,17 @@ export default function ReceiveDetailPage() {
     setNotLive(false);
     (async () => {
       try {
-        const { addresses } = await api.getCryptoDepositAddresses();
+        const { addresses, networks } = await api.getCryptoDepositAddresses();
         if (!active) return;
-        const entry = addresses.find((x) => x.asset === meta.symbol);
-        if (entry) {
-          setAddress(entry.address);
-          setNetLabel(entry.networkLabel);
+        const mine = addresses.filter((x) => x.asset === meta.symbol);
+        setOptions(mine);
+        // Chains with no address yet — offered as "generate" so a user is never
+        // stuck because their preferred network was added after they signed up.
+        const have = new Set(mine.map((m) => m.network));
+        setMintable((networks ?? []).filter((n) => !have.has(n.network)));
+        if (mine.length > 0) {
+          setAddress(mine[0].address);
+          setNetLabel(mine[0].networkLabel);
         } else {
           setNotLive(true);
         }
@@ -97,6 +110,26 @@ export default function ReceiveDetailPage() {
         .catch(() => undefined);
     } else {
       copy();
+    }
+  }
+
+  /** Mint an address on a chain the user does not have yet. */
+  async function generate(network: string) {
+    if (!meta) return;
+    setMinting(network);
+    setError(null);
+    try {
+      await api.createWallet(meta.symbol, network);
+      // Re-read rather than trusting the POST response shape.
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setError(
+        e instanceof ApiError
+          ? e.message
+          : "We couldn’t create that address. Please try again."
+      );
+    } finally {
+      setMinting(null);
     }
   }
 
@@ -172,6 +205,58 @@ export default function ReceiveDetailPage() {
           <p className="mt-3 text-lg font-bold text-ink">{meta.name}</p>
           <p className="text-sm text-muted">{netLabel ?? meta.networkLabel}</p>
         </div>
+
+        {/* Network selector. A stablecoin lives on several chains and the
+            address differs per chain, so the choice is explicit — picking one
+            swaps the QR and the address below it. Chains with no address yet
+            are listed too and minted on selection, so the dropdown shows every
+            network the user can receive on rather than only the ready ones. */}
+        {(options.length > 1 || mintable.length > 0) && (
+          <div className="mt-5">
+            <label
+              htmlFor="receive-network"
+              className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted"
+            >
+              Network
+            </label>
+            <div className="relative">
+              <select
+                id="receive-network"
+                value={address ?? ""}
+                disabled={minting !== null}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  // A "generate:" option has no address yet — mint it first.
+                  if (v.startsWith("generate:")) {
+                    void generate(v.slice("generate:".length));
+                    return;
+                  }
+                  const picked = options.find((o) => o.address === v);
+                  if (picked) {
+                    setAddress(picked.address);
+                    setNetLabel(picked.networkLabel);
+                  }
+                }}
+                className="w-full appearance-none rounded-2xl border border-border bg-card px-4 py-3.5 pr-10 text-base font-semibold text-ink outline-none focus:border-brand disabled:opacity-60"
+              >
+                {options.map((o) => (
+                  <option key={o.network} value={o.address}>
+                    {o.networkLabel}
+                  </option>
+                ))}
+                {mintable.map((n) => (
+                  <option key={n.network} value={`generate:${n.network}`}>
+                    {n.label} — generate address
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            </div>
+            {minting && (
+              <p className="mt-2 text-xs text-muted">Creating your {minting} address…</p>
+            )}
+          </div>
+        )}
 
         {/* QR */}
         <div className="mt-6 flex justify-center">

@@ -1,4 +1,5 @@
 import { KycStatus, prisma } from "@cheqpay/db";
+import { pregenerateCryptoWallets } from "./pregenerateWallets";
 
 /**
  * Grant internal KYC tier 1 off the back of a successful provider enrolment.
@@ -98,6 +99,10 @@ export async function grantTierFromEnrolment(userId: string): Promise<{
         },
       },
     });
+
+    // Enrolment is confirmed, so the customer the addresses hang off exists —
+    // mint them now rather than making the user wait on first Receive.
+    pregenerateCryptoWallets(userId, "auto_tier_grant");
 
     return { granted: true, tier: target, reason: `granted tier ${target} from provider enrolment` };
   } catch (err) {

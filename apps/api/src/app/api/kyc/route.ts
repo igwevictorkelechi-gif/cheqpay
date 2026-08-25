@@ -6,6 +6,7 @@ import { getKycProvider } from "@/kyc";
 import { sendPush } from "@/lib/push";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
+import { pregenerateCryptoWallets } from "@/lib/pregenerateWallets";
 import { persistKycIdentity } from "@/lib/kycIdentity";
 import { grantTierFromEnrolment } from "@/lib/kycAutoTier";
 import { upgradeToTier2 } from "@/lib/mapleradTier2";
@@ -233,6 +234,14 @@ export async function POST(req: Request) {
         address: body.address,
         identity,
       });
+
+      // Mint the crypto deposit addresses now rather than when the user first
+      // opens Receive: the customer they hang off has just been created, and
+      // doing it here means no provider round-trip while someone waits. Never
+      // blocks or fails this request.
+      if (customerId) {
+        pregenerateCryptoWallets(auth.id, "kyc_enrolment");
+      }
 
       // The documents have now been part of a submission the provider accepted,
       // so mark them submitted — until now they were "uploaded, not sent

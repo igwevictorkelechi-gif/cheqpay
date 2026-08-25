@@ -138,7 +138,10 @@ export type ReviewActionInput = z.infer<typeof reviewActionSchema>;
 /** Request a crypto withdrawal to an external address. */
 export const cryptoWithdrawalSchema = z.object({
   asset: z.enum(["BTC", "USDT", "USDC"]),
-  network: z.enum(["BITCOIN", "TRON", "ETHEREUM", "BSC"]),
+  // Every chain we can hold coin on. Which of them can actually be sent from is
+  // enforced by the custody layer's withdrawable guard, not here — this is only
+  // the shape check.
+  network: z.enum(["BITCOIN", "TRON", "ETHEREUM", "BSC", "SOLANA", "BASE", "POLYGON"]),
   toAddress: z.string().min(20).max(120),
   amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount"),
 });
@@ -153,14 +156,15 @@ export const quoteCreateSchema = z.object({
 export type QuoteCreateInput = z.infer<typeof quoteCreateSchema>;
 
 /**
- * Create a crypto-to-crypto convert quote (e.g. BTC -> USDT). Both legs are
- * crypto; the price is derived from each asset's USDT spot. `amount` is a
- * decimal string in the FROM asset.
+ * Create a convert quote between any two supported assets — crypto↔crypto, or
+ * anything touching USD, including NGN↔USD. The price is derived from each
+ * asset's USDT value (fiats pegged, crypto from the feed). `amount` is a decimal
+ * string in the FROM asset.
  */
 export const convertQuoteSchema = z
   .object({
-    fromAsset: z.enum(["BTC", "USDT", "USDC"]),
-    toAsset: z.enum(["BTC", "USDT", "USDC"]),
+    fromAsset: z.enum(["NGN", "USD", "BTC", "USDT", "USDC"]),
+    toAsset: z.enum(["NGN", "USD", "BTC", "USDT", "USDC"]),
     amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount"),
   })
   .refine((v) => v.fromAsset !== v.toAsset, {

@@ -1,20 +1,55 @@
 import { Asset, Network } from "@cheqpay/db";
 
 /**
- * Crypto wallets provisioned for every user. Asset/network are modeled as data
- * so adding a pair later is a one-line change here plus the matching enum value.
- *
- * The set mirrors what Maplerad custody can actually mint (verified against
- * their API): USDT and USDC on Ethereum (ERC-20). TRON is not offered by
- * Maplerad's address API, and BTC has no custodian at all — it stays "coming
- * soon" in the clients and is deliberately NOT provisioned, so users can never
- * see a BTC address nobody is watching.
+ * Every asset/network pair Maplerad custody can mint an address for: USDT and
+ * USDC across the six chains POST /crypto documents. BTC has no custodian at
+ * all — it stays "coming soon" in the clients and is deliberately absent, so
+ * users can never see a BTC address nobody is watching.
  */
-export const SUPPORTED_WALLETS: ReadonlyArray<{ asset: Asset; network: Network }> = [
-  { asset: Asset.USDT, network: Network.ETHEREUM }, // ERC-20
-  { asset: Asset.USDC, network: Network.ETHEREUM }, // ERC-20
+export const CRYPTO_NETWORKS: ReadonlyArray<Network> = [
+  Network.SOLANA,
+  Network.BASE,
+  Network.POLYGON,
+  Network.ETHEREUM,
+  Network.TRON,
+  Network.BSC,
 ];
 
+export const CRYPTO_COINS: ReadonlyArray<Asset> = [Asset.USDT, Asset.USDC];
+
+/** Every mintable pair — what a user may request on demand. */
+export const AVAILABLE_WALLETS: ReadonlyArray<{ asset: Asset; network: Network }> =
+  CRYPTO_COINS.flatMap((asset) => CRYPTO_NETWORKS.map((network) => ({ asset, network })));
+
+/**
+ * The pairs provisioned automatically for every user.
+ *
+ * Deliberately just Solana: it is the one chain Maplerad documents for
+ * withdrawal as well as deposit, so it is the only pair that works whether or
+ * not the deposit is offramped. Minting all twelve pairs up front would hand
+ * every user a wall of addresses they did not ask for; the other chains are
+ * available on demand through POST /api/wallets.
+ */
+export const SUPPORTED_WALLETS: ReadonlyArray<{ asset: Asset; network: Network }> = [
+  { asset: Asset.USDT, network: Network.SOLANA },
+  { asset: Asset.USDC, network: Network.SOLANA },
+];
+
+/**
+ * Chains a user can actually send FROM, so holding the coin there is safe.
+ *
+ * POST /crypto/transfer's `chain` enum is exactly ["solana"], so Solana is the
+ * only one. Mirrors the `withdrawable` column in custody/maplerad.ts; a test
+ * asserts the two agree, because a silent disagreement here is what would let
+ * an unsendable address be minted as if it held real coin.
+ */
+export const WITHDRAWABLE_NETWORKS: ReadonlyArray<Network> = [Network.SOLANA];
+
+export function isWithdrawableNetwork(network: Network): boolean {
+  return WITHDRAWABLE_NETWORKS.includes(network);
+}
+
+/** Is this pair one we can mint at all (not just one we auto-provision)? */
 export function isSupportedWallet(asset: Asset, network: Network): boolean {
-  return SUPPORTED_WALLETS.some((w) => w.asset === asset && w.network === network);
+  return AVAILABLE_WALLETS.some((w) => w.asset === asset && w.network === network);
 }

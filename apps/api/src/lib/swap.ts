@@ -1,23 +1,79 @@
 import {
   Asset,
   Prisma,
+  type Quote,
   TransactionStatus,
   TransactionType,
   prisma,
 } from "@cheqpay/db";
 import { ApiError } from "./http";
 import { isWithinSingleTxLimit } from "./kyc";
-import { fromMinorUnits } from "./money";
+import { ASSET_DECIMALS, fromMinorUnits } from "./money";
 import { notifyUser } from "./alerts";
 import {
+  classifySwap,
   computeCryptoConvert,
   computeSwap,
   cryptoToNgnKobo,
+  fiatUsdtPrice,
+  isNgnUsdPair,
   type SwapSide,
 } from "./rates";
 import { getSwapSpreadBps, getUsdtNgnRate } from "./settings";
 import { awardCashback } from "./cashback";
-import { getPriceFeed } from "@/market";
+import { ensureUsdAsset } from "./ensureUsdAsset";
+import { ensureQuoteProviderRef } from "./ensureQuoteProviderRef";
+import { exchangeFx, quoteFx } from "./maplerad/fx";
+import type { FxCurrency } from "./maplerad/types";
+import { getPriceFeed, type PriceFeed } from "@/market";
+
+/** The internal Asset for a fiat leg maps 1:1 to Maplerad's FX currency code. */
+function fxCurrencyOf(asset: Asset): FxCurrency {
+  return asset === Asset.USD ? "USD" : "NGN";
+}
+
+/** Minor units -> whole units for an asset, as a Decimal. */
+function toWhole(minor: bigint, asset: Asset): Prisma.Decimal {
+  return new Prisma.Decimal(minor.toString()).div(
+    new Prisma.Decimal(10).pow(ASSET_DECIMALS[asset]),
+  );
+}
+
+/**
+ * The rate for a pair of settled legs: TO whole units per 1 FROM whole unit.
+ *
+ * Maplerad returns a `rate` of its own, but nothing in the response says which
+ * direction it is quoted in, and for NGN↔USD the two directions are ~1,550 and
+ * ~0.00065 — an inverted rate is indistinguishable from a plausible one, so it
+ * cannot be validated after the fact. The two legs are unambiguous, so the rate
+ * is derived from them and always means what `rate` means on every other quote
+ * in this codebase. That is the number the clients print as "1 X = Y".
+ */
+function rateFromLegs(
+  fromAsset: Asset,
+  amountInMinor: bigint,
+  toAsset: Asset,
+  amountOutMinor: bigint,
+): Prisma.Decimal {
+  const from = toWhole(amountInMinor, fromAsset);
+  if (from.lte(0)) {
+    throw new ApiError(422, "Amount must be positive", "bad_amount");
+  }
+  return toWhole(amountOutMinor, toAsset).div(from);
+}
+
+/**
+ * USDT price for any convertible asset: the pegged fiat value for NGN/USD, or
+ * the market spot for a crypto asset.
+ */
+function usdtPriceForAsset(
+  asset: Asset,
+  feed: PriceFeed,
+  usdtNgnRate: Prisma.Decimal
+): Promise<Prisma.Decimal> {
+  const fiat = fiatUsdtPrice(asset, usdtNgnRate);
+  return fiat !== null ? Promise.resolve(fiat) : feed.getSpotUsdt(asset);
+}
 
 export const QUOTE_TTL_MS = 45_000;
 
@@ -72,29 +128,41 @@ export async function createQuote(params: {
 }
 
 /**
- * Create a crypto-to-crypto convert quote (e.g. BTC -> USDT). Priced from each
- * asset's USDT spot with the business spread applied once. The NGN value of the
- * input is used only to enforce the tier single-tx limit.
+ * Create a convert quote between any two supported assets (crypto↔crypto, or
+ * anything touching USD — including NGN↔USD). Priced from each asset's USDT
+ * value (fiats pegged, crypto from the feed) with the business spread applied
+ * once. The NGN value of the input is used only to enforce the tier single-tx
+ * limit.
  */
 export async function createConvertQuote(params: {
   userId: string;
   tier: number;
-  fromAsset: Asset; // BTC | USDT
-  toAsset: Asset; // BTC | USDT
+  fromAsset: Asset;
+  toAsset: Asset;
   amountInMinor: bigint;
 }) {
   if (params.fromAsset === params.toAsset) {
     throw new ApiError(422, "Cannot convert an asset to itself", "same_asset");
   }
+
+  // NGN↔USD settles on Maplerad's real FX rail, so it is priced from a live
+  // Maplerad quote (whose reference we keep to settle at execute time) rather
+  // than the synthetic USDT peg. The displayed rate is derived from the two
+  // legs Maplerad returns, not from its own `rate` field — see rateFromLegs.
+  if (isNgnUsdPair(params.fromAsset, params.toAsset)) {
+    return createFxConvertQuote(params);
+  }
+
   const usdtNgnRate = await getUsdtNgnRate();
   if (usdtNgnRate === null) {
     throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
   }
+  const usdtNgnDecimal = new Prisma.Decimal(usdtNgnRate);
   const spreadBps = await getSwapSpreadBps();
   const feed = getPriceFeed();
   const [fromUsdtPrice, toUsdtPrice] = await Promise.all([
-    feed.getSpotUsdt(params.fromAsset),
-    feed.getSpotUsdt(params.toAsset),
+    usdtPriceForAsset(params.fromAsset, feed, usdtNgnDecimal),
+    usdtPriceForAsset(params.toAsset, feed, usdtNgnDecimal),
   ]);
 
   const { amountOutMinor, rate } = computeCryptoConvert({
@@ -111,10 +179,15 @@ export async function createConvertQuote(params: {
     params.amountInMinor,
     params.fromAsset,
     fromUsdtPrice,
-    new Prisma.Decimal(usdtNgnRate)
+    usdtNgnDecimal
   );
   if (!isWithinSingleTxLimit(params.tier, ngnValueKobo)) {
     throw new ApiError(403, "Amount exceeds your per-transaction limit", "single_tx_limit");
+  }
+
+  // A USD leg needs the Asset enum value to exist for the typed Quote write.
+  if (params.fromAsset === Asset.USD || params.toAsset === Asset.USD) {
+    await ensureUsdAsset();
   }
 
   return prisma.quote.create({
@@ -125,6 +198,63 @@ export async function createConvertQuote(params: {
       rate,
       amountIn: params.amountInMinor,
       amountOut: amountOutMinor,
+      expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
+    },
+  });
+}
+
+/**
+ * Price a NGN↔USD convert from a live Maplerad FX quote and persist it with the
+ * provider reference, so executeSwap can settle the very same quote. The tier
+ * single-tx limit is enforced on the NGN leg (input when selling NGN, output
+ * when buying it).
+ */
+async function createFxConvertQuote(params: {
+  userId: string;
+  tier: number;
+  fromAsset: Asset;
+  toAsset: Asset;
+  amountInMinor: bigint;
+}) {
+  // Maplerad's amount is the minor unit of the source currency, which is exactly
+  // our minor unit for NGN (kobo) and USD (cents).
+  const fx = await quoteFx({
+    sourceCurrency: fxCurrencyOf(params.fromAsset),
+    targetCurrency: fxCurrencyOf(params.toAsset),
+    amount: Number(params.amountInMinor),
+  });
+
+  if (!Number.isInteger(fx.target?.amount) || fx.target.amount <= 0) {
+    throw new ApiError(
+      502,
+      "The exchange provider did not return a usable amount for that conversion",
+      "bad_fx_quote",
+    );
+  }
+  const amountOutMinor = BigInt(fx.target.amount);
+  const ngnLegMinor = params.fromAsset === Asset.NGN ? params.amountInMinor : amountOutMinor;
+  if (!isWithinSingleTxLimit(params.tier, ngnLegMinor)) {
+    throw new ApiError(403, "Amount exceeds your per-transaction limit", "single_tx_limit");
+  }
+
+  // The USD enum value and the provider_ref column must exist for the typed write.
+  await Promise.all([ensureUsdAsset(), ensureQuoteProviderRef()]);
+
+  return prisma.quote.create({
+    data: {
+      userId: params.userId,
+      fromAsset: params.fromAsset,
+      toAsset: params.toAsset,
+      // Derived from the legs, not read from fx.rate — see rateFromLegs.
+      rate: rateFromLegs(
+        params.fromAsset,
+        params.amountInMinor,
+        params.toAsset,
+        amountOutMinor,
+      ),
+      amountIn: params.amountInMinor,
+      amountOut: amountOutMinor,
+      providerRef: fx.reference,
       expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
     },
   });
@@ -158,11 +288,26 @@ export async function executeSwap(params: {
     return { transactionId: existing.id, status: existing.status };
   }
 
-  // A convert has crypto on both legs; otherwise one leg is NGN (buy/sell).
-  const isConvert = quote.fromAsset !== Asset.NGN && quote.toAsset !== Asset.NGN;
-  const side: SwapSide = quote.fromAsset === Asset.NGN ? "buy" : "sell";
-  const cryptoAsset = side === "buy" ? quote.toAsset : quote.fromAsset;
-  const cryptoAmountMinor = side === "buy" ? quote.amountOut : quote.amountIn;
+  // NGN↔USD backed by a Maplerad FX quote settles through the real FX rail,
+  // which involves an external call that cannot live inside a DB transaction.
+  if (quote.providerRef && isNgnUsdPair(quote.fromAsset, quote.toAsset)) {
+    return executeFxSwap({ ...params, quote });
+  }
+
+  // buy = NGN→crypto, sell = crypto→NGN, convert = everything else (crypto↔
+  // crypto, and anything touching USD, including NGN↔USD).
+  const kind = classifySwap(quote.fromAsset, quote.toAsset);
+  const isConvert = kind === "convert";
+  const side: SwapSide = kind === "buy" ? "buy" : "sell";
+  // The "primary" leg names the Transaction. Buy is named by the crypto bought;
+  // otherwise by the from-asset (unchanged for a crypto↔crypto convert or sell).
+  const primaryAsset = kind === "buy" ? quote.toAsset : quote.fromAsset;
+  const primaryAmountMinor = kind === "buy" ? quote.amountOut : quote.amountIn;
+
+  // Defensive: a USD leg needs the Asset enum value present for the typed writes.
+  if (quote.fromAsset === Asset.USD || quote.toAsset === Asset.USD) {
+    await ensureUsdAsset();
+  }
 
   const result = await prisma.$transaction(async (db) => {
     // Consume the quote (first writer wins).
@@ -199,16 +344,16 @@ export async function executeSwap(params: {
         userId: params.userId,
         type: isConvert
           ? TransactionType.CONVERT
-          : side === "buy"
+          : kind === "buy"
           ? TransactionType.BUY
           : TransactionType.SELL,
-        asset: cryptoAsset,
-        amount: cryptoAmountMinor,
+        asset: primaryAsset,
+        amount: primaryAmountMinor,
         status: TransactionStatus.COMPLETED,
         idempotencyKey: params.idempotencyKey,
         quoteId: quote.id,
         metadata: {
-          kind: isConvert ? "convert" : side,
+          kind,
           side,
           fromAsset: quote.fromAsset,
           toAsset: quote.toAsset,
@@ -222,7 +367,7 @@ export async function executeSwap(params: {
     await db.auditLog.create({
       data: {
         userId: params.userId,
-        action: `swap.${side}`,
+        action: `swap.${kind}`,
         resourceType: "Transaction",
         resourceId: record.id,
         details: {
@@ -252,25 +397,201 @@ export async function executeSwap(params: {
   // Trade confirmation (best-effort, after commit).
   const fmtNgn = (m: bigint) => `₦${fromMinorUnits(m, Asset.NGN)}`;
   const fmtCrypto = (m: bigint, a: Asset) => `${fromMinorUnits(m, a)} ${a}`;
+  // Fiat-aware label for a convert leg: ₦/$ symbols, or "amount ASSET" for crypto.
+  const fmtAsset = (m: bigint, a: Asset) =>
+    a === Asset.NGN
+      ? fmtNgn(m)
+      : a === Asset.USD
+      ? `$${fromMinorUnits(m, a)}`
+      : fmtCrypto(m, a);
   let title: string;
   let body: string;
   if (isConvert) {
     title = "Conversion complete";
-    body = `Converted ${fmtCrypto(quote.amountIn, quote.fromAsset)} to ${fmtCrypto(
+    body = `Converted ${fmtAsset(quote.amountIn, quote.fromAsset)} to ${fmtAsset(
       quote.amountOut,
       quote.toAsset
     )}.`;
   } else if (side === "buy") {
     title = "Purchase complete";
-    body = `Bought ${fmtCrypto(quote.amountOut, cryptoAsset)} for ${fmtNgn(quote.amountIn)}.`;
+    body = `Bought ${fmtCrypto(quote.amountOut, primaryAsset)} for ${fmtNgn(quote.amountIn)}.`;
   } else {
     title = "Sale complete";
-    body = `Sold ${fmtCrypto(quote.amountIn, cryptoAsset)} for ${fmtNgn(quote.amountOut)}.`;
+    body = `Sold ${fmtCrypto(quote.amountIn, primaryAsset)} for ${fmtNgn(quote.amountOut)}.`;
   }
   await notifyUser(params.userId, {
     category: "trades",
     title,
     body,
+    data: { transactionId: result.transactionId },
+  });
+
+  return result;
+}
+
+/**
+ * Settle a NGN↔USD convert on Maplerad's real FX rail.
+ *
+ * The exchange is an external, irreversible money movement, so it cannot sit
+ * inside a DB transaction. The order is deliberate:
+ *   1. reserve — consume the quote and debit the payer atomically (rolls back
+ *      cleanly; nothing external has happened yet);
+ *   2. settle — call Maplerad; on failure refund the reservation and surface a
+ *      retryable error, because the money never moved;
+ *   3. credit — bank the target and record the transaction. A failure here is
+ *      an owed credit against a real exchange, not a lost debit, so it is logged
+ *      for reconciliation rather than reversed.
+ */
+async function executeFxSwap(params: {
+  userId: string;
+  quoteId: string;
+  idempotencyKey: string;
+  quote: Quote;
+}) {
+  const { quote } = params;
+  await ensureUsdAsset();
+
+  // 1. Reserve.
+  await prisma.$transaction(async (db) => {
+    const consumed = await db.quote.updateMany({
+      where: { id: quote.id, consumed: false },
+      data: { consumed: true },
+    });
+    if (consumed.count !== 1) {
+      throw new ApiError(409, "Quote already used", "quote_consumed");
+    }
+    const debit = await db.balance.updateMany({
+      where: {
+        userId: params.userId,
+        asset: quote.fromAsset,
+        available: { gte: quote.amountIn },
+      },
+      data: { available: { decrement: quote.amountIn } },
+    });
+    if (debit.count !== 1) {
+      throw new ApiError(422, `Insufficient ${quote.fromAsset} balance`, "insufficient_funds");
+    }
+  });
+
+  // 2. Settle at the provider (point of no return).
+  let settled: Awaited<ReturnType<typeof exchangeFx>>;
+  try {
+    settled = await exchangeFx({ quoteReference: quote.providerRef as string });
+  } catch (err) {
+    // The exchange did not happen — undo the reservation so the payer is whole.
+    await prisma.balance
+      .update({
+        where: { userId_asset: { userId: params.userId, asset: quote.fromAsset } },
+        data: { available: { increment: quote.amountIn } },
+      })
+      .catch((refundErr) =>
+        console.error(
+          "[fx] refund after a failed exchange also failed — reconcile",
+          { userId: params.userId, quoteId: quote.id, asset: quote.fromAsset, amount: quote.amountIn.toString() },
+          refundErr,
+        ),
+      );
+    throw new ApiError(502, "Currency exchange failed at the provider; you were not charged", "fx_failed");
+  }
+
+  // What the exchange actually produced. A quote is a promise about a rate, not
+  // a guarantee about an amount: if the provider settled at a different figure,
+  // that figure is the money that exists, and crediting the quoted one would
+  // put the ledger out of step with the treasury in one direction or the other.
+  // The quote is the fallback for a response that does not report an amount.
+  const settledOut =
+    Number.isInteger(settled?.target?.amount) && settled.target.amount > 0
+      ? BigInt(settled.target.amount)
+      : null;
+  const creditMinor = settledOut ?? quote.amountOut;
+  if (settledOut !== null && settledOut !== quote.amountOut) {
+    console.warn("[fx] settled amount differs from the quote — crediting what settled", {
+      userId: params.userId,
+      quoteId: quote.id,
+      quoted: quote.amountOut.toString(),
+      settled: settledOut.toString(),
+      providerRef: quote.providerRef,
+    });
+  }
+
+  // 3. Credit + record.
+  let result: { transactionId: string; status: TransactionStatus };
+  try {
+    result = await prisma.$transaction(async (db) => {
+      await db.balance.upsert({
+        where: { userId_asset: { userId: params.userId, asset: quote.toAsset } },
+        update: { available: { increment: creditMinor } },
+        create: { userId: params.userId, asset: quote.toAsset, available: creditMinor },
+      });
+      const record = await db.transaction.create({
+        data: {
+          userId: params.userId,
+          type: TransactionType.CONVERT,
+          asset: quote.fromAsset,
+          amount: quote.amountIn,
+          status: TransactionStatus.COMPLETED,
+          idempotencyKey: params.idempotencyKey,
+          quoteId: quote.id,
+          metadata: {
+            kind: "convert",
+            rail: "maplerad_fx",
+            providerRef: quote.providerRef,
+            fromAsset: quote.fromAsset,
+            toAsset: quote.toAsset,
+            amountIn: quote.amountIn.toString(),
+            amountOut: creditMinor.toString(),
+            quotedAmountOut: quote.amountOut.toString(),
+            rate: quote.rate.toString(),
+          },
+        },
+      });
+      await db.auditLog.create({
+        data: {
+          userId: params.userId,
+          action: "swap.fx",
+          resourceType: "Transaction",
+          resourceId: record.id,
+          details: {
+            fromAsset: quote.fromAsset,
+            toAsset: quote.toAsset,
+            amountIn: quote.amountIn.toString(),
+            amountOut: creditMinor.toString(),
+            quotedAmountOut: quote.amountOut.toString(),
+            providerRef: quote.providerRef,
+          },
+        },
+      });
+      return { transactionId: record.id, status: record.status };
+    });
+  } catch (err) {
+    console.error(
+      "[fx] exchange settled but crediting the user failed — reconcile",
+      {
+        userId: params.userId,
+        quoteId: quote.id,
+        toAsset: quote.toAsset,
+        amountOut: creditMinor.toString(),
+        providerRef: quote.providerRef,
+      },
+      err,
+    );
+    throw new ApiError(
+      500,
+      "Exchange completed but your balance update failed; support has been notified.",
+      "fx_credit_failed",
+    );
+  }
+
+  // Confirmation (best-effort, after commit).
+  const fmtFiat = (m: bigint, a: Asset) =>
+    a === Asset.USD ? `$${fromMinorUnits(m, a)}` : `₦${fromMinorUnits(m, Asset.NGN)}`;
+  await notifyUser(params.userId, {
+    category: "trades",
+    title: "Conversion complete",
+    body: `Converted ${fmtFiat(quote.amountIn, quote.fromAsset)} to ${fmtFiat(
+      creditMinor,
+      quote.toAsset,
+    )}.`,
     data: { transactionId: result.transactionId },
   });
 

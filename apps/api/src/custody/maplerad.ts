@@ -25,33 +25,58 @@ import type {
  * for every valid coin/chain pair — their bug, ticket-worthy. The request
  * contract itself is confirmed: invalid pairs get proper validation errors.
  *
- * DISABLED PENDING A CHAIN FIX: both pairs below are ERC-20, and Maplerad's
- * withdrawal endpoint documents Solana as its only destination chain, so neither
- * pair can currently complete a round trip. See COIN_CHAIN. Nothing observable
- * changes today — address creation is broken provider-side regardless — but the
- * guard means the trap cannot open the moment their bug is fixed.
+ * CHAINS: addresses can be minted on all six chains POST /crypto documents, but
+ * POST /crypto/transfer accepts only Solana. Holding coin anywhere else would be
+ * a one-way trip, so a non-Solana address is minted only as an offramp address
+ * (arrivals convert to USD). See COIN_CHAIN and DEFAULT_OFFRAMP.
  */
 
 /**
- * Asset/network pairs Maplerad can custody, and the API names they map to.
- *
- * `withdrawable` is the important column. POST /crypto (address generation)
- * documents six chains — solana, base, polygon, eth, tron, bsc — but
- * POST /crypto/transfer (withdrawal) documents exactly one: solana. A pair that
- * can receive but cannot send is a trap: the user's money arrives and has no
- * documented way out, and they only discover it at the moment they try to
- * leave. So the flag gates address creation too, not just withdrawal.
- *
- * To widen this, run ONE sandbox withdrawal on the chain in question and
- * confirm it is accepted. Do not widen it because address generation accepted
- * the chain — that is the very mismatch this guards.
+ * The chains POST /crypto accepts, and whether POST /crypto/transfer documents
+ * each as a withdrawal destination. Solana is the only `withdrawable: true`
+ * entry — see the note above; widen an entry only after a sandbox withdrawal on
+ * that chain is accepted, never because address generation accepted it.
  */
+const CHAINS: ReadonlyArray<{ network: Network; chain: string; withdrawable: boolean }> = [
+  { network: Network.SOLANA, chain: "solana", withdrawable: true },
+  { network: Network.BASE, chain: "base", withdrawable: false },
+  { network: Network.POLYGON, chain: "polygon", withdrawable: false },
+  { network: Network.ETHEREUM, chain: "eth", withdrawable: false },
+  { network: Network.TRON, chain: "tron", withdrawable: false },
+  { network: Network.BSC, chain: "bsc", withdrawable: false },
+];
+
+/** The stablecoins we custody. Maplerad also lists PYUSD; we do not carry it. */
+const COINS: ReadonlyArray<{ asset: Asset; coin: string }> = [
+  { asset: Asset.USDT, coin: "USDT" },
+  { asset: Asset.USDC, coin: "USDC" },
+];
+
 export const COIN_CHAIN: Partial<
   Record<Asset, Partial<Record<Network, { coin: string; chain: string; withdrawable: boolean }>>>
-> = {
-  [Asset.USDT]: { [Network.ETHEREUM]: { coin: "USDT", chain: "eth", withdrawable: false } },
-  [Asset.USDC]: { [Network.ETHEREUM]: { coin: "USDC", chain: "eth", withdrawable: false } },
-};
+> = Object.fromEntries(
+  COINS.map(({ asset, coin }) => [
+    asset,
+    Object.fromEntries(
+      CHAINS.map(({ network, chain, withdrawable }) => [network, { coin, chain, withdrawable }])
+    ),
+  ])
+);
+
+/**
+ * Deposits are credited as the coin itself, not converted to USD.
+ *
+ * With offramp OFF the user really holds the stablecoin, which is the point of
+ * a crypto wallet — so the withdrawable guard applies in full and only Solana
+ * can be minted. That is not a limitation we invented: POST /crypto/transfer's
+ * `chain` enum is exactly ["solana"], so Solana is the only chain a user could
+ * ever send from.
+ *
+ * Callers that genuinely want another chain must opt into offramp explicitly,
+ * which converts the arrival to USD — the user never holds coin on a chain we
+ * cannot send from, so nothing can be stranded.
+ */
+export const DEFAULT_OFFRAMP = false;
 
 /**
  * Both halves of the trap say the same thing, so they say it once. Named for
@@ -86,6 +111,8 @@ export class MapleradCustodyProvider implements CustodyProvider {
     userId: string;
     asset: Asset;
     network: Network;
+    /** Auto-convert arrivals to USD. Defaults to DEFAULT_OFFRAMP (false). */
+    offramp?: boolean;
   }): Promise<DepositAddress> {
     const pair = COIN_CHAIN[input.asset]?.[input.network];
     if (!pair) {
@@ -94,11 +121,17 @@ export class MapleradCustodyProvider implements CustodyProvider {
           (input.asset === Asset.BTC ? " (BTC is coming soon)" : "")
       );
     }
+    const offramp = input.offramp ?? DEFAULT_OFFRAMP;
 
     // Refuse before minting, not at withdrawal time. An address handed to a user
     // is a promise that money sent to it can come back out; making that promise
     // and breaking it later is worse than never making it.
-    if (!pair.withdrawable) {
+    //
+    // An offramp address makes that promise a different way: the deposit is
+    // converted to USD on arrival, so the user never holds coin on a chain we
+    // cannot send from, and their exit is the USD balance. The guard therefore
+    // applies only when the user really would hold the coin.
+    if (!offramp && !pair.withdrawable) {
       throw oneWayChain(input.asset, input.network, pair.chain);
     }
 
@@ -121,7 +154,7 @@ export class MapleradCustodyProvider implements CustodyProvider {
         customer_id: user.mapleradCustomerId,
         coin: pair.coin,
         chain: pair.chain,
-        offramp: false,
+        offramp,
       },
     });
     return { address: created.address, custodyRef: created.id };
@@ -163,11 +196,18 @@ export class MapleradCustodyProvider implements CustodyProvider {
       throw oneWayChain(input.asset, input.network, pair.chain);
     }
 
+    // The provider's own dedupe key, documented on POST /crypto/transfer as "a
+    // unique identifier for the transaction". Same value as the header so both
+    // mechanisms agree on what "the same withdrawal" means: a retry of this
+    // transfer reuses it and cannot double-send.
+    const reference = `${input.userId}:${input.toAddress}:${cents}`;
+
     const transfer = await mapleradRequest<MapleradCryptoTransfer>("/crypto/transfer", {
       method: "POST",
-      idempotencyKey: `${input.userId}:${input.toAddress}:${cents}`,
+      idempotencyKey: reference,
       body: {
         amount: cents,
+        reference,
         address: input.toAddress,
         chain: pair.chain,
         coin: pair.coin.toLowerCase(),

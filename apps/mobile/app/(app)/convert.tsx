@@ -8,7 +8,9 @@ import { api } from '@/services/api';
 import {
   ASSET_META,
   CONVERT_ASSETS,
+  formatConvertRate,
   formatMinor,
+  resolveConvertMode,
   type ConvertSymbol,
 } from '@/lib/assets';
 
@@ -22,12 +24,6 @@ function CoinBadge({ symbol, size = 40 }: { symbol: ConvertSymbol; size?: number
       <Text style={{ color: '#FFFFFF', fontSize: size * 0.45, fontWeight: '700' }}>{m.glyph}</Text>
     </View>
   );
-}
-
-function resolveMode(from: ConvertSymbol, to: ConvertSymbol) {
-  if (from === 'NGN') return { kind: 'buy' as const, crypto: to as 'BTC' | 'USDT' };
-  if (to === 'NGN') return { kind: 'sell' as const, crypto: from as 'BTC' | 'USDT' };
-  return { kind: 'convert' as const, crypto: from as 'BTC' | 'USDT' };
 }
 
 const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del'];
@@ -119,7 +115,7 @@ export default function ConvertScreen() {
     setError(null);
   }
 
-  const mode = resolveMode(fromSym, toSym);
+  const mode = resolveConvertMode(fromSym, toSym);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requote = useCallback((amt: string, f: ConvertSymbol, t: ConvertSymbol) => {
     if (debounce.current) clearTimeout(debounce.current);
@@ -133,10 +129,10 @@ export default function ConvertScreen() {
       setQuoting(true);
       setError(null);
       try {
-        const m = resolveMode(f, t);
+        const m = resolveConvertMode(f, t);
         const q =
           m.kind === 'convert'
-            ? await api.createConvertQuote(f as 'BTC' | 'USDT', t as 'BTC' | 'USDT', amt)
+            ? await api.createConvertQuote(f, t, amt)
             : await api.createQuote(m.kind, m.crypto, amt);
         setOut(formatMinor(q.amountOut, t));
         setRate(q.rate);
@@ -170,7 +166,7 @@ export default function ConvertScreen() {
     : !rate
     ? 'Enter an amount to see the rate'
     : mode.kind === 'convert'
-    ? `1 ${fromSym} ≈ ${Number(rate).toLocaleString('en-US', { maximumFractionDigits: 8 })} ${toSym}`
+    ? formatConvertRate(fromSym, toSym, rate, '≈')
     : `1 ${mode.crypto} ≈ ₦${Number(rate).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
 
   return (

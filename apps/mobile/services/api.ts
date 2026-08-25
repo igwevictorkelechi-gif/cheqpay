@@ -96,6 +96,29 @@ export interface UsdAccountInput {
   employerName: string;
   usResidencyStatus: string;
 }
+export interface UsdAccountStatus {
+  status: string;
+  messages: string[];
+  currency: string;
+  kycLink?: string | null;
+  accountId?: string;
+}
+export interface UsdWireInstruction {
+  type: string;
+  routingNumber: string;
+  bankName: string;
+  accountType: string;
+  accountNumber: string;
+  accountName: string;
+  memo: string;
+  swiftCode: string;
+}
+export interface UsdWireDetails {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  instructions: UsdWireInstruction[];
+}
 export interface Quote {
   quoteId: string;
   side: 'buy' | 'sell' | 'convert';
@@ -216,8 +239,10 @@ export const api = {
     return apiFetch(`/api/market/${asset}/price`);
   },
 
-  getTransactions(limit = 50): Promise<{ transactions: LedgerTransaction[] }> {
-    return apiFetch(`/api/transactions?limit=${limit}`);
+  /** Ledger history. `asset` narrows to one currency (both legs of a convert count). */
+  getTransactions(limit = 50, asset?: string): Promise<{ transactions: LedgerTransaction[] }> {
+    const q = asset ? `&asset=${encodeURIComponent(asset)}` : '';
+    return apiFetch(`/api/transactions?limit=${limit}${q}`);
   },
 
   getTransaction(id: string): Promise<{ transaction: LedgerTransaction }> {
@@ -231,7 +256,7 @@ export const api = {
     });
   },
 
-  createConvertQuote(fromAsset: AssetSymbol, toAsset: AssetSymbol, amount: string): Promise<Quote> {
+  createConvertQuote(fromAsset: string, toAsset: string, amount: string): Promise<Quote> {
     return apiFetch('/api/quotes/convert', {
       method: 'POST',
       body: JSON.stringify({ fromAsset, toAsset, amount }),
@@ -248,9 +273,30 @@ export const api = {
 
   /** Live crypto deposit addresses (manual custody). Absent asset = coming soon. */
   getCryptoDepositAddresses(): Promise<{
-    addresses: { asset: string; address: string; network: string; networkLabel: string }[];
+    addresses: {
+      asset: string;
+      address: string;
+      network: string;
+      networkLabel: string;
+      /** Minted for this user — deposits credit automatically. */
+      managed?: boolean;
+    }[];
+    /** Chains the user can additionally request an address on. */
+    networks?: { network: string; label: string }[];
   }> {
     return apiFetch('/api/crypto/deposit-addresses');
+  },
+
+  /** Mint a deposit address for one asset/network pair. */
+  createWallet(
+    asset: string,
+    network: string,
+    offramp?: boolean,
+  ): Promise<{ wallets: { asset: string; network: string; address: string }[]; offramp?: boolean }> {
+    return apiFetch('/api/wallets', {
+      method: 'POST',
+      body: JSON.stringify({ asset, network, offramp }),
+    });
   },
 
   createCryptoWithdrawal(input: {
@@ -386,6 +432,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     });
+  },
+
+  getUsdAccountStatus(): Promise<{ usdStatus: UsdAccountStatus | null }> {
+    return apiFetch('/api/virtual-accounts/usd/status');
+  },
+
+  getUsdAccountWire(): Promise<{ wire: UsdWireDetails | null }> {
+    return apiFetch('/api/virtual-accounts/usd/wire');
   },
 
   getBillCatalog(): Promise<{ services: BillServiceConfig[] }> {

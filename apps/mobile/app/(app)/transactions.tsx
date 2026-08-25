@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, FlatList, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '@/store';
 import { api, ApiError, type LedgerTransaction } from '@/services/api';
 import { colors } from '@/components/brand';
@@ -11,12 +11,16 @@ import { TxnRow } from '@/components/TxnRow';
 export default function TransactionsScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
+  // `currency=USD` narrows the history, so the home screen's currency tab
+  // carries through to "See all".
+  const { currency } = useLocalSearchParams<{ currency?: string }>();
+  const asset = String(currency ?? '').toUpperCase() === 'USD' ? 'USD' : undefined;
   const [txns, setTxns] = useState<LedgerTransaction[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   async function load() {
     try {
-      const run = () => api.getTransactions(100);
+      const run = () => api.getTransactions(100, asset);
       let res;
       try {
         res = await run();
@@ -36,7 +40,7 @@ export default function TransactionsScreen() {
 
   useEffect(() => {
     load();
-  }, [user?.id]);
+  }, [user?.id, asset]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -47,7 +51,9 @@ export default function TransactionsScreen() {
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
       <View className="px-5 py-4 flex-row items-center">
-        <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold flex-1">Transactions</Text>
+        <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold flex-1">
+          {asset === 'USD' ? 'Dollar transactions' : 'Transactions'}
+        </Text>
       </View>
 
       <FlatList

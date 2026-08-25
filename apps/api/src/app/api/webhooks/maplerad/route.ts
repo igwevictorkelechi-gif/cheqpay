@@ -21,6 +21,7 @@ import {
 import type { CollectionEventData, MapleradWebhookEvent } from "@/lib/maplerad/types";
 import { handleIssuingEvent, type IssuingEventData } from "@/lib/maplerad/issuing";
 import { handleCollectionEvent } from "@/lib/maplerad/deposits";
+import { creditCryptoDeposit, parseCryptoDeposit } from "@/lib/maplerad/cryptoDeposits";
 import { prismaLedgerPort } from "@/lib/mapleradCollections";
 import { cardStore } from "@/lib/cards";
 
@@ -129,18 +130,40 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     if (name.startsWith("crypto.")) {
-      // Stablecoin deposit/transfer events. Their exact names and payloads
-      // cannot be confirmed yet — Maplerad's sandbox address endpoint is broken
-      // (their SQL bug), so no test deposit has ever been observed. Log the
-      // full shape loudly; crediting gets wired from a real captured event, not
-      // a guess. crypto_deposits stays OFF until then, so nothing is lost.
-      console.error("[maplerad webhook] crypto event received but crediting is not wired", {
-        id: svix.id,
-        name,
-        payload: JSON.stringify(event).slice(0, 2000),
-      });
+      // A stablecoin deposit landed on one of our minted addresses. Outbound
+      // transfers arrive under the same prefix, so only inbound events credit;
+      // anything else is acknowledged and logged.
+      const isOutbound = /(transfer|withdraw|payout|debit)/i.test(name);
+      const parsed = isOutbound ? null : parseCryptoDeposit(event);
+
+      if (!parsed) {
+        // Either an outbound event, or a shape this parser could not read.
+        // Log the FULL payload: it is the only record of a deposit we may owe
+        // someone, and it is what the parser gets taught from.
+        console.error("[maplerad webhook] crypto event not credited", {
+          id: svix.id,
+          name,
+          reason: isOutbound ? "outbound event" : "unparseable payload",
+          payload: JSON.stringify(event).slice(0, 4000),
+        });
+        await markProcessed(SOURCE, svix.id);
+        return NextResponse.json({ status: "unhandled", eventId: svix.id });
+      }
+
+      const outcome = await creditCryptoDeposit(parsed);
+      if (outcome.outcome === "unmatched") {
+        // Real money arrived that we could not place. Never silent.
+        console.error("[maplerad webhook] CRYPTO UNMATCHED — deposit received, no owner found", {
+          id: svix.id,
+          name,
+          reason: outcome.reason,
+          address: parsed.address,
+          payload: JSON.stringify(event).slice(0, 4000),
+        });
+      }
+
       await markProcessed(SOURCE, svix.id);
-      return NextResponse.json({ status: "unhandled", eventId: svix.id });
+      return NextResponse.json({ ...outcome, eventId: svix.id });
     }
 
     // Authentic but not an event we consume — acknowledge so Maplerad stops retrying.

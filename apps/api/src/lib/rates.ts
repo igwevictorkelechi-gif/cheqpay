@@ -7,6 +7,50 @@ type Decimal = Prisma.Decimal;
 
 export type SwapSide = "buy" | "sell";
 
+/** The crypto assets the swap engine trades. Everything else is fiat. */
+export const CRYPTO_ASSETS: Asset[] = [Asset.BTC, Asset.USDT, Asset.USDC];
+
+export function isCryptoAsset(asset: Asset): boolean {
+  return CRYPTO_ASSETS.includes(asset);
+}
+
+/**
+ * USDT price (USDT per 1 whole unit) for the two fiats the convert engine
+ * supports, or `null` for a crypto asset (whose price must come from the feed).
+ * USD is treated as 1:1 with USDT (a dollar stablecoin); NGN is the inverse of
+ * the business USDT→NGN rate. This is what lets `computeCryptoConvert` price any
+ * pair in {NGN, USD, BTC, USDT, USDC} with the same generic maths.
+ */
+export function fiatUsdtPrice(asset: Asset, usdtNgnRate: Decimal): Decimal | null {
+  if (asset === Asset.USD) return new D(1);
+  if (asset === Asset.NGN) return new D(1).div(usdtNgnRate);
+  return null;
+}
+
+/**
+ * Classify a from→to pair. A buy spends NGN for crypto; a sell returns crypto to
+ * NGN; everything else — crypto↔crypto, and anything touching USD (incl.
+ * NGN↔USD) — is a convert. Kept here so the quote engine and clients agree on
+ * which API a pair uses, and so cashback (buy/sell only) is applied consistently.
+ */
+export function classifySwap(fromAsset: Asset, toAsset: Asset): "buy" | "sell" | "convert" {
+  if (fromAsset === Asset.NGN && isCryptoAsset(toAsset)) return "buy";
+  if (toAsset === Asset.NGN && isCryptoAsset(fromAsset)) return "sell";
+  return "convert";
+}
+
+/**
+ * True for a NGN↔USD pair (in either direction). This is the one pair Maplerad's
+ * FX rail settles, so it is priced and executed against real FX rather than the
+ * synthetic USDT peg used for crypto legs.
+ */
+export function isNgnUsdPair(fromAsset: Asset, toAsset: Asset): boolean {
+  return (
+    (fromAsset === Asset.NGN && toAsset === Asset.USD) ||
+    (fromAsset === Asset.USD && toAsset === Asset.NGN)
+  );
+}
+
 /**
  * Effective NGN price per 1 whole crypto unit, with the business spread applied.
  * Buy = user pays a premium (mid × (1+s)); Sell = user receives less (mid × (1-s)).
@@ -75,17 +119,22 @@ export function computeSwap(params: {
 }
 
 /**
- * Compute a crypto-to-crypto convert (e.g. BTC -> USDT), money-safe:
- *  - value the input in USDT using the from-asset's USDT spot
+ * Compute a convert between any two supported assets (e.g. BTC -> USDT, or
+ * USD -> NGN), money-safe:
+ *  - value the input in USDT using the from-asset's USDT price
  *  - apply the full business spread once (user receives slightly less)
- *  - convert that USDT value into the to-asset at its USDT spot
+ *  - convert that USDT value into the to-asset at its USDT price
  *  - FLOOR to integer minor units (never over-credit)
+ *
+ * Fiat legs are priced via `fiatUsdtPrice` (USD 1:1, NGN = 1/rate); crypto legs
+ * via the market feed. The maths is asset-agnostic — it only needs each leg's
+ * USDT price and decimals.
  *
  * `rate` is stored as TO-asset whole units per 1 FROM-asset whole unit.
  */
 export function computeCryptoConvert(params: {
-  fromAsset: Asset; // BTC | USDT
-  toAsset: Asset; // BTC | USDT
+  fromAsset: Asset; // any supported asset
+  toAsset: Asset; // any supported asset
   amountInMinor: bigint;
   fromUsdtPrice: Decimal; // USDT per 1 from-asset (USDT itself = 1)
   toUsdtPrice: Decimal; // USDT per 1 to-asset (USDT itself = 1)

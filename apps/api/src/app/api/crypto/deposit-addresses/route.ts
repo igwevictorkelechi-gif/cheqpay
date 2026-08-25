@@ -1,32 +1,112 @@
+import { Network } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { getManualWallets, MANUAL_ASSETS } from "@/lib/manualCrypto";
 import { getFeatureFlags } from "@/lib/features";
+import { listWallets, provisionWalletsDetailed } from "@/lib/wallets";
+import { CRYPTO_COINS, CRYPTO_NETWORKS } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
 
+/** Human label per chain, so the client never has to map enum values itself. */
+const NETWORK_LABELS: Partial<Record<Network, string>> = {
+  [Network.SOLANA]: "Solana (SPL)",
+  [Network.BASE]: "Base",
+  [Network.POLYGON]: "Polygon",
+  [Network.ETHEREUM]: "Ethereum (ERC-20)",
+  [Network.TRON]: "Tron (TRC-20)",
+  [Network.BSC]: "BNB Smart Chain (BEP-20)",
+  [Network.BITCOIN]: "Bitcoin",
+};
+
 /**
- * The crypto deposit addresses users can fund (manual custody mode). An asset
- * appears here only once the admin has configured its wallet address; the apps
- * treat everything else as "Coming soon".
+ * The crypto deposit addresses this user can fund.
+ *
+ * Per-user Maplerad addresses come first: they are minted for one holder, so an
+ * incoming deposit identifies its owner by the address alone and the webhook can
+ * credit it automatically. Manual (admin-configured) wallets are the fallback
+ * for assets custody cannot mint — BTC today — and those still need a human to
+ * credit, which is why they are not preferred.
+ *
+ * Addresses are provisioned on demand: a user who verified before their chain
+ * was supported would otherwise be stuck with no address and no way to ask for
+ * one. Provisioning is idempotent and failure-tolerant, so a provider outage
+ * degrades to "nothing live yet" rather than an error.
  */
 export async function GET(req: Request) {
   try {
-    await requireUser(req);
+    const auth = await requireUser(req);
+
     // Kill switch: with crypto deposits off, every asset reads as
     // "Coming soon" in the apps (empty list) rather than erroring.
     const flags = await getFeatureFlags();
     if (!flags.crypto_deposits) {
-      return jsonOk({ addresses: [] });
+      return jsonOk({ addresses: [], networks: [] });
     }
-    const wallets = await getManualWallets();
-    const addresses = MANUAL_ASSETS.filter((a) => wallets[a]).map((a) => ({
-      asset: a,
-      address: wallets[a]!.address,
-      network: wallets[a]!.network,
-      networkLabel: wallets[a]!.networkLabel,
+
+    // Mint the launch set if this user has none yet. Best-effort: an address we
+    // already hold is still returned when the provider is unreachable.
+    let wallets = await listWallets(auth.id);
+    let blocked: string | undefined;
+    let mintError: string | undefined;
+    if (wallets.length === 0) {
+      const report = await provisionWalletsDetailed(auth.id).catch((err) => {
+        console.error("[deposit-addresses] provisioning failed", err);
+        return { wallets: [], outcomes: [], blocked: String(err) };
+      });
+      wallets = report.wallets;
+      blocked = report.blocked;
+      mintError = report.outcomes.find((o) => o.status === "failed")?.error;
+    }
+
+    const addresses = wallets.map((w) => ({
+      asset: w.asset,
+      address: w.address,
+      network: w.network,
+      networkLabel: NETWORK_LABELS[w.network] ?? String(w.network),
+      /** Minted for this user — deposits credit automatically. */
+      managed: true,
     }));
-    return jsonOk({ addresses });
+
+    // Manual (shared, admin-configured) wallets fill in ONLY for assets custody
+    // cannot mint — BTC today.
+    //
+    // Never for USDT/USDC: a manual wallet is one address shared by every user,
+    // so a deposit into it cannot be attributed to anyone. The crypto webhook
+    // credits by matching the deposit address to its holder, which is exactly
+    // what a shared address destroys. Showing it would look like it worked and
+    // silently produce deposits nobody can be credited for.
+    const mintableAssets = new Set<string>(CRYPTO_COINS);
+    const covered = new Set(addresses.map((a) => a.asset));
+    const manual = await getManualWallets();
+    for (const a of MANUAL_ASSETS) {
+      const entry = manual[a];
+      if (entry && !covered.has(a) && !mintableAssets.has(a)) {
+        addresses.push({
+          asset: a,
+          address: entry.address,
+          network: entry.network as Network,
+          networkLabel: entry.networkLabel,
+          managed: false,
+        });
+      }
+    }
+
+    // Mintable assets with no address yet: say so, with the reason, instead of
+    // going quiet or handing back somebody else's wallet.
+    const pending = CRYPTO_COINS.filter((a) => !covered.has(a)).map((asset) => ({
+      asset,
+      reason: blocked ?? mintError ?? "address is still being generated",
+    }));
+
+    // Which chains the user could additionally request, so the client can offer
+    // a network selector without hardcoding the list.
+    const networks = CRYPTO_NETWORKS.map((n) => ({
+      network: n,
+      label: NETWORK_LABELS[n] ?? String(n),
+    }));
+
+    return jsonOk({ addresses, networks, pending });
   } catch (err) {
     return toErrorResponse(err);
   }

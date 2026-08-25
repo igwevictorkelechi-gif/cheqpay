@@ -5,7 +5,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { ShieldCheck, KeyRound, ArrowDownToLine, ArrowUpFromLine, Loader2 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
-const ASSETS = ['NGN', 'BTC', 'USDT', 'USDC'] as const;
+const ASSETS = ['NGN', 'USD', 'BTC', 'USDT', 'USDC'] as const;
 
 export default function AdjustBalancePage() {
   const [configured, setConfigured] = useState<boolean | null>(null);

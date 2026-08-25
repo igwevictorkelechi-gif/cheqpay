@@ -180,6 +180,7 @@ export function CoinBadge({
     USDT: { bg: "#26A17B", glyph: "₮" },
     USDC: { bg: "#2775CA", glyph: "$" },
     NGN: { bg: "#2E8B57", glyph: "₦" },
+    USD: { bg: "#22C55E", glyph: "$" },
   };
   const c = map[symbol] ?? { bg: "#6B5B95", glyph: symbol.charAt(0) };
   return (

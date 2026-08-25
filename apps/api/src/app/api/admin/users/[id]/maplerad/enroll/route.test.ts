@@ -23,6 +23,7 @@ const {
 }));
 
 vi.mock("@cheqpay/db", () => ({ prisma: { user: { findUnique, findFirst, update } } }));
+vi.mock("@/lib/pregenerateWallets", () => ({ pregenerateCryptoWallets: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requireAdmin }));
 vi.mock("@/lib/pii", () => ({ decryptPii, isPiiEncryptionConfigured }));
 vi.mock("@/lib/mapleradCustomer", () => ({ ensureMapleradCustomer, ensureMapleradSchema }));

@@ -92,14 +92,18 @@ async function ensureSchema(): Promise<void> {
       { ensureRetentionSchema },
       { ensureActivitySchema },
       { ensureMapleradSchema, ensureKycDocSchema },
+      { ensureQuoteProviderRef },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
       import("@/lib/mapleradCustomer"),
+      import("@/lib/ensureQuoteProviderRef"),
     ]);
     await Promise.all([
       ensureRetentionSchema(),
       ensureActivitySchema(),
+      // Quote.provider_ref, same select-all hazard: every Quote query selects it.
+      ensureQuoteProviderRef(),
       // maplerad_tier + the address columns. Omitting this is what broke the
       // admin user list, KYC and virtual accounts in production: the columns
       // were only created on KYC submission, but every User query selected them,

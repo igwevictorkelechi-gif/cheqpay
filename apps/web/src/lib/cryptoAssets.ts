@@ -1,8 +1,35 @@
 /** Crypto assets the backend custodies (launch set). */
+/** The chains Maplerad mints stablecoin addresses on. */
+export type CryptoNetwork =
+  | "SOLANA"
+  | "BASE"
+  | "POLYGON"
+  | "ETHEREUM"
+  | "TRON"
+  | "BSC"
+  | "BITCOIN";
+
+/**
+ * Chains a user can receive USDT/USDC on, in the order they are offered.
+ *
+ * Solana is first and is the default: it is the only chain Maplerad documents
+ * for withdrawal as well as deposit. Deposits on the others auto-convert to USD
+ * on arrival (offramp), so the user is never left holding coin on a chain we
+ * cannot send from — which is what makes offering them safe.
+ */
+export const CRYPTO_NETWORKS: { network: CryptoNetwork; label: string; offramp: boolean }[] = [
+  { network: "SOLANA", label: "Solana (SPL)", offramp: false },
+  { network: "BASE", label: "Base", offramp: true },
+  { network: "POLYGON", label: "Polygon", offramp: true },
+  { network: "ETHEREUM", label: "Ethereum (ERC-20)", offramp: true },
+  { network: "TRON", label: "Tron (TRC-20)", offramp: true },
+  { network: "BSC", label: "BNB Smart Chain (BEP-20)", offramp: true },
+];
+
 export interface CryptoAssetMeta {
   symbol: "BTC" | "USDT" | "USDC";
   name: string;
-  network: "BITCOIN" | "TRON" | "ETHEREUM" | "BSC";
+  network: CryptoNetwork;
   networkLabel: string;
   color: string;
   glyph: string;
@@ -24,9 +51,9 @@ export const CRYPTO_ASSETS: CryptoAssetMeta[] = [
   {
     symbol: "USDT",
     name: "Tether",
-    // Maplerad custody mints ERC-20 addresses; it has no TRON product.
-    network: "ETHEREUM",
-    networkLabel: "Ethereum (ERC-20)",
+    // Default chain: the one Maplerad documents for withdrawal too.
+    network: "SOLANA",
+    networkLabel: "Solana (SPL)",
     color: "#26A17B",
     glyph: "₮",
     minSend: "2",
@@ -35,8 +62,8 @@ export const CRYPTO_ASSETS: CryptoAssetMeta[] = [
   {
     symbol: "USDC",
     name: "USD Coin",
-    network: "ETHEREUM",
-    networkLabel: "Ethereum (ERC-20)",
+    network: "SOLANA",
+    networkLabel: "Solana (SPL)",
     color: "#2775CA",
     glyph: "$",
     minSend: "2",
@@ -67,13 +94,14 @@ export function isAssetEnabled(symbol: string): boolean {
   return ENABLED_CRYPTO.has(symbol.toUpperCase());
 }
 
-/** All assets the convert/swap flow can switch between. NGN is the fiat leg. */
-export type ConvertSymbol = "NGN" | "BTC" | "USDT" | "USDC";
+/** All assets the convert/swap flow can switch between. NGN and USD are fiat. */
+export type ConvertSymbol = "NGN" | "USD" | "BTC" | "USDT" | "USDC";
 
-export const CONVERT_ASSETS: ConvertSymbol[] = ["NGN", "BTC", "USDT", "USDC"];
+export const CONVERT_ASSETS: ConvertSymbol[] = ["NGN", "USD", "BTC", "USDT", "USDC"];
 
 export const ASSET_DECIMALS: Record<ConvertSymbol, number> = {
   NGN: 2,
+  USD: 2,
   BTC: 8,
   USDT: 6,
   USDC: 6,
@@ -81,10 +109,35 @@ export const ASSET_DECIMALS: Record<ConvertSymbol, number> = {
 
 export const ASSET_NAMES: Record<ConvertSymbol, string> = {
   NGN: "Nigerian Naira",
+  USD: "US Dollar",
   BTC: "Bitcoin",
   USDT: "Tether",
   USDC: "USD Coin",
 };
+
+/** The crypto legs (everything that isn't fiat). */
+export type CryptoLeg = Exclude<ConvertSymbol, "NGN" | "USD">;
+const CRYPTO_SYMBOLS: CryptoLeg[] = ["BTC", "USDT", "USDC"];
+
+/**
+ * Which API a from/to pair uses. Buy spends NGN for crypto and sell returns
+ * crypto to NGN — both go through /api/quotes. Everything else (crypto↔crypto,
+ * and anything touching USD, including NGN↔USD) is a convert through
+ * /api/quotes/convert. Mirrors the server's classifySwap so the two agree.
+ */
+export function resolveConvertMode(
+  fromSym: ConvertSymbol,
+  toSym: ConvertSymbol
+):
+  | { kind: "buy"; crypto: CryptoLeg }
+  | { kind: "sell"; crypto: CryptoLeg }
+  | { kind: "convert" } {
+  const isCrypto = (s: ConvertSymbol): s is CryptoLeg =>
+    (CRYPTO_SYMBOLS as string[]).includes(s);
+  if (fromSym === "NGN" && isCrypto(toSym)) return { kind: "buy", crypto: toSym };
+  if (toSym === "NGN" && isCrypto(fromSym)) return { kind: "sell", crypto: fromSym };
+  return { kind: "convert" };
+}
 
 /** Format a minor-unit string/bigint into a human decimal string for display. */
 export function formatMinor(minor: string | bigint, symbol: ConvertSymbol): string {
@@ -99,4 +152,33 @@ export function formatMinor(minor: string | bigint, symbol: ConvertSymbol): stri
     : wholeFmt;
   if (out === "") out = "0";
   return neg ? `-${out}` : out;
+}
+
+/**
+ * The rate line for a convert, printed in the direction people read it.
+ *
+ * The server's `rate` on a convert is always TO whole units per 1 FROM whole
+ * unit. For a pair with a Naira leg that is unreadable one way round — a real
+ * NGN→USD quote prints as "1 NGN = 0.00065 USD" — so a Naira pair is always
+ * flipped to Naira per unit of the other currency, which is how every rate in
+ * the country is quoted. Crypto↔crypto keeps the server's direction.
+ *
+ * Only for `convert` quotes: a buy/sell `rate` is already NGN per crypto unit
+ * in both directions and is formatted at the call site.
+ */
+export function formatConvertRate(
+  fromSym: ConvertSymbol,
+  toSym: ConvertSymbol,
+  rate: string,
+  joiner = "="
+): string | null {
+  const n = Number(rate);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const ngn = (v: number) =>
+    `₦${v.toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
+  if (toSym === "NGN") return `1 ${fromSym} ${joiner} ${ngn(n)}`;
+  if (fromSym === "NGN") return `1 ${toSym} ${joiner} ${ngn(1 / n)}`;
+  return `1 ${fromSym} ${joiner} ${n.toLocaleString("en-US", {
+    maximumFractionDigits: 8,
+  })} ${toSym}`;
 }

@@ -116,6 +116,59 @@ type MapleradEnroll = {
   message: string;
 };
 
+/** A user's USD account as the admin endpoint reports it. */
+type UsdAccountAdmin = {
+  accountNumber: string;
+  bankName: string;
+  accountName?: string;
+  currency: string;
+  status?: string;
+  consentRequired: boolean;
+  consentUrl?: string | null;
+};
+
+/** GET /api/users/{id}/usd-account — stored account plus a live status poll. */
+type UsdAccountState = {
+  enrolled: boolean;
+  customerId: string | null;
+  account: UsdAccountAdmin | null;
+  status: {
+    status: string;
+    messages: string[];
+    currency: string;
+    kycLink?: string | null;
+  } | null;
+};
+
+/** POST /api/users/{id}/usd-account — the manual open. */
+type UsdAccountOpened = {
+  created: boolean;
+  message: string;
+  account: UsdAccountAdmin;
+};
+
+/** GET/POST /api/users/{id}/wallets — crypto addresses and mint outcomes. */
+type WalletRow = { asset: string; network: string; address: string };
+type MintOutcome = {
+  asset: string;
+  network: string;
+  status: 'created' | 'existing' | 'skipped' | 'failed';
+  address?: string;
+  error?: string;
+};
+type WalletState = {
+  enrolled: boolean;
+  customerId: string | null;
+  wallets: WalletRow[];
+  mintable: { asset: string; network: string }[];
+};
+type MintResult = {
+  wallets: WalletRow[];
+  outcomes: MintOutcome[];
+  blocked: string | null;
+  message: string;
+};
+
 /** Anything not captured shows a dash rather than an empty cell. */
 const DASH = '—';
 function show(v: string | number | null | undefined): string {
@@ -213,6 +266,31 @@ export default function UserDetailPage() {
   const [enroll, setEnroll] = useState<MapleradEnroll | null>(null);
   const [enrollError, setEnrollError] = useState<string | null>(null);
 
+  // USD account: the dollar equivalent of the enrol/repair tool above. A user
+  // can be stuck with no dollar account because the client form was never
+  // finished, so an operator can supply the US-banking KYC and open it here.
+  const [usd, setUsd] = useState<UsdAccountState | null>(null);
+  const [usdChecking, setUsdChecking] = useState(false);
+  const [usdOpening, setUsdOpening] = useState(false);
+  const [usdOpened, setUsdOpened] = useState<UsdAccountOpened | null>(null);
+  const [usdError, setUsdError] = useState<string | null>(null);
+  // Crypto addresses: mint on demand and surface the provider's real error,
+  // which is otherwise only visible in server logs.
+  const [cw, setCw] = useState<WalletState | null>(null);
+  const [cwLoading, setCwLoading] = useState(false);
+  const [cwMinting, setCwMinting] = useState(false);
+  const [cwResult, setCwResult] = useState<MintResult | null>(null);
+  const [cwError, setCwError] = useState<string | null>(null);
+
+  const [usdForm, setUsdForm] = useState({
+    identificationNumber: '',
+    employmentStatus: 'EMPLOYED',
+    employmentDescription: '',
+    nationality: 'NG',
+    employerName: '',
+    usResidencyStatus: 'NON_RESIDENT_ALIEN',
+  });
+
   const load = useCallback(() => {
     if (!id) return;
     setLoading(true);
@@ -298,6 +376,90 @@ export default function UserDetailPage() {
       setEnrolling(false);
     }
   }, [id, enrollPhone, load]);
+
+  /** Read where the USD account stands, including a live status poll. */
+  const checkUsd = useCallback(async () => {
+    setUsdChecking(true);
+    setUsdError(null);
+    try {
+      const r = await fetch(`/api/users/${id}/usd-account`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || d?.message || `Check failed (${r.status})`);
+      setUsd(d as UsdAccountState);
+    } catch (e) {
+      setUsdError((e as Error).message);
+    } finally {
+      setUsdChecking(false);
+    }
+  }, [id]);
+
+  /** Open the USD account on the user's behalf from the supplied KYC. */
+  const openUsd = useCallback(async () => {
+    setUsdOpening(true);
+    setUsdError(null);
+    setUsdOpened(null);
+    try {
+      const r = await fetch(`/api/users/${id}/usd-account`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(usdForm),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || d?.message || `Open failed (${r.status})`);
+      setUsdOpened(d as UsdAccountOpened);
+      await checkUsd();
+    } catch (e) {
+      setUsdError((e as Error).message);
+    } finally {
+      setUsdOpening(false);
+    }
+  }, [id, usdForm, checkUsd]);
+
+  /** Read the user's crypto addresses and what is still mintable. */
+  const loadWallets = useCallback(async () => {
+    setCwLoading(true);
+    setCwError(null);
+    try {
+      const r = await fetch(`/api/users/${id}/wallets`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || d?.message || `Load failed (${r.status})`);
+      setCw(d as WalletState);
+    } catch (e) {
+      setCwError((e as Error).message);
+    } finally {
+      setCwLoading(false);
+    }
+  }, [id]);
+
+  /** Mint addresses. No pair = the launch set; a pair mints just that one. */
+  const mintWallets = useCallback(
+    async (pair?: { asset: string; network: string; offramp?: boolean }) => {
+      setCwMinting(true);
+      setCwError(null);
+      setCwResult(null);
+      try {
+        const r = await fetch(`/api/users/${id}/wallets`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(pair ?? {}),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d?.error || d?.message || `Generate failed (${r.status})`);
+        setCwResult(d as MintResult);
+        await loadWallets();
+      } catch (e) {
+        setCwError((e as Error).message);
+      } finally {
+        setCwMinting(false);
+      }
+    },
+    [id, loadWallets],
+  );
+
+  const usdFormValid =
+    usdForm.identificationNumber.trim().length >= 3 &&
+    usdForm.employmentDescription.trim().length >= 2 &&
+    usdForm.employerName.trim().length >= 1;
 
   const u = data?.user;
 
@@ -635,6 +797,307 @@ export default function UserDetailPage() {
                     <p className="mt-3">
                       Still missing: <strong>{enroll.missing.join(', ')}</strong>
                     </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* USD account: the dollar equivalent of the repair tool above. */}
+            <div className="mt-6 border-t border-gray-200 pt-6">
+              <h3 className="text-sm font-semibold text-gray-900">USD account</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                A dollar account needs US-banking KYC the Naira one never asks for, so a user can
+                sit with no USD account simply because they never finished that form. Check where
+                it stands, or open it on their behalf. Requires an enrolled Maplerad customer —
+                run <strong>Enrol / upgrade tier</strong> first if there is none.
+              </p>
+
+              <button
+                onClick={checkUsd}
+                disabled={usdChecking}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {usdChecking ? 'Checking…' : 'Check USD account status'}
+              </button>
+
+              {usd && (
+                <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+                  <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <Field label="Enrolled" value={usd.enrolled ? 'Yes' : 'No'} />
+                    <Field
+                      label="Account"
+                      value={
+                        usd.account
+                          ? `${usd.account.accountNumber} · ${usd.account.bankName}`
+                          : 'Not opened'
+                      }
+                    />
+                    <Field label="Request status" value={show(usd.status?.status)} />
+                    <Field
+                      label="Consent"
+                      value={usd.account?.consentRequired ? 'Required' : 'Not required'}
+                    />
+                  </dl>
+                  {usd.status?.messages && usd.status.messages.length > 0 && (
+                    <ul className="mt-3 list-disc space-y-1 pl-5 text-gray-700">
+                      {usd.status.messages.map((m, i) => (
+                        <li key={i}>{m}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {usd.status?.kycLink && (
+                    <p className="mt-3">
+                      <a
+                        href={usd.status.kycLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-brand-600 underline"
+                      >
+                        Open the provider’s verification link
+                      </a>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Manual open — only offered when there is no account yet. */}
+              {usd && !usd.account && (
+                <div className="mt-4 rounded-lg border border-gray-200 p-4">
+                  <p className="text-sm font-medium text-gray-900">Open it manually</p>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="text-sm">
+                      <span className="mb-1 block text-gray-600">Tax / ID number</span>
+                      <input
+                        value={usdForm.identificationNumber}
+                        onChange={(e) =>
+                          setUsdForm((f) => ({ ...f, identificationNumber: e.target.value }))
+                        }
+                        placeholder="Tax identification number"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
+                      />
+                    </label>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-gray-600">Employment status</span>
+                      <select
+                        value={usdForm.employmentStatus}
+                        onChange={(e) =>
+                          setUsdForm((f) => ({ ...f, employmentStatus: e.target.value }))
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
+                      >
+                        {['EMPLOYED', 'SELF_EMPLOYED', 'STUDENT', 'UNEMPLOYED', 'RETIRED'].map(
+                          (v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </label>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-gray-600">What do they do?</span>
+                      <input
+                        value={usdForm.employmentDescription}
+                        onChange={(e) =>
+                          setUsdForm((f) => ({ ...f, employmentDescription: e.target.value }))
+                        }
+                        placeholder="e.g. Software engineering"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
+                      />
+                    </label>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-gray-600">Employer / business</span>
+                      <input
+                        value={usdForm.employerName}
+                        onChange={(e) => setUsdForm((f) => ({ ...f, employerName: e.target.value }))}
+                        placeholder="e.g. Self / company name"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
+                      />
+                    </label>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-gray-600">Nationality (ISO-2)</span>
+                      <input
+                        value={usdForm.nationality}
+                        onChange={(e) =>
+                          setUsdForm((f) => ({
+                            ...f,
+                            nationality: e.target.value.toUpperCase().slice(0, 2),
+                          }))
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
+                      />
+                    </label>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-gray-600">US residency</span>
+                      <select
+                        value={usdForm.usResidencyStatus}
+                        onChange={(e) =>
+                          setUsdForm((f) => ({ ...f, usResidencyStatus: e.target.value }))
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
+                      >
+                        {['NON_RESIDENT_ALIEN', 'RESIDENT_ALIEN', 'US_CITIZEN'].map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <button
+                    onClick={openUsd}
+                    disabled={usdOpening || !usdFormValid || !usd.enrolled}
+                    className="mt-3 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {usdOpening ? 'Opening…' : 'Open USD account'}
+                  </button>
+                  {!usd.enrolled && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Enrol the customer with Maplerad first — the USD account hangs off the
+                      customer id.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {usdError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {usdError}
+                </div>
+              )}
+
+              {usdOpened && (
+                <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+                  <p className="font-medium">{usdOpened.message}</p>
+                  <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <Field label="Account" value={usdOpened.account.accountNumber} />
+                    <Field label="Bank" value={usdOpened.account.bankName} />
+                    <Field label="Status" value={show(usdOpened.account.status)} />
+                  </dl>
+                </div>
+              )}
+            </div>
+
+            {/* Crypto deposit addresses. Each is minted for this user alone —
+                that is what lets an incoming deposit be credited automatically,
+                since the webhook identifies the owner by the address. */}
+            <div className="mt-6 border-t border-gray-200 pt-6">
+              <h3 className="text-sm font-semibold text-gray-900">Crypto deposit addresses</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Unique per user — the deposit webhook credits by matching the address to its
+                holder, so a shared address could not be attributed to anyone. Addresses are
+                pre-generated at enrolment; generate here if a user has none, or to add a chain.
+                Requires an enrolled Maplerad customer.
+              </p>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={loadWallets}
+                  disabled={cwLoading}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {cwLoading ? 'Loading…' : 'Show crypto addresses'}
+                </button>
+                <button
+                  onClick={() => mintWallets()}
+                  disabled={cwMinting}
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {cwMinting ? 'Generating…' : 'Generate addresses'}
+                </button>
+              </div>
+
+              {cw && (
+                <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+                  <Field label="Enrolled" value={cw.enrolled ? 'Yes' : 'No'} />
+                  {cw.wallets.length === 0 ? (
+                    <p className="mt-3 text-gray-700">
+                      This user has no crypto addresses yet.
+                    </p>
+                  ) : (
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="border-b border-gray-200 text-left text-gray-500">
+                          <tr>
+                            <th className="py-2 pr-4 font-medium">Asset</th>
+                            <th className="py-2 pr-4 font-medium">Network</th>
+                            <th className="py-2 font-medium">Address</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cw.wallets.map((w) => (
+                            <tr key={`${w.asset}/${w.network}`} className="border-b border-gray-100">
+                              <td className="py-2 pr-4 font-medium text-gray-900">{w.asset}</td>
+                              <td className="py-2 pr-4 text-gray-700">{w.network}</td>
+                              <td className="py-2 break-all font-mono text-xs text-gray-700">
+                                {w.address}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {cw.mintable.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        Not yet generated
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {cw.mintable.map((m) => (
+                          <button
+                            key={`${m.asset}/${m.network}`}
+                            onClick={() =>
+                              mintWallets({
+                                asset: m.asset,
+                                network: m.network,
+                                // Only Solana can be withdrawn from, so any other
+                                // chain has to offramp to USD to be safe.
+                                offramp: m.network !== 'SOLANA',
+                              })
+                            }
+                            disabled={cwMinting}
+                            className="rounded-lg border border-dashed border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-white disabled:opacity-50"
+                          >
+                            + {m.asset} on {m.network}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {cwError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {cwError}
+                </div>
+              )}
+
+              {cwResult && (
+                <div
+                  className={`mt-3 rounded-lg border p-4 text-sm ${
+                    cwResult.blocked
+                      ? 'border-yellow-200 bg-yellow-50 text-yellow-800'
+                      : 'border-green-200 bg-green-50 text-green-800'
+                  }`}
+                >
+                  <p className="font-medium">{cwResult.message}</p>
+                  {cwResult.outcomes.length > 0 && (
+                    <ul className="mt-3 space-y-1">
+                      {cwResult.outcomes.map((o, i) => (
+                        <li key={i}>
+                          <strong>
+                            {o.asset}/{o.network}
+                          </strong>
+                          : {o.status}
+                          {/* The provider's own message — the thing that explains
+                              why nothing was minted. */}
+                          {o.error ? ` — ${o.error}` : ''}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               )}
