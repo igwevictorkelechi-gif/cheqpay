@@ -164,7 +164,7 @@ export default function AssetPage() {
         <button
           onClick={() => router.back()}
           aria-label="Back"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -251,7 +251,7 @@ export default function AssetPage() {
               <button
                 key={r}
                 onClick={() => setRange(r)}
-                className={`flex-1 rounded-full py-2 text-xs font-bold transition-colors ${
+                className={`min-h-[44px] flex-1 rounded-full py-2 text-xs font-bold transition-colors ${
                   range === r ? "bg-brand text-white" : "text-muted"
                 }`}
               >
@@ -436,7 +436,7 @@ function TradeSheet({
                     setAmount("");
                     reset();
                   }}
-                  className={`flex-1 rounded-full py-2.5 text-sm font-bold capitalize transition-colors ${
+                  className={`min-h-[44px] flex-1 rounded-full py-2.5 text-sm font-bold capitalize transition-colors ${
                     side === s ? "bg-brand text-white" : "text-muted"
                   }`}
                 >
@@ -474,7 +474,7 @@ function TradeSheet({
                       setAmount(c);
                       reset();
                     }}
-                    className="flex-1 rounded-full bg-surface py-2 text-xs font-semibold text-ink"
+                    className="min-h-[44px] flex-1 rounded-full bg-surface py-2 text-xs font-semibold text-ink"
                   >
                     ₦{Number(c).toLocaleString()}
                   </button>
@@ -487,7 +487,7 @@ function TradeSheet({
                     setAmount(balance);
                     reset();
                   }}
-                  className="flex-1 rounded-full bg-surface py-2 text-xs font-semibold text-ink"
+                  className="min-h-[44px] flex-1 rounded-full bg-surface py-2 text-xs font-semibold text-ink"
                 >
                   Max ({balance} {symbol})
                 </button>

@@ -158,7 +158,7 @@ export default function VirtualAccountPage() {
       <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
         <button
           onClick={() => router.back()}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
           aria-label="Go back"
         >
           <ChevronLeft className="h-5 w-5" />
@@ -175,7 +175,7 @@ export default function VirtualAccountPage() {
             <p className="text-muted">We couldn’t load your deposit account.</p>
             <button
               onClick={() => window.location.reload()}
-              className="mt-4 rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white active:scale-95"
+              className="min-h-[44px] mt-4 rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white active:scale-95"
             >
               Try again
             </button>
@@ -219,7 +219,7 @@ export default function VirtualAccountPage() {
                   </span>
                   <button
                     onClick={() => copy(account.accountNumber)}
-                    className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-2 text-sm font-bold text-ink active:scale-95"
+                    className="min-h-[44px] flex items-center gap-1.5 rounded-full bg-surface px-3 py-2 text-sm font-bold text-ink active:scale-95"
                   >
                     {copied ? (
                       <Check className="h-4 w-4 text-green-400" />

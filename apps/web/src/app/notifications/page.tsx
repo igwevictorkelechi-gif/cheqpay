@@ -78,7 +78,7 @@ export default function NotificationsPage() {
                 <button
                   onClick={() => flip(r.key)}
                   aria-pressed={!!prefs[r.key]}
-                  className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${
+                  className={`tap relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${
                     prefs[r.key] ? "bg-brand" : "bg-circle"
                   }`}
                 >

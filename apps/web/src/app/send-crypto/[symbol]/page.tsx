@@ -110,7 +110,7 @@ export default function SendCryptoDetailPage() {
         <div className="min-h-screen w-full max-w-[480px] bg-surface px-5 pt-4 lg:max-w-3xl">
           <button
             onClick={() => router.back()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
             aria-label="Go back"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -128,7 +128,7 @@ export default function SendCryptoDetailPage() {
         <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
           <button
             onClick={() => router.back()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
             aria-label="Go back"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -214,7 +214,7 @@ export default function SendCryptoDetailPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => (stage === "review" ? setStage("form") : router.back())}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
             aria-label="Go back"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -247,7 +247,7 @@ export default function SendCryptoDetailPage() {
                     setError("No valid wallet address found on your clipboard.");
                   }
                 }}
-                className="flex items-center gap-1 rounded-full bg-card px-3 py-1.5 text-xs font-bold text-brand-light active:scale-95"
+                className="min-h-[44px] flex items-center gap-1 rounded-full bg-card px-3 py-1.5 text-xs font-bold text-brand-light active:scale-95"
               >
                 <ClipboardPaste className="h-3.5 w-3.5" /> Paste
               </button>
@@ -293,7 +293,7 @@ export default function SendCryptoDetailPage() {
               <span className="text-sm font-bold text-muted">{meta.symbol}</span>
               <button
                 onClick={() => setAmount(String(available))}
-                className="rounded-full bg-brand/20 px-3 py-1 text-xs font-bold text-brand-light active:scale-95"
+                className="min-h-[44px] rounded-full bg-brand/20 px-3 py-1 text-xs font-bold text-brand-light active:scale-95"
               >
                 MAX
               </button>

@@ -163,7 +163,7 @@ export default function Dashboard() {
                 key={c}
                 onClick={() => setCurrency(c)}
                 aria-pressed={active}
-                className={`flex items-center gap-1.5 rounded-full px-5 py-2 text-sm font-bold transition-colors ${
+                className={`min-h-[44px] flex items-center gap-1.5 rounded-full px-5 py-2 text-sm font-bold transition-colors ${
                   active ? "bg-brand text-white shadow-sm" : "text-muted hover:text-ink"
                 }`}
               >

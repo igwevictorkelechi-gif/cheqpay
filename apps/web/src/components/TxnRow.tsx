@@ -141,7 +141,7 @@ export default function TxnRow({
         </div>
       </div>
       <div className="text-right">
-        <p className={`font-bold ${amt.positive ? "text-green-400" : "text-ink"}`}>{amt.text}</p>
+        <p className={`tnum font-bold ${amt.positive ? "text-green-400" : "text-ink"}`}>{amt.text}</p>
         {t.type === "CONVERT" && t.fromFormatted && (
           <p className="text-xs text-muted">
             -{Number(t.fromFormatted).toLocaleString("en-US", { maximumFractionDigits: 8 })}{" "}

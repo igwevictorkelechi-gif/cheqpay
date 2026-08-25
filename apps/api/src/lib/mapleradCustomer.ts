@@ -119,11 +119,54 @@ export function ensureKycDocSchema(): Promise<void> {
   return ensuredKycDoc;
 }
 
-export async function ensureMapleradCustomer(
+
+/**
+ * Render a provider failure into something an operator can act on.
+ *
+ * MapleradError carries the response body, and that body is where the real
+ * reason lives — "BVN does not match the name provided", "customer already
+ * exists", "invalid phone number". The `message` alone is usually just the
+ * status line, which is why an enrolment failure has been reading as an
+ * unexplained refusal.
+ */
+export function describeProviderError(err: unknown): string {
+  if (err instanceof MapleradError) {
+    const parts: string[] = [`HTTP ${err.status}`];
+    const body = err.body;
+    if (typeof body === "string" && body.trim()) {
+      parts.push(body.trim());
+    } else if (body && typeof body === "object") {
+      const b = body as Record<string, unknown>;
+      // Maplerad puts the useful text in `message`, and sometimes a field-level
+      // breakdown in `errors` / `data`.
+      for (const key of ["message", "error", "errors", "data"]) {
+        const v = b[key];
+        if (typeof v === "string" && v.trim()) { parts.push(v.trim()); break; }
+        if (v && typeof v === "object") { parts.push(JSON.stringify(v)); break; }
+      }
+    }
+    if (parts.length === 1 && err.message) parts.push(err.message);
+    return parts.join(" — ").slice(0, 500);
+  }
+  return (err instanceof Error ? err.message : String(err)).slice(0, 500);
+}
+
+/** What happened during an enrolment attempt, rather than just whether it worked. */
+export interface EnrollmentOutcome {
+  customerId: string | null;
+  /** The provider's own reason, when a call failed. */
+  error?: string;
+  /** Which call failed, so an operator knows what to retry. */
+  step?: "enroll" | "create" | "readback" | "upgradeTier1";
+  /** Fields we knew were absent before calling — not a provider failure. */
+  missing?: string[];
+}
+
+export async function ensureMapleradCustomerDetailed(
   userId: string,
   email: string,
   input: MapleradEnrollmentInput
-): Promise<string | null> {
+): Promise<EnrollmentOutcome> {
   await ensureMapleradSchema();
 
   const user = await prisma.user.findUnique({
@@ -137,7 +180,7 @@ export async function ensureMapleradCustomer(
       addressPostalCode: true,
     },
   });
-  if (!user) return null;
+  if (!user) return { customerId: null, error: "no such user" };
 
   let customerId = user.mapleradCustomerId;
   // Local mirror of the tier so an enrol that lands tier 1+ in this call is seen
@@ -219,12 +262,16 @@ export async function ensureMapleradCustomer(
         });
       }
     } catch (err) {
+      // The provider's own words, carried out to the caller. Logging alone is
+      // what made this failure read as an unexplained refusal: the operator saw
+      // "the provider did not accept the upgrade" and had nowhere to go.
+      const error = describeProviderError(err);
       console.error("[maplerad] could not create the customer (will retry)", {
         userId,
         fullEnroll: canEnrollFull,
-        error: err instanceof Error ? err.message : String(err),
+        error,
       });
-      return null;
+      return { customerId: null, error, step: canEnrollFull ? "enroll" : "create" };
     }
   } else {
     // ---- Step 1b: reconcile an id we did not create -----------------------
@@ -247,7 +294,7 @@ export async function ensureMapleradCustomer(
       const remote = await getCustomer(customerId);
       if (hasTier1Evidence(remote)) {
         await prisma.user.update({ where: { id: userId }, data: { mapleradTier: 1 } });
-        return customerId;
+        return { customerId };
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -266,7 +313,11 @@ export async function ensureMapleradCustomer(
           where: { id: userId },
           data: { mapleradCustomerId: null, mapleradTier: 0 },
         });
-        return null;
+        return {
+          customerId: null,
+          error: `the stored customer id ${customerId} does not exist at Maplerad; it has been cleared so the next attempt creates a real one`,
+          step: "readback",
+        };
       }
     }
   }
@@ -274,7 +325,7 @@ export async function ensureMapleradCustomer(
   // ---- Step 2: the tier 1 upgrade -----------------------------------------
   // `tier` (not user.mapleradTier) so a full enrol above, which may have just
   // landed tier 2, is not followed by a pointless upgrade attempt.
-  if (tier >= 1) return customerId;
+  if (tier >= 1) return { customerId };
 
   // `address`, `dob` and `phone` were resolved once above and are reused here —
   // the address falls back to what is already on file, so the upgrade can be
@@ -288,12 +339,21 @@ export async function ensureMapleradCustomer(
     // Not an error: the customer exists and can be upgraded as soon as the
     // user supplies the rest.
     console.warn("[maplerad] tier 1 upgrade skipped (incomplete data)", { userId, missing });
-    return customerId;
+    return {
+      customerId,
+      missing,
+      error: `tier 1 upgrade needs ${missing.join(", ")}`,
+      step: "upgradeTier1",
+    };
   }
 
   if (!dob || !phone) {
     console.warn("[maplerad] tier 1 upgrade skipped (unparseable dob/phone)", { userId });
-    return customerId;
+    return {
+      customerId,
+      error: "date of birth or phone number could not be put into the format Maplerad expects",
+      step: "upgradeTier1",
+    };
   }
 
   try {
@@ -317,13 +377,25 @@ export async function ensureMapleradCustomer(
       data: { mapleradTier: 1 },
     });
   } catch (err) {
-    console.error("[maplerad] tier 1 upgrade failed (will retry)", {
-      userId,
-      error: err instanceof Error ? err.message : String(err),
-    });
+    const error = describeProviderError(err);
+    console.error("[maplerad] tier 1 upgrade failed (will retry)", { userId, error });
+    return { customerId, error, step: "upgradeTier1" };
   }
 
-  return customerId;
+  return { customerId };
+}
+
+/**
+ * The original signature, kept for the many callers that only branch on
+ * "did we end up with a customer". Anything that needs to TELL somebody why it
+ * failed — the admin repair tool above all — should call the detailed variant.
+ */
+export async function ensureMapleradCustomer(
+  userId: string,
+  email: string,
+  input: MapleradEnrollmentInput
+): Promise<string | null> {
+  return (await ensureMapleradCustomerDetailed(userId, email, input)).customerId;
 }
 
 /** Persist the address so a later tier 1 upgrade needs nothing from the user. */

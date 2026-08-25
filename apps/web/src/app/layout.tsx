@@ -78,6 +78,19 @@ export default function RootLayout({
     // intentionally differ on this one element.
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/*
+          Preload the latin subset only. It carries the alphabet and digits, so
+          it is on the critical path for every screen; latin-ext holds the naira
+          sign and is fetched by the same first paint that needs it. Preloading
+          both would make the app pay for two files before rendering anything.
+        */}
+        <link
+          rel="preload"
+          href="/fonts/jakarta-latin-v1.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
         {/* Apply the saved theme before first paint to avoid a flash. */}
         <script
           dangerouslySetInnerHTML={{

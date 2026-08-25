@@ -133,11 +133,11 @@ export default function Landing() {
           <div className="hidden items-center gap-3 md:flex">
             <Link
               href="/login"
-              className="rounded-full px-4 py-2 text-sm font-semibold text-ink transition-colors hover:bg-circle"
+              className="inline-flex min-h-[44px] items-center rounded-full px-4 py-2 text-sm font-semibold text-ink transition-colors hover:bg-circle"
             >
               Sign in
             </Link>
-            <Link href="/signup" className="btn-primary !px-5 !py-2.5 text-sm">
+            <Link href="/signup" className="min-h-[44px] btn-primary !px-5 !py-2.5 text-sm">
               Create account
             </Link>
           </div>
@@ -158,21 +158,21 @@ export default function Landing() {
               <a
                 href="#features"
                 onClick={() => setMenuOpen(false)}
-                className="rounded-xl px-3 py-2.5 text-sm font-medium text-ink/80 hover:bg-circle"
+                className="flex min-h-[44px] items-center rounded-xl px-3 py-2.5 text-sm font-medium text-ink/80 hover:bg-circle"
               >
                 Features
               </a>
               <a
                 href="#security"
                 onClick={() => setMenuOpen(false)}
-                className="rounded-xl px-3 py-2.5 text-sm font-medium text-ink/80 hover:bg-circle"
+                className="flex min-h-[44px] items-center rounded-xl px-3 py-2.5 text-sm font-medium text-ink/80 hover:bg-circle"
               >
                 Security
               </a>
               <Link
                 href="/support"
                 onClick={() => setMenuOpen(false)}
-                className="rounded-xl px-3 py-2.5 text-sm font-medium text-ink/80 hover:bg-circle"
+                className="flex min-h-[44px] items-center rounded-xl px-3 py-2.5 text-sm font-medium text-ink/80 hover:bg-circle"
               >
                 Support
               </Link>

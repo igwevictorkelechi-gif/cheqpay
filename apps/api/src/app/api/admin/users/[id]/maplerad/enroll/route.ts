@@ -1,8 +1,14 @@
 import { prisma } from "@cheqpay/db";
 import { requireAdmin } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
-import { decryptPii, isPiiEncryptionConfigured } from "@/lib/pii";
-import { ensureMapleradCustomer, ensureMapleradSchema } from "@/lib/mapleradCustomer";
+import {
+  decryptPii,
+  encryptPii,
+  fingerprintPii,
+  isPiiEncryptionConfigured,
+  last4,
+} from "@/lib/pii";
+import { ensureMapleradCustomerDetailed, ensureMapleradSchema } from "@/lib/mapleradCustomer";
 import { grantTierFromEnrolment } from "@/lib/kycAutoTier";
 import { upgradeToTier2 } from "@/lib/mapleradTier2";
 import { resolveApiOrigin } from "@/lib/kycDocuments";
@@ -45,6 +51,15 @@ export async function POST(req: Request, { params }: Ctx) {
       createAccount?: unknown;
       /** Set false to stop at tier 1 and skip the government-ID upgrade. */
       tier2?: unknown;
+      // Identity corrections. NIBSS validates the BVN against the name and date
+      // of birth together, so a correct BVN still fails "could not validate BVN"
+      // when the stored name is in the wrong order or the DOB is off by a digit.
+      // These let support fix that in place instead of asking the user to redo
+      // KYC. Each is optional; anything omitted keeps what is on file.
+      firstName?: unknown;
+      lastName?: unknown;
+      dateOfBirth?: unknown;
+      bvn?: unknown;
     };
 
     await ensureMapleradSchema();
@@ -122,8 +137,90 @@ export async function POST(req: Request, { params }: Ctx) {
       }
     }
 
-    const [firstName, ...rest] = (user.legalName ?? "").trim().split(/\s+/);
-    const lastName = rest.join(" ");
+    let [firstName, ...rest] = (user.legalName ?? "").trim().split(/\s+/);
+    let lastName = rest.join(" ");
+    let dateOfBirthIso = user.dateOfBirth ? user.dateOfBirth.toISOString().slice(0, 10) : null;
+
+    // ---- Step 2b: identity corrections from the operator -------------------
+    //
+    // Applied to the stored values AND persisted, so the fix sticks for the
+    // deposit account below and for any future retry rather than living only in
+    // this request. Each field is validated to the same shape the KYC form
+    // enforces, so a repair cannot write a worse value than the user could.
+    // A row is written to the audit log naming exactly which fields an admin
+    // changed — this is an identity edit on a money account and must be
+    // attributable.
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const overrideFirst = str(body.firstName);
+    const overrideLast = str(body.lastName);
+    const overrideDob = str(body.dateOfBirth);
+    const overrideBvn = str(body.bvn);
+    const persist: Record<string, unknown> = {};
+    const overridden: string[] = [];
+
+    if (overrideFirst || overrideLast) {
+      // A name correction must supply both halves — sending only one would
+      // leave the other as whatever the mis-split produced, which is the very
+      // problem being fixed.
+      if (!overrideFirst || !overrideLast) {
+        throw new ApiError(
+          422,
+          "A name correction needs both a first name and a last name.",
+          "bad_name",
+        );
+      }
+      if (!/^[A-Za-z][A-Za-z '-]*$/.test(overrideFirst) || !/^[A-Za-z][A-Za-z '-]*$/.test(overrideLast)) {
+        throw new ApiError(422, "Names may contain only letters, spaces, apostrophes and hyphens.", "bad_name");
+      }
+      firstName = overrideFirst;
+      lastName = overrideLast;
+      rest = [];
+      persist.legalName = `${overrideFirst} ${overrideLast}`;
+      overridden.push("legal name");
+    }
+
+    if (overrideDob) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(overrideDob) || Number.isNaN(Date.parse(overrideDob))) {
+        throw new ApiError(422, "Date of birth must be a real date in YYYY-MM-DD form.", "bad_dob");
+      }
+      dateOfBirthIso = overrideDob;
+      persist.dateOfBirth = new Date(overrideDob);
+      overridden.push("date of birth");
+    }
+
+    if (overrideBvn) {
+      if (!/^\d{11}$/.test(overrideBvn)) {
+        throw new ApiError(422, "A BVN is exactly 11 digits.", "bad_bvn");
+      }
+      if (!isPiiEncryptionConfigured()) {
+        // Refuse rather than store a BVN in the clear: the three-way encrypted
+        // storage is the whole point of how the BVN is held.
+        throw new ApiError(
+          503,
+          "PII encryption is not configured, so a corrected BVN cannot be stored safely.",
+          "pii_unconfigured",
+        );
+      }
+      bvn = overrideBvn;
+      persist.bvnCiphertext = encryptPii(overrideBvn);
+      persist.bvnFingerprint = fingerprintPii(overrideBvn);
+      persist.bvnLast4 = last4(overrideBvn);
+      overridden.push("BVN");
+    }
+
+    if (overridden.length) {
+      await prisma.user.update({ where: { id }, data: persist });
+      await prisma.auditLog.create({
+        data: {
+          userId: id,
+          action: "admin.kyc.identity_corrected",
+          resourceType: "User",
+          resourceId: id,
+          // Never the values themselves — only which fields moved.
+          details: { fields: overridden, actor: req.headers.get("x-admin-actor") ?? "admin" },
+        },
+      });
+    }
     const address =
       user.addressStreet && user.addressCity && user.addressState && user.addressPostalCode
         ? {
@@ -136,7 +233,7 @@ export async function POST(req: Request, { params }: Ctx) {
 
     const missing: string[] = [];
     if (!bvn) missing.push("bvn");
-    if (!user.dateOfBirth) missing.push("dateOfBirth");
+    if (!dateOfBirthIso) missing.push("dateOfBirth");
     if (!phone) missing.push("phone");
     if (!address) missing.push("address");
     if (!firstName || !lastName) missing.push("legalName (need a first and last name)");
@@ -147,6 +244,7 @@ export async function POST(req: Request, { params }: Ctx) {
         phoneOutcome,
         enrolled: false,
         missing,
+        corrected: overridden.length ? overridden : undefined,
         tier: user.mapleradTier,
         message:
           `Cannot reach tier 1 yet — still missing: ${missing.join(", ")}. ` +
@@ -157,14 +255,15 @@ export async function POST(req: Request, { params }: Ctx) {
     // ---- Step 3: enrol / upgrade -------------------------------------------
     // No identity image: this is a repair from stored data, and Maplerad's
     // identity block is not required for the tier-1 upgrade path.
-    const customerId = await ensureMapleradCustomer(id, user.email, {
+    const enrolment = await ensureMapleradCustomerDetailed(id, user.email, {
       firstName,
       lastName,
       bvn,
-      dateOfBirth: user.dateOfBirth!.toISOString().slice(0, 10),
+      dateOfBirth: dateOfBirthIso!,
       phone,
       address,
     });
+    const customerId = enrolment.customerId;
 
     // ---- Step 3b: tier 2 -----------------------------------------------------
     // Attempted whenever the customer has reached tier 1 and a government ID is
@@ -211,12 +310,21 @@ export async function POST(req: Request, { params }: Ctx) {
       userId: id,
       phoneOutcome,
       enrolled: Boolean(customerId),
+      // Which identity fields this run corrected before enrolling, so the
+      // operator sees the fix was applied and what it touched.
+      corrected: overridden.length ? overridden : undefined,
       customerId: after?.mapleradCustomerId ?? customerId,
       tierBefore: user.mapleradTier,
       tier: after?.mapleradTier ?? user.mapleradTier,
       kycTier: promotion.tier,
       kycTierGranted: promotion.granted,
       tier2Reason,
+      // Why the enrolment stopped, in Maplerad's own words. Without this the
+      // operator was told to go and read the API logs, which in practice meant
+      // the account stayed stuck.
+      enrollError: enrolment.error ?? null,
+      enrollStep: enrolment.step ?? null,
+      missing: enrolment.missing ?? undefined,
       account,
       accountError,
       message:
@@ -224,7 +332,9 @@ export async function POST(req: Request, { params }: Ctx) {
           ? "Customer is at tier 2 — limits raised and crypto withdrawals unlocked."
           : (after?.mapleradTier ?? 0) >= 1
             ? `Customer is at tier 1.${tier2Reason ? ` Tier 2 not granted: ${tier2Reason}.` : ""}`
-            : "Still tier 0 — the provider did not accept the upgrade. The Maplerad response is in the API logs.",
+            : enrolment.error
+              ? `Still tier 0 — Maplerad refused${enrolment.step ? ` at the ${enrolment.step} step` : ""}: ${enrolment.error}`
+              : "Still tier 0 — the provider did not accept the upgrade, and returned no reason.",
     });
   } catch (err) {
     return toErrorResponse(err);

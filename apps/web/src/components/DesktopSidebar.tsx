@@ -128,8 +128,7 @@ export default function DesktopSidebar() {
                       key={item.href}
                       href={item.href}
                       aria-current={active ? "page" : undefined}
-                      className={
-                        "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors " +
+                      className={"min-h-[44px] flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors " +
                         (active
                           ? "bg-brand/15 text-brand-light"
                           : "text-ink/80 hover:bg-circle hover:text-ink")
@@ -150,7 +149,7 @@ export default function DesktopSidebar() {
         <div className="flex items-center gap-2">
           <Link
             href="/profile"
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-circle"
+            className="min-h-[44px] flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-circle"
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/20 font-bold text-brand-light">
               {label.charAt(0).toUpperCase()}

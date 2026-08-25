@@ -1,3 +1,45 @@
+/*
+ * CheqPay's typeface: Plus Jakarta Sans, self-hosted.
+ *
+ * Self-hosted rather than linked from Google Fonts: that saves a third-party DNS
+ * lookup and TLS handshake before any text can render, which is worth real time
+ * on the mobile connections most of our users are on, and it means the app does
+ * not stop looking like itself if fonts.gstatic.com is slow or blocked.
+ *
+ * One variable file per subset covers weights 400-800, so every weight the UI
+ * uses costs the same single download. `latin-ext` is NOT optional: the naira
+ * sign ₦ is U+20A6, which lives in that subset, and without it every balance in
+ * the app would render its currency symbol in a fallback font sitting next to
+ * Jakarta digits.
+ *
+ * The `-v1` in the filenames is deliberate. .htaccess serves .woff2 as
+ * `immutable, max-age=31536000`, and unlike Next's own assets these names are
+ * not content-hashed — so a replacement font would sit unseen in browser caches
+ * for a year. Changing the face means bumping to -v2, not overwriting.
+ */
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/jakarta-latin-v1.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/jakarta-latin-ext-v1.woff2") format("woff2");
+  /* U+20A0-20AB carries ₦ (U+20A6). */
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -37,10 +79,51 @@ html {
 
 body {
   @apply bg-black text-ink antialiased;
+  /* Slightly tighter than default: Jakarta is wide, and at UI sizes the default
+     tracking reads loose next to the dense number columns this app is full of. */
+  letter-spacing: -0.011em;
+}
+
+/*
+ * Money lines up in columns — balances, transaction lists, statements — and
+ * proportional digits make those columns ragged as the amounts change. Tabular
+ * figures fix the advance width so a number never shifts under its own update.
+ */
+.tnum,
+input[inputmode="decimal"],
+input[inputmode="numeric"] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 /* Component Utilities (dark-purple theme) */
 @layer components {
+  /*
+   * A guaranteed 44x44 hit area for a control that must stay visually small.
+   *
+   * Apple asks for 44pt and Material for 48dp; this app is used one-handed, on
+   * a phone, to move money, so a mis-tap is expensive. Most controls simply get
+   * bigger (see min-h-[44px] and h-11 across the screens) — but a toggle switch
+   * or a corner dismiss has a size the design depends on. For those the
+   * *target* grows while the *paint* does not: an invisible ::after centred on
+   * the control extends the tappable region outward.
+   *
+   * `position: relative` is set here rather than assumed, and the pseudo-element
+   * is inert (no pointer-events change needed — it inherits the button's).
+   */
+  .tap {
+    position: relative;
+  }
+  .tap::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+  }
+
   .btn-primary {
     @apply inline-flex items-center justify-center rounded-full bg-gradient-to-r from-brand to-brand-light px-5 py-3 font-semibold text-white shadow-lg shadow-brand/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
   }

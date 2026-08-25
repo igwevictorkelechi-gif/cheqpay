@@ -138,7 +138,7 @@ export default function StatementPage() {
                   <button
                     key={p.label}
                     onClick={() => pickPreset(p.days)}
-                    className={`rounded-full px-3.5 py-2 text-xs font-bold transition-colors ${
+                    className={`min-h-[44px] rounded-full px-3.5 py-2 text-xs font-bold transition-colors ${
                       activePreset
                         ? "bg-brand text-white"
                         : "bg-card text-muted hover:text-ink"

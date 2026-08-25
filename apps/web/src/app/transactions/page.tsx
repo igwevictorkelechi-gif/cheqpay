@@ -81,7 +81,7 @@ export default function TransactionsPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
             aria-label="Go back"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -109,7 +109,7 @@ export default function TransactionsPage() {
               <p className="text-muted">We couldn’t load your transactions.</p>
               <button
                 onClick={() => window.location.reload()}
-                className="mt-4 rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white active:scale-95"
+                className="min-h-[44px] mt-4 rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white active:scale-95"
               >
                 Try again
               </button>

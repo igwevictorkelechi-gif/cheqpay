@@ -65,7 +65,7 @@ export default function SettingsPage() {
                 role="switch"
                 aria-checked={notifications}
                 aria-label="Push Notifications"
-                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                className={`tap relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
                   notifications ? "bg-brand" : "bg-circle"
                 }`}
               >
@@ -87,7 +87,7 @@ export default function SettingsPage() {
                 role="switch"
                 aria-checked={biometric}
                 aria-label="Biometric Authentication"
-                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                className={`tap relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
                   biometric ? "bg-brand" : "bg-circle"
                 }`}
               >
@@ -109,7 +109,7 @@ export default function SettingsPage() {
                 role="switch"
                 aria-checked={darkMode}
                 aria-label="Dark Mode"
-                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                className={`tap relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
                   darkMode ? "bg-brand" : "bg-circle"
                 }`}
               >

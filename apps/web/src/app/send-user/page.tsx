@@ -185,7 +185,7 @@ export default function SendToUserPage() {
                     setAsset(a);
                     setAmount("");
                   }}
-                  className={`rounded-full px-4 py-2 text-sm font-bold transition-colors ${
+                  className={`min-h-[44px] rounded-full px-4 py-2 text-sm font-bold transition-colors ${
                     asset === a ? "bg-brand text-white" : "bg-card text-muted hover:text-ink"
                   }`}
                 >

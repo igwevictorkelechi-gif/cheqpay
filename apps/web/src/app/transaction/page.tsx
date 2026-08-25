@@ -91,7 +91,7 @@ export default function TransactionDetailPage() {
             <button
               onClick={share}
               disabled={sharing}
-              className="flex items-center gap-2 rounded-full bg-card px-4 py-2.5 text-sm font-semibold text-ink"
+              className="min-h-[44px] flex items-center gap-2 rounded-full bg-card px-4 py-2.5 text-sm font-semibold text-ink"
             >
               <Share2 className="h-4 w-4" />
               {sharing ? "…" : copied ? "Saved" : "Share"}

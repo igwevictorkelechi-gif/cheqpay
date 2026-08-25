@@ -193,7 +193,7 @@ export default function ReceiveDetailPage() {
         <div className="min-h-screen w-full max-w-[480px] bg-surface px-5 pt-4 lg:max-w-3xl">
           <button
             onClick={() => router.back()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
             aria-label="Go back"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -211,7 +211,7 @@ export default function ReceiveDetailPage() {
         <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
           <button
             onClick={() => router.back()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
             aria-label="Go back"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -244,7 +244,7 @@ export default function ReceiveDetailPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
             aria-label="Go back"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -337,7 +337,7 @@ export default function ReceiveDetailPage() {
               onClick={() =>
                 needsAuth ? router.push("/login") : setReloadKey((k) => k + 1)
               }
-              className="mt-3 rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white active:scale-95"
+              className="min-h-[44px] mt-3 rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white active:scale-95"
             >
               {needsAuth ? "Sign in" : "Try again"}
             </button>

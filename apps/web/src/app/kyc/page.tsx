@@ -252,7 +252,7 @@ export default function KYCPage() {
       <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
         <button
           onClick={() => router.back()}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
           aria-label="Go back"
         >
           <ChevronLeft className="h-5 w-5" />

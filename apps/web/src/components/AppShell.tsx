@@ -106,7 +106,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   key={tab.href}
                   href={tab.href}
                   aria-current={active ? "page" : undefined}
-                  className="relative z-10 flex flex-1 flex-col items-center gap-1 py-2"
+                  className="min-h-[44px] relative z-10 flex flex-1 flex-col items-center gap-1 py-2"
                 >
                   {/* Active icons render as a solid brand silhouette with their
                       interior detail knocked out in the bar colour — the filled

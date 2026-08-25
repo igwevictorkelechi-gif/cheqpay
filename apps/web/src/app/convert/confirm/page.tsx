@@ -109,7 +109,7 @@ function ConfirmInner() {
       <div className="flex items-center px-5 pb-2 pt-3">
         <button
           onClick={() => router.back()}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink"
           aria-label="Go back"
         >
           <ChevronLeft className="h-5 w-5" />
