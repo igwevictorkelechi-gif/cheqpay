@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
-import { ChevronLeft, Copy, Share2, Check, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronDown, Copy, Share2, Check, AlertTriangle } from "lucide-react";
 import { api, ApiError } from "@/services/api";
 import { getAssetMeta } from "@/lib/cryptoAssets";
 import DesktopSidebar from "@/components/DesktopSidebar";
@@ -208,43 +208,53 @@ export default function ReceiveDetailPage() {
 
         {/* Network selector. A stablecoin lives on several chains and the
             address differs per chain, so the choice is explicit — picking one
-            swaps the QR and the address below it. */}
+            swaps the QR and the address below it. Chains with no address yet
+            are listed too and minted on selection, so the dropdown shows every
+            network the user can receive on rather than only the ready ones. */}
         {(options.length > 1 || mintable.length > 0) && (
           <div className="mt-5">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+            <label
+              htmlFor="receive-network"
+              className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted"
+            >
               Network
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {options.map((o) => {
-                const active = o.address === address;
-                return (
-                  <button
-                    key={o.network}
-                    onClick={() => {
-                      setAddress(o.address);
-                      setNetLabel(o.networkLabel);
-                    }}
-                    className={`rounded-full px-4 py-2 text-sm font-bold transition-colors ${
-                      active
-                        ? "bg-brand text-white"
-                        : "bg-card text-muted hover:text-ink"
-                    }`}
-                  >
+            </label>
+            <div className="relative">
+              <select
+                id="receive-network"
+                value={address ?? ""}
+                disabled={minting !== null}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  // A "generate:" option has no address yet — mint it first.
+                  if (v.startsWith("generate:")) {
+                    void generate(v.slice("generate:".length));
+                    return;
+                  }
+                  const picked = options.find((o) => o.address === v);
+                  if (picked) {
+                    setAddress(picked.address);
+                    setNetLabel(picked.networkLabel);
+                  }
+                }}
+                className="w-full appearance-none rounded-2xl border border-border bg-card px-4 py-3.5 pr-10 text-base font-semibold text-ink outline-none focus:border-brand disabled:opacity-60"
+              >
+                {options.map((o) => (
+                  <option key={o.network} value={o.address}>
                     {o.networkLabel}
-                  </button>
-                );
-              })}
-              {mintable.map((n) => (
-                <button
-                  key={n.network}
-                  onClick={() => generate(n.network)}
-                  disabled={minting !== null}
-                  className="rounded-full border border-dashed border-border px-4 py-2 text-sm font-semibold text-muted hover:text-ink disabled:opacity-50"
-                >
-                  {minting === n.network ? "Creating…" : `+ ${n.label}`}
-                </button>
-              ))}
+                  </option>
+                ))}
+                {mintable.map((n) => (
+                  <option key={n.network} value={`generate:${n.network}`}>
+                    {n.label} — generate address
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             </div>
+            {minting && (
+              <p className="mt-2 text-xs text-muted">Creating your {minting} address…</p>
+            )}
           </div>
         )}
 

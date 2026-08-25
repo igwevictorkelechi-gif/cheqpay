@@ -273,9 +273,30 @@ export const api = {
 
   /** Live crypto deposit addresses (manual custody). Absent asset = coming soon. */
   getCryptoDepositAddresses(): Promise<{
-    addresses: { asset: string; address: string; network: string; networkLabel: string }[];
+    addresses: {
+      asset: string;
+      address: string;
+      network: string;
+      networkLabel: string;
+      /** Minted for this user — deposits credit automatically. */
+      managed?: boolean;
+    }[];
+    /** Chains the user can additionally request an address on. */
+    networks?: { network: string; label: string }[];
   }> {
     return apiFetch('/api/crypto/deposit-addresses');
+  },
+
+  /** Mint a deposit address for one asset/network pair. */
+  createWallet(
+    asset: string,
+    network: string,
+    offramp?: boolean,
+  ): Promise<{ wallets: { asset: string; network: string; address: string }[]; offramp?: boolean }> {
+    return apiFetch('/api/wallets', {
+      method: 'POST',
+      body: JSON.stringify({ asset, network, offramp }),
+    });
   },
 
   createCryptoWithdrawal(input: {

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Share } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Share, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import { colors } from '@/components/brand';
-import { api } from '@/services/api';
+import { api, ApiError } from '@/services/api';
 import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
 
 type Sym = 'BTC' | 'USDT' | 'USDC';
@@ -23,6 +23,11 @@ export default function ReceiveScreen() {
   const [byAsset, setByAsset] = useState<
     Record<string, { address: string; network: string; networkLabel: string }[]>
   >({});
+  // Chains with no address yet, offered in the same dropdown and minted on
+  // selection — so a user is never stuck because their chain was added later.
+  const [allNetworks, setAllNetworks] = useState<{ network: string; label: string }[]>([]);
+  const [netPickerOpen, setNetPickerOpen] = useState(false);
+  const [minting, setMinting] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,7 +35,7 @@ export default function ReceiveScreen() {
     (async () => {
       try {
         // Per-user addresses minted by custody, with manual wallets as fallback.
-        const { addresses } = await api.getCryptoDepositAddresses();
+        const { addresses, networks } = await api.getCryptoDepositAddresses();
         const map: Record<string, string> = {};
         const labels: Record<string, string> = {};
         const grouped: Record<
@@ -52,11 +57,55 @@ export default function ReceiveScreen() {
         setAddresses(map);
         setNetLabels(labels);
         setByAsset(grouped);
+        setAllNetworks(networks ?? []);
       } catch {
         setError('We couldn’t load deposit addresses. Please try again shortly.');
       }
     })();
   }, []);
+
+  /** Mint an address on a chain the user does not hold yet, then re-read. */
+  async function generate(asset: string, network: string) {
+    setMinting(network);
+    setError(null);
+    try {
+      await api.createWallet(asset, network);
+      const { addresses, networks } = await api.getCryptoDepositAddresses();
+      const map: Record<string, string> = {};
+      const labels: Record<string, string> = {};
+      const grouped: Record<
+        string,
+        { address: string; network: string; networkLabel: string }[]
+      > = {};
+      for (const e of addresses) {
+        if (!map[e.asset]) {
+          map[e.asset] = e.address;
+          labels[e.asset] = e.networkLabel;
+        }
+        (grouped[e.asset] ??= []).push({
+          address: e.address,
+          network: e.network,
+          networkLabel: e.networkLabel,
+        });
+      }
+      // Show the chain that was just created, not whatever was selected before.
+      const fresh = grouped[asset]?.find((g) => g.network === network);
+      if (fresh) {
+        map[asset] = fresh.address;
+        labels[asset] = fresh.networkLabel;
+      }
+      setAddresses(map);
+      setNetLabels(labels);
+      setByAsset(grouped);
+      setAllNetworks(networks ?? []);
+    } catch (e) {
+      setError(
+        e instanceof ApiError ? e.message : 'We couldn’t create that address. Please try again.',
+      );
+    } finally {
+      setMinting(null);
+    }
+  }
 
   async function copy(addr: string) {
     await Clipboard.setStringAsync(addr);
@@ -78,6 +127,10 @@ export default function ReceiveScreen() {
     const meta = ASSET_META[selected];
     const info = CRYPTO_SEND[selected];
     const addr = addresses[selected];
+    // Per asset: a chain held for USDT says nothing about USDC, so filtering
+    // across every asset would hide a chain the user can still generate here.
+    const held = new Set((byAsset[selected] ?? []).map((o) => o.network));
+    const mintable = allNetworks.filter((n) => !held.has(n.network));
     return (
       <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
         {Header(`Receive ${selected}`, () => setSelected(null))}
@@ -91,14 +144,57 @@ export default function ReceiveScreen() {
           </View>
 
           {/* Network selector — the address differs per chain, so picking one
-              swaps the QR and the address below it. */}
-          {(byAsset[selected]?.length ?? 0) > 1 && (
+              swaps the QR and the address below it. A dropdown rather than a
+              row of chips: the list grows with every chain, and chains with no
+              address yet are offered here and minted on selection. */}
+          {((byAsset[selected]?.length ?? 0) > 1 || mintable.length > 0) && (
             <View className="mt-5">
               <Text className="text-muted dark:text-muted-dark text-xs font-semibold uppercase mb-2">
                 Network
               </Text>
-              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
-                {byAsset[selected].map((o) => {
+              <TouchableOpacity
+                onPress={() => setNetPickerOpen(true)}
+                disabled={minting !== null}
+                className="flex-row items-center justify-between rounded-2xl px-4 py-3.5"
+                style={{
+                  backgroundColor: colors.card,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  opacity: minting ? 0.6 : 1,
+                }}
+                activeOpacity={0.8}
+              >
+                <Text className="text-ink dark:text-ink-dark text-base font-semibold">
+                  {minting
+                    ? `Creating your ${minting} address…`
+                    : (netLabels[selected] ?? info.networkLabel)}
+                </Text>
+                <Ionicons name="chevron-down" size={18} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <Modal
+            visible={netPickerOpen}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setNetPickerOpen(false)}
+          >
+            <TouchableOpacity
+              className="flex-1 justify-end"
+              style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+              activeOpacity={1}
+              onPress={() => setNetPickerOpen(false)}
+            >
+              <View
+                className="rounded-t-3xl p-5"
+                style={{ backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }}
+              >
+                <Text className="text-ink dark:text-ink-dark text-lg font-bold mb-4">
+                  Select network
+                </Text>
+
+                {(byAsset[selected] ?? []).map((o) => {
                   const active = o.address === addr;
                   return (
                     <TouchableOpacity
@@ -106,26 +202,40 @@ export default function ReceiveScreen() {
                       onPress={() => {
                         setAddresses((m) => ({ ...m, [selected]: o.address }));
                         setNetLabels((m) => ({ ...m, [selected]: o.networkLabel }));
+                        setNetPickerOpen(false);
                       }}
-                      className="rounded-full px-4 py-2"
-                      style={{ backgroundColor: active ? colors.brand : colors.card }}
-                      activeOpacity={0.8}
+                      className="flex-row items-center justify-between rounded-2xl p-4 mb-2"
+                      style={{ backgroundColor: colors.card }}
+                      activeOpacity={0.7}
                     >
-                      <Text
-                        style={{
-                          color: active ? '#fff' : colors.muted,
-                          fontSize: 13,
-                          fontWeight: '700',
-                        }}
-                      >
+                      <Text className="text-ink dark:text-ink-dark font-semibold">
                         {o.networkLabel}
                       </Text>
+                      {active && <Ionicons name="checkmark" size={18} color={colors.brand} />}
                     </TouchableOpacity>
                   );
                 })}
+
+                {mintable.map((n) => (
+                  <TouchableOpacity
+                    key={n.network}
+                    onPress={() => {
+                      setNetPickerOpen(false);
+                      void generate(selected, n.network);
+                    }}
+                    className="flex-row items-center justify-between rounded-2xl p-4 mb-2"
+                    style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border }}
+                    activeOpacity={0.7}
+                  >
+                    <Text className="text-muted dark:text-muted-dark font-semibold">{n.label}</Text>
+                    <Text style={{ color: colors.brand, fontSize: 12, fontWeight: '700' }}>
+                      Generate
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-            </View>
-          )}
+            </TouchableOpacity>
+          </Modal>
 
           <View className="items-center mt-6">
             <View className="bg-white rounded-3xl p-5">

@@ -35,6 +35,20 @@ export const SUPPORTED_WALLETS: ReadonlyArray<{ asset: Asset; network: Network }
   { asset: Asset.USDC, network: Network.SOLANA },
 ];
 
+/**
+ * Chains a user can actually send FROM, so holding the coin there is safe.
+ *
+ * POST /crypto/transfer's `chain` enum is exactly ["solana"], so Solana is the
+ * only one. Mirrors the `withdrawable` column in custody/maplerad.ts; a test
+ * asserts the two agree, because a silent disagreement here is what would let
+ * an unsendable address be minted as if it held real coin.
+ */
+export const WITHDRAWABLE_NETWORKS: ReadonlyArray<Network> = [Network.SOLANA];
+
+export function isWithdrawableNetwork(network: Network): boolean {
+  return WITHDRAWABLE_NETWORKS.includes(network);
+}
+
 /** Is this pair one we can mint at all (not just one we auto-provision)? */
 export function isSupportedWallet(asset: Asset, network: Network): boolean {
   return AVAILABLE_WALLETS.some((w) => w.asset === asset && w.network === network);

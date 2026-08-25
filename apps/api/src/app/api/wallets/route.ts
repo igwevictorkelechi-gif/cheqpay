@@ -2,7 +2,7 @@ import { Asset, Network, prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { listWallets, provisionWallets } from "@/lib/wallets";
-import { AVAILABLE_WALLETS, isSupportedWallet } from "@/lib/assets";
+import { AVAILABLE_WALLETS, isSupportedWallet, isWithdrawableNetwork } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
 
@@ -51,10 +51,18 @@ export async function POST(req: Request) {
           "bad_pair",
         );
       }
-      // A non-Solana chain is only mintable as an offramp address — the custody
-      // layer refuses otherwise, since the user could never send from it.
+      // A chain the user could never send from can only be minted as an offramp
+      // address, where the arrival converts to USD and no coin is stranded.
+      // Decided here rather than by the caller: a client that omitted the flag
+      // would otherwise get a refusal it has no way to interpret, which is
+      // exactly how every non-Solana "generate" silently failed. An explicit
+      // `offramp` from the caller still wins.
+      const offramp = body.offramp ?? !isWithdrawableNetwork(network);
+
       return jsonOk({
-        wallets: await provisionWallets(auth.id, [{ asset, network }], body.offramp),
+        wallets: await provisionWallets(auth.id, [{ asset, network }], offramp),
+        // So the client can say "arrives as USD" rather than implying coin.
+        offramp,
       });
     }
 
