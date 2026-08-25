@@ -49,15 +49,22 @@ const RESIDENCY = [
 ];
 
 /**
- * The USD account, behind a switch. Kept self-contained so the NGN flow on the
- * page is untouched: it loads its own state and only talks to /virtual-accounts/usd.
+ * The USD account. Kept self-contained so the NGN flow on the page is
+ * untouched: it loads its own state and only talks to /virtual-accounts/usd.
  *
  * A USD account needs US-banking KYC the NGN one never asked for (a tax/ID
  * number, employment, residency), and it can require the holder to consent to US
  * banking terms before it activates — surfaced here as a link rather than hidden.
+ *
+ * `defaultOpen` marks the dedicated /usd-account screen, where the user arrived
+ * to do exactly this: there the panel renders open with no switch at all. A
+ * switch there is a step between the user and the only thing on the page.
+ * Alongside the NGN account on /virtual-account it stays behind the switch,
+ * because there it is one option among several.
  */
 export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?: boolean } = {}) {
   const [open, setOpen] = useState(defaultOpen);
+  const collapsible = !defaultOpen;
   const [loading, setLoading] = useState(false);
   const [account, setAccount] = useState<UsdAccount | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
@@ -190,35 +197,37 @@ export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?:
 
   return (
     <div className="mt-6 rounded-3xl bg-card p-5">
-      {/* The switch. */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-500/15">
-            <DollarSign className="h-5 w-5 text-green-500" />
-          </span>
-          <div>
-            <p className="text-sm font-bold text-ink">USD account</p>
-            <p className="text-xs text-muted">Receive US dollars into your wallet</p>
+      {/* The switch — only where the panel is one option among several. */}
+      {collapsible && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-500/15">
+              <DollarSign className="h-5 w-5 text-green-500" />
+            </span>
+            <div>
+              <p className="text-sm font-bold text-ink">USD account</p>
+              <p className="text-xs text-muted">Receive US dollars into your wallet</p>
+            </div>
           </div>
-        </div>
-        <button
-          role="switch"
-          aria-checked={open}
-          onClick={() => setOpen((v) => !v)}
-          className={`relative h-7 w-12 rounded-full transition-colors ${
-            open ? "bg-brand" : "bg-border"
-          }`}
-        >
-          <span
-            className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${
-              open ? "translate-x-6" : "translate-x-1"
+          <button
+            role="switch"
+            aria-checked={open}
+            onClick={() => setOpen((v) => !v)}
+            className={`relative h-7 w-12 rounded-full transition-colors ${
+              open ? "bg-brand" : "bg-border"
             }`}
-          />
-        </button>
-      </div>
+          >
+            <span
+              className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${
+                open ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
+      )}
 
       {open && (
-        <div className="mt-5 border-t border-border pt-5">
+        <div className={collapsible ? "mt-5 border-t border-border pt-5" : ""}>
           {loading ? (
             <div className="flex justify-center py-4">
               <Loader2 className="h-6 w-6 animate-spin text-muted" />

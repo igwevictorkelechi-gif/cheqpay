@@ -7,7 +7,12 @@ import AppShell from "@/components/AppShell";
 import { CoinBadge } from "@/components/MobileUI";
 import { api } from "@/services/api";
 import { invalidateMoneyCaches } from "@/lib/cache";
-import { formatMinor, resolveConvertMode, type ConvertSymbol } from "@/lib/cryptoAssets";
+import {
+  formatConvertRate,
+  formatMinor,
+  resolveConvertMode,
+  type ConvertSymbol,
+} from "@/lib/cryptoAssets";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -135,9 +140,7 @@ function ConfirmInner() {
               !rate
                 ? "—"
                 : mode.kind === "convert"
-                ? `1 ${fromSym} = ${Number(rate).toLocaleString("en-US", {
-                    maximumFractionDigits: 8,
-                  })} ${toSym}`
+                ? (formatConvertRate(fromSym, toSym, rate) ?? "—")
                 : `1 ${mode.crypto} = ₦${Number(rate).toLocaleString("en-NG", {
                     maximumFractionDigits: 2,
                   })}`

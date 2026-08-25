@@ -4,16 +4,27 @@ const h = vi.hoisted(() => ({
   walletFindFirst: vi.fn(),
   creditBalance: vi.fn(),
   notifyUser: vi.fn(),
+  ensureUsdAsset: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
   Asset: { NGN: "NGN", USD: "USD", BTC: "BTC", USDT: "USDT", USDC: "USDC" },
-  Network: { FIAT: "FIAT", SOLANA: "SOLANA", ETHEREUM: "ETHEREUM" },
+  Network: {
+    FIAT: "FIAT",
+    SOLANA: "SOLANA",
+    ETHEREUM: "ETHEREUM",
+    BASE: "BASE",
+    POLYGON: "POLYGON",
+    TRON: "TRON",
+    BSC: "BSC",
+    BITCOIN: "BITCOIN",
+  },
   TransactionType: { DEPOSIT: "DEPOSIT" },
   prisma: { wallet: { findFirst: h.walletFindFirst } },
 }));
 vi.mock("../ledger", () => ({ creditBalance: h.creditBalance }));
 vi.mock("../alerts", () => ({ notifyUser: h.notifyUser }));
+vi.mock("../ensureUsdAsset", () => ({ ensureUsdAsset: h.ensureUsdAsset }));
 
 import {
   assetForCoin,
@@ -110,6 +121,7 @@ describe("creditCryptoDeposit", () => {
     h.walletFindFirst.mockResolvedValue({ userId: "u1", asset: "USDC", network: "SOLANA" });
     h.creditBalance.mockResolvedValue({ created: true, transactionId: "tx-1" });
     h.notifyUser.mockResolvedValue(undefined);
+    h.ensureUsdAsset.mockResolvedValue(undefined);
   });
 
   it("credits the address owner, keyed on the provider tx id", async () => {
@@ -154,6 +166,50 @@ describe("creditCryptoDeposit", () => {
 
   it("refuses an amount it cannot read rather than crediting zero", async () => {
     const r = await creditCryptoDeposit({ ...deposit, rawAmount: "not-a-number" });
+    expect(r.outcome).toBe("unmatched");
+    expect(h.creditBalance).not.toHaveBeenCalled();
+  });
+
+  it("adds USD to the Asset enum before crediting it", async () => {
+    // Migrations are not applied on deploy. Without this the first offramped
+    // deposit throws on the enum value, the webhook 500s, Maplerad retries into
+    // the same failure, and real money is never credited to anyone.
+    await creditCryptoDeposit({ ...deposit, offramp: true, rawAmount: "2500" });
+    expect(h.ensureUsdAsset).toHaveBeenCalled();
+  });
+
+  it("does not touch the enum for an ordinary coin credit", async () => {
+    await creditCryptoDeposit(deposit);
+    expect(h.ensureUsdAsset).not.toHaveBeenCalled();
+  });
+
+  it("treats an arrival on a receive-only chain as USD even when the payload is silent", async () => {
+    // A USDC address on Base could only ever have been minted as an offramp
+    // address — the custody layer refuses any other combination — so the money
+    // arrived as dollars whether or not Maplerad echoed the flag. Crediting the
+    // coin would credit a balance the user can never move off that chain.
+    h.walletFindFirst.mockResolvedValue({ userId: "u1", asset: "USDC", network: "BASE" });
+
+    await creditCryptoDeposit({ ...deposit, chain: "base", offramp: false, rawAmount: "2500" });
+
+    expect(h.creditBalance).toHaveBeenCalledWith(
+      expect.objectContaining({ asset: "USD", amountMinor: 2500n }),
+    );
+  });
+
+  it("still credits the coin on Solana, the one chain a user can send from", async () => {
+    h.walletFindFirst.mockResolvedValue({ userId: "u1", asset: "USDT", network: "SOLANA" });
+    await creditCryptoDeposit({ ...deposit, coin: "usdt" });
+    expect(h.creditBalance).toHaveBeenCalledWith(
+      expect.objectContaining({ asset: "USDT" }),
+    );
+  });
+
+  it("leaves a Bitcoin wallet alone — it is not a Maplerad offramp pair", async () => {
+    h.walletFindFirst.mockResolvedValue({ userId: "u1", asset: "BTC", network: "BITCOIN" });
+    const r = await creditCryptoDeposit({ ...deposit, coin: "btc" });
+    // BTC is not a coin this handler carries, so it stays unmatched rather than
+    // being swept into USD by the receive-only rule.
     expect(r.outcome).toBe("unmatched");
     expect(h.creditBalance).not.toHaveBeenCalled();
   });

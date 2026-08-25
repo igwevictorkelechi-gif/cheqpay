@@ -8,6 +8,7 @@ import { api } from '@/services/api';
 import {
   ASSET_META,
   CONVERT_ASSETS,
+  formatConvertRate,
   formatMinor,
   resolveConvertMode,
   type ConvertSymbol,
@@ -165,7 +166,7 @@ export default function ConvertScreen() {
     : !rate
     ? 'Enter an amount to see the rate'
     : mode.kind === 'convert'
-    ? `1 ${fromSym} ≈ ${Number(rate).toLocaleString('en-US', { maximumFractionDigits: 8 })} ${toSym}`
+    ? formatConvertRate(fromSym, toSym, rate, '≈')
     : `1 ${mode.crypto} ≈ ₦${Number(rate).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
 
   return (

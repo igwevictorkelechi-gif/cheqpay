@@ -90,3 +90,29 @@ const ENABLED_CRYPTO = new Set(
 export function isAssetEnabled(symbol: string): boolean {
   return ENABLED_CRYPTO.has(symbol.toUpperCase());
 }
+
+/**
+ * The rate line for a convert, printed in the direction people read it.
+ *
+ * The server's `rate` on a convert is always TO whole units per 1 FROM whole
+ * unit. For a pair with a Naira leg that is unreadable one way round — a real
+ * NGN→USD quote prints as "1 NGN = 0.00065 USD" — so a Naira pair is always
+ * flipped to Naira per unit of the other currency, which is how every rate in
+ * the country is quoted. Crypto↔crypto keeps the server's direction.
+ *
+ * Only for `convert` quotes: a buy/sell `rate` is already NGN per crypto unit
+ * in both directions and is formatted at the call site.
+ */
+export function formatConvertRate(
+  fromSym: ConvertSymbol,
+  toSym: ConvertSymbol,
+  rate: string,
+  joiner = '=',
+): string | null {
+  const n = Number(rate);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const ngn = (v: number) => `₦${v.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
+  if (toSym === 'NGN') return `1 ${fromSym} ${joiner} ${ngn(n)}`;
+  if (fromSym === 'NGN') return `1 ${toSym} ${joiner} ${ngn(1 / n)}`;
+  return `1 ${fromSym} ${joiner} ${n.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${toSym}`;
+}

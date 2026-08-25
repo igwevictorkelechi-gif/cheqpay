@@ -11,7 +11,7 @@ import { getCustodyProvider } from "@/custody";
 import { isManualAsset } from "@/lib/manualCrypto";
 import { getPriceFeed } from "@/market";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
-import { isSupportedWallet } from "@/lib/assets";
+import { isSupportedWallet, isWithdrawableNetwork } from "@/lib/assets";
 import { getTierLimits, MAX_TIER } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
 import { requestContext } from "@/lib/requestContext";
@@ -74,6 +74,24 @@ export async function POST(req: Request) {
       throw new ApiError(422, `Unsupported asset/network: ${body.asset}/${body.network}`, "unsupported");
     }
 
+    // Manual-custody assets are paid out by hand from the business wallet, so
+    // the provider's chain support does not apply to them. Resolved here rather
+    // than after the debit because the chain guard below depends on it.
+    const manual = await isManualAsset(asset);
+
+    // Maplerad mints addresses on six chains but POST /crypto/transfer accepts
+    // only Solana, so the other five are receive-only. Refusing here — before
+    // anything is debited — turns a debit-then-refund round trip and an opaque
+    // provider error into an answer the user can act on.
+    if (!manual && !isWithdrawableNetwork(network)) {
+      throw new ApiError(
+        422,
+        `${asset} on ${network} can only be received, not sent. Convert it to Naira or USD, ` +
+          `or withdraw ${asset} on Solana instead.`,
+        "chain_not_withdrawable"
+      );
+    }
+
     const amountMinor = toMinorUnits(body.amount, asset);
 
     const rate = await getUsdtNgnRate();
@@ -118,10 +136,8 @@ export async function POST(req: Request) {
       return jsonOk({ transactionId: existing.id, status: existing.status });
     }
 
-    // Manual-custody assets always queue as PENDING: the business pays out
-    // from its own wallet, then the admin marks the withdrawal complete.
-    const manual = await isManualAsset(asset);
-
+    // Manual-custody assets always queue as PENDING (resolved above): the
+    // business pays out from its own wallet, then the admin marks it complete.
     // Atomic debit + record. Held-for-review withdrawals are PENDING (funds
     // reserved) and not broadcast until an admin approves.
     const initialStatus = aml.holdForReview || manual

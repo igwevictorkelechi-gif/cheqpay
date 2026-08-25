@@ -34,12 +34,16 @@ const RESIDENCY = [
 ];
 
 /**
- * The USD account, behind a switch. Self-contained so the NGN flow on the screen
+ * The USD account. Self-contained so the NGN flow on the screen
  * is untouched. A USD account needs US-banking KYC the NGN one never asked for,
  * and may require the holder to consent to US banking terms before it activates.
  */
 export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?: boolean } = {}) {
   const [open, setOpen] = useState(defaultOpen);
+  // `defaultOpen` marks the dedicated dollar-account screen, where this panel is
+  // the only thing on it: no switch there, it just renders. Alongside the NGN
+  // account it stays collapsible, because there it is one option among several.
+  const collapsible = !defaultOpen;
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [account, setAccount] = useState<UsdAccount | null>(null);
@@ -211,28 +215,33 @@ export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?:
 
   return (
     <View className="rounded-3xl p-5 mt-6" style={{ backgroundColor: colors.card }}>
-      <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center" style={{ gap: 12 }}>
-          <View
-            className="rounded-2xl items-center justify-center"
-            style={{ width: 40, height: 40, backgroundColor: 'rgba(34,197,94,0.15)' }}
-          >
-            <Ionicons name="logo-usd" size={20} color="#22C55E" />
+      {collapsible && (
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center" style={{ gap: 12 }}>
+            <View
+              className="rounded-2xl items-center justify-center"
+              style={{ width: 40, height: 40, backgroundColor: 'rgba(34,197,94,0.15)' }}
+            >
+              <Ionicons name="logo-usd" size={20} color="#22C55E" />
+            </View>
+            <View>
+              <Text className="text-ink dark:text-ink-dark font-bold text-sm">USD account</Text>
+              <Text style={{ color: colors.muted, fontSize: 12 }}>Receive US dollars</Text>
+            </View>
           </View>
-          <View>
-            <Text className="text-ink dark:text-ink-dark font-bold text-sm">USD account</Text>
-            <Text style={{ color: colors.muted, fontSize: 12 }}>Receive US dollars</Text>
-          </View>
+          <Switch
+            value={open}
+            onValueChange={setOpen}
+            trackColor={{ false: colors.border, true: colors.brand }}
+          />
         </View>
-        <Switch
-          value={open}
-          onValueChange={setOpen}
-          trackColor={{ false: colors.border, true: colors.brand }}
-        />
-      </View>
+      )}
 
       {open && (
-        <View className="mt-5 pt-5" style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
+        <View
+          className={collapsible ? 'mt-5 pt-5' : ''}
+          style={collapsible ? { borderTopWidth: 1, borderTopColor: colors.border } : undefined}
+        >
           {loading ? (
             <ActivityIndicator color={colors.brand} />
           ) : account ? (

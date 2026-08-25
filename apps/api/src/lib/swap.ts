@@ -8,7 +8,7 @@ import {
 } from "@cheqpay/db";
 import { ApiError } from "./http";
 import { isWithinSingleTxLimit } from "./kyc";
-import { fromMinorUnits } from "./money";
+import { ASSET_DECIMALS, fromMinorUnits } from "./money";
 import { notifyUser } from "./alerts";
 import {
   classifySwap,
@@ -30,6 +30,36 @@ import { getPriceFeed, type PriceFeed } from "@/market";
 /** The internal Asset for a fiat leg maps 1:1 to Maplerad's FX currency code. */
 function fxCurrencyOf(asset: Asset): FxCurrency {
   return asset === Asset.USD ? "USD" : "NGN";
+}
+
+/** Minor units -> whole units for an asset, as a Decimal. */
+function toWhole(minor: bigint, asset: Asset): Prisma.Decimal {
+  return new Prisma.Decimal(minor.toString()).div(
+    new Prisma.Decimal(10).pow(ASSET_DECIMALS[asset]),
+  );
+}
+
+/**
+ * The rate for a pair of settled legs: TO whole units per 1 FROM whole unit.
+ *
+ * Maplerad returns a `rate` of its own, but nothing in the response says which
+ * direction it is quoted in, and for NGN↔USD the two directions are ~1,550 and
+ * ~0.00065 — an inverted rate is indistinguishable from a plausible one, so it
+ * cannot be validated after the fact. The two legs are unambiguous, so the rate
+ * is derived from them and always means what `rate` means on every other quote
+ * in this codebase. That is the number the clients print as "1 X = Y".
+ */
+function rateFromLegs(
+  fromAsset: Asset,
+  amountInMinor: bigint,
+  toAsset: Asset,
+  amountOutMinor: bigint,
+): Prisma.Decimal {
+  const from = toWhole(amountInMinor, fromAsset);
+  if (from.lte(0)) {
+    throw new ApiError(422, "Amount must be positive", "bad_amount");
+  }
+  return toWhole(amountOutMinor, toAsset).div(from);
 }
 
 /**
@@ -117,7 +147,8 @@ export async function createConvertQuote(params: {
 
   // NGN↔USD settles on Maplerad's real FX rail, so it is priced from a live
   // Maplerad quote (whose reference we keep to settle at execute time) rather
-  // than the synthetic USDT peg. Maplerad's rate is passed through as-is.
+  // than the synthetic USDT peg. The displayed rate is derived from the two
+  // legs Maplerad returns, not from its own `rate` field — see rateFromLegs.
   if (isNgnUsdPair(params.fromAsset, params.toAsset)) {
     return createFxConvertQuote(params);
   }
@@ -193,6 +224,13 @@ async function createFxConvertQuote(params: {
     amount: Number(params.amountInMinor),
   });
 
+  if (!Number.isInteger(fx.target?.amount) || fx.target.amount <= 0) {
+    throw new ApiError(
+      502,
+      "The exchange provider did not return a usable amount for that conversion",
+      "bad_fx_quote",
+    );
+  }
   const amountOutMinor = BigInt(fx.target.amount);
   const ngnLegMinor = params.fromAsset === Asset.NGN ? params.amountInMinor : amountOutMinor;
   if (!isWithinSingleTxLimit(params.tier, ngnLegMinor)) {
@@ -207,7 +245,13 @@ async function createFxConvertQuote(params: {
       userId: params.userId,
       fromAsset: params.fromAsset,
       toAsset: params.toAsset,
-      rate: new Prisma.Decimal(fx.rate),
+      // Derived from the legs, not read from fx.rate — see rateFromLegs.
+      rate: rateFromLegs(
+        params.fromAsset,
+        params.amountInMinor,
+        params.toAsset,
+        amountOutMinor,
+      ),
       amountIn: params.amountInMinor,
       amountOut: amountOutMinor,
       providerRef: fx.reference,
@@ -430,8 +474,9 @@ async function executeFxSwap(params: {
   });
 
   // 2. Settle at the provider (point of no return).
+  let settled: Awaited<ReturnType<typeof exchangeFx>>;
   try {
-    await exchangeFx({ quoteReference: quote.providerRef as string });
+    settled = await exchangeFx({ quoteReference: quote.providerRef as string });
   } catch (err) {
     // The exchange did not happen — undo the reservation so the payer is whole.
     await prisma.balance
@@ -449,14 +494,34 @@ async function executeFxSwap(params: {
     throw new ApiError(502, "Currency exchange failed at the provider; you were not charged", "fx_failed");
   }
 
+  // What the exchange actually produced. A quote is a promise about a rate, not
+  // a guarantee about an amount: if the provider settled at a different figure,
+  // that figure is the money that exists, and crediting the quoted one would
+  // put the ledger out of step with the treasury in one direction or the other.
+  // The quote is the fallback for a response that does not report an amount.
+  const settledOut =
+    Number.isInteger(settled?.target?.amount) && settled.target.amount > 0
+      ? BigInt(settled.target.amount)
+      : null;
+  const creditMinor = settledOut ?? quote.amountOut;
+  if (settledOut !== null && settledOut !== quote.amountOut) {
+    console.warn("[fx] settled amount differs from the quote — crediting what settled", {
+      userId: params.userId,
+      quoteId: quote.id,
+      quoted: quote.amountOut.toString(),
+      settled: settledOut.toString(),
+      providerRef: quote.providerRef,
+    });
+  }
+
   // 3. Credit + record.
   let result: { transactionId: string; status: TransactionStatus };
   try {
     result = await prisma.$transaction(async (db) => {
       await db.balance.upsert({
         where: { userId_asset: { userId: params.userId, asset: quote.toAsset } },
-        update: { available: { increment: quote.amountOut } },
-        create: { userId: params.userId, asset: quote.toAsset, available: quote.amountOut },
+        update: { available: { increment: creditMinor } },
+        create: { userId: params.userId, asset: quote.toAsset, available: creditMinor },
       });
       const record = await db.transaction.create({
         data: {
@@ -474,7 +539,8 @@ async function executeFxSwap(params: {
             fromAsset: quote.fromAsset,
             toAsset: quote.toAsset,
             amountIn: quote.amountIn.toString(),
-            amountOut: quote.amountOut.toString(),
+            amountOut: creditMinor.toString(),
+            quotedAmountOut: quote.amountOut.toString(),
             rate: quote.rate.toString(),
           },
         },
@@ -489,7 +555,8 @@ async function executeFxSwap(params: {
             fromAsset: quote.fromAsset,
             toAsset: quote.toAsset,
             amountIn: quote.amountIn.toString(),
-            amountOut: quote.amountOut.toString(),
+            amountOut: creditMinor.toString(),
+            quotedAmountOut: quote.amountOut.toString(),
             providerRef: quote.providerRef,
           },
         },
@@ -503,7 +570,7 @@ async function executeFxSwap(params: {
         userId: params.userId,
         quoteId: quote.id,
         toAsset: quote.toAsset,
-        amountOut: quote.amountOut.toString(),
+        amountOut: creditMinor.toString(),
         providerRef: quote.providerRef,
       },
       err,
@@ -522,7 +589,7 @@ async function executeFxSwap(params: {
     category: "trades",
     title: "Conversion complete",
     body: `Converted ${fmtFiat(quote.amountIn, quote.fromAsset)} to ${fmtFiat(
-      quote.amountOut,
+      creditMinor,
       quote.toAsset,
     )}.`,
     data: { transactionId: result.transactionId },

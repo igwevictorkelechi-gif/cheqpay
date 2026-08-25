@@ -14,6 +14,8 @@ import { creditBalance } from "../ledger";
 import { notifyUser } from "../alerts";
 import { fromMinorUnits } from "../money";
 import { ASSET_DECIMALS } from "../money";
+import { CRYPTO_COINS, isWithdrawableNetwork } from "../assets";
+import { ensureUsdAsset } from "../ensureUsdAsset";
 
 /** A crypto deposit reduced to the few things crediting actually needs. */
 export interface ParsedCryptoDeposit {
@@ -160,8 +162,27 @@ export async function creditCryptoDeposit(
   if (!wallet) return { outcome: "unmatched", reason: "no wallet for address" };
 
   // An offramped deposit lands as dollars regardless of the coin sent.
-  const asset = deposit.offramp ? Asset.USD : assetForCoin(deposit.coin);
+  //
+  // The flag in the payload is only believed when it is present; Maplerad has
+  // never been observed echoing it. The address itself is the reliable record:
+  // a stablecoin address on a chain we cannot send from could ONLY have been
+  // minted as an offramp address (that is the rule POST /api/wallets applies,
+  // and the custody layer refuses any other combination), so the arrival is
+  // dollars whether or not the webhook says so. Crediting coin there would
+  // credit a balance the user can never move.
+  const mintedAsOfframp =
+    (CRYPTO_COINS as ReadonlyArray<Asset>).includes(wallet.asset) &&
+    !isWithdrawableNetwork(wallet.network);
+  const offramp = deposit.offramp || mintedAsOfframp;
+
+  const asset = offramp ? Asset.USD : assetForCoin(deposit.coin);
   if (!asset) return { outcome: "unmatched", reason: `unknown coin ${deposit.coin}` };
+
+  // Migrations are not applied on deploy, so USD is added to the Asset enum
+  // lazily. Without this the FIRST offramped deposit throws on the enum value,
+  // the webhook 500s, Maplerad retries into the same failure, and real money
+  // sits uncredited — the exact failure this handler exists to prevent.
+  if (asset === Asset.USD) await ensureUsdAsset();
 
   const amountMinor = toMinor(deposit.rawAmount, asset);
   if (amountMinor === null || amountMinor <= 0n) {
@@ -183,7 +204,8 @@ export async function creditCryptoDeposit(
       coin: deposit.coin,
       chain: deposit.chain ?? null,
       address: deposit.address,
-      offramp: deposit.offramp,
+      offramp,
+      offrampSource: deposit.offramp ? "payload" : mintedAsOfframp ? "address" : null,
     },
   });
 

@@ -5,7 +5,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/components/brand';
 import { api, ApiError } from '@/services/api';
-import { ASSET_META, formatMinor, resolveConvertMode, type ConvertSymbol } from '@/lib/assets';
+import {
+  ASSET_META,
+  formatConvertRate,
+  formatMinor,
+  resolveConvertMode,
+  type ConvertSymbol,
+} from '@/lib/assets';
 
 function CoinBadge({ symbol, size = 44 }: { symbol: string; size?: number }) {
   const m = ASSET_META[symbol as ConvertSymbol] ?? { bg: colors.brand, glyph: symbol.charAt(0) };
@@ -102,7 +108,7 @@ export default function SwapConfirmScreen() {
   const rateValue = !rate
     ? '—'
     : mode.kind === 'convert'
-    ? `1 ${fromSym} = ${Number(rate).toLocaleString('en-US', { maximumFractionDigits: 8 })} ${toSym}`
+    ? (formatConvertRate(fromSym, toSym, rate) ?? '—')
     : `1 ${mode.crypto} = ₦${Number(rate).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
 
   return (

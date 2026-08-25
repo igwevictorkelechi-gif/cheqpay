@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// The real Decimal, not a stub: the rate a NGN↔USD quote stores is now computed
+// from the two legs with Decimal arithmetic, so a stub that only carries a
+// string would test nothing about the number that reaches the user.
+const { RealDecimal } = vi.hoisted(() => ({
+  RealDecimal: (require("@prisma/client") as typeof import("@prisma/client")).Prisma.Decimal,
+}));
+
 const h = vi.hoisted(() => ({
   quoteFindUnique: vi.fn(),
   quoteCreate: vi.fn(),
@@ -27,7 +34,7 @@ vi.mock("@cheqpay/db", () => ({
   Asset: { NGN: "NGN", USD: "USD", BTC: "BTC", USDT: "USDT", USDC: "USDC" },
   TransactionStatus: { COMPLETED: "COMPLETED" },
   TransactionType: { CONVERT: "CONVERT", BUY: "BUY", SELL: "SELL" },
-  Prisma: { Decimal: class D { constructor(public v: unknown) {} toString() { return String(this.v); } } },
+  Prisma: { Decimal: RealDecimal },
   prisma: {
     quote: { findUnique: h.quoteFindUnique, create: h.quoteCreate },
     transaction: { findUnique: h.txFindUnique },
@@ -80,6 +87,53 @@ describe("createConvertQuote — NGN↔USD routes to Maplerad FX", () => {
     const data = h.quoteCreate.mock.calls[0][0].data;
     expect(data.providerRef).toBe("fxref");
     expect(data.amountOut).toBe(660n);
+  });
+
+  it("stores the rate as TO per FROM, derived from the legs — not Maplerad's own field", async () => {
+    // Maplerad's `rate` here is quoted the OTHER way round (NGN per USD). Trusting
+    // it would put 1,515 into a field the clients read as "USD per naira" and
+    // print a conversion rate roughly two million times the real one.
+    h.quoteFx.mockResolvedValue({
+      reference: "fxref",
+      source: { currency: "NGN", amount: 1_000_000, human_readable_amount: 10000 },
+      target: { currency: "USD", amount: 660, human_readable_amount: 6.6 },
+      rate: 1515.15,
+    });
+
+    await createConvertQuote({ userId: "u1", tier: 2, fromAsset: "NGN" as never, toAsset: "USD" as never, amountInMinor: 1_000_000n });
+
+    // $6.60 for ₦10,000 = 0.00066 USD per naira.
+    const rate = Number(h.quoteCreate.mock.calls[0][0].data.rate.toString());
+    expect(rate).toBeCloseTo(0.00066, 8);
+  });
+
+  it("derives the reverse direction just as correctly", async () => {
+    h.quoteFx.mockResolvedValue({
+      reference: "fxref2",
+      source: { currency: "USD", amount: 10_000, human_readable_amount: 100 },
+      target: { currency: "NGN", amount: 15_000_000, human_readable_amount: 150000 },
+      rate: 0.00066,
+    });
+
+    await createConvertQuote({ userId: "u1", tier: 2, fromAsset: "USD" as never, toAsset: "NGN" as never, amountInMinor: 10_000n });
+
+    // ₦150,000 for $100 = ₦1,500 per dollar.
+    const rate = Number(h.quoteCreate.mock.calls[0][0].data.rate.toString());
+    expect(rate).toBeCloseTo(1500, 6);
+  });
+
+  it("refuses a quote the provider priced at nothing rather than storing a zero rate", async () => {
+    h.quoteFx.mockResolvedValue({
+      reference: "fxref3",
+      source: { currency: "NGN", amount: 1_000_000, human_readable_amount: 10000 },
+      target: { currency: "USD", amount: 0, human_readable_amount: 0 },
+      rate: 0,
+    });
+
+    await expect(
+      createConvertQuote({ userId: "u1", tier: 2, fromAsset: "NGN" as never, toAsset: "USD" as never, amountInMinor: 1_000_000n }),
+    ).rejects.toMatchObject({ code: "bad_fx_quote" });
+    expect(h.quoteCreate).not.toHaveBeenCalled();
   });
 });
 
@@ -137,6 +191,35 @@ describe("executeSwap — NGN↔USD settles on the real FX rail", () => {
       code: "insufficient_funds",
     });
     expect(h.exchangeFx).not.toHaveBeenCalled();
+  });
+
+  it("credits what the exchange actually settled, not what the quote promised", async () => {
+    // The provider settled at $6.50, sixpence short of the quoted $6.60.
+    h.exchangeFx.mockResolvedValue({
+      source: { currency: "NGN", amount: 1_000_000 },
+      target: { currency: "USD", amount: 650 },
+      rate: 0.00065,
+    });
+
+    await executeSwap({ userId: "u1", quoteId: "q1", idempotencyKey: "idem-settle" });
+
+    expect(h.balanceUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: { available: { increment: 650n } } }),
+    );
+    // Both figures are kept so the drift is visible on the transaction itself.
+    const meta = h.txCreate.mock.calls[0][0].data.metadata;
+    expect(meta.amountOut).toBe("650");
+    expect(meta.quotedAmountOut).toBe("660");
+  });
+
+  it("falls back to the quoted amount when the exchange reports none", async () => {
+    h.exchangeFx.mockResolvedValue({ source: {}, target: {}, rate: 600 });
+
+    await executeSwap({ userId: "u1", quoteId: "q1", idempotencyKey: "idem-nofigure" });
+
+    expect(h.balanceUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: { available: { increment: 660n } } }),
+    );
   });
 
   it("short-circuits on a replayed idempotency key without re-exchanging", async () => {

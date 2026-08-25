@@ -9,6 +9,7 @@ import { api } from "@/services/api";
 import {
   CONVERT_ASSETS,
   ASSET_NAMES,
+  formatConvertRate,
   formatMinor,
   resolveConvertMode,
   type ConvertSymbol,
@@ -166,9 +167,7 @@ export default function ConvertPage() {
     if (error) return null;
     if (!rate) return "Enter an amount to see the rate";
     if (mode.kind === "convert") {
-      return `1 ${fromSym} ≈ ${Number(rate).toLocaleString("en-US", {
-        maximumFractionDigits: 8,
-      })} ${toSym}`;
+      return formatConvertRate(fromSym, toSym, rate, "≈");
     }
     return `1 ${mode.crypto} ≈ ₦${Number(rate).toLocaleString("en-NG", {
       maximumFractionDigits: 2,
