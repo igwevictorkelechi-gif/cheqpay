@@ -10,6 +10,7 @@ import type {
   Institution,
   InstitutionType,
   Minor,
+  UsdAccountRequestStatus,
   VirtualAccount,
 } from "./types";
 
@@ -84,6 +85,22 @@ export async function createUsdAccount(input: {
       meta: input.meta,
     },
   });
+}
+
+/**
+ * Check the status of a USD account request.
+ * GET /collections/virtual-account/status/{reference}
+ *
+ * A USD account is not instant — Maplerad reviews the KYC before it flips to
+ * APPROVED. Poll this with the `reference` returned when the account was opened
+ * to learn where the application stands and what (if anything) the user must fix.
+ */
+export async function checkUsdAccountRequestStatus(
+  reference: string,
+): Promise<UsdAccountRequestStatus> {
+  return mapleradRequest<UsdAccountRequestStatus>(
+    `/collections/virtual-account/status/${encodeURIComponent(reference)}`,
+  );
 }
 
 /**

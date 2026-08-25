@@ -238,6 +238,22 @@ export interface VirtualAccount {
   reference?: string | null;
 }
 
+/**
+ * Status of a USD account *request* (not the account itself). A USD account is
+ * reviewed by Maplerad before it is APPROVED; `message` carries any correction
+ * the applicant must make (e.g. a proof-of-address problem) and `kyc_link` is
+ * where to fix it.
+ * GET /collections/virtual-account/status/{reference}
+ */
+export interface UsdAccountRequestStatus {
+  reference: string;
+  account_id: string;
+  status: string; // APPROVED | PENDING | DECLINED | ...
+  message?: string[];
+  currency: Currency;
+  kyc_link?: string | null;
+}
+
 export interface Institution {
   name: string;
   code: string;

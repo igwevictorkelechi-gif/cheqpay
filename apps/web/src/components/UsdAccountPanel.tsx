@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, DollarSign, ExternalLink, Loader2 } from "lucide-react";
-import { api, ApiError, type UsdAccount } from "@/services/api";
+import { Check, Copy, DollarSign, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { api, ApiError, type UsdAccount, type UsdAccountStatus } from "@/services/api";
 
 const EMPLOYMENT = [
   { value: "EMPLOYED", label: "Employed" },
@@ -34,6 +34,9 @@ export default function UsdAccountPanel() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<UsdAccountStatus | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   // Form state.
   const [idNumber, setIdNumber] = useState("");
@@ -111,6 +114,28 @@ export default function UsdAccountPanel() {
       /* clipboard unavailable */
     }
   }
+
+  async function checkStatus() {
+    setStatusError(null);
+    setCheckingStatus(true);
+    try {
+      const { usdStatus } = await api.getUsdAccountStatus();
+      if (usdStatus) setStatus(usdStatus);
+      else setStatusError("Status is not available for this account yet.");
+    } catch (e) {
+      setStatusError(e instanceof ApiError ? e.message : "Could not check the status.");
+    } finally {
+      setCheckingStatus(false);
+    }
+  }
+
+  // A green pill for APPROVED, amber for anything still in review.
+  const statusTone = (s: string) =>
+    /approv|active|success/i.test(s)
+      ? "bg-green-500/15 text-green-600"
+      : /declin|reject|fail/i.test(s)
+        ? "bg-red-500/15 text-red-500"
+        : "bg-amber-500/15 text-amber-600";
 
   return (
     <div className="mt-6 rounded-3xl bg-card p-5">
@@ -192,6 +217,53 @@ export default function UsdAccountPanel() {
               {account.status && !account.consentRequired && (
                 <p className="mt-3 text-xs text-muted">Status: {account.status}</p>
               )}
+
+              {/* Application status — Maplerad reviews the KYC before approval. */}
+              <div className="mt-4 border-t border-border pt-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    Application status
+                  </p>
+                  <button
+                    onClick={checkStatus}
+                    disabled={checkingStatus}
+                    className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-bold text-ink active:scale-95 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${checkingStatus ? "animate-spin" : ""}`} />
+                    {checkingStatus ? "Checking…" : "Check status"}
+                  </button>
+                </div>
+                {status && (
+                  <div className="mt-3">
+                    <span
+                      className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${statusTone(status.status)}`}
+                    >
+                      {status.status}
+                    </span>
+                    {status.messages.length > 0 && (
+                      <ul className="mt-3 space-y-1.5">
+                        {status.messages.map((m, i) => (
+                          <li key={i} className="text-sm text-muted">
+                            • {m}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {status.kycLink && (
+                      <a
+                        href={status.kycLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex items-center gap-2 rounded-full bg-brand/10 px-4 py-2 text-sm font-bold text-brand"
+                      >
+                        Complete verification
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                )}
+                {statusError && <p className="mt-2 text-xs text-red-400">{statusError}</p>}
+              </div>
             </>
           ) : (
             <>

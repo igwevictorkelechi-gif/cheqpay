@@ -11,7 +11,7 @@ import {
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/components/brand';
-import { api, ApiError, type UsdAccount } from '@/services/api';
+import { api, ApiError, type UsdAccount, type UsdAccountStatus } from '@/services/api';
 
 const EMPLOYMENT = [
   { value: 'EMPLOYED', label: 'Employed' },
@@ -39,6 +39,9 @@ export default function UsdAccountPanel() {
   const [balance, setBalance] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<UsdAccountStatus | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const [idNumber, setIdNumber] = useState('');
   const [employmentStatus, setEmploymentStatus] = useState('EMPLOYED');
@@ -113,6 +116,27 @@ export default function UsdAccountPanel() {
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   }
+
+  async function checkStatus() {
+    setStatusError(null);
+    setCheckingStatus(true);
+    try {
+      const { usdStatus } = await api.getUsdAccountStatus();
+      if (usdStatus) setStatus(usdStatus);
+      else setStatusError('Status is not available for this account yet.');
+    } catch (e) {
+      setStatusError(e instanceof ApiError ? e.message : 'Could not check the status.');
+    } finally {
+      setCheckingStatus(false);
+    }
+  }
+
+  const statusTone = (s: string) =>
+    /approv|active|success/i.test(s)
+      ? { bg: 'rgba(34,197,94,0.15)', fg: '#16A34A' }
+      : /declin|reject|fail/i.test(s)
+        ? { bg: 'rgba(239,68,68,0.15)', fg: '#EF4444' }
+        : { bg: 'rgba(245,158,11,0.15)', fg: '#B45309' };
 
   const chipRow = (
     options: { value: string; label: string }[],
@@ -227,6 +251,54 @@ export default function UsdAccountPanel() {
                   <Ionicons name="open-outline" size={16} color="#B45309" style={{ marginLeft: 6 }} />
                 </TouchableOpacity>
               ) : null}
+
+              {/* Application status — Maplerad reviews the KYC before approval. */}
+              <View className="mt-4 pt-4" style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
+                <View className="flex-row items-center justify-between">
+                  <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '700' }}>
+                    APPLICATION STATUS
+                  </Text>
+                  <TouchableOpacity
+                    onPress={checkStatus}
+                    disabled={checkingStatus}
+                    className="flex-row items-center rounded-full px-3 py-1.5"
+                    style={{ backgroundColor: colors.surface, opacity: checkingStatus ? 0.5 : 1 }}
+                  >
+                    <Ionicons name="refresh" size={14} color={colors.ink} />
+                    <Text className="text-ink dark:text-ink-dark font-bold ml-1.5" style={{ fontSize: 12 }}>
+                      {checkingStatus ? 'Checking…' : 'Check status'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {status ? (
+                  <View className="mt-3">
+                    <View
+                      className="self-start rounded-full px-3 py-1"
+                      style={{ backgroundColor: statusTone(status.status).bg }}
+                    >
+                      <Text style={{ color: statusTone(status.status).fg, fontWeight: '700', fontSize: 12 }}>
+                        {status.status}
+                      </Text>
+                    </View>
+                    {status.messages.map((m, i) => (
+                      <Text key={i} style={{ color: colors.muted, marginTop: 8 }}>
+                        • {m}
+                      </Text>
+                    ))}
+                    {status.kycLink ? (
+                      <TouchableOpacity
+                        onPress={() => Linking.openURL(status.kycLink as string)}
+                        className="rounded-full px-4 py-2.5 mt-3 flex-row items-center justify-center self-start"
+                        style={{ backgroundColor: 'rgba(107,91,149,0.12)' }}
+                      >
+                        <Text style={{ color: colors.brand, fontWeight: '700' }}>Complete verification</Text>
+                        <Ionicons name="open-outline" size={16} color={colors.brand} style={{ marginLeft: 6 }} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                ) : null}
+                {statusError ? <Text style={{ color: '#EF4444', marginTop: 8 }}>{statusError}</Text> : null}
+              </View>
             </>
           ) : (
             <>

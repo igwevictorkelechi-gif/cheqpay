@@ -96,6 +96,13 @@ export interface UsdAccountInput {
   employerName: string;
   usResidencyStatus: string;
 }
+export interface UsdAccountStatus {
+  status: string;
+  messages: string[];
+  currency: string;
+  kycLink?: string | null;
+  accountId?: string;
+}
 export interface Quote {
   quoteId: string;
   side: 'buy' | 'sell' | 'convert';
@@ -386,6 +393,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     });
+  },
+
+  getUsdAccountStatus(): Promise<{ usdStatus: UsdAccountStatus | null }> {
+    return apiFetch('/api/virtual-accounts/usd/status');
   },
 
   getBillCatalog(): Promise<{ services: BillServiceConfig[] }> {

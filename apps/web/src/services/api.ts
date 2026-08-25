@@ -160,6 +160,14 @@ export interface UsdAccountInput {
   usResidencyStatus: string;
 }
 
+export interface UsdAccountStatus {
+  status: string;
+  messages: string[];
+  currency: string;
+  kycLink?: string | null;
+  accountId?: string;
+}
+
 export interface BillBiller {
   id: string;
   name: string;
@@ -356,6 +364,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     });
+  },
+
+  /** Check the approval status of the USD account request (null if not pollable). */
+  getUsdAccountStatus(): Promise<{ usdStatus: UsdAccountStatus | null }> {
+    return apiFetch("/api/virtual-accounts/usd/status");
   },
 
   getPrice(asset: AssetSymbol): Promise<MarketPrice> {
