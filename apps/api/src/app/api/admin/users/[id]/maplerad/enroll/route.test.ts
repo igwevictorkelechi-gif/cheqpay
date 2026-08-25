@@ -9,7 +9,11 @@ const {
   ensureMapleradCustomerDetailed,
   createVirtualAccount,
   decryptPii,
+  encryptPii,
+  fingerprintPii,
+  last4,
   isPiiEncryptionConfigured,
+  auditCreate,
 } = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
   findUnique: vi.fn(),
@@ -19,13 +23,19 @@ const {
   ensureMapleradCustomerDetailed: vi.fn(),
   createVirtualAccount: vi.fn(),
   decryptPii: vi.fn(),
+  encryptPii: vi.fn(),
+  fingerprintPii: vi.fn(),
+  last4: vi.fn(),
   isPiiEncryptionConfigured: vi.fn(),
+  auditCreate: vi.fn(),
 }));
 
-vi.mock("@cheqpay/db", () => ({ prisma: { user: { findUnique, findFirst, update } } }));
+vi.mock("@cheqpay/db", () => ({
+  prisma: { user: { findUnique, findFirst, update }, auditLog: { create: auditCreate } },
+}));
 vi.mock("@/lib/pregenerateWallets", () => ({ pregenerateCryptoWallets: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requireAdmin }));
-vi.mock("@/lib/pii", () => ({ decryptPii, isPiiEncryptionConfigured }));
+vi.mock("@/lib/pii", () => ({ decryptPii, encryptPii, fingerprintPii, last4, isPiiEncryptionConfigured }));
 vi.mock("@/lib/mapleradCustomer", () => ({ ensureMapleradCustomerDetailed, ensureMapleradSchema }));
 vi.mock("@/lib/virtualAccounts", () => ({ createVirtualAccount }));
 
@@ -71,6 +81,10 @@ describe("POST /api/admin/users/[id]/maplerad/enroll", () => {
     });
     decryptPii.mockReset().mockReturnValue("12345678901");
     isPiiEncryptionConfigured.mockReset().mockReturnValue(true);
+    encryptPii.mockReset().mockReturnValue("new-cipher");
+    fingerprintPii.mockReset().mockReturnValue("new-fp");
+    last4.mockReset().mockReturnValue("9999");
+    auditCreate.mockReset().mockResolvedValue({});
   });
 
   it("stores a supplied phone in +234 form and enrols with the stored identity", async () => {
@@ -152,4 +166,73 @@ describe("POST /api/admin/users/[id]/maplerad/enroll", () => {
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(findUnique).not.toHaveBeenCalled();
   });
+
+/**
+ * Identity corrections. "could not validate BVN" from NIBSS is usually a name
+ * entered surname-first or a wrong digit, not a bad BVN — so an operator can
+ * correct the name / DOB / BVN in place and re-validate without the user
+ * redoing KYC. These lock in that a correction is persisted, audited, and
+ * carried into the enrol, and that a bad correction is refused.
+ */
+describe("identity correction on the enrol repair", () => {
+  beforeEach(() => {
+    findUnique
+      .mockResolvedValueOnce(stuckUser({ phone: "+2348031234567" }))
+      .mockResolvedValueOnce({ mapleradCustomerId: "cus_1", mapleradTier: 1 });
+  });
+
+  it("re-orders a surname-first name and enrols with it", async () => {
+    // Stored "Igwe Victor" would split to first=Igwe — the mismatch NIBSS
+    // rejects. The operator supplies the correct halves.
+    const res = await call({ firstName: "Victor", lastName: "Igwe" });
+    expect(res.status).toBe(200);
+
+    // Persisted as a single legal name...
+    expect(update).toHaveBeenCalledWith({ where: { id: "u1" }, data: { legalName: "Victor Igwe" } });
+    // ...and passed to the provider in the right order.
+    const arg = ensureMapleradCustomerDetailed.mock.calls[0][2];
+    expect(arg.firstName).toBe("Victor");
+    expect(arg.lastName).toBe("Igwe");
+    // And the change is on the audit log, by field name only.
+    const audit = auditCreate.mock.calls[0][0].data;
+    expect(audit.action).toBe("admin.kyc.identity_corrected");
+    expect(audit.details.fields).toContain("legal name");
+  });
+
+  it("re-encrypts a corrected BVN three ways and enrols with it", async () => {
+    const res = await call({ bvn: "22222222222" });
+    expect(res.status).toBe(200);
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "u1" },
+      data: { bvnCiphertext: "new-cipher", bvnFingerprint: "new-fp", bvnLast4: "9999" },
+    });
+    expect(ensureMapleradCustomerDetailed.mock.calls[0][2].bvn).toBe("22222222222");
+  });
+
+  it("stores a corrected date of birth and sends it in the enrol", async () => {
+    const res = await call({ dateOfBirth: "1990-05-06" });
+    expect(res.status).toBe(200);
+    expect(ensureMapleradCustomerDetailed.mock.calls[0][2].dateOfBirth).toBe("1990-05-06");
+  });
+
+  it("refuses a half-supplied name rather than sending a mismatched pair", async () => {
+    const res = await call({ firstName: "Victor" });
+    expect(res.status).toBe(422);
+    expect(ensureMapleradCustomerDetailed).not.toHaveBeenCalled();
+  });
+
+  it("refuses a BVN that is not 11 digits", async () => {
+    const res = await call({ bvn: "123" });
+    expect(res.status).toBe(422);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("refuses a corrected BVN when PII encryption is off, rather than storing it in the clear", async () => {
+    isPiiEncryptionConfigured.mockReturnValue(false);
+    const res = await call({ bvn: "22222222222" });
+    expect(res.status).toBe(503);
+    expect(encryptPii).not.toHaveBeenCalled();
+  });
+});
+
 });

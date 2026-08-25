@@ -114,6 +114,8 @@ type MapleradEnroll = {
   /** Maplerad's own words when the enrolment itself failed. */
   enrollError?: string | null;
   enrollStep?: string | null;
+  /** Identity fields this run corrected before enrolling. */
+  corrected?: string[];
   account?: { accountNumber: string; bankName: string; accountName?: string } | null;
   accountError?: string | null;
   message: string;
@@ -265,6 +267,14 @@ export default function UserDetailPage() {
   // enrolment from data already on file, rather than making the user resubmit
   // the whole KYC form from a newer client.
   const [enrollPhone, setEnrollPhone] = useState('');
+  // Identity corrections, kept behind a toggle so the common "just retry / add a
+  // phone" case stays one field, and editing the name/DOB/BVN that NIBSS
+  // validates against is a deliberate step.
+  const [fixIdentity, setFixIdentity] = useState(false);
+  const [fixFirst, setFixFirst] = useState('');
+  const [fixLast, setFixLast] = useState('');
+  const [fixDob, setFixDob] = useState('');
+  const [fixBvn, setFixBvn] = useState('');
   const [enrolling, setEnrolling] = useState(false);
   const [enroll, setEnroll] = useState<MapleradEnroll | null>(null);
   const [enrollError, setEnrollError] = useState<string | null>(null);
@@ -367,6 +377,16 @@ export default function UserDetailPage() {
         body: JSON.stringify({
           phone: enrollPhone.trim() || undefined,
           createAccount: true,
+          // Only sent when the operator opened the correction panel, so a
+          // normal retry can never accidentally rewrite identity fields.
+          ...(fixIdentity
+            ? {
+                firstName: fixFirst.trim() || undefined,
+                lastName: fixLast.trim() || undefined,
+                dateOfBirth: fixDob.trim() || undefined,
+                bvn: fixBvn.trim() || undefined,
+              }
+            : {}),
         }),
       });
       const d = await r.json().catch(() => ({}));
@@ -378,7 +398,7 @@ export default function UserDetailPage() {
     } finally {
       setEnrolling(false);
     }
-  }, [id, enrollPhone, load]);
+  }, [id, enrollPhone, fixIdentity, fixFirst, fixLast, fixDob, fixBvn, load]);
 
   /** Read where the USD account stands, including a live status poll. */
   const checkUsd = useCallback(async () => {
@@ -744,6 +764,73 @@ export default function UserDetailPage() {
                 Leave the number blank to retry with whatever is already on file.
               </p>
 
+              {/* Identity correction. NIBSS validates the BVN against the name
+                  and date of birth together, so "could not validate BVN" is
+                  usually a name entered surname-first or a wrong digit, not a
+                  bad BVN. Correcting it here re-validates without the user
+                  redoing KYC. */}
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setFixIdentity((v) => !v)}
+                  className="text-sm font-medium text-brand-700 hover:text-brand-800"
+                >
+                  {fixIdentity ? '− Hide identity correction' : '+ Correct name / date of birth / BVN'}
+                </button>
+
+                {fixIdentity && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-xs text-amber-800">
+                      These must match the account holder&apos;s bank (NIBSS) record exactly. Leave a
+                      field blank to keep what is on file. Every change is written to the audit log.
+                    </p>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="block text-xs font-medium text-gray-600">
+                        First name
+                        <input
+                          value={fixFirst}
+                          onChange={(e) => setFixFirst(e.target.value)}
+                          placeholder={show(data.kyc.legalName)?.split(' ')[0] ?? 'First'}
+                          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
+                        />
+                      </label>
+                      <label className="block text-xs font-medium text-gray-600">
+                        Last name
+                        <input
+                          value={fixLast}
+                          onChange={(e) => setFixLast(e.target.value)}
+                          placeholder="Surname as the bank has it"
+                          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
+                        />
+                      </label>
+                      <label className="block text-xs font-medium text-gray-600">
+                        Date of birth
+                        <input
+                          value={fixDob}
+                          onChange={(e) => setFixDob(e.target.value)}
+                          type="date"
+                          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
+                        />
+                      </label>
+                      <label className="block text-xs font-medium text-gray-600">
+                        BVN (11 digits)
+                        <input
+                          value={fixBvn}
+                          onChange={(e) => setFixBvn(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                          inputMode="numeric"
+                          placeholder={data.kyc.bvnLast4 ? `•••• ${data.kyc.bvnLast4}` : '11 digits'}
+                          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
+                        />
+                      </label>
+                    </div>
+                    <p className="mt-2 text-xs text-amber-700">
+                      A name correction needs both halves. Then press{' '}
+                      <strong>Enrol / upgrade tier</strong> above to save and re-validate.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {enrollError && (
                 <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                   {enrollError}
@@ -795,6 +882,11 @@ export default function UserDetailPage() {
                       between "the upgrade did not work" and knowing whether the
                       BVN mismatched, the customer already exists, or the phone
                       was rejected. */}
+                  {enroll.corrected && enroll.corrected.length > 0 && (
+                    <p className="mt-3 text-sm text-gray-700">
+                      Corrected before enrolling: <strong>{enroll.corrected.join(', ')}</strong>.
+                    </p>
+                  )}
                   {enroll.enrollError && (
                     <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3">
                       <p className="text-xs font-semibold uppercase tracking-wide text-red-700">
