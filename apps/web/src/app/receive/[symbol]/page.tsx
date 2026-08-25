@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { ChevronLeft, ChevronDown, Copy, Share2, Check, AlertTriangle } from "lucide-react";
 import { api, ApiError } from "@/services/api";
+import { readCache, writeCache } from "@/lib/cache";
 import { getAssetMeta } from "@/lib/cryptoAssets";
 import DesktopSidebar from "@/components/DesktopSidebar";
 
@@ -18,6 +19,28 @@ function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: 
     </span>
   );
 }
+
+/**
+ * The whole deposit-address response, cached verbatim.
+ *
+ * Cached per user session rather than per asset: one request already returns
+ * every asset and chain, so a single snapshot serves every receive screen and
+ * switching assets costs nothing. Addresses are immutable once minted, which is
+ * what makes serving a stale copy safe — the refresh behind it only ever adds
+ * chains the user has since generated.
+ */
+interface DepositCache {
+  addresses: {
+    asset: string;
+    address: string;
+    network: string;
+    networkLabel: string;
+    managed?: boolean;
+  }[];
+  networks: { network: string; label: string }[];
+}
+
+const CACHE_KEY = "cheqpay:crypto:addresses";
 
 export default function ReceiveDetailPage() {
   const router = useRouter();
@@ -44,6 +67,27 @@ export default function ReceiveDetailPage() {
   const [mintable, setMintable] = useState<{ network: string; label: string }[]>([]);
   const [minting, setMinting] = useState<string | null>(null);
 
+  // Project one snapshot onto the screen. Shared by the cached first paint and
+  // the network response so the two can never drift apart.
+  const applySnapshot = useCallback(
+    (snap: DepositCache, sym: string) => {
+      const mine = snap.addresses.filter((x) => x.asset === sym);
+      setOptions(mine);
+      // Chains with no address yet — offered as "generate" so a user is never
+      // stuck because their preferred network was added after they signed up.
+      const have = new Set(mine.map((m) => m.network));
+      setMintable(snap.networks.filter((n) => !have.has(n.network)));
+      if (mine.length > 0) {
+        setAddress((prev) => prev ?? mine[0].address);
+        setNetLabel((prev) => prev ?? mine[0].networkLabel);
+        setNotLive(false);
+      } else {
+        setNotLive(true);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!meta) {
       setError("Unsupported asset.");
@@ -51,26 +95,26 @@ export default function ReceiveDetailPage() {
       return;
     }
     let active = true;
-    setLoading(true);
     setError(null);
     setNeedsAuth(false);
     setNotLive(false);
+
+    // A deposit address never changes once minted, so the stored copy is shown
+    // immediately and the network call only confirms it. Without this the
+    // screen opens on "Loading…" every single time for an address the database
+    // has held since the user verified.
+    const cached = readCache<DepositCache>(CACHE_KEY);
+    const hadCache = !!cached && cached.addresses.length > 0;
+    if (cached) applySnapshot(cached, meta.symbol);
+    setLoading(!hadCache);
+
     (async () => {
       try {
         const { addresses, networks } = await api.getCryptoDepositAddresses();
         if (!active) return;
-        const mine = addresses.filter((x) => x.asset === meta.symbol);
-        setOptions(mine);
-        // Chains with no address yet — offered as "generate" so a user is never
-        // stuck because their preferred network was added after they signed up.
-        const have = new Set(mine.map((m) => m.network));
-        setMintable((networks ?? []).filter((n) => !have.has(n.network)));
-        if (mine.length > 0) {
-          setAddress(mine[0].address);
-          setNetLabel(mine[0].networkLabel);
-        } else {
-          setNotLive(true);
-        }
+        const snapshot: DepositCache = { addresses, networks: networks ?? [] };
+        writeCache(CACHE_KEY, snapshot);
+        applySnapshot(snapshot, meta.symbol);
       } catch (e) {
         if (!active) return;
         // Only a genuine 401 means "sign in" — anything else is a temporary
@@ -78,7 +122,9 @@ export default function ReceiveDetailPage() {
         if (e instanceof ApiError && e.status === 401) {
           setNeedsAuth(true);
           setError("Your session has expired. Please sign in again.");
-        } else {
+        } else if (!hadCache) {
+          // With a cached address on screen a failed refresh is not worth
+          // reporting — the address is still correct and still usable.
           setError("We couldn’t load the deposit address. Please try again.");
         }
       } finally {
@@ -119,7 +165,14 @@ export default function ReceiveDetailPage() {
     setMinting(network);
     setError(null);
     try {
-      await api.createWallet(meta.symbol, network);
+      const { wallets } = await api.createWallet(meta.symbol, network);
+      // Show the chain the user just asked for, rather than leaving them on the
+      // one that happened to be selected. The authoritative re-read follows.
+      const minted = wallets?.find((w) => w.asset === meta.symbol && w.network === network);
+      if (minted) {
+        setAddress(minted.address);
+        setNetLabel(mintable.find((m) => m.network === network)?.label ?? network);
+      }
       // Re-read rather than trusting the POST response shape.
       setReloadKey((k) => k + 1);
     } catch (e) {

@@ -8,9 +8,52 @@ import QRCode from 'react-native-qrcode-svg';
 import { colors } from '@/components/brand';
 import { api, ApiError } from '@/services/api';
 import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
+import { readCache, writeCache } from '@/lib/cache';
 
 type Sym = 'BTC' | 'USDT' | 'USDC';
 const ASSETS: Sym[] = ['BTC', 'USDT', 'USDC'];
+
+interface AddressEntry {
+  asset: string;
+  address: string;
+  network: string;
+  networkLabel: string;
+}
+
+/**
+ * The whole deposit-address response, cached verbatim.
+ *
+ * One request already returns every asset and chain, so a single snapshot
+ * serves every asset on this screen. Addresses are immutable once minted, which
+ * is what makes serving a stored copy safe — the refresh behind it only ever
+ * adds chains the user has since generated. Cleared on sign-out.
+ */
+interface DepositCache {
+  addresses: AddressEntry[];
+  networks: { network: string; label: string }[];
+}
+
+const CACHE_KEY = 'cheqpay:crypto:addresses';
+
+/** Group one response into the three shapes the screen renders from. */
+function project(addresses: AddressEntry[]) {
+  const map: Record<string, string> = {};
+  const labels: Record<string, string> = {};
+  const grouped: Record<string, { address: string; network: string; networkLabel: string }[]> = {};
+  for (const e of addresses) {
+    // First address per asset is the default shown.
+    if (!map[e.asset]) {
+      map[e.asset] = e.address;
+      labels[e.asset] = e.networkLabel;
+    }
+    (grouped[e.asset] ??= []).push({
+      address: e.address,
+      network: e.network,
+      networkLabel: e.networkLabel,
+    });
+  }
+  return { map, labels, grouped };
+}
 
 export default function ReceiveScreen() {
   const insets = useSafeAreaInsets();
@@ -32,36 +75,46 @@ export default function ReceiveScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+
+    const apply = (snap: DepositCache) => {
+      const { map, labels, grouped } = project(snap.addresses);
+      setAddresses(map);
+      setNetLabels(labels);
+      setByAsset(grouped);
+      setAllNetworks(snap.networks);
+    };
+
     (async () => {
+      // Show the stored copy first. A deposit address does not change once it
+      // is minted, so waiting on the network to display one the device already
+      // has is a spinner for nothing.
+      let hadCache = false;
+      const cached = await readCache<DepositCache>(CACHE_KEY);
+      if (cached && active && cached.addresses.length > 0) {
+        hadCache = true;
+        apply(cached);
+      }
+
       try {
         // Per-user addresses minted by custody, with manual wallets as fallback.
         const { addresses, networks } = await api.getCryptoDepositAddresses();
-        const map: Record<string, string> = {};
-        const labels: Record<string, string> = {};
-        const grouped: Record<
-          string,
-          { address: string; network: string; networkLabel: string }[]
-        > = {};
-        for (const e of addresses) {
-          // First address per asset is the default shown.
-          if (!map[e.asset]) {
-            map[e.asset] = e.address;
-            labels[e.asset] = e.networkLabel;
-          }
-          (grouped[e.asset] ??= []).push({
-            address: e.address,
-            network: e.network,
-            networkLabel: e.networkLabel,
-          });
-        }
-        setAddresses(map);
-        setNetLabels(labels);
-        setByAsset(grouped);
-        setAllNetworks(networks ?? []);
+        if (!active) return;
+        const snapshot: DepositCache = { addresses, networks: networks ?? [] };
+        apply(snapshot);
+        void writeCache(CACHE_KEY, snapshot);
       } catch {
-        setError('We couldn’t load deposit addresses. Please try again shortly.');
+        // With addresses already on screen a failed refresh is not worth
+        // reporting — what is shown is still correct and still usable.
+        if (active && !hadCache) {
+          setError('We couldn’t load deposit addresses. Please try again shortly.');
+        }
       }
     })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   /** Mint an address on a chain the user does not hold yet, then re-read. */
@@ -71,23 +124,7 @@ export default function ReceiveScreen() {
     try {
       await api.createWallet(asset, network);
       const { addresses, networks } = await api.getCryptoDepositAddresses();
-      const map: Record<string, string> = {};
-      const labels: Record<string, string> = {};
-      const grouped: Record<
-        string,
-        { address: string; network: string; networkLabel: string }[]
-      > = {};
-      for (const e of addresses) {
-        if (!map[e.asset]) {
-          map[e.asset] = e.address;
-          labels[e.asset] = e.networkLabel;
-        }
-        (grouped[e.asset] ??= []).push({
-          address: e.address,
-          network: e.network,
-          networkLabel: e.networkLabel,
-        });
-      }
+      const { map, labels, grouped } = project(addresses);
       // Show the chain that was just created, not whatever was selected before.
       const fresh = grouped[asset]?.find((g) => g.network === network);
       if (fresh) {
@@ -98,6 +135,9 @@ export default function ReceiveScreen() {
       setNetLabels(labels);
       setByAsset(grouped);
       setAllNetworks(networks ?? []);
+      // The new address is now part of the stored set, so the next open shows
+      // it without a round trip.
+      void writeCache(CACHE_KEY, { addresses, networks: networks ?? [] });
     } catch (e) {
       setError(
         e instanceof ApiError ? e.message : 'We couldn’t create that address. Please try again.',
