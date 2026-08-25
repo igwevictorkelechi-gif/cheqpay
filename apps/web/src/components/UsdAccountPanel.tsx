@@ -213,7 +213,7 @@ export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?:
             role="switch"
             aria-checked={open}
             onClick={() => setOpen((v) => !v)}
-            className={`relative h-7 w-12 rounded-full transition-colors ${
+            className={`tap relative h-7 w-12 rounded-full transition-colors ${
               open ? "bg-brand" : "bg-border"
             }`}
           >
@@ -254,7 +254,7 @@ export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?:
                 </span>
                 <button
                   onClick={() => copy(account.accountNumber)}
-                  className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-2 text-sm font-bold text-ink active:scale-95"
+                  className="min-h-[44px] flex items-center gap-1.5 rounded-full bg-surface px-3 py-2 text-sm font-bold text-ink active:scale-95"
                 >
                   {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
                   {copied ? "Copied" : "Copy"}
@@ -334,7 +334,7 @@ export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?:
                   <button
                     onClick={checkStatus}
                     disabled={checkingStatus}
-                    className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-bold text-ink active:scale-95 disabled:opacity-50"
+                    className="min-h-[44px] flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-bold text-ink active:scale-95 disabled:opacity-50"
                   >
                     <RefreshCw className={`h-3.5 w-3.5 ${checkingStatus ? "animate-spin" : ""}`} />
                     {checkingStatus ? "Checking…" : "Check status"}
@@ -361,7 +361,7 @@ export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?:
                         href={status.kycLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-3 inline-flex items-center gap-2 rounded-full bg-brand/10 px-4 py-2 text-sm font-bold text-brand"
+                        className="min-h-[44px] mt-3 inline-flex items-center gap-2 rounded-full bg-brand/10 px-4 py-2 text-sm font-bold text-brand"
                       >
                         Complete verification
                         <ExternalLink className="h-4 w-4" />

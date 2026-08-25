@@ -98,6 +98,32 @@ input[inputmode="numeric"] {
 
 /* Component Utilities (dark-purple theme) */
 @layer components {
+  /*
+   * A guaranteed 44x44 hit area for a control that must stay visually small.
+   *
+   * Apple asks for 44pt and Material for 48dp; this app is used one-handed, on
+   * a phone, to move money, so a mis-tap is expensive. Most controls simply get
+   * bigger (see min-h-[44px] and h-11 across the screens) — but a toggle switch
+   * or a corner dismiss has a size the design depends on. For those the
+   * *target* grows while the *paint* does not: an invisible ::after centred on
+   * the control extends the tappable region outward.
+   *
+   * `position: relative` is set here rather than assumed, and the pseudo-element
+   * is inert (no pointer-events change needed — it inherits the button's).
+   */
+  .tap {
+    position: relative;
+  }
+  .tap::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+  }
+
   .btn-primary {
     @apply inline-flex items-center justify-center rounded-full bg-gradient-to-r from-brand to-brand-light px-5 py-3 font-semibold text-white shadow-lg shadow-brand/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
   }

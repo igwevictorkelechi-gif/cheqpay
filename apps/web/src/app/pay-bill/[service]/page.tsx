@@ -237,7 +237,7 @@ export default function BillServicePage() {
                   <button
                     key={v}
                     onClick={() => setAmount(String(v))}
-                    className="rounded-full bg-card px-4 py-2 text-sm font-semibold text-ink active:scale-95"
+                    className="min-h-[44px] rounded-full bg-card px-4 py-2 text-sm font-semibold text-ink active:scale-95"
                   >
                     ₦{v.toLocaleString()}
                   </button>
@@ -337,7 +337,7 @@ export default function BillServicePage() {
               </p>
               <button
                 onClick={() => navigator.clipboard?.writeText(billToken)}
-                className="mt-3 rounded-full bg-card px-5 py-2 text-sm font-bold text-ink active:scale-95"
+                className="min-h-[44px] mt-3 rounded-full bg-card px-5 py-2 text-sm font-bold text-ink active:scale-95"
               >
                 Copy token
               </button>
@@ -374,7 +374,7 @@ function Header({ onBack, title }: { onBack: () => void; title: string }) {
     <div className="flex items-center gap-3 px-5 pb-4 pt-4">
       <button
         onClick={onBack}
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+        className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
         aria-label="Go back"
       >
         <ChevronLeft className="h-5 w-5" />

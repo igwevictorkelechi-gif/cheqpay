@@ -68,7 +68,7 @@ export default function SupportChatPage() {
         <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-surface px-5 py-4">
           <button
             onClick={() => router.back()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
             aria-label="Go back"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -121,7 +121,7 @@ export default function SupportChatPage() {
                 <button
                   key={s}
                   onClick={() => send(s)}
-                  className="rounded-full border border-border bg-card px-3.5 py-2 text-xs font-semibold text-ink active:scale-95"
+                  className="min-h-[44px] rounded-full border border-border bg-card px-3.5 py-2 text-xs font-semibold text-ink active:scale-95"
                 >
                   {s}
                 </button>

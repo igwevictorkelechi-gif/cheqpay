@@ -167,7 +167,7 @@ export default function BankAccountsPage() {
                     <button
                       onClick={() => remove(b.id)}
                       aria-label="Remove account"
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-soft active:scale-90"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-soft active:scale-90"
                     >
                       <Trash2 className="h-4 w-4 text-muted" />
                     </button>

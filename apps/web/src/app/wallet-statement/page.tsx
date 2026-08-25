@@ -120,7 +120,7 @@ export default function WalletStatementPage() {
               <h1 className="text-3xl font-extrabold text-ink">{selected.name}</h1>
               <button
                 onClick={download}
-                className="flex items-center gap-2 rounded-full bg-card px-4 py-2 text-sm font-semibold text-ink"
+                className="min-h-[44px] flex items-center gap-2 rounded-full bg-card px-4 py-2 text-sm font-semibold text-ink"
               >
                 <Download className="h-4 w-4" />
                 Export

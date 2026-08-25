@@ -61,7 +61,7 @@ export default function PromoPopup() {
         <button
           onClick={dismiss}
           aria-label="Close"
-          className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60"
+          className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60"
         >
           <X className="h-4 w-4" />
         </button>

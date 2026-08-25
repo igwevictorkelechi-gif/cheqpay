@@ -80,7 +80,7 @@ export default function InstantWithdrawalPage() {
               onClick={toggle}
               disabled={busy}
               aria-pressed={enabled}
-              className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${
+              className={`tap relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${
                 enabled ? "bg-red-500" : "bg-circle"
               }`}
             >

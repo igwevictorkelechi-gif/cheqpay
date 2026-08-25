@@ -61,7 +61,7 @@ export default function PayBillPage() {
             <p className="text-base font-bold text-ink">Showing services in</p>
             <button
               onClick={() => toast.show("More countries coming soon")}
-              className="flex items-center gap-1.5 rounded-full bg-circle px-3 py-1.5"
+              className="min-h-[44px] flex items-center gap-1.5 rounded-full bg-circle px-3 py-1.5"
             >
               <span className="text-sm">🇳🇬</span>
               <span className="text-sm font-semibold text-ink">Nigeria</span>
