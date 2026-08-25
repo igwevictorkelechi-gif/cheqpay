@@ -117,7 +117,13 @@ describe("KYC document store (Postgres-backed)", () => {
       const exp = Number(url.searchParams.get("exp"));
       const sig = url.searchParams.get("sig")!;
       expect(verifyKycDocumentToken("doc-OTHER", exp, sig)).toBe(false);
-      expect(verifyKycDocumentToken("doc-9", exp, sig.replace(/.$/, "0"))).toBe(false);
+      // Flip the last hex digit to a DIFFERENT one. Substituting a constant
+      // (e.g. "0") silently no-ops whenever the signature already ends in it,
+      // leaving the "tampered" signature identical and the assertion failing
+      // about one run in sixteen.
+      const tampered = sig.slice(0, -1) + (sig.endsWith("0") ? "1" : "0");
+      expect(tampered).not.toBe(sig);
+      expect(verifyKycDocumentToken("doc-9", exp, tampered)).toBe(false);
       expect(verifyKycDocumentToken("doc-9", Math.floor(Date.now() / 1000) - 1, sig)).toBe(false);
     });
 

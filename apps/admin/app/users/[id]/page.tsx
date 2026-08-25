@@ -147,6 +147,28 @@ type UsdAccountOpened = {
   account: UsdAccountAdmin;
 };
 
+/** GET/POST /api/users/{id}/wallets — crypto addresses and mint outcomes. */
+type WalletRow = { asset: string; network: string; address: string };
+type MintOutcome = {
+  asset: string;
+  network: string;
+  status: 'created' | 'existing' | 'skipped' | 'failed';
+  address?: string;
+  error?: string;
+};
+type WalletState = {
+  enrolled: boolean;
+  customerId: string | null;
+  wallets: WalletRow[];
+  mintable: { asset: string; network: string }[];
+};
+type MintResult = {
+  wallets: WalletRow[];
+  outcomes: MintOutcome[];
+  blocked: string | null;
+  message: string;
+};
+
 /** Anything not captured shows a dash rather than an empty cell. */
 const DASH = '—';
 function show(v: string | number | null | undefined): string {
@@ -252,6 +274,14 @@ export default function UserDetailPage() {
   const [usdOpening, setUsdOpening] = useState(false);
   const [usdOpened, setUsdOpened] = useState<UsdAccountOpened | null>(null);
   const [usdError, setUsdError] = useState<string | null>(null);
+  // Crypto addresses: mint on demand and surface the provider's real error,
+  // which is otherwise only visible in server logs.
+  const [cw, setCw] = useState<WalletState | null>(null);
+  const [cwLoading, setCwLoading] = useState(false);
+  const [cwMinting, setCwMinting] = useState(false);
+  const [cwResult, setCwResult] = useState<MintResult | null>(null);
+  const [cwError, setCwError] = useState<string | null>(null);
+
   const [usdForm, setUsdForm] = useState({
     identificationNumber: '',
     employmentStatus: 'EMPLOYED',
@@ -384,6 +414,47 @@ export default function UserDetailPage() {
       setUsdOpening(false);
     }
   }, [id, usdForm, checkUsd]);
+
+  /** Read the user's crypto addresses and what is still mintable. */
+  const loadWallets = useCallback(async () => {
+    setCwLoading(true);
+    setCwError(null);
+    try {
+      const r = await fetch(`/api/users/${id}/wallets`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || d?.message || `Load failed (${r.status})`);
+      setCw(d as WalletState);
+    } catch (e) {
+      setCwError((e as Error).message);
+    } finally {
+      setCwLoading(false);
+    }
+  }, [id]);
+
+  /** Mint addresses. No pair = the launch set; a pair mints just that one. */
+  const mintWallets = useCallback(
+    async (pair?: { asset: string; network: string; offramp?: boolean }) => {
+      setCwMinting(true);
+      setCwError(null);
+      setCwResult(null);
+      try {
+        const r = await fetch(`/api/users/${id}/wallets`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(pair ?? {}),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d?.error || d?.message || `Generate failed (${r.status})`);
+        setCwResult(d as MintResult);
+        await loadWallets();
+      } catch (e) {
+        setCwError((e as Error).message);
+      } finally {
+        setCwMinting(false);
+      }
+    },
+    [id, loadWallets],
+  );
 
   const usdFormValid =
     usdForm.identificationNumber.trim().length >= 3 &&
@@ -903,6 +974,131 @@ export default function UserDetailPage() {
                     <Field label="Bank" value={usdOpened.account.bankName} />
                     <Field label="Status" value={show(usdOpened.account.status)} />
                   </dl>
+                </div>
+              )}
+            </div>
+
+            {/* Crypto deposit addresses. Each is minted for this user alone —
+                that is what lets an incoming deposit be credited automatically,
+                since the webhook identifies the owner by the address. */}
+            <div className="mt-6 border-t border-gray-200 pt-6">
+              <h3 className="text-sm font-semibold text-gray-900">Crypto deposit addresses</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Unique per user — the deposit webhook credits by matching the address to its
+                holder, so a shared address could not be attributed to anyone. Addresses are
+                pre-generated at enrolment; generate here if a user has none, or to add a chain.
+                Requires an enrolled Maplerad customer.
+              </p>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={loadWallets}
+                  disabled={cwLoading}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {cwLoading ? 'Loading…' : 'Show crypto addresses'}
+                </button>
+                <button
+                  onClick={() => mintWallets()}
+                  disabled={cwMinting}
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {cwMinting ? 'Generating…' : 'Generate addresses'}
+                </button>
+              </div>
+
+              {cw && (
+                <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+                  <Field label="Enrolled" value={cw.enrolled ? 'Yes' : 'No'} />
+                  {cw.wallets.length === 0 ? (
+                    <p className="mt-3 text-gray-700">
+                      This user has no crypto addresses yet.
+                    </p>
+                  ) : (
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="border-b border-gray-200 text-left text-gray-500">
+                          <tr>
+                            <th className="py-2 pr-4 font-medium">Asset</th>
+                            <th className="py-2 pr-4 font-medium">Network</th>
+                            <th className="py-2 font-medium">Address</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cw.wallets.map((w) => (
+                            <tr key={`${w.asset}/${w.network}`} className="border-b border-gray-100">
+                              <td className="py-2 pr-4 font-medium text-gray-900">{w.asset}</td>
+                              <td className="py-2 pr-4 text-gray-700">{w.network}</td>
+                              <td className="py-2 break-all font-mono text-xs text-gray-700">
+                                {w.address}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {cw.mintable.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        Not yet generated
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {cw.mintable.map((m) => (
+                          <button
+                            key={`${m.asset}/${m.network}`}
+                            onClick={() =>
+                              mintWallets({
+                                asset: m.asset,
+                                network: m.network,
+                                // Only Solana can be withdrawn from, so any other
+                                // chain has to offramp to USD to be safe.
+                                offramp: m.network !== 'SOLANA',
+                              })
+                            }
+                            disabled={cwMinting}
+                            className="rounded-lg border border-dashed border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-white disabled:opacity-50"
+                          >
+                            + {m.asset} on {m.network}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {cwError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {cwError}
+                </div>
+              )}
+
+              {cwResult && (
+                <div
+                  className={`mt-3 rounded-lg border p-4 text-sm ${
+                    cwResult.blocked
+                      ? 'border-yellow-200 bg-yellow-50 text-yellow-800'
+                      : 'border-green-200 bg-green-50 text-green-800'
+                  }`}
+                >
+                  <p className="font-medium">{cwResult.message}</p>
+                  {cwResult.outcomes.length > 0 && (
+                    <ul className="mt-3 space-y-1">
+                      {cwResult.outcomes.map((o, i) => (
+                        <li key={i}>
+                          <strong>
+                            {o.asset}/{o.network}
+                          </strong>
+                          : {o.status}
+                          {/* The provider's own message — the thing that explains
+                              why nothing was minted. */}
+                          {o.error ? ` — ${o.error}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               )}
             </div>

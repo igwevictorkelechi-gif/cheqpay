@@ -28,7 +28,7 @@ vi.mock("@/custody", () => ({ getCustodyProvider: h.getCustodyProvider }));
 vi.mock("./features", () => ({ getFeatureFlags: h.getFeatureFlags }));
 vi.mock("./ensureNetworks", () => ({ ensureNetworks: vi.fn().mockResolvedValue(undefined) }));
 
-import { listWallets, provisionWallets } from "./wallets";
+import { listWallets, provisionWallets, provisionWalletsDetailed } from "./wallets";
 
 describe("listWallets", () => {
   beforeEach(() => {
@@ -105,5 +105,60 @@ describe("provisionWallets", () => {
     await provisionWallets("u1");
     // The second asset still got written despite the first failing.
     expect(h.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("provisionWalletsDetailed — reporting, not just logging", () => {
+  beforeEach(() => {
+    Object.values(h).forEach((fn) => fn.mockReset());
+    h.findMany.mockResolvedValue([]);
+    h.findUnique.mockResolvedValue(null);
+    h.create.mockResolvedValue({});
+    h.getFeatureFlags.mockResolvedValue({ crypto_deposits: true });
+    h.createDepositAddress.mockResolvedValue({ address: "BvH5k", custodyRef: "ref" });
+    h.getCustodyProvider.mockReturnValue({ createDepositAddress: h.createDepositAddress });
+  });
+
+  it("reports the provider's error instead of swallowing it", async () => {
+    h.createDepositAddress.mockRejectedValue(new Error("column supported_chains does not exist"));
+
+    const r = await provisionWalletsDetailed("u1");
+
+    expect(r.outcomes.every((o) => o.status === "failed")).toBe(true);
+    // The operator needs the provider's own words to act on this.
+    expect(r.outcomes[0].error).toMatch(/supported_chains/);
+  });
+
+  it("reports why nothing was attempted when the flag is off", async () => {
+    h.getFeatureFlags.mockResolvedValue({ crypto_deposits: false });
+    const r = await provisionWalletsDetailed("u1");
+    expect(r.blocked).toMatch(/crypto_deposits/);
+    expect(h.createDepositAddress).not.toHaveBeenCalled();
+  });
+
+  it("reports a custody outage as blocked rather than a per-pair failure", async () => {
+    h.getCustodyProvider.mockImplementation(() => {
+      throw new Error("CUSTODY_PROVIDER=maplerad requires MAPLERAD_SECRET_KEY");
+    });
+    const r = await provisionWalletsDetailed("u1");
+    expect(r.blocked).toMatch(/MAPLERAD_SECRET_KEY/);
+  });
+
+  it("marks each minted pair created, and an existing one existing", async () => {
+    const created = await provisionWalletsDetailed("u1");
+    expect(created.outcomes.map((o) => o.status)).toEqual(["created", "created"]);
+
+    h.findUnique.mockResolvedValue({ address: "already" });
+    const again = await provisionWalletsDetailed("u1");
+    expect(again.outcomes.map((o) => o.status)).toEqual(["existing", "existing"]);
+  });
+
+  it("names a pair it cannot mint instead of silently dropping it", async () => {
+    const r = await provisionWalletsDetailed("u1", [
+      { asset: "BTC" as never, network: "BITCOIN" as never },
+    ]);
+    expect(r.outcomes[0]).toMatchObject({ status: "skipped" });
+    expect(r.outcomes[0].error).toMatch(/not a mintable pair/);
   });
 });

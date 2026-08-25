@@ -3,8 +3,8 @@ import { requireUser } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { getManualWallets, MANUAL_ASSETS } from "@/lib/manualCrypto";
 import { getFeatureFlags } from "@/lib/features";
-import { listWallets, provisionWallets } from "@/lib/wallets";
-import { CRYPTO_NETWORKS } from "@/lib/assets";
+import { listWallets, provisionWalletsDetailed } from "@/lib/wallets";
+import { CRYPTO_COINS, CRYPTO_NETWORKS } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
 
@@ -47,11 +47,16 @@ export async function GET(req: Request) {
     // Mint the launch set if this user has none yet. Best-effort: an address we
     // already hold is still returned when the provider is unreachable.
     let wallets = await listWallets(auth.id);
+    let blocked: string | undefined;
+    let mintError: string | undefined;
     if (wallets.length === 0) {
-      wallets = await provisionWallets(auth.id).catch((err) => {
+      const report = await provisionWalletsDetailed(auth.id).catch((err) => {
         console.error("[deposit-addresses] provisioning failed", err);
-        return [];
+        return { wallets: [], outcomes: [], blocked: String(err) };
       });
+      wallets = report.wallets;
+      blocked = report.blocked;
+      mintError = report.outcomes.find((o) => o.status === "failed")?.error;
     }
 
     const addresses = wallets.map((w) => ({
@@ -63,12 +68,20 @@ export async function GET(req: Request) {
       managed: true,
     }));
 
-    // Fall back to a manual wallet only for an asset with no minted address.
+    // Manual (shared, admin-configured) wallets fill in ONLY for assets custody
+    // cannot mint — BTC today.
+    //
+    // Never for USDT/USDC: a manual wallet is one address shared by every user,
+    // so a deposit into it cannot be attributed to anyone. The crypto webhook
+    // credits by matching the deposit address to its holder, which is exactly
+    // what a shared address destroys. Showing it would look like it worked and
+    // silently produce deposits nobody can be credited for.
+    const mintableAssets = new Set<string>(CRYPTO_COINS);
     const covered = new Set(addresses.map((a) => a.asset));
     const manual = await getManualWallets();
     for (const a of MANUAL_ASSETS) {
       const entry = manual[a];
-      if (entry && !covered.has(a)) {
+      if (entry && !covered.has(a) && !mintableAssets.has(a)) {
         addresses.push({
           asset: a,
           address: entry.address,
@@ -79,6 +92,13 @@ export async function GET(req: Request) {
       }
     }
 
+    // Mintable assets with no address yet: say so, with the reason, instead of
+    // going quiet or handing back somebody else's wallet.
+    const pending = CRYPTO_COINS.filter((a) => !covered.has(a)).map((asset) => ({
+      asset,
+      reason: blocked ?? mintError ?? "address is still being generated",
+    }));
+
     // Which chains the user could additionally request, so the client can offer
     // a network selector without hardcoding the list.
     const networks = CRYPTO_NETWORKS.map((n) => ({
@@ -86,7 +106,7 @@ export async function GET(req: Request) {
       label: NETWORK_LABELS[n] ?? String(n),
     }));
 
-    return jsonOk({ addresses, networks });
+    return jsonOk({ addresses, networks, pending });
   } catch (err) {
     return toErrorResponse(err);
   }
