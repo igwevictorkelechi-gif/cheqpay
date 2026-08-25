@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { clearUserCaches } from "@/lib/cache";
 import type { User } from "@cheqpay/shared";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
@@ -110,6 +111,12 @@ export const authService = {
     } catch (error) {
       console.error("logout error:", error);
       throw error;
+    } finally {
+      // In `finally` on purpose: a failed sign-out still means this person is
+      // walking away from the device, and leaving their balance and deposit
+      // address in localStorage for whoever opens the app next is the worse
+      // outcome of the two.
+      clearUserCaches();
     }
   },
 

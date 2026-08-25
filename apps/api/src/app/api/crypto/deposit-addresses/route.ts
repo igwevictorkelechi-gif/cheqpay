@@ -5,6 +5,7 @@ import { getManualWallets, MANUAL_ASSETS } from "@/lib/manualCrypto";
 import { getFeatureFlags } from "@/lib/features";
 import { listWallets, provisionWalletsDetailed } from "@/lib/wallets";
 import { CRYPTO_COINS, CRYPTO_NETWORKS } from "@/lib/assets";
+import { rateLimit } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
 
@@ -37,26 +38,46 @@ export async function GET(req: Request) {
   try {
     const auth = await requireUser(req);
 
+    // The three reads below are independent, so they go together rather than
+    // one after another. This endpoint is on the path the receive screen opens
+    // with, and on a cold lambda three sequential round trips to Postgres is
+    // most of what the user experiences as "loading".
+    const [flags, wallets0, manual] = await Promise.all([
+      getFeatureFlags(),
+      listWallets(auth.id),
+      getManualWallets(),
+    ]);
+
     // Kill switch: with crypto deposits off, every asset reads as
     // "Coming soon" in the apps (empty list) rather than erroring.
-    const flags = await getFeatureFlags();
     if (!flags.crypto_deposits) {
       return jsonOk({ addresses: [], networks: [] });
     }
 
     // Mint the launch set if this user has none yet. Best-effort: an address we
     // already hold is still returned when the provider is unreachable.
-    let wallets = await listWallets(auth.id);
+    //
+    // Throttled, because the miss case repeats. A user whose minting cannot
+    // succeed — custody down, provider refusing, no Maplerad customer yet —
+    // has no wallets on every single visit, and without this the screen calls
+    // the provider every time it opens and waits for the same failure. Once a
+    // minute is enough to pick up a recovery; the rest of the time the stored
+    // rows answer on their own.
+    let wallets = wallets0;
     let blocked: string | undefined;
     let mintError: string | undefined;
     if (wallets.length === 0) {
-      const report = await provisionWalletsDetailed(auth.id).catch((err) => {
-        console.error("[deposit-addresses] provisioning failed", err);
-        return { wallets: [], outcomes: [], blocked: String(err) };
-      });
-      wallets = report.wallets;
-      blocked = report.blocked;
-      mintError = report.outcomes.find((o) => o.status === "failed")?.error;
+      if (rateLimit(`mint:auto:${auth.id}`, 1, 60_000).allowed) {
+        const report = await provisionWalletsDetailed(auth.id).catch((err) => {
+          console.error("[deposit-addresses] provisioning failed", err);
+          return { wallets: [], outcomes: [], blocked: String(err) };
+        });
+        wallets = report.wallets;
+        blocked = report.blocked;
+        mintError = report.outcomes.find((o) => o.status === "failed")?.error;
+      } else {
+        blocked = "address is still being generated";
+      }
     }
 
     const addresses = wallets.map((w) => ({
@@ -78,7 +99,6 @@ export async function GET(req: Request) {
     // silently produce deposits nobody can be credited for.
     const mintableAssets = new Set<string>(CRYPTO_COINS);
     const covered = new Set(addresses.map((a) => a.asset));
-    const manual = await getManualWallets();
     for (const a of MANUAL_ASSETS) {
       const entry = manual[a];
       if (entry && !covered.has(a) && !mintableAssets.has(a)) {

@@ -44,3 +44,25 @@ export function invalidateMoneyCaches(): void {
     /* ignore */
   }
 }
+
+/**
+ * Drop every cached snapshot belonging to the signed-in user.
+ *
+ * Called on sign-out. These caches exist to paint a screen before the network
+ * answers, which on a shared device means the next person to open the app would
+ * otherwise see the previous user's balance — or, worse, their deposit address,
+ * which someone could then pay into believing it was their own.
+ */
+export function clearUserCaches(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("cheqpay:")) keys.push(k);
+    }
+    keys.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* ignore */
+  }
+}
