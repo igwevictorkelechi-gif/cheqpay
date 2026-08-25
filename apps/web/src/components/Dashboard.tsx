@@ -36,7 +36,10 @@ import { readCache, writeCache } from "@/lib/cache";
 
 const CASH_CACHE = "cheqpay:cash";
 const USD_CACHE = "cheqpay:usd";
+// Transactions are cached per currency: the two tabs show different lists, and
+// sharing one cache key would flash the wrong currency's history on switch.
 const HOME_TX_CACHE = "cheqpay:home:txns";
+const HOME_TX_CACHE_USD = "cheqpay:home:txns:usd";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -52,8 +55,11 @@ export default function Dashboard() {
   // balance block is showing.
   const [usd, setUsd] = useState<number>(() => readCache<number>(USD_CACHE) ?? 0);
   const [currency, setCurrency] = useState<"NGN" | "USD">("NGN");
-  const [txns, setTxns] = useState<LedgerTransaction[]>(
+  const [ngnTxns, setNgnTxns] = useState<LedgerTransaction[]>(
     () => readCache<LedgerTransaction[]>(HOME_TX_CACHE) ?? []
+  );
+  const [usdTxns, setUsdTxns] = useState<LedgerTransaction[]>(
+    () => readCache<LedgerTransaction[]>(HOME_TX_CACHE_USD) ?? []
   );
 
   // Keep the user's name fresh (best-effort; non-blocking).
@@ -68,19 +74,24 @@ export default function Dashboard() {
     let active = true;
 
     async function refresh() {
-      const [{ balances }, { transactions }] = await Promise.all([
+      // Both currencies are fetched up front so switching tabs is instant and
+      // never shows another currency's history while a request is in flight.
+      const [{ balances }, ngnRes, usdRes] = await Promise.all([
         api.getBalances(),
-        api.getTransactions(6),
+        api.getTransactions(6, "NGN"),
+        api.getTransactions(6, "USD"),
       ]);
       if (!active) return;
       const cash = Number(balances.find((b) => b.asset === "NGN")?.availableFormatted ?? 0);
       const dollars = Number(balances.find((b) => b.asset === "USD")?.availableFormatted ?? 0);
       setNgn(cash);
       setUsd(dollars);
-      setTxns(transactions);
+      setNgnTxns(ngnRes.transactions);
+      setUsdTxns(usdRes.transactions);
       writeCache(CASH_CACHE, cash);
       writeCache(USD_CACHE, dollars);
-      writeCache(HOME_TX_CACHE, transactions);
+      writeCache(HOME_TX_CACHE, ngnRes.transactions);
+      writeCache(HOME_TX_CACHE_USD, usdRes.transactions);
     }
 
     (async () => {
@@ -105,13 +116,30 @@ export default function Dashboard() {
   const isUsd = currency === "USD";
   const value = isUsd ? usd : ngn;
   const symbol = isUsd ? "$" : "₦";
+  const locale = isUsd ? "en-US" : "en-NG";
+  // Everything below the tab reads from the selected currency only.
+  const txns = isUsd ? usdTxns : ngnTxns;
   const formattedBalance = showBalance
     ? symbol +
-      value.toLocaleString(isUsd ? "en-US" : "en-NG", {
+      value.toLocaleString(locale, {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })
     : `${symbol}••••`;
+
+  /**
+   * USD payouts are not live yet. Rather than a dead button, point the user at
+   * the conversion that does work — they can turn dollars into naira or crypto
+   * and withdraw that.
+   */
+  const onWithdraw = () => {
+    if (isUsd) {
+      toast.show("USD withdrawals aren’t available yet — convert to Naira first.");
+      router.push("/convert?from=USD");
+      return;
+    }
+    router.push("/withdraw");
+  };
 
   return (
     <AppShell>
@@ -154,20 +182,24 @@ export default function Dashboard() {
 
       <KycBanner />
 
-      {/* First-run nudge: no money and no history yet. */}
-      {features.ngn_deposits && ngn === 0 && txns.length === 0 && (
+      {/* First-run nudge: no money and no history yet, in this currency. */}
+      {features.ngn_deposits && value === 0 && txns.length === 0 && (
         <div className="mb-6 px-5">
           <button
-            onClick={() => router.push("/deposit")}
+            onClick={() => router.push(isUsd ? "/deposit?currency=USD" : "/deposit")}
             className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-r from-brand to-brand-light p-5 text-left active:scale-[0.99]"
           >
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20">
               <ArrowDown className="h-6 w-6 text-white" />
             </span>
             <div className="flex-1">
-              <p className="text-base font-bold text-white">Add money to get started</p>
+              <p className="text-base font-bold text-white">
+                {isUsd ? "Add dollars to get started" : "Add money to get started"}
+              </p>
               <p className="mt-0.5 text-sm text-white/80">
-                Fund your wallet by bank transfer to buy crypto and pay bills.
+                {isUsd
+                  ? "Open your USD account to receive dollars from anywhere."
+                  : "Fund your wallet by bank transfer to buy crypto and pay bills."}
               </p>
             </div>
           </button>
@@ -176,10 +208,14 @@ export default function Dashboard() {
 
       <ActionRow>
         {features.ngn_deposits && (
-          <CircleAction icon={ArrowDown} label="Deposit" onClick={() => router.push("/deposit")} />
+          <CircleAction
+            icon={ArrowDown}
+            label="Deposit"
+            onClick={() => router.push(isUsd ? "/deposit?currency=USD" : "/deposit")}
+          />
         )}
         {features.ngn_withdrawals && (
-          <CircleAction icon={ArrowRight} label="Withdraw" onClick={() => router.push("/withdraw")} />
+          <CircleAction icon={ArrowRight} label="Withdraw" onClick={onWithdraw} />
         )}
         {features.crypto_trading && (
           <CircleAction icon={RefreshCw} label="Convert" onClick={() => router.push("/convert")} />
@@ -189,22 +225,28 @@ export default function Dashboard() {
         )}
       </ActionRow>
 
-      {/* Cash account */}
+      {/* Cash account — the selected currency only. */}
       <div className="mb-4 px-5">
         <Card>
           <p className="mb-4 text-base font-medium text-muted">Cash</p>
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <NairaFlag />
+              {isUsd ? (
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/15 text-lg font-bold text-green-500">
+                  $
+                </span>
+              ) : (
+                <NairaFlag />
+              )}
               <div className="ml-3">
-                <p className="text-lg font-bold text-ink">NGN</p>
-                <p className="text-sm text-muted">Naira</p>
+                <p className="text-lg font-bold text-ink">{currency}</p>
+                <p className="text-sm text-muted">{isUsd ? "US Dollar" : "Naira"}</p>
               </div>
             </div>
             <p className="text-lg font-bold text-ink">
               {showBalance
-                ? `${ngn.toLocaleString("en-NG", { maximumFractionDigits: 2 })} NGN`
-                : "•••• NGN"}
+                ? `${value.toLocaleString(locale, { maximumFractionDigits: 2 })} ${currency}`
+                : `•••• ${currency}`}
             </p>
           </div>
         </Card>
@@ -212,11 +254,16 @@ export default function Dashboard() {
 
       {/* Transactions */}
       <div className="px-5">
-        <SectionHeader title="Transactions" onClick={() => router.push("/transactions")} />
+        <SectionHeader
+          title="Transactions"
+          onClick={() => router.push(isUsd ? "/transactions?currency=USD" : "/transactions")}
+        />
         {txns.length === 0 ? (
           <div className="flex flex-col items-center py-8 text-center">
             <Receipt className="mb-2 h-9 w-9 text-muted" />
-            <p className="text-sm text-muted">No transactions yet.</p>
+            <p className="text-sm text-muted">
+              {isUsd ? "No dollar transactions yet." : "No Naira transactions yet."}
+            </p>
           </div>
         ) : (
           <div className="overflow-hidden rounded-3xl bg-card">

@@ -269,6 +269,15 @@ export default function UsdAccountPanel() {
                 <p className="mt-3 text-xs text-muted">Status: {account.status}</p>
               )}
 
+              {/* USD payouts are not live — say so here rather than only on tap. */}
+              <p className="mt-4 rounded-2xl bg-surface px-4 py-3 text-xs leading-relaxed text-muted">
+                Dollar withdrawals aren’t available yet. You can{" "}
+                <a href="/convert?from=USD" className="font-bold text-brand">
+                  convert your dollars
+                </a>{" "}
+                to Naira or crypto and withdraw from there.
+              </p>
+
               {/* Wire / international transfer details (ACH / FEDWIRE / SWIFT). */}
               <div className="mt-4 border-t border-border pt-4">
                 <button

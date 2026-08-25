@@ -69,9 +69,18 @@ export async function provisionWallets(userId: string): Promise<WalletView[]> {
   return listWallets(userId);
 }
 
+/**
+ * The user's CRYPTO deposit wallets.
+ *
+ * Fiat virtual accounts (the NGN NUBAN and the USD account) are stored as Wallet
+ * rows too — same table, network = FIAT — so an unfiltered read would hand back
+ * a bank account number as if it were an on-chain deposit address. Excluding
+ * FIAT keeps this endpoint meaning what its name says, and stays correct as new
+ * crypto assets are added.
+ */
 export async function listWallets(userId: string): Promise<WalletView[]> {
   const wallets = await prisma.wallet.findMany({
-    where: { userId },
+    where: { userId, network: { not: Network.FIAT } },
     select: { asset: true, network: true, address: true },
     orderBy: [{ asset: "asc" }, { network: "asc" }],
   });

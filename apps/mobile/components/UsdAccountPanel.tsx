@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/components/brand';
 import {
@@ -278,6 +279,20 @@ export default function UsdAccountPanel() {
                   <Ionicons name="open-outline" size={16} color="#B45309" style={{ marginLeft: 6 }} />
                 </TouchableOpacity>
               ) : null}
+
+              {/* USD payouts are not live — say so here rather than only on tap. */}
+              <TouchableOpacity
+                onPress={() => router.push('/(app)/convert')}
+                className="rounded-2xl px-4 py-3 mt-4"
+                style={{ backgroundColor: colors.surface }}
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 18 }}>
+                  Dollar withdrawals aren’t available yet.{' '}
+                  <Text style={{ color: colors.brand, fontWeight: '700' }}>Convert your dollars</Text>{' '}
+                  to Naira or crypto and withdraw from there.
+                </Text>
+              </TouchableOpacity>
 
               {/* Wire / international transfer details (ACH / FEDWIRE / SWIFT). */}
               <View className="mt-4 pt-4" style={{ borderTopWidth: 1, borderTopColor: colors.border }}>

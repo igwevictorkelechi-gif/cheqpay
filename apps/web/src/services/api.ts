@@ -255,8 +255,10 @@ export const api = {
     return apiFetch("/api/wallets");
   },
 
-  getTransactions(limit = 50): Promise<{ transactions: LedgerTransaction[] }> {
-    return apiFetch(`/api/transactions?limit=${limit}`);
+  /** Ledger history. `asset` narrows to one currency (both legs of a convert count). */
+  getTransactions(limit = 50, asset?: string): Promise<{ transactions: LedgerTransaction[] }> {
+    const q = asset ? `&asset=${encodeURIComponent(asset)}` : "";
+    return apiFetch(`/api/transactions?limit=${limit}${q}`);
   },
 
   getTransaction(id: string): Promise<{ transaction: LedgerTransaction }> {
