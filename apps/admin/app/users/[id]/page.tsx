@@ -121,6 +121,26 @@ type MapleradEnroll = {
   message: string;
 };
 
+/** Result of POST /api/users/{id}/bvn-verify — NIBSS's record for the BVN. */
+interface BvnVerify {
+  source: 'supplied' | 'on file';
+  identity: {
+    firstName: string | null;
+    lastName: string | null;
+    middleName: string | null;
+    dateOfBirth: string | null;
+    phone: string | null;
+    gender: string | null;
+  };
+  held: {
+    firstName: string | null;
+    lastName: string | null;
+    dateOfBirth: string | null;
+    bvnLast4: string | null;
+  };
+  matches: { firstName: boolean; lastName: boolean; dateOfBirth: boolean };
+}
+
 /** A user's USD account as the admin endpoint reports it. */
 type UsdAccountAdmin = {
   accountNumber: string;
@@ -203,6 +223,33 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+/** NIBSS's value beside ours, with a match/mismatch mark — the KYC diff. */
+function CompareRow({
+  label,
+  nibss,
+  held,
+  ok,
+}: {
+  label: string;
+  nibss: string | null;
+  held: string | null;
+  ok: boolean;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="text-gray-600">{label}</dt>
+      <dd className="text-right">
+        <span className={`font-medium ${ok ? 'text-green-700' : 'text-red-700'}`}>
+          {nibss ?? '—'} {ok ? '✓' : '✗'}
+        </span>
+        {!ok && (
+          <span className="block text-xs text-gray-400">we have: {held ?? '—'}</span>
+        )}
+      </dd>
+    </div>
+  );
+}
+
 /** One number in the statistics grid. */
 function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
@@ -275,6 +322,10 @@ export default function UserDetailPage() {
   const [fixLast, setFixLast] = useState('');
   const [fixDob, setFixDob] = useState('');
   const [fixBvn, setFixBvn] = useState('');
+  // BVN lookup against NIBSS — the authoritative name/DOB for a BVN.
+  const [bvnChecking, setBvnChecking] = useState(false);
+  const [bvnResult, setBvnResult] = useState<BvnVerify | null>(null);
+  const [bvnError, setBvnError] = useState<string | null>(null);
   const [enrolling, setEnrolling] = useState(false);
   const [enroll, setEnroll] = useState<MapleradEnroll | null>(null);
   const [enrollError, setEnrollError] = useState<string | null>(null);
@@ -399,6 +450,40 @@ export default function UserDetailPage() {
       setEnrolling(false);
     }
   }, [id, enrollPhone, fixIdentity, fixFirst, fixLast, fixDob, fixBvn, load]);
+
+  /** Look the BVN up at NIBSS and show the authoritative name / DOB. */
+  const verifyBvn = useCallback(async () => {
+    setBvnChecking(true);
+    setBvnError(null);
+    setBvnResult(null);
+    try {
+      const r = await fetch(`/api/users/${id}/bvn-verify`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        // A typed BVN checks that one; blank checks whatever is on file.
+        body: JSON.stringify({ bvn: fixBvn.trim() || undefined }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || d?.message || `Lookup failed (${r.status})`);
+      if (d.ok === false) {
+        setBvnError(d.error || 'NIBSS could not verify that BVN.');
+      } else {
+        setBvnResult(d as BvnVerify);
+      }
+    } catch (e) {
+      setBvnError((e as Error).message);
+    } finally {
+      setBvnChecking(false);
+    }
+  }, [id, fixBvn]);
+
+  /** Copy NIBSS's name and DOB into the correction fields, ready to save. */
+  const useNibssValues = useCallback(() => {
+    if (!bvnResult) return;
+    if (bvnResult.identity.firstName) setFixFirst(bvnResult.identity.firstName);
+    if (bvnResult.identity.lastName) setFixLast(bvnResult.identity.lastName);
+    if (bvnResult.identity.dateOfBirth) setFixDob(bvnResult.identity.dateOfBirth);
+  }, [bvnResult]);
 
   /** Read where the USD account stands, including a live status poll. */
   const checkUsd = useCallback(async () => {
@@ -827,6 +912,78 @@ export default function UserDetailPage() {
                       A name correction needs both halves. Then press{' '}
                       <strong>Enrol / upgrade tier</strong> above to save and re-validate.
                     </p>
+
+                    {/* NIBSS lookup: the authoritative name and DOB for the BVN,
+                        so the operator corrects to match the truth rather than
+                        guessing. Checks the typed BVN if one is entered above,
+                        otherwise the BVN on file. */}
+                    <div className="mt-4 border-t border-amber-200 pt-3">
+                      <button
+                        type="button"
+                        onClick={verifyBvn}
+                        disabled={bvnChecking}
+                        className="inline-flex items-center gap-2 rounded-lg border border-amber-400 bg-white px-3 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-50"
+                      >
+                        {bvnChecking ? 'Checking NIBSS…' : 'Verify BVN against NIBSS'}
+                      </button>
+                      <p className="mt-1 text-xs text-amber-600">
+                        A live, billed lookup. Returns the name and date of birth NIBSS holds
+                        for the {fixBvn.trim() ? 'entered' : 'stored'} BVN.
+                      </p>
+
+                      {bvnError && (
+                        <div className="mt-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+                          {bvnError}
+                        </div>
+                      )}
+
+                      {bvnResult && (
+                        <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3 text-sm">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            NIBSS record ({bvnResult.source})
+                          </p>
+                          <dl className="mt-2 space-y-1">
+                            <CompareRow
+                              label="First name"
+                              nibss={bvnResult.identity.firstName}
+                              held={bvnResult.held.firstName}
+                              ok={bvnResult.matches.firstName}
+                            />
+                            <CompareRow
+                              label="Last name"
+                              nibss={bvnResult.identity.lastName}
+                              held={bvnResult.held.lastName}
+                              ok={bvnResult.matches.lastName}
+                            />
+                            <CompareRow
+                              label="Date of birth"
+                              nibss={bvnResult.identity.dateOfBirth}
+                              held={bvnResult.held.dateOfBirth}
+                              ok={bvnResult.matches.dateOfBirth}
+                            />
+                            {bvnResult.identity.middleName && (
+                              <div className="flex justify-between text-gray-600">
+                                <dt>Middle name</dt>
+                                <dd className="font-medium text-gray-900">
+                                  {bvnResult.identity.middleName}
+                                </dd>
+                              </div>
+                            )}
+                          </dl>
+                          {(!bvnResult.matches.firstName ||
+                            !bvnResult.matches.lastName ||
+                            !bvnResult.matches.dateOfBirth) && (
+                            <button
+                              type="button"
+                              onClick={useNibssValues}
+                              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+                            >
+                              Use NIBSS values in the fields above
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
