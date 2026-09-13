@@ -18,7 +18,7 @@ import type { Minor } from "./types";
  * returns one country-level biller, `{ name: "Airtime NG", identifier:
  * "ng-airtime", commission: 1 }`, and an example alone could not prove that was
  * the whole list. POST /bills/airtime settles it: its identifier enum is
- * ["ng-airtime", "airteltigo-gh", "mtn-gh", "vodafone-gh"], so Nigeria has
+ * ["ng-airtime", "airteltigo-ng", "mtn-ng", "vodafone-ng"], so Nigeria has
  * exactly one value and Maplerad reads the carrier off the phone number. An
  * enum is the contract; a biller list is a sample. lib/bills.ts and
  * payments/maplerad.ts now both send `ng-airtime` — do not reintroduce

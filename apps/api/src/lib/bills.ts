@@ -75,7 +75,7 @@ export interface ServiceConfig {
  *
  * RESOLVED (was the open AIRTIME_NETWORKS question): Maplerad's
  * POST /bills/airtime takes ONE country-level identifier whose enum is
- * ["ng-airtime", "airteltigo-gh", "mtn-gh", "vodafone-gh"] — Nigeria has a
+ * ["ng-airtime", "airteltigo-ng", "mtn-ng", "vodafone-ng"] — Nigeria has a
  * single value, `ng-airtime`, and Maplerad resolves the carrier from the
  * phone number. There are no per-network NG airtime billers. Sending
  * `mtn-ng` etc. fails the purchase AFTER the customer is debited.
