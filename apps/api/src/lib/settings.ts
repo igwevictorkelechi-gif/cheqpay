@@ -8,7 +8,21 @@ export const SETTING_KEYS = {
   // Business fees, admin-set from the dashboard. All default to 0 (off).
   DEPOSIT_FEE_BPS: "deposit_fee_bps", // % of each NGN deposit, in basis points
   WITHDRAWAL_FEE_NGN: "withdrawal_fee_ngn", // flat NGN fee per bank payout
-  BILL_MARGIN_BPS: "bill_margin_bps", // markup on bill payments, in basis points
+  BILL_MARGIN_BPS: "bill_margin_bps", // default markup on bill payments, in bps
+  // Per-service bill margins. Each overrides BILL_MARGIN_BPS for that service
+  // alone, because the economics differ sharply: a data bundle's wholesale
+  // price is invisible to the buyer, while everyone knows ₦100 of airtime
+  // should cost ₦100. Unset means "use the default".
+  BILL_MARGIN_AIRTIME_BPS: "bill_margin_airtime_bps",
+  BILL_MARGIN_DATA_BPS: "bill_margin_data_bps",
+  BILL_MARGIN_ELECTRICITY_BPS: "bill_margin_electricity_bps",
+  BILL_MARGIN_CABLETV_BPS: "bill_margin_cabletv_bps",
+  BILL_MARGIN_BETTING_BPS: "bill_margin_betting_bps",
+  BILL_MARGIN_FOOD_BPS: "bill_margin_food_bps",
+  // Spread taken on a NGN⇄USD conversion, which settles on Maplerad's FX rail
+  // rather than the synthetic USDT peg — so SWAP_SPREAD_BPS never reaches it
+  // and it needs a margin of its own.
+  FX_MARGIN_BPS: "fx_margin_bps",
   // Cashback rewards, paid in NGN. Rates are per transaction kind because the
   // economics differ (a bill carries margin, a deposit carries a fee, a payout
   // carries neither), and all default to 0 so nothing pays out until set.
@@ -107,9 +121,91 @@ export function getWithdrawalFeeNgn(): Promise<number> {
   return getNumberSetting(SETTING_KEYS.WITHDRAWAL_FEE_NGN, 0);
 }
 
-/** Profit margin (basis points) added on top of each bill payment. 0 = none. */
-export function getBillMarginBps(): Promise<number> {
-  return getNumberSetting(SETTING_KEYS.BILL_MARGIN_BPS, 0);
+/** The bill services that can carry their own margin. */
+export type BillMarginService =
+  | "airtime"
+  | "data"
+  | "electricity"
+  | "cabletv"
+  | "betting"
+  | "food";
+
+const BILL_MARGIN_KEYS: Record<BillMarginService, string> = {
+  airtime: SETTING_KEYS.BILL_MARGIN_AIRTIME_BPS,
+  data: SETTING_KEYS.BILL_MARGIN_DATA_BPS,
+  electricity: SETTING_KEYS.BILL_MARGIN_ELECTRICITY_BPS,
+  cabletv: SETTING_KEYS.BILL_MARGIN_CABLETV_BPS,
+  betting: SETTING_KEYS.BILL_MARGIN_BETTING_BPS,
+  food: SETTING_KEYS.BILL_MARGIN_FOOD_BPS,
+};
+
+/**
+ * Profit margin (basis points) added on top of a bill payment. 0 = none.
+ *
+ * With a service, its own rate wins when one is set and the shared default
+ * applies otherwise — so an admin can price data at 3% and still sell airtime
+ * at face value. Note that an explicit 0 is a real answer, not "unset": it is
+ * how you hold one service at face value while the default is non-zero.
+ */
+export async function getBillMarginBps(service?: BillMarginService): Promise<number> {
+  const fallback = () => getNumberSetting(SETTING_KEYS.BILL_MARGIN_BPS, 0);
+  if (!service) return fallback();
+
+  const row = await prisma.platformSetting.findUnique({
+    where: { key: BILL_MARGIN_KEYS[service] },
+  });
+  return row ? parseNonNegNumber(row.value, BILL_MARGIN_KEYS[service]) : fallback();
+}
+
+/** Every bill margin, for the admin dashboard. Null means "uses the default". */
+export async function getBillMargins(): Promise<{
+  defaultBps: number;
+  perService: Record<BillMarginService, number | null>;
+}> {
+  const services = Object.keys(BILL_MARGIN_KEYS) as BillMarginService[];
+  const [defaultBps, rows] = await Promise.all([
+    getNumberSetting(SETTING_KEYS.BILL_MARGIN_BPS, 0),
+    prisma.platformSetting.findMany({
+      where: { key: { in: services.map((s) => BILL_MARGIN_KEYS[s]) } },
+    }),
+  ]);
+  const byKey = new Map(rows.map((r) => [r.key, r.value]));
+  const perService = Object.fromEntries(
+    services.map((s) => {
+      const raw = byKey.get(BILL_MARGIN_KEYS[s]);
+      return [s, raw === undefined ? null : parseNonNegNumber(raw, BILL_MARGIN_KEYS[s])];
+    }),
+  ) as Record<BillMarginService, number | null>;
+  return { defaultBps, perService };
+}
+
+/** Set one service's margin, or clear it back to the default with null. */
+export async function setBillMarginForService(
+  service: BillMarginService,
+  bps: number | null,
+  updatedBy?: string,
+): Promise<void> {
+  const key = BILL_MARGIN_KEYS[service];
+  if (bps === null) {
+    await prisma.platformSetting.deleteMany({ where: { key } });
+    return;
+  }
+  await upsertSetting(key, String(bps), updatedBy);
+}
+
+/**
+ * Spread (basis points) taken on a NGN⇄USD conversion. 0 = none.
+ *
+ * Separate from SWAP_SPREAD_BPS because these two never meet: the crypto
+ * spread is applied to a price we compute ourselves, while this is withheld
+ * from an amount Maplerad's FX rail returns.
+ */
+export function getFxMarginBps(): Promise<number> {
+  return getNumberSetting(SETTING_KEYS.FX_MARGIN_BPS, 0);
+}
+
+export async function setFxMarginBps(bps: number, updatedBy?: string) {
+  await upsertSetting(SETTING_KEYS.FX_MARGIN_BPS, String(bps), updatedBy);
 }
 
 export async function setDepositFeeBps(bps: number, updatedBy?: string) {

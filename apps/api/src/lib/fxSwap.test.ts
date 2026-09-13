@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
   exchangeFx: vi.fn(),
   isWithinSingleTxLimit: vi.fn(),
   notifyUser: vi.fn(),
+  getFxMarginBps: vi.fn(),
 }));
 
 const db = {
@@ -46,7 +47,14 @@ vi.mock("./kyc", () => ({ isWithinSingleTxLimit: h.isWithinSingleTxLimit }));
 vi.mock("./maplerad/fx", () => ({ quoteFx: h.quoteFx, exchangeFx: h.exchangeFx }));
 vi.mock("./ensureUsdAsset", () => ({ ensureUsdAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./ensureQuoteProviderRef", () => ({ ensureQuoteProviderRef: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("./settings", () => ({ getUsdtNgnRate: vi.fn(), getSwapSpreadBps: vi.fn() }));
+vi.mock("./settings", () => ({
+  getUsdtNgnRate: vi.fn(),
+  getSwapSpreadBps: vi.fn(),
+  getFxMarginBps: h.getFxMarginBps,
+  // The real implementation: the arithmetic is the thing under test.
+  feeFromBps: (amt: bigint, bps: number) =>
+    bps <= 0 ? 0n : (amt * BigInt(Math.trunc(bps))) / 10_000n,
+}));
 vi.mock("./cashback", () => ({ awardCashback: vi.fn() }));
 vi.mock("./alerts", () => ({ notifyUser: h.notifyUser }));
 vi.mock("@/market", () => ({ getPriceFeed: () => ({ getSpotUsdt: vi.fn() }) }));
@@ -71,6 +79,7 @@ describe("createConvertQuote — NGN↔USD routes to Maplerad FX", () => {
     Object.values(h).forEach((fn) => fn.mockReset());
     h.isWithinSingleTxLimit.mockReturnValue(true);
     h.quoteCreate.mockResolvedValue({ id: "q1" });
+    h.getFxMarginBps.mockResolvedValue(0);
   });
 
   it("prices from a live FX quote and stores the provider reference", async () => {
@@ -150,6 +159,7 @@ describe("executeSwap — NGN↔USD settles on the real FX rail", () => {
     h.auditCreate.mockResolvedValue({});
     h.exchangeFx.mockResolvedValue({ source: {}, target: {}, rate: 600 });
     h.notifyUser.mockResolvedValue(undefined);
+    h.getFxMarginBps.mockResolvedValue(0);
   });
 
   it("reserves, exchanges, then credits — recording a maplerad_fx CONVERT", async () => {
@@ -227,5 +237,110 @@ describe("executeSwap — NGN↔USD settles on the real FX rail", () => {
     const r = await executeSwap({ userId: "u1", quoteId: "q1", idempotencyKey: "idem-1" });
     expect(r).toEqual({ transactionId: "tx-old", status: "COMPLETED" });
     expect(h.exchangeFx).not.toHaveBeenCalled();
+  });
+});
+
+describe("the NGN↔USD business spread", () => {
+  beforeEach(() => {
+    Object.values(h).forEach((fn) => fn.mockReset());
+    h.isWithinSingleTxLimit.mockReturnValue(true);
+    h.quoteCreate.mockResolvedValue({ id: "q1" });
+    h.quoteFindUnique.mockResolvedValue(fxQuote);
+    h.txFindUnique.mockResolvedValue(null);
+    h.quoteUpdateMany.mockResolvedValue({ count: 1 });
+    h.balanceUpdateMany.mockResolvedValue({ count: 1 });
+    h.balanceUpsert.mockResolvedValue({});
+    h.balanceUpdate.mockResolvedValue({});
+    h.txCreate.mockResolvedValue({ id: "tx1", status: "COMPLETED" });
+    h.auditCreate.mockResolvedValue({});
+    h.notifyUser.mockResolvedValue(undefined);
+    h.getFxMarginBps.mockResolvedValue(100); // 1%
+  });
+
+  const providerQuote = (targetAmount: number) => ({
+    reference: "fxref",
+    source: { currency: "NGN", amount: 1_000_000, human_readable_amount: 10000 },
+    target: { currency: "USD", amount: targetAmount, human_readable_amount: targetAmount / 100 },
+    rate: 0.00066,
+  });
+
+  it("withholds the spread from what the provider quotes", async () => {
+    h.quoteFx.mockResolvedValue(providerQuote(1_000)); // $10.00 gross
+    await createConvertQuote({
+      userId: "u1", tier: 2, fromAsset: "NGN" as never, toAsset: "USD" as never,
+      amountInMinor: 1_000_000n,
+    });
+    // 1% of $10.00 is $0.10, so the user is promised $9.90.
+    expect(h.quoteCreate.mock.calls[0][0].data.amountOut).toBe(990n);
+  });
+
+  it("prices the rate off the net, so the displayed rate is the one the user gets", async () => {
+    h.quoteFx.mockResolvedValue(providerQuote(1_000));
+    await createConvertQuote({
+      userId: "u1", tier: 2, fromAsset: "NGN" as never, toAsset: "USD" as never,
+      amountInMinor: 1_000_000n,
+    });
+    // $9.90 for ₦10,000 = 0.00099 USD per naira, not the gross 0.001.
+    const rate = Number(h.quoteCreate.mock.calls[0][0].data.rate.toString());
+    expect(rate).toBeCloseTo(0.00099, 8);
+  });
+
+  it("takes the spread again at settlement, so it is not handed back", async () => {
+    // The regression this guards: executeFxSwap prefers the SETTLED amount over
+    // the quoted one. Crediting that raw would return the whole margin.
+    h.exchangeFx.mockResolvedValue({
+      source: { currency: "NGN", amount: 1_000_000 },
+      target: { currency: "USD", amount: 1_000 }, // $10.00 gross settled
+      rate: 0.0001,
+    });
+    await executeSwap({ userId: "u1", quoteId: "q1", idempotencyKey: "idem-m1" });
+
+    expect(h.balanceUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: { available: { increment: 990n } } }),
+    );
+  });
+
+  it("still credits what settled when the provider moves, net of the spread", async () => {
+    // Settled $9.00 rather than the $10.00 quoted: the user gets 99% of what
+    // actually exists, not 99% of what was hoped for.
+    h.exchangeFx.mockResolvedValue({
+      source: { currency: "NGN", amount: 1_000_000 },
+      target: { currency: "USD", amount: 900 },
+      rate: 0.0001,
+    });
+    await executeSwap({ userId: "u1", quoteId: "q1", idempotencyKey: "idem-m2" });
+
+    expect(h.balanceUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: { available: { increment: 891n } } }),
+    );
+  });
+
+  it("falls back to the quoted net when the provider reports no amount", async () => {
+    h.exchangeFx.mockResolvedValue({ source: {}, target: {}, rate: 600 });
+    await executeSwap({ userId: "u1", quoteId: "q1", idempotencyKey: "idem-m3" });
+    // fxQuote.amountOut is already net — do not take the spread off it twice.
+    expect(h.balanceUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: { available: { increment: 660n } } }),
+    );
+  });
+
+  it("refuses a conversion too small to survive the spread", async () => {
+    h.quoteFx.mockResolvedValue(providerQuote(0));
+    await expect(
+      createConvertQuote({
+        userId: "u1", tier: 2, fromAsset: "NGN" as never, toAsset: "USD" as never,
+        amountInMinor: 100n,
+      }),
+    ).rejects.toMatchObject({ code: "bad_fx_quote" });
+  });
+
+  it("changes nothing when the spread is off", async () => {
+    h.getFxMarginBps.mockResolvedValue(0);
+    h.quoteFx.mockResolvedValue(providerQuote(1_000));
+    await createConvertQuote({
+      userId: "u1", tier: 2, fromAsset: "NGN" as never, toAsset: "USD" as never,
+      amountInMinor: 1_000_000n,
+    });
+    expect(h.quoteCreate.mock.calls[0][0].data.amountOut).toBe(1_000n);
   });
 });

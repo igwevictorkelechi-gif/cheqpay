@@ -208,8 +208,25 @@ export const platformSettingsUpdateSchema = z
     depositFeeBps: z.number().int().min(0).max(500).optional(),
     /** Flat withdrawal fee in NGN (max ₦10,000). */
     withdrawalFeeNgn: z.number().min(0).max(10_000).optional(),
-    /** Bill-payment profit margin in basis points (max 20%). */
+    /** Default bill-payment profit margin in basis points (max 20%). */
     billMarginBps: z.number().int().min(0).max(2_000).optional(),
+    /**
+     * Per-service bill margins, each overriding the default for that service.
+     * null clears the override so the service falls back to the default; an
+     * explicit 0 is different — it pins that service to face value.
+     */
+    billMargins: z
+      .object({
+        airtime: z.number().int().min(0).max(2_000).nullable().optional(),
+        data: z.number().int().min(0).max(2_000).nullable().optional(),
+        electricity: z.number().int().min(0).max(2_000).nullable().optional(),
+        cabletv: z.number().int().min(0).max(2_000).nullable().optional(),
+        betting: z.number().int().min(0).max(2_000).nullable().optional(),
+        food: z.number().int().min(0).max(2_000).nullable().optional(),
+      })
+      .optional(),
+    /** NGN⇄USD conversion spread in basis points (max 10%). */
+    fxMarginBps: z.number().int().min(0).max(1_000).optional(),
     /**
      * Cashback. Rates are capped at 10% each — a slip of the decimal point
      * here pays real money out of the treasury on every transaction, so the
