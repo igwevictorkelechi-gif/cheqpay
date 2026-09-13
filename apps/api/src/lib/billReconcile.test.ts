@@ -2,14 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   findMany: vi.fn(),
+  webhookFindFirst: vi.fn(),
   verifyTransaction: vi.fn(),
   settleBillByProviderRef: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
+  Prisma: {},
   TransactionType: { BILL: "BILL" },
   TransactionStatus: { PROCESSING: "PROCESSING" },
-  prisma: { transaction: { findMany: h.findMany } },
+  prisma: {
+    transaction: { findMany: h.findMany },
+    webhookEvent: { findFirst: h.webhookFindFirst },
+  },
 }));
 vi.mock("./maplerad/transactions", () => ({ verifyTransaction: h.verifyTransaction }));
 vi.mock("./mapleradCustomer", () => ({
@@ -34,6 +39,7 @@ const row = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   h.findMany.mockResolvedValue([row()]);
+  h.webhookFindFirst.mockResolvedValue(null);
   h.verifyTransaction.mockResolvedValue({ id: "prov-1", status: "SUCCESS" });
   h.settleBillByProviderRef.mockResolvedValue({ outcome: "completed", transactionId: "tx-1" });
 });
@@ -45,6 +51,7 @@ describe("previewStuckBills", () => {
     expect(res.items[0]).toMatchObject({
       transactionId: "tx-1",
       providerStatus: "SUCCESS",
+      evidence: "verify",
       resolution: "complete",
       amountMinor: "10000",
     });
@@ -75,7 +82,11 @@ describe("previewStuckBills", () => {
     });
     const res = await previewStuckBills("user-1");
     const byId = Object.fromEntries(res.items.map((i) => [i.transactionId, i]));
-    expect(byId["tx-1"]).toMatchObject({ resolution: null, reason: "provider exploded" });
+    expect(byId["tx-1"]).toMatchObject({
+      resolution: null,
+      evidence: null,
+      reason: "provider exploded",
+    });
     expect(byId["tx-2"]).toMatchObject({ resolution: "complete" });
   });
 
@@ -88,6 +99,104 @@ describe("previewStuckBills", () => {
       reason: "no provider reference: the purchase was never accepted",
     });
     expect(h.verifyTransaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("when the live verify cannot answer for a bill", () => {
+  /**
+   * The real production case: GET /transactions/verify/{id} covers collections,
+   * so it answered "HTTP 400 — transaction not found" for a stuck ₦100 airtime
+   * that Maplerad had in fact already reported successful over a signed webhook.
+   */
+  const notFound = () => new Error("HTTP 400 — transaction not found");
+
+  const storedEvent = (over: Record<string, unknown> = {}) => ({
+    payload: {
+      id: "prov-1",
+      event: "bill.successful",
+      status: "SUCCESS",
+      reference: "MPRBILL-daj8j964hcac716qpl10",
+      ...over,
+    },
+  });
+
+  beforeEach(() => {
+    h.verifyTransaction.mockRejectedValue(notFound());
+  });
+
+  it("settles from the provider's own signed webhook", async () => {
+    h.webhookFindFirst.mockResolvedValue(storedEvent());
+    const res = await previewStuckBills("user-1");
+    expect(res.items[0]).toMatchObject({
+      providerStatus: "SUCCESS",
+      evidence: "webhook",
+      resolution: "complete",
+    });
+    expect(res.summary.resolvable).toBe(1);
+  });
+
+  it("looks the event up by the bill's provider id, and only a valid signature", async () => {
+    h.webhookFindFirst.mockResolvedValue(storedEvent());
+    await previewStuckBills("user-1");
+    expect(h.webhookFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          source: "maplerad",
+          signatureValid: true,
+          payload: { path: ["id"], equals: "prov-1" },
+        }),
+      }),
+    );
+  });
+
+  it("refunds when the stored webhook reports a failure", async () => {
+    h.webhookFindFirst.mockResolvedValue(
+      storedEvent({ event: "bill.failed", status: "FAILED" }),
+    );
+    const res = await previewStuckBills("user-1");
+    expect(res.items[0]).toMatchObject({ evidence: "webhook", resolution: "refund" });
+  });
+
+  it("still refuses to settle one the stored webhook calls pending", async () => {
+    h.webhookFindFirst.mockResolvedValue(
+      storedEvent({ event: "bill.pending", status: "PENDING" }),
+    );
+    const res = await settleStuckBills("user-1");
+    expect(h.settleBillByProviderRef).not.toHaveBeenCalled();
+    expect(res.items[0]).toMatchObject({
+      evidence: "webhook",
+      reason: "the provider still reports it pending",
+    });
+  });
+
+  it("ignores a stored event that is not about a bill", async () => {
+    // A collection webhook can carry the same id shape; it says nothing here.
+    h.webhookFindFirst.mockResolvedValue(
+      storedEvent({ event: "collection.successful" }),
+    );
+    const res = await previewStuckBills("user-1");
+    expect(res.items[0]).toMatchObject({
+      evidence: null,
+      resolution: null,
+      reason: "HTTP 400 — transaction not found",
+    });
+  });
+
+  it("reports the provider error when there is no stored webhook either", async () => {
+    h.webhookFindFirst.mockResolvedValue(null);
+    const res = await previewStuckBills("user-1");
+    expect(res.items[0]).toMatchObject({
+      evidence: null,
+      resolution: null,
+      reason: "HTTP 400 — transaction not found",
+    });
+  });
+
+  it("settles the bill end to end from that evidence", async () => {
+    h.webhookFindFirst.mockResolvedValue(storedEvent());
+    const res = await settleStuckBills("user-1");
+    expect(h.settleBillByProviderRef).toHaveBeenCalledWith("prov-1", "successful");
+    expect(res.summary.settled).toBe(1);
   });
 });
 

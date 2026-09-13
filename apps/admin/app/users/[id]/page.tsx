@@ -204,6 +204,8 @@ type StuckBill = {
   providerRef: string | null;
   createdAt: string;
   providerStatus: string | null;
+  /** Where that answer came from: a live verify, or the stored signed webhook. */
+  evidence: 'verify' | 'webhook' | null;
   /** How it would be settled: completed, or failed-and-refunded. */
   resolution: 'complete' | 'refund' | null;
   reason?: string;
@@ -1777,6 +1779,14 @@ export default function UserDetailPage() {
                             </td>
                             <td className="py-2 pr-3 text-xs text-gray-700">
                               {show(b.providerStatus)}
+                              {b.evidence === 'webhook' && (
+                                <span
+                                  className="block text-[11px] text-gray-400"
+                                  title="Maplerad's own signed webhook — its live verify endpoint only answers for collections"
+                                >
+                                  from signed webhook
+                                </span>
+                              )}
                             </td>
                             <td className="py-2">
                               {b.resolution === 'complete' ? (
