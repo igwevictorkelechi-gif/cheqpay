@@ -10,7 +10,14 @@ import {
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import BillerLogo from "@/components/BillerLogo";
-import { api, ApiError, getAccessToken, type BillServiceConfig } from "@/services/api";
+import {
+  api,
+  ApiError,
+  getAccessToken,
+  type BillCashback,
+  type BillServiceConfig,
+} from "@/services/api";
+import DataPlanGrid from "@/components/DataPlanGrid";
 import { SuccessAnimation } from "@/components/Lottie";
 import { invalidateMoneyCaches } from "@/lib/cache";
 
@@ -22,6 +29,7 @@ export default function BillServicePage() {
   const service = (params?.service ?? "").toLowerCase();
 
   const [config, setConfig] = useState<BillServiceConfig | null>(null);
+  const [cashback, setCashback] = useState<BillCashback | undefined>();
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState(0);
 
@@ -41,9 +49,10 @@ export default function BillServicePage() {
   useEffect(() => {
     (async () => {
       try {
-        const { services } = await api.getBillCatalog();
+        const { services, cashback: cb } = await api.getBillCatalog();
         const c = services.find((s) => s.service === service) ?? null;
         setConfig(c);
+        setCashback(cb);
         if (c) setBillerId(c.billers.find((b) => !b.comingSoon)?.id ?? "");
         const token = await getAccessToken();
         if (token) {
@@ -246,23 +255,36 @@ export default function BillServicePage() {
             </>
           ) : (
             <>
-              <p className="mb-2 mt-6 text-sm font-semibold text-muted">Select plan</p>
-              <div className="space-y-2">
-                {plans.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => setPlanId(p.id)}
-                    className={`flex w-full items-center justify-between rounded-2xl border p-4 active:scale-[0.99] ${
-                      planId === p.id ? "border-brand bg-card" : "border-border bg-card"
-                    }`}
-                  >
-                    <span className="font-semibold text-ink">{p.name}</span>
-                    <span className="font-bold text-ink">
-                      ₦{Number(p.amount).toLocaleString()}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              {service === "data" ? (
+                // Data bundles come back ranked by value, so they get the grid
+                // that leads with the best deals rather than a flat list.
+                <DataPlanGrid
+                  plans={plans}
+                  selectedId={planId}
+                  onSelect={setPlanId}
+                  cashback={cashback}
+                />
+              ) : (
+                <>
+                  <p className="mb-2 mt-6 text-sm font-semibold text-muted">Select plan</p>
+                  <div className="space-y-2">
+                    {plans.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => setPlanId(p.id)}
+                        className={`flex w-full items-center justify-between rounded-2xl border p-4 active:scale-[0.99] ${
+                          planId === p.id ? "border-brand bg-card" : "border-border bg-card"
+                        }`}
+                      >
+                        <span className="font-semibold text-ink">{p.name}</span>
+                        <span className="font-bold text-ink">
+                          ₦{Number(p.amount).toLocaleString()}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </>
           )}
 

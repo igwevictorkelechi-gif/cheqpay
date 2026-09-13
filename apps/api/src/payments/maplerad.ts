@@ -192,10 +192,24 @@ export class MapleradProvider implements PaymentProvider {
     billerCode: string,
   ): Promise<ProviderBillPlan[]> {
     if (service === "data") {
-      const bundles = await this.req<Array<{ name: string; price: number; code: string }>>(
-        `/bills/data/bundle/${billerCode}`,
-      );
-      return bundles.map((b) => ({ code: b.code, name: b.name, amountMinor: b.price }));
+      const bundles = await this.req<
+        Array<{
+          name: string;
+          price: number;
+          code: string;
+          validity?: string;
+          data?: string;
+        }>
+      >(`/bills/data/bundle/${billerCode}`);
+      return bundles.map((b) => ({
+        code: b.code,
+        name: b.name,
+        amountMinor: b.price,
+        // Passed through rather than folded into the name: the apps sort
+        // bundles by value (price per GB per day), which needs the numbers.
+        data: b.data,
+        validity: b.validity,
+      }));
     }
 
     // Cable plans are grouped by bouquet; each `payment_options` entry is one

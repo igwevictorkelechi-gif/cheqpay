@@ -83,6 +83,8 @@ async function build(): Promise<ServiceConfig[]> {
               name: p.name,
               amount: minorToNaira(p.amountMinor),
               providerCode: p.code,
+              data: p.data,
+              validity: p.validity,
             }));
           } catch (err) {
             // Keep this biller's last known plans if we have them; otherwise it

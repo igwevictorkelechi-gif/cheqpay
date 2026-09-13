@@ -12,7 +12,13 @@ const psp = new MapleradProvider("sk-test", BASE);
  */
 const ROUTES: Record<string, unknown> = {
   "GET /bills/data/bundle/mtn-data-ng": [
-    { name: "1GB · 30 days", price: 10_000, code: "BUNDLE-1GB", validity: "Monthly" },
+    {
+      name: "1GB · 30 days",
+      price: 10_000,
+      code: "BUNDLE-1GB",
+      validity: "Monthly",
+      data: "1GB",
+    },
   ],
   "POST /bills/data": { id: "mp_tx_1", status: "SUCCESS" },
   "POST /bills/airtime": { id: "mp_air_1", status: "SUCCESS" },
@@ -220,10 +226,18 @@ describe("MapleradProvider — bills", () => {
 });
 
 describe("MapleradProvider — live plan lists", () => {
-  it("lists real data bundles with their codes and kobo prices", async () => {
+  it("lists real data bundles with their codes, kobo prices and bundle facts", async () => {
     stubMaplerad();
+    // volume + validity ride along: the catalog ranks bundles by value and
+    // cannot do that from a display name alone.
     await expect(psp.listBillPlans("data", "mtn-data-ng")).resolves.toEqual([
-      { code: "BUNDLE-1GB", name: "1GB · 30 days", amountMinor: 10_000 },
+      {
+        code: "BUNDLE-1GB",
+        name: "1GB · 30 days",
+        amountMinor: 10_000,
+        data: "1GB",
+        validity: "Monthly",
+      },
     ]);
   });
 

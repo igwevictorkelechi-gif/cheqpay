@@ -53,6 +53,13 @@ export interface BillPlan {
    * live; absent on the mock fallback plans below.
    */
   providerCode?: string;
+  /**
+   * Structured bundle facts when the provider gives them: volume ("1GB") and
+   * validity ("30 days"). The apps rank data plans by value using these; when
+   * absent (mock plans, cable) they fall back to reading the name.
+   */
+  data?: string;
+  validity?: string;
 }
 
 export interface ServiceConfig {
