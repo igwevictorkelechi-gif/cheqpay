@@ -19,7 +19,7 @@ import {
   isNgnUsdPair,
   type SwapSide,
 } from "./rates";
-import { getSwapSpreadBps, getUsdtNgnRate } from "./settings";
+import { feeFromBps, getFxMarginBps, getSwapSpreadBps, getUsdtNgnRate } from "./settings";
 import { awardCashback } from "./cashback";
 import { ensureUsdAsset } from "./ensureUsdAsset";
 import { ensureQuoteProviderRef } from "./ensureQuoteProviderRef";
@@ -231,7 +231,20 @@ async function createFxConvertQuote(params: {
       "bad_fx_quote",
     );
   }
-  const amountOutMinor = BigInt(fx.target.amount);
+  // The business spread, withheld from what the provider returns. This rail
+  // never sees SWAP_SPREAD_BPS — that one prices a rate we compute ourselves,
+  // whereas here Maplerad sets the rate and our margin is the slice we keep of
+  // the amount it produces. Taken in the asset the user receives, so the
+  // difference stays in treasury.
+  const grossOutMinor = BigInt(fx.target.amount);
+  const amountOutMinor = grossOutMinor - feeFromBps(grossOutMinor, await getFxMarginBps());
+  if (amountOutMinor <= 0n) {
+    throw new ApiError(
+      422,
+      "That amount is too small to convert after the exchange spread",
+      "amount_too_small",
+    );
+  }
   const ngnLegMinor = params.fromAsset === Asset.NGN ? params.amountInMinor : amountOutMinor;
   if (!isWithinSingleTxLimit(params.tier, ngnLegMinor)) {
     throw new ApiError(403, "Amount exceeds your per-transaction limit", "single_tx_limit");
@@ -499,17 +512,29 @@ async function executeFxSwap(params: {
   // that figure is the money that exists, and crediting the quoted one would
   // put the ledger out of step with the treasury in one direction or the other.
   // The quote is the fallback for a response that does not report an amount.
-  const settledOut =
+  const settledGross =
     Number.isInteger(settled?.target?.amount) && settled.target.amount > 0
       ? BigInt(settled.target.amount)
       : null;
-  const creditMinor = settledOut ?? quote.amountOut;
-  if (settledOut !== null && settledOut !== quote.amountOut) {
+
+  // The margin has to come off here too, not just at quote time. This path
+  // deliberately credits what the provider actually settled over what was
+  // quoted, so crediting the settled amount raw would hand the spread straight
+  // back — the quote would promise a margin the execution then gives away.
+  // When the provider settles exactly what it quoted, this lands on
+  // quote.amountOut, so the normal case is unchanged.
+  const creditMinor =
+    settledGross === null
+      ? quote.amountOut
+      : settledGross - feeFromBps(settledGross, await getFxMarginBps());
+
+  if (creditMinor !== quote.amountOut) {
     console.warn("[fx] settled amount differs from the quote — crediting what settled", {
       userId: params.userId,
       quoteId: quote.id,
-      quoted: quote.amountOut.toString(),
-      settled: settledOut.toString(),
+      quotedNet: quote.amountOut.toString(),
+      settledGross: settledGross?.toString() ?? null,
+      creditingNet: creditMinor.toString(),
       providerRef: quote.providerRef,
     });
   }

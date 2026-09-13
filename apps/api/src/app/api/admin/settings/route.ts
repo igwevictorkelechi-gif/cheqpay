@@ -2,30 +2,35 @@ import { requireAdmin } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { platformSettingsUpdateSchema } from "@/lib/validation";
 import {
-  getBillMarginBps,
+  getBillMargins,
   getCashbackConfig,
   getDepositFeeBps,
+  getFxMarginBps,
   getSwapSpreadBps,
   getUsdtNgnRate,
   getWithdrawalFeeNgn,
   setBillMarginBps,
+  setBillMarginForService,
   setCashbackConfig,
   setDepositFeeBps,
+  setFxMarginBps,
   setSwapSpreadBps,
   setUsdtNgnRate,
   setWithdrawalFeeNgn,
+  type BillMarginService,
 } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
 async function snapshot() {
-  const [spreadBps, usdtNgnRate, depositFeeBps, withdrawalFeeNgn, billMarginBps, cashback] =
+  const [spreadBps, usdtNgnRate, depositFeeBps, withdrawalFeeNgn, fxMarginBps, billMargins, cashback] =
     await Promise.all([
       getSwapSpreadBps(),
       getUsdtNgnRate(),
       getDepositFeeBps(),
       getWithdrawalFeeNgn(),
-      getBillMarginBps(),
+      getFxMarginBps(),
+      getBillMargins(),
       getCashbackConfig(),
     ]);
   return {
@@ -33,7 +38,10 @@ async function snapshot() {
     usdtNgnRate,
     depositFeeBps,
     withdrawalFeeNgn,
-    billMarginBps,
+    fxMarginBps,
+    billMarginBps: billMargins.defaultBps,
+    /** Per service: a number overrides the default, null means it uses it. */
+    billMargins: billMargins.perService,
     cashbackEnabled: cashback.enabled,
     cashbackDepositBps: cashback.depositBps,
     cashbackWithdrawalBps: cashback.withdrawalBps,
@@ -66,6 +74,14 @@ export async function PUT(req: Request) {
     if (body.withdrawalFeeNgn !== undefined)
       await setWithdrawalFeeNgn(body.withdrawalFeeNgn, updatedBy);
     if (body.billMarginBps !== undefined) await setBillMarginBps(body.billMarginBps, updatedBy);
+    if (body.fxMarginBps !== undefined) await setFxMarginBps(body.fxMarginBps, updatedBy);
+    if (body.billMargins) {
+      // An omitted service is left alone; null clears its override.
+      for (const [service, bps] of Object.entries(body.billMargins)) {
+        if (bps === undefined) continue;
+        await setBillMarginForService(service as BillMarginService, bps, updatedBy);
+      }
+    }
 
     await setCashbackConfig(
       {

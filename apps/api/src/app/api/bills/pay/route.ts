@@ -90,8 +90,9 @@ export async function POST(req: Request) {
     }
 
     // Business profit margin on bills (admin-set bps, default 0): the user is
-    // debited amount + margin; the biller receives the bill amount.
-    const marginMinor = feeFromBps(amountMinor, await getBillMarginBps());
+    // debited amount + margin; the biller receives the bill amount. Priced per
+    // service, so airtime can sell at face value while data carries a markup.
+    const marginMinor = feeFromBps(amountMinor, await getBillMarginBps(body.service));
     const totalMinor = amountMinor + marginMinor;
 
     // Idempotent replay.

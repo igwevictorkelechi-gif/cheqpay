@@ -9,15 +9,32 @@ import {
   Receipt,
   ArrowDownToLine,
   Gift,
+  ArrowLeftRight,
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+
+const BILL_SERVICES = [
+  { key: 'airtime', label: 'Airtime' },
+  { key: 'data', label: 'Data' },
+  { key: 'electricity', label: 'Electricity' },
+  { key: 'cabletv', label: 'Cable TV' },
+  { key: 'betting', label: 'Betting' },
+  { key: 'food', label: 'Food' },
+] as const;
+
+type BillService = (typeof BILL_SERVICES)[number]['key'];
+
+/** Per service: a number is its own rate; null means it uses the default. */
+type BillMargins = Record<BillService, number | null>;
 
 interface Settings {
   spreadBps: number;
   usdtNgnRate: number | null;
   depositFeeBps: number;
   withdrawalFeeNgn: number;
+  fxMarginBps: number;
   billMarginBps: number;
+  billMargins: BillMargins;
   cashbackEnabled: boolean;
   cashbackDepositBps: number;
   cashbackWithdrawalBps: number;
@@ -31,7 +48,10 @@ export default function TradingSettingsPage() {
   const [usdtNgnRate, setUsdtNgnRate] = useState('');
   const [depositFeeBps, setDepositFeeBps] = useState('');
   const [withdrawalFeeNgn, setWithdrawalFeeNgn] = useState('');
+  const [fxMarginBps, setFxMarginBps] = useState('');
   const [billMarginBps, setBillMarginBps] = useState('');
+  // '' means "uses the default" — distinct from '0', which pins face value.
+  const [billMargins, setBillMargins] = useState<Record<string, string>>({});
   const [cashbackEnabled, setCashbackEnabled] = useState(false);
   const [cashbackDepositBps, setCashbackDepositBps] = useState('');
   const [cashbackWithdrawalBps, setCashbackWithdrawalBps] = useState('');
@@ -47,7 +67,16 @@ export default function TradingSettingsPage() {
     setUsdtNgnRate(data.usdtNgnRate != null ? String(data.usdtNgnRate) : '');
     setDepositFeeBps(String(data.depositFeeBps ?? 0));
     setWithdrawalFeeNgn(String(data.withdrawalFeeNgn ?? 0));
+    setFxMarginBps(String(data.fxMarginBps ?? 0));
     setBillMarginBps(String(data.billMarginBps ?? 0));
+    setBillMargins(
+      Object.fromEntries(
+        BILL_SERVICES.map(({ key }) => {
+          const v = data.billMargins?.[key];
+          return [key, v == null ? '' : String(v)];
+        }),
+      ),
+    );
     setCashbackEnabled(Boolean(data.cashbackEnabled));
     setCashbackDepositBps(String(data.cashbackDepositBps ?? 0));
     setCashbackWithdrawalBps(String(data.cashbackWithdrawalBps ?? 0));
@@ -79,12 +108,21 @@ export default function TradingSettingsPage() {
     setSaving(true);
     setMessage(null);
     try {
-      const payload: Record<string, number | boolean> = {};
+      const payload: Record<string, unknown> = {};
       if (spreadBps !== '') payload.spreadBps = Number(spreadBps);
       if (usdtNgnRate !== '') payload.usdtNgnRate = Number(usdtNgnRate);
       if (depositFeeBps !== '') payload.depositFeeBps = Number(depositFeeBps);
       if (withdrawalFeeNgn !== '') payload.withdrawalFeeNgn = Number(withdrawalFeeNgn);
       if (billMarginBps !== '') payload.billMarginBps = Number(billMarginBps);
+      if (fxMarginBps !== '') payload.fxMarginBps = Number(fxMarginBps);
+      // A blank box clears the override (null) so that service follows the
+      // default again; '0' is sent as a real rate meaning face value.
+      payload.billMargins = Object.fromEntries(
+        BILL_SERVICES.map(({ key }) => {
+          const raw = billMargins[key] ?? '';
+          return [key, raw === '' ? null : Number(raw)];
+        }),
+      );
       payload.cashbackEnabled = cashbackEnabled;
       if (cashbackDepositBps !== '') payload.cashbackDepositBps = Number(cashbackDepositBps);
       if (cashbackWithdrawalBps !== '')
@@ -242,8 +280,73 @@ export default function TradingSettingsPage() {
             placeholder="0"
           />
           <p className="text-sm text-gray-500 mt-2">
-            Profit added on airtime, data, electricity, cable &amp; betting ({pct(billMarginBps)}%).
-            The biller receives the bill amount; the user pays amount + margin. Max 2000 bps (20%).
+            The fallback rate ({pct(billMarginBps)}%), used by any service without one of its own
+            below. The biller receives the bill amount; the user pays amount + margin. Max 2000 bps
+            (20%).
+          </p>
+
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <p className="text-sm font-semibold text-gray-700">Per service</p>
+            <p className="text-xs text-gray-500 mt-1 mb-3">
+              Leave a box empty to use the default. Enter <span className="font-medium">0</span> to
+              sell that service at face value — on airtime especially, the markup is visible to the
+              user, who pays more than the credit they receive.
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {BILL_SERVICES.map(({ key, label }) => {
+                const raw = billMargins[key] ?? '';
+                return (
+                  <div key={key}>
+                    <label
+                      htmlFor={`margin-${key}`}
+                      className="block text-xs font-medium text-gray-600 mb-1"
+                    >
+                      {label}
+                    </label>
+                    <input
+                      id={`margin-${key}`}
+                      type="number"
+                      min={0}
+                      max={2000}
+                      step={1}
+                      value={raw}
+                      onChange={(e) =>
+                        setBillMargins((m) => ({ ...m, [key]: e.target.value }))
+                      }
+                      disabled={loading || saving}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      placeholder={`default (${pct(billMarginBps)}%)`}
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      {raw === '' ? `Using default · ${pct(billMarginBps)}%` : `${pct(raw)}%`}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <label className="flex items-center gap-2 text-gray-700 font-semibold mb-2">
+            <ArrowLeftRight size={18} className="text-brand-600" />
+            Naira ⇄ Dollar conversion spread (basis points)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={1000}
+            step={1}
+            value={fxMarginBps}
+            onChange={(e) => setFxMarginBps(e.target.value)}
+            disabled={loading || saving}
+            className={inputCls}
+            placeholder="0"
+          />
+          <p className="text-sm text-gray-500 mt-2">
+            Withheld from every NGN⇄USD conversion ({pct(fxMarginBps)}%). This rail is priced by
+            Maplerad, so the trading spread above never reaches it — at 0 the provider&apos;s raw
+            rate goes straight to the user and the business earns nothing. Max 1000 bps (10%).
           </p>
         </div>
 
