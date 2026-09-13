@@ -23,6 +23,11 @@ import { feeFromBps, getDepositFeeBps } from "../settings";
 import { prismaLedgerPort } from "../mapleradCollections";
 import { getCustomerTransactions, verifyTransaction } from "./transactions";
 import { classifyVerified, settleCollectionById } from "./settle";
+import {
+  isCryptoCollection,
+  resolveCryptoPlan,
+  alreadyCredited as cryptoAlreadyCredited,
+} from "./cryptoCollection";
 
 export interface ReconcileItem {
   /** Maplerad transaction id — the dedupe key. */
@@ -102,6 +107,52 @@ async function toItem(transactionId: string, feeBps: number): Promise<ReconcileI
     tx = await verifyTransaction(transactionId);
   } catch {
     return { ...blank, reason: "could not verify this transaction with Maplerad" };
+  }
+
+  // A stablecoin collection is classified by the crypto resolver — the same one
+  // the webhook credits from — so the panel shows exactly what an auto-credit
+  // would do. Reading it with the fiat rules is what made a real USDT deposit
+  // show as "unsupported currency USDT" here while the webhook could handle it.
+  if (isCryptoCollection(tx)) {
+    const credited = await cryptoAlreadyCredited(tx);
+    const resolved = await resolveCryptoPlan(tx);
+    const base = {
+      ...blank,
+      id: tx.id,
+      currency: tx.currency ?? null,
+      entry: tx.entry ?? null,
+      status: tx.status ?? null,
+      type: tx.type ?? null,
+      rawAmount: Number.isFinite(tx.amount) ? String(tx.amount) : null,
+      createdAt: tx.created_at ?? null,
+      reference:
+        typeof tx.reference === "string" && tx.reference ? tx.reference : null,
+      source: {
+        bankName: tx.source?.bank_name ?? null,
+        accountNumber: tx.source?.account_number ?? null,
+        accountName: tx.source?.account_name ?? null,
+      },
+      alreadyCredited: credited,
+    };
+
+    if (!resolved.ok) {
+      return { ...base, creditable: false, reason: credited ? undefined : resolved.reason };
+    }
+
+    const { asset, amountMinor, coin } = resolved.plan;
+    return {
+      ...base,
+      asset,
+      amountMinor: amountMinor.toString(),
+      // Crypto deposits carry no platform deposit fee, matching the crypto path.
+      feeMinor: "0",
+      netMinor: amountMinor.toString(),
+      netDisplay:
+        asset === Asset.USD
+          ? `$${fromMinorUnits(amountMinor, Asset.USD)}`
+          : `${fromMinorUnits(amountMinor, asset)} ${coin}`,
+      creditable: !credited,
+    };
   }
 
   const cls = classifyVerified(tx);

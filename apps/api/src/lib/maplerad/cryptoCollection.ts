@@ -100,36 +100,51 @@ function candidateKeys(tx: VerifiedTransaction): string[] {
   return keys;
 }
 
+/** Everything needed to credit a crypto collection, or why it cannot be. */
+export interface CryptoPlan {
+  userId: string;
+  coin: Asset;
+  network: Network;
+  /** What actually lands: USD when the chain cannot be withdrawn from. */
+  asset: Asset;
+  offramp: boolean;
+  amountMinor: bigint;
+}
+
+export type CryptoPlanResult =
+  | { ok: true; plan: CryptoPlan }
+  | { ok: false; outcome: "ignored" | "unmatched"; reason: string };
+
 /**
- * Credit a verified stablecoin collection to its owner.
+ * Work out who owns a stablecoin collection and what should land, without
+ * writing anything.
  *
- * Ownership comes from `customer.id`. The chain decides what actually lands: a
- * coin on a chain we cannot withdraw from could only have been minted as an
- * offramp address, so the arrival is dollars — crediting coin there would give
- * the user a balance they can never move. That is the same rule the crypto
- * webhook path applies.
+ * Shared deliberately: the webhook credits from this and the admin
+ * reconciliation preview classifies from it, so what an operator is shown is
+ * exactly what an auto-credit would do. Two paths reading the same payload
+ * differently is what left this deposit showing "unsupported currency" in the
+ * panel while the webhook had already been taught to handle it.
  */
-export async function creditCryptoCollection(
+export async function resolveCryptoPlan(
   tx: VerifiedTransaction,
-): Promise<CreditResult> {
+): Promise<CryptoPlanResult> {
   const coin = coinFor(tx.currency);
-  if (!coin) return { outcome: "ignored", reason: `unsupported coin ${tx.currency ?? "?"}` };
+  if (!coin) {
+    return { ok: false, outcome: "ignored", reason: `unsupported coin ${tx.currency ?? "?"}` };
+  }
 
   const customerId = tx.customer?.id;
-  if (!customerId) return { outcome: "unmatched", reason: "no customer on the transaction" };
+  if (!customerId) {
+    return { ok: false, outcome: "unmatched", reason: "no customer on the transaction" };
+  }
 
   const user = await prisma.user.findFirst({
     where: { mapleradCustomerId: customerId },
     select: { id: true },
   });
-  if (!user) return { outcome: "unmatched", reason: "no user for this Maplerad customer" };
-
-  // Already credited by another path? Check every key that could hold it.
-  const existing = await prisma.transaction.findFirst({
-    where: { idempotencyKey: { in: candidateKeys(tx) } },
-    select: { id: true },
-  });
-  if (existing) return { outcome: "duplicate", userId: user.id };
+  if (!user) {
+    return { ok: false, outcome: "unmatched", reason: "no user for this Maplerad customer" };
+  }
 
   // The chain: stated by the provider, else inferred from the user's own
   // addresses for this coin — but only when there is exactly one, since
@@ -143,20 +158,55 @@ export async function creditCryptoCollection(
     if (wallets.length === 1) network = wallets[0].network as Network;
   }
   if (!network) {
-    return { outcome: "unmatched", reason: "could not determine which chain the deposit arrived on" };
+    return {
+      ok: false,
+      outcome: "unmatched",
+      reason: "could not determine which chain the deposit arrived on",
+    };
   }
 
   const offramp = !isWithdrawableNetwork(network);
   const asset = offramp ? Asset.USD : coin;
-  if (asset === Asset.USD) await ensureUsdAsset();
 
   const amountMinor = toAssetMinor(tx.amount, asset);
   if (amountMinor === null) {
-    return { outcome: "unmatched", reason: `unreadable amount ${tx.amount}` };
+    return { ok: false, outcome: "unmatched", reason: `unreadable amount ${tx.amount}` };
   }
 
+  return { ok: true, plan: { userId: user.id, coin, network, asset, offramp, amountMinor } };
+}
+
+/** True when this deposit is already credited under any path's key. */
+export async function alreadyCredited(tx: VerifiedTransaction): Promise<boolean> {
+  const existing = await prisma.transaction.findFirst({
+    where: { idempotencyKey: { in: candidateKeys(tx) } },
+    select: { id: true },
+  });
+  return existing !== null;
+}
+
+/**
+ * Credit a verified stablecoin collection to its owner.
+ *
+ * Ownership comes from `customer.id`. The chain decides what actually lands: a
+ * coin on a chain we cannot withdraw from could only have been minted as an
+ * offramp address, so the arrival is dollars — crediting coin there would give
+ * the user a balance they can never move. That is the same rule the crypto
+ * webhook path applies.
+ */
+export async function creditCryptoCollection(
+  tx: VerifiedTransaction,
+): Promise<CreditResult> {
+  const resolved = await resolveCryptoPlan(tx);
+  if (!resolved.ok) return { outcome: resolved.outcome, reason: resolved.reason };
+  const { userId, coin, network, asset, offramp, amountMinor } = resolved.plan;
+
+  if (await alreadyCredited(tx)) return { outcome: "duplicate", userId };
+
+  if (asset === Asset.USD) await ensureUsdAsset();
+
   const { created, transactionId } = await creditBalance({
-    userId: user.id,
+    userId,
     asset,
     amountMinor,
     type: TransactionType.DEPOSIT,
@@ -176,9 +226,9 @@ export async function creditCryptoCollection(
     },
   });
 
-  if (!created) return { outcome: "duplicate", userId: user.id, amount: tx.amount };
+  if (!created) return { outcome: "duplicate", userId, amount: tx.amount };
 
-  await notifyUser(user.id, {
+  await notifyUser(userId, {
     category: "deposits",
     title: "Deposit received",
     body: offramp
@@ -187,5 +237,5 @@ export async function creditCryptoCollection(
     data: { transactionId },
   }).catch(() => undefined);
 
-  return { outcome: "credited", userId: user.id, amount: tx.amount };
+  return { outcome: "credited", userId, amount: tx.amount };
 }
