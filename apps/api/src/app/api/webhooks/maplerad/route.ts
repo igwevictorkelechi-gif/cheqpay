@@ -18,11 +18,10 @@ import {
   markProcessed,
   notifySettlement,
 } from "@/lib/ngnWebhook";
-import type { CollectionEventData, MapleradWebhookEvent } from "@/lib/maplerad/types";
+import type { MapleradWebhookEvent } from "@/lib/maplerad/types";
 import { handleIssuingEvent, type IssuingEventData } from "@/lib/maplerad/issuing";
-import { handleCollectionEvent } from "@/lib/maplerad/deposits";
+import { settleCollectionById } from "@/lib/maplerad/settle";
 import { creditCryptoDeposit, parseCryptoDeposit } from "@/lib/maplerad/cryptoDeposits";
-import { prismaLedgerPort } from "@/lib/mapleradCollections";
 import { cardStore } from "@/lib/cards";
 
 // Node.js runtime: we need crypto + the raw body. Never the edge runtime.
@@ -96,11 +95,21 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     if (name.startsWith("collection.")) {
-      // Someone paid into a user's dedicated NUBAN. Credit the owner.
-      const outcome = await handleCollectionEvent(
-        event as unknown as MapleradWebhookEvent<CollectionEventData>,
-        prismaLedgerPort
-      );
+      // Someone paid into a user's dedicated NUBAN. The collection payload is
+      // flat and carries NO amount, so we cannot credit from it directly —
+      // instead we take the transaction id and verify it, which returns the real
+      // amount, currency and destination account, then credit the owner. The
+      // credit is idempotent on the same key reconciliation uses, so the two can
+      // never double-credit each other.
+      const txId =
+        (event.data && typeof event.data === "object"
+          ? (event.data as { id?: string }).id
+          : undefined) ?? (event as { id?: string }).id;
+
+      // A verify failure throws out of settleCollectionById; let it fall to the
+      // 500 handler so Maplerad retries rather than us acknowledging a deposit we
+      // never actually read.
+      const outcome = await settleCollectionById(txId ?? "");
 
       if (outcome.outcome === "unmatched") {
         // Real money arrived that we could not place. Never silent: this needs
@@ -108,8 +117,9 @@ export async function POST(req: Request): Promise<Response> {
         console.error("[maplerad webhook] COLLECTION UNMATCHED — money received, no owner found", {
           id: svix.id,
           name,
+          transactionId: txId,
           amount: outcome.amount,
-          payload: JSON.stringify(event.data).slice(0, 2000),
+          payload: JSON.stringify(event).slice(0, 2000),
         });
       }
 

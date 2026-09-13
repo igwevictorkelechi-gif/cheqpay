@@ -1,219 +1,171 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
-  txFindFirst: vi.fn(),
-  auditCreate: vi.fn(),
-  creditBalance: vi.fn(),
-  notifyUser: vi.fn(),
-  awardCashback: vi.fn(),
-  ensureUsdAsset: vi.fn(),
-  getDepositFeeBps: vi.fn(),
   getCustomerTransactions: vi.fn(),
+  verifyTransaction: vi.fn(),
+  hasProcessed: vi.fn(),
+  findUserByAccount: vi.fn(),
+  creditUser: vi.fn(),
+  getDepositFeeBps: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
   Asset: { NGN: "NGN", USD: "USD", BTC: "BTC", USDT: "USDT", USDC: "USDC" },
-  Network: { FIAT: "FIAT", SOLANA: "SOLANA", TRON: "TRON" },
-  TransactionType: { DEPOSIT: "DEPOSIT" },
-  prisma: {
-    transaction: { findFirst: h.txFindFirst },
-    auditLog: { create: h.auditCreate },
+}));
+vi.mock("./transactions", () => ({
+  getCustomerTransactions: h.getCustomerTransactions,
+  verifyTransaction: h.verifyTransaction,
+}));
+vi.mock("../mapleradCollections", () => ({
+  prismaLedgerPort: {
+    hasProcessed: h.hasProcessed,
+    findUserByAccount: h.findUserByAccount,
+    creditUser: h.creditUser,
   },
 }));
-vi.mock("../ledger", () => ({ creditBalance: h.creditBalance }));
-vi.mock("../alerts", () => ({ notifyUser: h.notifyUser }));
-vi.mock("../cashback", () => ({ awardCashback: h.awardCashback }));
-vi.mock("../ensureUsdAsset", () => ({ ensureUsdAsset: h.ensureUsdAsset }));
 vi.mock("../settings", () => ({
-  // Real fee maths, mockable rate — keeps the interpretation honest.
   feeFromBps: (amt: bigint, bps: number) =>
     bps <= 0 ? 0n : (amt * BigInt(Math.trunc(bps))) / 10_000n,
   getDepositFeeBps: h.getDepositFeeBps,
 }));
-vi.mock("./transactions", () => ({
-  getCustomerTransactions: h.getCustomerTransactions,
-}));
 
 import { previewReconciliation, commitReconciliation } from "./reconcile";
-import type { MapleradTransaction } from "./transactions";
+import type { VerifiedTransaction } from "./transactions";
 
-function tx(over: Partial<MapleradTransaction>): MapleradTransaction {
+function verified(over: Partial<VerifiedTransaction> = {}): VerifiedTransaction {
   return {
     id: "t1",
     status: "SUCCESS",
     entry: "CREDIT",
-    type: "FUNDING",
-    amount: "10000",
+    type: "COLLECTION",
+    amount: 100000000,
     currency: "NGN",
-    created_at: "2026-01-01T00:00:00Z",
-    source: { bank_name: "Kuda Bank", account_number: "1400123000", account_name: "A" },
+    account_id: "acct-1",
+    customer: { id: "cust-1" },
+    source: { bank_name: "Opay", account_number: "7014998301", account_name: "V K IGWE" },
+    created_at: "2026-09-13T05:54:24Z",
     ...over,
   };
 }
 
+/** Wire the customer index + per-id verify from a map of id -> verified tx. */
+function withDeposits(txs: VerifiedTransaction[]) {
+  h.getCustomerTransactions.mockResolvedValue({
+    deposit: txs.map((t) => ({ transaction_id: t.id, amount: 0 })),
+    withdrawal: [],
+  });
+  const byId = new Map(txs.map((t) => [t.id, t]));
+  h.verifyTransaction.mockImplementation(async (id: string) => {
+    const t = byId.get(id);
+    if (!t) throw new Error(`no such tx ${id}`);
+    return t;
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
-  h.txFindFirst.mockResolvedValue(null); // nothing credited yet by default
+  h.hasProcessed.mockResolvedValue(false);
+  h.findUserByAccount.mockResolvedValue({ userId: "user-1" });
+  h.creditUser.mockResolvedValue(undefined);
   h.getDepositFeeBps.mockResolvedValue(0);
-  h.creditBalance.mockResolvedValue({ created: true, transactionId: "new-tx" });
-  h.auditCreate.mockResolvedValue({});
-  h.awardCashback.mockResolvedValue(0n);
-  h.notifyUser.mockResolvedValue({ devices: 0, email: false });
-  h.ensureUsdAsset.mockResolvedValue(undefined);
 });
 
-describe("previewReconciliation classification", () => {
-  it("marks a settled NGN funding as creditable with the net shown", async () => {
-    h.getCustomerTransactions.mockResolvedValue([tx({ id: "a" })]);
+describe("previewReconciliation", () => {
+  it("verifies each deposit and marks a settled NGN collection creditable with the net shown", async () => {
+    withDeposits([verified({ id: "a", amount: 100000000 })]);
     const res = await previewReconciliation("cust");
-    const it = res.items[0];
-    expect(it).toMatchObject({
+    expect(res.items[0]).toMatchObject({
       id: "a",
       asset: "NGN",
       creditable: true,
       alreadyCredited: false,
-      amountMinor: "10000",
+      amountMinor: "100000000",
       feeMinor: "0",
-      netMinor: "10000",
-      netDisplay: "₦100.00",
+      netMinor: "100000000",
+      netDisplay: "₦1000000.00",
     });
     expect(res.summary.creditableMissing).toBe(1);
   });
 
   it("withholds the platform deposit fee from the net", async () => {
     h.getDepositFeeBps.mockResolvedValue(100); // 1%
-    h.getCustomerTransactions.mockResolvedValue([tx({ id: "a", amount: "10000" })]);
+    withDeposits([verified({ id: "a", amount: 100000000 })]);
     const res = await previewReconciliation("cust");
     expect(res.items[0]).toMatchObject({
-      amountMinor: "10000",
-      feeMinor: "100",
-      netMinor: "9900",
-      netDisplay: "₦99.00",
+      feeMinor: "1000000",
+      netMinor: "99000000",
+      netDisplay: "₦990000.00",
     });
   });
 
-  it("reads a decimal amount as whole units", async () => {
-    // "12.50" USD → 1250 cents.
-    h.getCustomerTransactions.mockResolvedValue([
-      tx({ id: "a", currency: "USD", amount: "12.50" }),
-    ]);
+  it("flags an already-credited deposit as credited, not creditable", async () => {
+    withDeposits([verified({ id: "done" })]);
+    h.hasProcessed.mockResolvedValue(true);
     const res = await previewReconciliation("cust");
-    expect(res.items[0]).toMatchObject({
-      asset: "USD",
-      amountMinor: "1250",
-      netDisplay: "$12.50",
-      creditable: true,
-    });
-  });
-
-  it("flags a transaction already in our ledger as credited, not creditable", async () => {
-    h.txFindFirst.mockImplementation(async ({ where }: any) => {
-      return where.idempotencyKey.in.includes("deposit:maplerad:done")
-        ? { id: "ledger-done" }
-        : null;
-    });
-    h.getCustomerTransactions.mockResolvedValue([tx({ id: "done" })]);
-    const res = await previewReconciliation("cust");
-    expect(res.items[0]).toMatchObject({
-      alreadyCredited: true,
-      creditable: false,
-      transactionId: "ledger-done",
-    });
+    expect(res.items[0]).toMatchObject({ alreadyCredited: true, creditable: false });
     expect(res.summary.alreadyCredited).toBe(1);
   });
 
-  it("also treats the crypto idempotency key as credited for USD (offramp guard)", async () => {
-    h.txFindFirst.mockImplementation(async ({ where }: any) => {
-      return where.idempotencyKey.in.includes("deposit:maplerad:crypto:u1")
-        ? { id: "ledger-crypto" }
-        : null;
+  it("surfaces a verify failure as an un-creditable row instead of aborting", async () => {
+    h.getCustomerTransactions.mockResolvedValue({
+      deposit: [{ transaction_id: "bad" }, { transaction_id: "good" }],
+      withdrawal: [],
     });
-    h.getCustomerTransactions.mockResolvedValue([
-      tx({ id: "u1", currency: "USD", amount: "500" }),
-    ]);
+    h.verifyTransaction.mockImplementation(async (id: string) => {
+      if (id === "bad") throw new Error("boom");
+      return verified({ id: "good" });
+    });
     const res = await previewReconciliation("cust");
-    expect(res.items[0].alreadyCredited).toBe(true);
+    const bad = res.items.find((i) => i.id === "bad")!;
+    const good = res.items.find((i) => i.id === "good")!;
+    expect(bad).toMatchObject({ creditable: false, reason: expect.stringContaining("could not verify") });
+    expect(good.creditable).toBe(true);
   });
 
-  it("refuses a debit, a non-settled status, an unknown currency and a non-deposit type", async () => {
-    h.getCustomerTransactions.mockResolvedValue([
-      tx({ id: "debit", entry: "DEBIT" }),
-      tx({ id: "pending", status: "PENDING" }),
-      tx({ id: "ghs", currency: "GHS" }),
-      tx({ id: "swap", type: "SWAP" }),
+  it("refuses a debit, a pending status and an unsupported currency", async () => {
+    withDeposits([
+      verified({ id: "debit", entry: "DEBIT" }),
+      verified({ id: "pending", status: "PENDING" }),
+      verified({ id: "ghs", currency: "GHS" }),
     ]);
     const res = await previewReconciliation("cust");
     const byId = Object.fromEntries(res.items.map((i) => [i.id, i]));
     expect(byId.debit).toMatchObject({ creditable: false, reason: "not an incoming credit" });
     expect(byId.pending).toMatchObject({ creditable: false, reason: "status PENDING" });
     expect(byId.ghs).toMatchObject({ creditable: false, reason: "unsupported currency GHS" });
-    expect(byId.swap).toMatchObject({ creditable: false, reason: "not a deposit type (SWAP)" });
     expect(res.summary.creditableMissing).toBe(0);
   });
 });
 
 describe("commitReconciliation", () => {
-  it("credits only the selected ids, with the shared webhook key", async () => {
-    h.getCustomerTransactions.mockResolvedValue([
-      tx({ id: "a", amount: "10000" }),
-      tx({ id: "b", amount: "20000" }),
-    ]);
+  it("credits only the selected ids via the shared settle path", async () => {
+    withDeposits([verified({ id: "a", amount: 100000000 }), verified({ id: "b", amount: 5000000 })]);
     const res = await commitReconciliation("user-1", "cust", { ids: ["a"] });
-
-    expect(h.creditBalance).toHaveBeenCalledTimes(1);
-    expect(h.creditBalance).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user-1",
-        asset: "NGN",
-        amountMinor: 10000n,
-        idempotencyKey: "deposit:maplerad:a",
-        type: "DEPOSIT",
-      }),
+    expect(h.creditUser).toHaveBeenCalledTimes(1);
+    expect(h.creditUser).toHaveBeenCalledWith(
+      expect.objectContaining({ amountMinor: 100000000, providerTxId: "a", currency: "NGN" }),
     );
     expect(res.summary.credited).toBe(1);
-    // The credited row is reflected as done in the returned items.
     expect(res.items.find((i) => i.id === "a")).toMatchObject({ alreadyCredited: true });
   });
 
   it("credits every creditable-missing row when all:true", async () => {
-    h.getCustomerTransactions.mockResolvedValue([
-      tx({ id: "a" }),
-      tx({ id: "b" }),
-      tx({ id: "debit", entry: "DEBIT" }),
+    withDeposits([
+      verified({ id: "a" }),
+      verified({ id: "b" }),
+      verified({ id: "debit", entry: "DEBIT" }),
     ]);
     const res = await commitReconciliation("user-1", "cust", { all: true });
-    expect(h.creditBalance).toHaveBeenCalledTimes(2);
+    expect(h.creditUser).toHaveBeenCalledTimes(2);
     expect(res.summary.credited).toBe(2);
   });
 
-  it("awards NGN cashback and notifies only on a first credit", async () => {
-    h.getCustomerTransactions.mockResolvedValue([tx({ id: "a" })]);
-    await commitReconciliation("user-1", "cust", { ids: ["a"] });
-    expect(h.awardCashback).toHaveBeenCalledOnce();
-    expect(h.notifyUser).toHaveBeenCalledOnce();
-  });
-
-  it("does not re-award when the credit was a dedupe (created:false)", async () => {
-    h.creditBalance.mockResolvedValue({ created: false, transactionId: "existing" });
-    h.getCustomerTransactions.mockResolvedValue([tx({ id: "a" })]);
-    const res = await commitReconciliation("user-1", "cust", { ids: ["a"] });
-    expect(h.awardCashback).not.toHaveBeenCalled();
-    expect(h.notifyUser).not.toHaveBeenCalled();
-    // created:false means we did not count it as credited this run.
-    expect(res.summary.credited).toBe(0);
-  });
-
-  it("never credits a USD deposit already covered by the crypto key", async () => {
-    h.txFindFirst.mockImplementation(async ({ where }: any) =>
-      where.idempotencyKey.in.includes("deposit:maplerad:crypto:u1")
-        ? { id: "ledger-crypto" }
-        : null,
-    );
-    h.getCustomerTransactions.mockResolvedValue([
-      tx({ id: "u1", currency: "USD", amount: "500" }),
-    ]);
+  it("counts a duplicate settle as not-credited but marks the row done", async () => {
+    withDeposits([verified({ id: "a" })]);
+    h.hasProcessed.mockResolvedValue(true); // settle sees it as already processed
     const res = await commitReconciliation("user-1", "cust", { all: true });
-    expect(h.creditBalance).not.toHaveBeenCalled();
+    // hasProcessed true means toItem marks it already-credited, so it isn't even a target.
+    expect(h.creditUser).not.toHaveBeenCalled();
     expect(res.summary.credited).toBe(0);
   });
 });
