@@ -143,6 +143,27 @@ export interface BillPlan {
   billerId: string;
   name: string;
   amount: string;
+  /** Data bundles only — the API ranks them by value and annotates each one. */
+  sizeLabel?: string | null;
+  validityLabel?: string | null;
+  /** Naira per gigabyte, the metric the plans are ranked on. */
+  nairaPerGb?: number | null;
+  bucket?: 'daily' | 'weekly' | 'monthly' | 'extended' | 'other' | null;
+  /** A night / off-peak bundle. Also appears under its duration tab. */
+  night?: boolean;
+  /** An extra the bundle throws in, e.g. "2GB YouTube". */
+  bonusLabel?: string | null;
+  /** One of the best deals, worth leading with. */
+  hot?: boolean;
+  /** The single best naira-per-gigabyte plan this biller sells. */
+  bestValue?: boolean;
+}
+
+/** The live cashback rate, so a plan tile can show what it really earns. */
+export interface BillCashback {
+  enabled: boolean;
+  billBps: number;
+  maxNgn: number;
 }
 export interface BillServiceConfig {
   service: 'airtime' | 'data' | 'electricity' | 'cabletv' | 'betting';
@@ -442,7 +463,7 @@ export const api = {
     return apiFetch('/api/virtual-accounts/usd/wire');
   },
 
-  getBillCatalog(): Promise<{ services: BillServiceConfig[] }> {
+  getBillCatalog(): Promise<{ services: BillServiceConfig[]; cashback?: BillCashback }> {
     return apiFetch('/api/bills/catalog');
   },
 

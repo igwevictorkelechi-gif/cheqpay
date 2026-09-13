@@ -16,6 +16,7 @@
 // Amounts crossing the PaymentProvider boundary are NGN decimal strings; we
 // convert to kobo (integer) for Maplerad and back.
 
+import { phoneForProvider } from "@/lib/ngnPhone";
 import {
   BillPaymentError,
   type Bank,
@@ -56,11 +57,12 @@ function toKobo(amount: string): number {
 }
 
 /**
- * The one Maplerad identifier for Nigerian airtime, for every network. Maplerad
- * derives the carrier from the phone number; there are no per-network airtime
- * codes. (Data is different — it has real per-network billers like mtn-data-ng.)
+ * Fallback airtime identifier, used only when a caller sends no billerCode.
+ * Nigerian airtime is bought per network (mtn-ng, airtel-ng, glo-ng, 9mobile-ng
+ * — see lib/bills.ts AIRTIME_NETWORKS); this country-level value stays as a
+ * safety net so a request without a biller still sends something valid.
  */
-const NG_AIRTIME_IDENTIFIER = "ng-airtime";
+const NG_AIRTIME_FALLBACK = "ng-airtime";
 
 export class MapleradProvider implements PaymentProvider {
   readonly name = "maplerad";
@@ -94,6 +96,16 @@ export class MapleradProvider implements PaymentProvider {
     const text = await res.text();
     let json: any;
     try { json = JSON.parse(text); } catch { json = { raw: text }; }
+
+    // Log the exchange. This client is the money path — bills, transfers,
+    // virtual accounts — and it used to log nothing, so a declined bill left
+    // only the provider's one-line message ("request failed") with no record of
+    // what we actually sent. That turned every failure into guesswork. The
+    // shared lib/maplerad/client.ts has logged this all along; this is the same
+    // treatment, with the same redaction. Silence it with
+    // MAPLERAD_LOG_RESPONSES=0.
+    logExchange(method, path, res.status, res.ok, body, json);
+
     if (!res.ok || json?.status === false) {
       const msg = json?.message ?? `HTTP ${res.status}`;
       throw new BillPaymentError(`Maplerad ${method} ${path} failed`, String(msg), res.status);
@@ -162,18 +174,20 @@ export class MapleradProvider implements PaymentProvider {
   /**
    * Airtime: no plan to resolve — the amount is whatever the user typed.
    *
-   * The identifier is pinned rather than taken from the catalog, which is the
-   * one place in this class that ignores `billerCode`. Maplerad accepts a single
-   * country-level airtime identifier and works the network out from the phone
-   * number, so the network the user tapped is a display choice with no bearing
-   * on the request. Reading it from the catalog would let a stale per-network
-   * code reach the provider and fail the purchase AFTER the customer is debited
-   * — and the refund is not the same thing as the airtime arriving.
+   * The network the user tapped IS the biller: each tile carries its own
+   * Maplerad identifier (mtn-ng, airtel-ng, glo-ng, 9mobile-ng) and it is sent
+   * straight through, the same way data does. A caller that sends no billerCode
+   * falls back to the country-level identifier rather than sending nothing.
+   *
+   * If an identifier is rejected the bills/pay route refunds automatically
+   * (debit -> provider error -> refund -> FAILED), so a wrong code costs the
+   * customer nothing — but it delivers no airtime either, so keep these ids in
+   * step with what Maplerad publishes for NG.
    */
   private async payAirtime(input: BillPayInput, kobo: number): Promise<BillPayResult> {
     const r = await this.req<{ id: string; status: string }>("/bills/airtime", "POST", {
-      identifier: NG_AIRTIME_IDENTIFIER,
-      phone_number: input.customer,
+      identifier: input.billerCode || NG_AIRTIME_FALLBACK,
+      phone_number: phoneForProvider(input.customer),
       amount: kobo,
     });
     return { providerRef: r.id, status: normalizeStatus(r.status) };
@@ -189,10 +203,24 @@ export class MapleradProvider implements PaymentProvider {
     billerCode: string,
   ): Promise<ProviderBillPlan[]> {
     if (service === "data") {
-      const bundles = await this.req<Array<{ name: string; price: number; code: string }>>(
-        `/bills/data/bundle/${billerCode}`,
-      );
-      return bundles.map((b) => ({ code: b.code, name: b.name, amountMinor: b.price }));
+      const bundles = await this.req<
+        Array<{
+          name: string;
+          price: number;
+          code: string;
+          validity?: string;
+          data?: string;
+        }>
+      >(`/bills/data/bundle/${billerCode}`);
+      return bundles.map((b) => ({
+        code: b.code,
+        name: b.name,
+        amountMinor: b.price,
+        // Passed through rather than folded into the name: the apps sort
+        // bundles by value (price per GB per day), which needs the numbers.
+        data: b.data,
+        validity: b.validity,
+      }));
     }
 
     // Cable plans are grouped by bouquet; each `payment_options` entry is one
@@ -223,7 +251,7 @@ export class MapleradProvider implements PaymentProvider {
     const r = await this.req<{ id: string; status: string }>("/bills/data", "POST", {
       identifier: this.identifier(input),
       bundle_identifier: this.planCode(input),
-      phone_number: input.customer,
+      phone_number: phoneForProvider(input.customer),
       amount: kobo,
     });
     return { providerRef: r.id, status: normalizeStatus(r.status) };
@@ -238,7 +266,7 @@ export class MapleradProvider implements PaymentProvider {
         meter_number: input.customer,
         identifier: this.identifier(input),
         amount: kobo,
-        phone_number: input.customer,
+        phone_number: phoneForProvider(input.customer),
       },
     );
     return { providerRef: r.id, status: normalizeStatus(r.status), token: r.token ?? null };
@@ -443,4 +471,53 @@ function normalizeStatus(s: string): "successful" | "pending" | "failed" {
   if (u === "SUCCESS" || u === "SUCCESSFUL" || u === "COMPLETED") return "successful";
   if (u === "FAILED" || u === "DECLINED") return "failed";
   return "pending";
+}
+
+/** Fields that must never reach the logs, mirroring lib/maplerad/client.ts. */
+const REDACTED_KEYS = new Set([
+  "identification_number",
+  "bvn",
+  "image",
+  "secret",
+  "secret_key",
+  "card_number",
+  "cvv",
+  "pin",
+]);
+
+function redactForLog(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactForLog);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = REDACTED_KEYS.has(k) ? "[redacted]" : redactForLog(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * One line per Maplerad exchange on the money path. Never throws — a logging
+ * failure must not fail a payment.
+ */
+function logExchange(
+  method: string,
+  path: string,
+  status: number,
+  ok: boolean,
+  reqBody: unknown,
+  resBody: unknown,
+): void {
+  const flag = process.env.MAPLERAD_LOG_RESPONSES;
+  if (flag === "0" || flag === "false") return;
+  try {
+    const line = `[maplerad:payments] ${method} ${path} -> HTTP ${status} ok=${ok}`;
+    const detail = JSON.stringify({ request: redactForLog(reqBody), response: resBody });
+    const capped = detail.length > 4000 ? `${detail.slice(0, 4000)}…(${detail.length} chars)` : detail;
+    if (ok) console.log(line, capped);
+    else console.error(line, capped);
+  } catch {
+    /* never let logging break a payment */
+  }
 }

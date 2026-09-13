@@ -109,6 +109,15 @@ export interface ProviderBillPlan {
   code: string;
   name: string;
   amountMinor: number;
+  /**
+   * Structured bundle facts, when the provider states them separately from the
+   * name (Maplerad's data bundles do): the volume ("1GB") and how long it lasts
+   * ("30 days"). Kept apart from `name` so the apps can rank plans by value
+   * instead of parsing a display string. Absent for cable, and for any provider
+   * that only returns a name.
+   */
+  data?: string;
+  validity?: string;
 }
 export interface BillPayResult {
   providerRef: string;
