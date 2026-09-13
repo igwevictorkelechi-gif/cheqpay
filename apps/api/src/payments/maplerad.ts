@@ -56,11 +56,12 @@ function toKobo(amount: string): number {
 }
 
 /**
- * The one Maplerad identifier for Nigerian airtime, for every network. Maplerad
- * derives the carrier from the phone number; there are no per-network airtime
- * codes. (Data is different — it has real per-network billers like mtn-data-ng.)
+ * Fallback airtime identifier, used only when a caller sends no billerCode.
+ * Nigerian airtime is bought per network (mtn-ng, airtel-ng, glo-ng, 9mobile-ng
+ * — see lib/bills.ts AIRTIME_NETWORKS); this country-level value stays as a
+ * safety net so a request without a biller still sends something valid.
  */
-const NG_AIRTIME_IDENTIFIER = "ng-airtime";
+const NG_AIRTIME_FALLBACK = "ng-airtime";
 
 export class MapleradProvider implements PaymentProvider {
   readonly name = "maplerad";
@@ -162,17 +163,19 @@ export class MapleradProvider implements PaymentProvider {
   /**
    * Airtime: no plan to resolve — the amount is whatever the user typed.
    *
-   * The identifier is pinned rather than taken from the catalog, which is the
-   * one place in this class that ignores `billerCode`. Maplerad accepts a single
-   * country-level airtime identifier and works the network out from the phone
-   * number, so the network the user tapped is a display choice with no bearing
-   * on the request. Reading it from the catalog would let a stale per-network
-   * code reach the provider and fail the purchase AFTER the customer is debited
-   * — and the refund is not the same thing as the airtime arriving.
+   * The network the user tapped IS the biller: each tile carries its own
+   * Maplerad identifier (mtn-ng, airtel-ng, glo-ng, 9mobile-ng) and it is sent
+   * straight through, the same way data does. A caller that sends no billerCode
+   * falls back to the country-level identifier rather than sending nothing.
+   *
+   * If an identifier is rejected the bills/pay route refunds automatically
+   * (debit -> provider error -> refund -> FAILED), so a wrong code costs the
+   * customer nothing — but it delivers no airtime either, so keep these ids in
+   * step with what Maplerad publishes for NG.
    */
   private async payAirtime(input: BillPayInput, kobo: number): Promise<BillPayResult> {
     const r = await this.req<{ id: string; status: string }>("/bills/airtime", "POST", {
-      identifier: NG_AIRTIME_IDENTIFIER,
+      identifier: input.billerCode || NG_AIRTIME_FALLBACK,
       phone_number: input.customer,
       amount: kobo,
     });

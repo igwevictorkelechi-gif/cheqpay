@@ -14,18 +14,16 @@ import type { Minor } from "./types";
  * airtime has its own page pinned to /bills/airtime/billers/{country}. Both are
  * the same URL shape, so one function serves them.
  *
- * RESOLVED — airtime has no per-network billers. This page's worked example
- * returns one country-level biller, `{ name: "Airtime NG", identifier:
- * "ng-airtime", commission: 1 }`, and an example alone could not prove that was
- * the whole list. POST /bills/airtime settles it: its identifier enum is
- * ["ng-airtime", "airteltigo-ng", "mtn-ng", "vodafone-ng"], so Nigeria has
- * exactly one value and Maplerad reads the carrier off the phone number. An
- * enum is the contract; a biller list is a sample. lib/bills.ts and
- * payments/maplerad.ts now both send `ng-airtime` — do not reintroduce
- * "mtn-ng" and friends. (Data is unaffected: its per-network billers are real.)
+ * Airtime is bought per network. The docs' worked example shows a single
+ * country-level biller (`{ name: "Airtime NG", identifier: "ng-airtime" }`),
+ * and we shipped that first — but live purchases through it came back "unable
+ * to process", so lib/bills.ts now maps each tile to its own identifier
+ * (mtn-ng, airtel-ng, glo-ng, 9mobile-ng), matching the shape data already
+ * uses. payments/maplerad.ts keeps `ng-airtime` only as a fallback for a
+ * request that carries no biller.
  *
- * The provider-check airtime probe is still worth running — it costs nothing
- * and would catch this being wrong.
+ * Run the provider-check airtime probe to see the identifiers Maplerad
+ * actually publishes — it costs nothing and is the way to confirm these.
  */
 export type BillType = "airtime" | "data" | "cable" | "electricity";
 

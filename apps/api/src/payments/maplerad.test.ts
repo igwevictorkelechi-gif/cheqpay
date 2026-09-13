@@ -51,7 +51,7 @@ afterEach(() => {
 const base = { customer: "08030000000", reference: "tx-1" };
 
 describe("MapleradProvider — bills", () => {
-  it("always buys airtime through the single ng-airtime identifier", async () => {
+  it("buys airtime through the network's own identifier", async () => {
     const sent = stubMaplerad();
     const r = await psp.payBill({
       ...base,
@@ -62,6 +62,18 @@ describe("MapleradProvider — bills", () => {
 
     expect(r).toEqual({ providerRef: "mp_air_1", status: "successful" });
     // Exactly one call: no biller lookup, and the amount is kobo, not naira.
+    expect(sent).toEqual([
+      {
+        key: "POST /bills/airtime",
+        body: { identifier: "mtn-ng", phone_number: "08030000000", amount: 50_000 },
+      },
+    ]);
+  });
+
+  it("falls back to the country-level identifier when no biller is sent", async () => {
+    const sent = stubMaplerad();
+    await psp.payBill({ ...base, service: "airtime", amount: "500" });
+
     expect(sent).toEqual([
       {
         key: "POST /bills/airtime",
