@@ -95,6 +95,16 @@ export class MapleradProvider implements PaymentProvider {
     const text = await res.text();
     let json: any;
     try { json = JSON.parse(text); } catch { json = { raw: text }; }
+
+    // Log the exchange. This client is the money path — bills, transfers,
+    // virtual accounts — and it used to log nothing, so a declined bill left
+    // only the provider's one-line message ("request failed") with no record of
+    // what we actually sent. That turned every failure into guesswork. The
+    // shared lib/maplerad/client.ts has logged this all along; this is the same
+    // treatment, with the same redaction. Silence it with
+    // MAPLERAD_LOG_RESPONSES=0.
+    logExchange(method, path, res.status, res.ok, body, json);
+
     if (!res.ok || json?.status === false) {
       const msg = json?.message ?? `HTTP ${res.status}`;
       throw new BillPaymentError(`Maplerad ${method} ${path} failed`, String(msg), res.status);
@@ -460,4 +470,53 @@ function normalizeStatus(s: string): "successful" | "pending" | "failed" {
   if (u === "SUCCESS" || u === "SUCCESSFUL" || u === "COMPLETED") return "successful";
   if (u === "FAILED" || u === "DECLINED") return "failed";
   return "pending";
+}
+
+/** Fields that must never reach the logs, mirroring lib/maplerad/client.ts. */
+const REDACTED_KEYS = new Set([
+  "identification_number",
+  "bvn",
+  "image",
+  "secret",
+  "secret_key",
+  "card_number",
+  "cvv",
+  "pin",
+]);
+
+function redactForLog(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactForLog);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = REDACTED_KEYS.has(k) ? "[redacted]" : redactForLog(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * One line per Maplerad exchange on the money path. Never throws — a logging
+ * failure must not fail a payment.
+ */
+function logExchange(
+  method: string,
+  path: string,
+  status: number,
+  ok: boolean,
+  reqBody: unknown,
+  resBody: unknown,
+): void {
+  const flag = process.env.MAPLERAD_LOG_RESPONSES;
+  if (flag === "0" || flag === "false") return;
+  try {
+    const line = `[maplerad:payments] ${method} ${path} -> HTTP ${status} ok=${ok}`;
+    const detail = JSON.stringify({ request: redactForLog(reqBody), response: resBody });
+    const capped = detail.length > 4000 ? `${detail.slice(0, 4000)}…(${detail.length} chars)` : detail;
+    if (ok) console.log(line, capped);
+    else console.error(line, capped);
+  } catch {
+    /* never let logging break a payment */
+  }
 }

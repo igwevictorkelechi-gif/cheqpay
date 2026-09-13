@@ -21,6 +21,7 @@ import {
 import type { MapleradWebhookEvent } from "@/lib/maplerad/types";
 import { handleIssuingEvent, type IssuingEventData } from "@/lib/maplerad/issuing";
 import { settleCollectionById } from "@/lib/maplerad/settle";
+import { billOutcomeFrom, settleBillByProviderRef } from "@/lib/billSettlement";
 import { creditCryptoDeposit, parseCryptoDeposit } from "@/lib/maplerad/cryptoDeposits";
 import { cardStore } from "@/lib/cards";
 
@@ -119,6 +120,42 @@ export async function POST(req: Request): Promise<Response> {
           name,
           transactionId: txId,
           amount: outcome.amount,
+          payload: JSON.stringify(event).slice(0, 2000),
+        });
+      }
+
+      await markProcessed(SOURCE, svix.id);
+      return NextResponse.json({ ...outcome, eventId: svix.id });
+    }
+
+    if (name.startsWith("bill.")) {
+      // Bills are asynchronous: the purchase call only gets them ACCEPTED, and
+      // this is where they actually settle. Without it a paid bill sat
+      // PROCESSING forever and a failed one was never refunded.
+      //
+      // The payload is flat, like collections — the provider transaction id is
+      // top level, and it is what we stored as the row's externalRef.
+      const txId =
+        (event.data && typeof event.data === "object"
+          ? (event.data as { id?: string }).id
+          : undefined) ?? (event as { id?: string }).id;
+      const status =
+        (event.data && typeof event.data === "object"
+          ? (event.data as { status?: string }).status
+          : undefined) ?? (event as { status?: string }).status;
+
+      const outcome = await settleBillByProviderRef(
+        txId ?? "",
+        billOutcomeFrom(name, status),
+      );
+
+      if (outcome.outcome === "unmatched") {
+        // A bill we cannot place: the customer may be owed a refund we have not
+        // made. Never silent.
+        console.error("[maplerad webhook] BILL UNMATCHED — no ledger row for this bill", {
+          id: svix.id,
+          name,
+          transactionId: txId,
           payload: JSON.stringify(event).slice(0, 2000),
         });
       }
