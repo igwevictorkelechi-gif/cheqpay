@@ -9,6 +9,17 @@ const h = vi.hoisted(() => ({
 
 vi.mock("@cheqpay/db", () => ({
   Asset: { NGN: "NGN", USD: "USD", BTC: "BTC", USDT: "USDT", USDC: "USDC" },
+  Network: {
+    FIAT: "FIAT", SOLANA: "SOLANA", ETHEREUM: "ETHEREUM", BASE: "BASE",
+    POLYGON: "POLYGON", TRON: "TRON", BSC: "BSC", BITCOIN: "BITCOIN",
+  },
+  TransactionType: { DEPOSIT: "DEPOSIT" },
+  // settle.ts now reaches the crypto-collection path, which reads these.
+  prisma: {
+    user: { findFirst: vi.fn() },
+    transaction: { findFirst: vi.fn() },
+    wallet: { findMany: vi.fn() },
+  },
 }));
 vi.mock("./transactions", () => ({ verifyTransaction: h.verifyTransaction }));
 vi.mock("../mapleradCollections", () => ({
