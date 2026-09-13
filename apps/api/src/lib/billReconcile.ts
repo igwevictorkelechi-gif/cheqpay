@@ -4,18 +4,21 @@
 //
 // Bills settle on a bill.* webhook. When one never arrives, the purchase sits
 // PROCESSING forever: the customer is debited and neither they nor support can
-// tell whether the airtime landed. This checks a stuck bill against Maplerad's
-// own purchase history and settles it from what the provider actually recorded.
+// tell whether the airtime landed. This asks the provider what actually became
+// of each stuck bill and settles it from that answer.
 //
-// The safety rule, and the reason this cannot simply "resolve" every stuck bill:
-// being listed in the provider's history PROVES the purchase happened, but its
-// absence proves nothing — the list may be recent-only or paginated. So a match
-// completes the bill, and no match leaves it exactly as it was. Refunding on
-// absence could hand back money for airtime the customer already received.
+// It verifies each bill BY ITS OWN TRANSACTION ID rather than scanning a
+// purchase-history list. The list was the first approach and was a bad one: it
+// only covered airtime, said nothing about a bill's status (presence was the
+// only signal, so a genuine failure could never be refunded), and it is a
+// single point of failure — GET /bills/airtime began returning HTTP 500 and
+// took the whole feature with it. Verifying one id is narrower, definitive,
+// works for every bill type, and cannot be broken by an unrelated bill.
 
 import { TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
-import { getAirtimeHistory } from "./maplerad/airtimeHistory";
-import { settleBillByProviderRef } from "./billSettlement";
+import { verifyTransaction } from "./maplerad/transactions";
+import { describeProviderError } from "./mapleradCustomer";
+import { billOutcomeFrom, settleBillByProviderRef, type BillOutcome } from "./billSettlement";
 
 export interface StuckBill {
   transactionId: string;
@@ -26,8 +29,10 @@ export interface StuckBill {
   amountMinor: string;
   providerRef: string | null;
   createdAt: string;
-  /** True when Maplerad's purchase history confirms this one went through. */
-  confirmedByProvider: boolean;
+  /** What the provider says became of it: SUCCESS / FAILED / still pending. */
+  providerStatus: string | null;
+  /** How it would be settled: completed, or failed-and-refunded. Null if not yet. */
+  resolution: "complete" | "refund" | null;
   /** Why it cannot be settled from here (when it cannot). */
   reason?: string;
 }
@@ -35,7 +40,7 @@ export interface StuckBill {
 export interface BillReconcileResult {
   ok: true;
   items: StuckBill[];
-  summary: { total: number; confirmed: number; settled?: number };
+  summary: { total: number; resolvable: number; settled?: number };
 }
 
 function readMeta(metadata: unknown, key: string): string | null {
@@ -52,72 +57,86 @@ async function stuckBillsFor(userId: string) {
       type: TransactionType.BILL,
       status: TransactionStatus.PROCESSING,
     },
-    select: {
-      id: true,
-      amount: true,
-      externalRef: true,
-      metadata: true,
-      createdAt: true,
-    },
+    select: { id: true, amount: true, externalRef: true, metadata: true, createdAt: true },
     orderBy: { createdAt: "desc" },
   });
 }
 
-/**
- * List a user's stuck bills and say which the provider can confirm. Settles
- * nothing.
- */
-export async function previewStuckBills(userId: string): Promise<BillReconcileResult> {
-  const rows = await stuckBillsFor(userId);
-  if (rows.length === 0) return { ok: true, items: [], summary: { total: 0, confirmed: 0 } };
+/** Ask the provider what became of one bill. Never throws. */
+async function checkOne(row: {
+  id: string;
+  amount: bigint;
+  externalRef: string | null;
+  metadata: unknown;
+  createdAt: Date;
+}): Promise<StuckBill> {
+  const ref = row.externalRef ?? readMeta(row.metadata, "providerRef");
+  const base: StuckBill = {
+    transactionId: row.id,
+    service: readMeta(row.metadata, "service"),
+    billerName: readMeta(row.metadata, "billerName"),
+    customer: readMeta(row.metadata, "customer"),
+    amountMinor: row.amount.toString(),
+    providerRef: ref,
+    createdAt: row.createdAt.toISOString(),
+    providerStatus: null,
+    resolution: null,
+  };
 
-  // One call covers every row; the history is business-wide.
-  const history = await getAirtimeHistory();
-  const seen = new Set(history.map((h) => h.id));
+  if (!ref) {
+    // Never accepted by the provider — there is no transaction to ask about.
+    return { ...base, reason: "no provider reference: the purchase was never accepted" };
+  }
 
-  const items: StuckBill[] = rows.map((r) => {
-    const service = readMeta(r.metadata, "service");
-    const ref = r.externalRef ?? readMeta(r.metadata, "providerRef");
-    const confirmed = !!ref && seen.has(ref);
+  let outcome: BillOutcome;
+  let status: string | undefined;
+  try {
+    const tx = await verifyTransaction(ref);
+    status = tx.status;
+    outcome = billOutcomeFrom("", tx.status);
+  } catch (err) {
+    // One bill the provider cannot answer for must not hide the others.
+    return { ...base, reason: describeProviderError(err) };
+  }
 
-    let reason: string | undefined;
-    if (!ref) {
-      // Never accepted by the provider — there is no purchase to confirm.
-      reason = "no provider reference: the purchase was never accepted";
-    } else if (!confirmed) {
-      reason =
-        service === "airtime"
-          ? "not in the provider's airtime history"
-          : `cannot verify a ${service ?? "non-airtime"} bill here — only airtime history is available`;
-    }
-
-    return {
-      transactionId: r.id,
-      service,
-      billerName: readMeta(r.metadata, "billerName"),
-      customer: readMeta(r.metadata, "customer"),
-      amountMinor: r.amount.toString(),
-      providerRef: ref,
-      createdAt: r.createdAt.toISOString(),
-      confirmedByProvider: confirmed,
-      reason,
-    };
-  });
-
+  if (outcome === "pending") {
+    return { ...base, providerStatus: status ?? null, reason: "the provider still reports it pending" };
+  }
   return {
-    ok: true,
-    items,
-    summary: { total: items.length, confirmed: items.filter((i) => i.confirmedByProvider).length },
+    ...base,
+    providerStatus: status ?? null,
+    resolution: outcome === "successful" ? "complete" : "refund",
+  };
+}
+
+function summarise(items: StuckBill[], settled?: number): BillReconcileResult["summary"] {
+  return {
+    total: items.length,
+    resolvable: items.filter((i) => i.resolution !== null).length,
+    ...(settled === undefined ? {} : { settled }),
   };
 }
 
 /**
- * Settle the stuck bills the provider confirms.
+ * List a user's stuck bills and what the provider says became of each. Settles
+ * nothing.
+ */
+export async function previewStuckBills(userId: string): Promise<BillReconcileResult> {
+  const rows = await stuckBillsFor(userId);
+  const items = await Promise.all(rows.map(checkOne));
+  return { ok: true, items, summary: summarise(items) };
+}
+
+/**
+ * Settle the stuck bills the provider can answer for.
  *
- * `ids` names the ledger rows to settle; omit it to settle every confirmed one.
- * Only ever settles as SUCCESSFUL, and only for a row the history confirms —
- * settlement itself runs through the same guarded path the webhook uses, so a
- * webhook arriving mid-way cannot double-settle.
+ * `ids` names the ledger rows to settle; omit it to settle every resolvable
+ * one. A bill the provider reports SUCCESS is completed; one it reports FAILED
+ * is refunded — the amount AND the margin. A bill it still calls pending is
+ * left exactly as it is, because "no answer yet" is not an outcome.
+ *
+ * Settlement runs through the same guarded path the webhook uses, so a webhook
+ * arriving mid-way cannot double-settle.
  */
 export async function settleStuckBills(
   userId: string,
@@ -126,22 +145,25 @@ export async function settleStuckBills(
   const preview = await previewStuckBills(userId);
   const wanted = new Set(ids ?? []);
   const targets = preview.items.filter(
-    (i) => i.confirmedByProvider && (ids === undefined || wanted.has(i.transactionId)),
+    (i) => i.resolution !== null && (ids === undefined || wanted.has(i.transactionId)),
   );
 
   let settled = 0;
   for (const item of targets) {
     if (!item.providerRef) continue;
-    const res = await settleBillByProviderRef(item.providerRef, "successful");
-    if (res.outcome === "completed") {
+    const res = await settleBillByProviderRef(
+      item.providerRef,
+      item.resolution === "complete" ? "successful" : "failed",
+    );
+    if (res.outcome === "completed" || res.outcome === "refunded") {
       settled += 1;
-      item.confirmedByProvider = false;
-      item.reason = "settled just now";
+      item.resolution = null;
+      item.reason = res.outcome === "completed" ? "settled just now" : "refunded just now";
     } else if (res.outcome === "duplicate") {
-      item.confirmedByProvider = false;
+      item.resolution = null;
       item.reason = "already settled";
     }
   }
 
-  return { ...preview, summary: { ...preview.summary, settled } };
+  return { ...preview, summary: summarise(preview.items, settled) };
 }

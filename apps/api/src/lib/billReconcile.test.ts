@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   findMany: vi.fn(),
-  getAirtimeHistory: vi.fn(),
+  verifyTransaction: vi.fn(),
   settleBillByProviderRef: vi.fn(),
 }));
 
@@ -11,8 +11,14 @@ vi.mock("@cheqpay/db", () => ({
   TransactionStatus: { PROCESSING: "PROCESSING" },
   prisma: { transaction: { findMany: h.findMany } },
 }));
-vi.mock("./maplerad/airtimeHistory", () => ({ getAirtimeHistory: h.getAirtimeHistory }));
-vi.mock("./billSettlement", () => ({ settleBillByProviderRef: h.settleBillByProviderRef }));
+vi.mock("./maplerad/transactions", () => ({ verifyTransaction: h.verifyTransaction }));
+vi.mock("./mapleradCustomer", () => ({
+  describeProviderError: (e: unknown) => (e as Error).message,
+}));
+vi.mock("./billSettlement", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, settleBillByProviderRef: h.settleBillByProviderRef };
+});
 
 import { previewStuckBills, settleStuckBills } from "./billReconcile";
 
@@ -28,67 +34,81 @@ const row = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   h.findMany.mockResolvedValue([row()]);
-  h.getAirtimeHistory.mockResolvedValue([{ id: "prov-1", amount: 10_000 }]);
+  h.verifyTransaction.mockResolvedValue({ id: "prov-1", status: "SUCCESS" });
   h.settleBillByProviderRef.mockResolvedValue({ outcome: "completed", transactionId: "tx-1" });
 });
 
 describe("previewStuckBills", () => {
-  it("confirms a stuck bill the provider's history lists", async () => {
+  it("asks the provider about the bill by its own id", async () => {
     const res = await previewStuckBills("user-1");
+    expect(h.verifyTransaction).toHaveBeenCalledWith("prov-1");
     expect(res.items[0]).toMatchObject({
       transactionId: "tx-1",
-      providerRef: "prov-1",
-      confirmedByProvider: true,
+      providerStatus: "SUCCESS",
+      resolution: "complete",
       amountMinor: "10000",
     });
-    expect(res.summary).toMatchObject({ total: 1, confirmed: 1 });
+    expect(res.summary).toMatchObject({ total: 1, resolvable: 1 });
   });
 
-  it("does not confirm one the history does not list", async () => {
-    h.getAirtimeHistory.mockResolvedValue([{ id: "someone-else", amount: 500 }]);
+  it("marks a provider-reported failure for refund", async () => {
+    h.verifyTransaction.mockResolvedValue({ id: "prov-1", status: "FAILED" });
+    const res = await previewStuckBills("user-1");
+    expect(res.items[0]).toMatchObject({ providerStatus: "FAILED", resolution: "refund" });
+  });
+
+  it("leaves a still-pending bill alone — no answer yet is not an outcome", async () => {
+    h.verifyTransaction.mockResolvedValue({ id: "prov-1", status: "PENDING" });
     const res = await previewStuckBills("user-1");
     expect(res.items[0]).toMatchObject({
-      confirmedByProvider: false,
-      reason: "not in the provider's airtime history",
+      resolution: null,
+      reason: "the provider still reports it pending",
     });
+    expect(res.summary.resolvable).toBe(0);
   });
 
-  it("explains that a non-airtime bill cannot be verified from this history", async () => {
-    h.findMany.mockResolvedValue([
-      row({ metadata: { service: "data", billerName: "Airtel" } }),
-    ]);
-    h.getAirtimeHistory.mockResolvedValue([]);
+  it("one unanswerable bill does not hide the others", async () => {
+    h.findMany.mockResolvedValue([row(), row({ id: "tx-2", externalRef: "prov-2" })]);
+    h.verifyTransaction.mockImplementation(async (ref: string) => {
+      if (ref === "prov-1") throw new Error("provider exploded");
+      return { id: ref, status: "SUCCESS" };
+    });
     const res = await previewStuckBills("user-1");
-    expect(res.items[0].reason).toContain("only airtime history is available");
+    const byId = Object.fromEntries(res.items.map((i) => [i.transactionId, i]));
+    expect(byId["tx-1"]).toMatchObject({ resolution: null, reason: "provider exploded" });
+    expect(byId["tx-2"]).toMatchObject({ resolution: "complete" });
   });
 
-  it("flags a bill the provider never accepted", async () => {
+  it("flags a bill the provider never accepted, without calling out", async () => {
     h.findMany.mockResolvedValue([row({ externalRef: null, metadata: { service: "airtime" } })]);
     const res = await previewStuckBills("user-1");
     expect(res.items[0]).toMatchObject({
       providerRef: null,
-      confirmedByProvider: false,
+      resolution: null,
       reason: "no provider reference: the purchase was never accepted",
     });
-  });
-
-  it("skips the provider call entirely when nothing is stuck", async () => {
-    h.findMany.mockResolvedValue([]);
-    const res = await previewStuckBills("user-1");
-    expect(res.summary).toMatchObject({ total: 0, confirmed: 0 });
-    expect(h.getAirtimeHistory).not.toHaveBeenCalled();
+    expect(h.verifyTransaction).not.toHaveBeenCalled();
   });
 });
 
 describe("settleStuckBills", () => {
-  it("settles a confirmed bill as successful", async () => {
+  it("completes a bill the provider reports successful", async () => {
     const res = await settleStuckBills("user-1");
     expect(h.settleBillByProviderRef).toHaveBeenCalledWith("prov-1", "successful");
     expect(res.summary.settled).toBe(1);
   });
 
-  it("never settles one the provider does not confirm", async () => {
-    h.getAirtimeHistory.mockResolvedValue([]);
+  it("refunds a bill the provider reports failed", async () => {
+    h.verifyTransaction.mockResolvedValue({ id: "prov-1", status: "FAILED" });
+    h.settleBillByProviderRef.mockResolvedValue({ outcome: "refunded", transactionId: "tx-1" });
+    const res = await settleStuckBills("user-1");
+    expect(h.settleBillByProviderRef).toHaveBeenCalledWith("prov-1", "failed");
+    expect(res.summary.settled).toBe(1);
+    expect(res.items[0].reason).toBe("refunded just now");
+  });
+
+  it("never settles one the provider still calls pending", async () => {
+    h.verifyTransaction.mockResolvedValue({ id: "prov-1", status: "PENDING" });
     const res = await settleStuckBills("user-1");
     expect(h.settleBillByProviderRef).not.toHaveBeenCalled();
     expect(res.summary.settled).toBe(0);
@@ -96,7 +116,7 @@ describe("settleStuckBills", () => {
 
   it("settles only the ids asked for", async () => {
     h.findMany.mockResolvedValue([row(), row({ id: "tx-2", externalRef: "prov-2" })]);
-    h.getAirtimeHistory.mockResolvedValue([{ id: "prov-1" }, { id: "prov-2" }]);
+    h.verifyTransaction.mockImplementation(async (ref: string) => ({ id: ref, status: "SUCCESS" }));
     await settleStuckBills("user-1", ["tx-2"]);
     expect(h.settleBillByProviderRef).toHaveBeenCalledTimes(1);
     expect(h.settleBillByProviderRef).toHaveBeenCalledWith("prov-2", "successful");

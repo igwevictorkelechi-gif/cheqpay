@@ -107,7 +107,7 @@ export async function settleCollectionById(transactionId: string): Promise<Credi
   }
 
   const match = await prismaLedgerPort.findUserByAccount({
-    accountId: tx.account_id,
+    accountId: tx.account_id ?? undefined,
     customerId: tx.customer?.id,
     currency: tx.currency,
   });
