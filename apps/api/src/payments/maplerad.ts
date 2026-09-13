@@ -16,6 +16,7 @@
 // Amounts crossing the PaymentProvider boundary are NGN decimal strings; we
 // convert to kobo (integer) for Maplerad and back.
 
+import { phoneForProvider } from "@/lib/ngnPhone";
 import {
   BillPaymentError,
   type Bank,
@@ -186,7 +187,7 @@ export class MapleradProvider implements PaymentProvider {
   private async payAirtime(input: BillPayInput, kobo: number): Promise<BillPayResult> {
     const r = await this.req<{ id: string; status: string }>("/bills/airtime", "POST", {
       identifier: input.billerCode || NG_AIRTIME_FALLBACK,
-      phone_number: input.customer,
+      phone_number: phoneForProvider(input.customer),
       amount: kobo,
     });
     return { providerRef: r.id, status: normalizeStatus(r.status) };
@@ -250,7 +251,7 @@ export class MapleradProvider implements PaymentProvider {
     const r = await this.req<{ id: string; status: string }>("/bills/data", "POST", {
       identifier: this.identifier(input),
       bundle_identifier: this.planCode(input),
-      phone_number: input.customer,
+      phone_number: phoneForProvider(input.customer),
       amount: kobo,
     });
     return { providerRef: r.id, status: normalizeStatus(r.status) };
@@ -265,7 +266,7 @@ export class MapleradProvider implements PaymentProvider {
         meter_number: input.customer,
         identifier: this.identifier(input),
         amount: kobo,
-        phone_number: input.customer,
+        phone_number: phoneForProvider(input.customer),
       },
     );
     return { providerRef: r.id, status: normalizeStatus(r.status), token: r.token ?? null };
