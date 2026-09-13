@@ -67,10 +67,17 @@ export default function SwapConfirmScreen() {
     setError(null);
     try {
       await api.ensureProvisioned();
+      // Resolved here rather than closed over: resolveConvertMode returns a
+      // fresh object literal every call, so depending on the rendered `mode`
+      // gave this callback a new identity on every render — the effect below
+      // re-ran, set state, re-rendered, and quoted again in a loop that pinned
+      // the screen on "getting rate" and rate-limited the quote endpoint.
+      // Every dependency here is a primitive, compared by value.
+      const m = resolveConvertMode(fromSym as ConvertSymbol, toSym as ConvertSymbol);
       const q =
-        mode.kind === 'convert'
+        m.kind === 'convert'
           ? await api.createConvertQuote(String(fromSym), String(toSym), String(amount))
-          : await api.createQuote(mode.kind, mode.crypto, String(amount));
+          : await api.createQuote(m.kind, m.crypto, String(amount));
       setQuoteId(q.quoteId);
       setOut(formatMinor(q.amountOut, toSym as ConvertSymbol));
       setRate(q.rate);
@@ -79,7 +86,7 @@ export default function SwapConfirmScreen() {
     } finally {
       setLoading(false);
     }
-  }, [amount, fromSym, toSym, mode]);
+  }, [amount, fromSym, toSym]);
 
   useEffect(() => {
     fetchQuote();
