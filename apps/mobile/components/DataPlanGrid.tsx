@@ -29,7 +29,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'daily', label: 'Daily' },
   { key: 'weekly', label: 'Weekly' },
   { key: 'monthly', label: 'Monthly' },
-  { key: 'extended', label: '3-Month+' },
+  { key: 'extended', label: 'Extended' },
   { key: 'other', label: 'Other' },
 ];
 

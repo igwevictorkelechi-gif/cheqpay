@@ -156,3 +156,46 @@ describe("parseBonus", () => {
     expect(parseBonus(null)).toBeNull();
   });
 });
+
+/**
+ * Fixtures copied verbatim from Maplerad's "Get Available Bundles" response, so
+ * this locks our reading of the real contract rather than an assumed one.
+ */
+describe("against Maplerad's documented bundle shape", () => {
+  const doc = (data: string, validity: string, price: number, code: string) =>
+    plan({ id: code, name: `${data} - ${validity}`, amount: String(price / 100), data, validity });
+
+  it("reads volume, price and validity for every documented bundle", () => {
+    const out = valueDataPlans([
+      doc("100MB Daily for Daily", "Daily", 10_000, "100_9"),
+      doc("1.5GB for Monthly", "Monthly", 100_000, "1000_9"),
+      doc("120GB for 60Days", "60Days", 3_000_000, "30000_9"),
+      doc("400GB for 1Year", "1Year", 12_000_000, "120000_9"),
+    ]);
+    const by = Object.fromEntries(out.map((p) => [p.id, p]));
+    expect(by["100_9"]).toMatchObject({ sizeLabel: "100MB", validityLabel: "1 Day", bucket: "daily" });
+    expect(by["1000_9"]).toMatchObject({ sizeLabel: "1.5GB", validityLabel: "30 Days", bucket: "monthly" });
+    expect(by["30000_9"]).toMatchObject({ sizeLabel: "120GB", validityLabel: "2 Months", bucket: "extended" });
+    expect(by["120000_9"]).toMatchObject({ sizeLabel: "400GB", validityLabel: "1 Year", bucket: "extended" });
+  });
+
+  it("trusts the stated duration over the coarse validity category", () => {
+    // Maplerad ships these with validity "Daily" / "Weekly" even though they
+    // run 3 and 14 days. Believing the category misstates the validity to the
+    // customer and files the plan under the wrong tab.
+    const out = valueDataPlans([
+      doc("200MB 3Day Plan for Daily", "Daily", 20_000, "200_9"),
+      doc("750MB 2Week Plan for Weekly", "Weekly", 50_000, "500_9"),
+    ]);
+    const by = Object.fromEntries(out.map((p) => [p.id, p]));
+    expect(by["200_9"]).toMatchObject({ days: 3, validityLabel: "3 Days", bucket: "weekly" });
+    expect(by["500_9"]).toMatchObject({ days: 14, validityLabel: "14 Days", bucket: "monthly" });
+  });
+
+  it("prices in kobo round-trip to the naira the customer is charged", () => {
+    // price 350000 kobo -> "3500" naira on the plan -> ₦3,500.
+    const out = valueDataPlans([doc("12GB for Monthly", "Monthly", 350_000, "3500_9")]);
+    expect(out[0].amount).toBe("3500");
+    expect(out[0].nairaPerGb).toBeCloseTo(291.67, 1);
+  });
+});

@@ -191,9 +191,16 @@ function pickHot(valued: ValuedPlan[], limit: number): Set<string> {
  */
 export function valueDataPlans(plans: BillPlan[], hotLimit = 8): ValuedPlan[] {
   const valued: ValuedPlan[] = plans.map((p) => {
-    // Prefer the provider's structured fields; fall back to the display name.
+    // Volume: the structured field first, then the display name.
     const sizeMb = parseVolumeMb(p.data) ?? parseVolumeMb(p.name);
-    const days = parseDays(p.validity) ?? parseDays(p.name);
+
+    // Validity is trickier. Maplerad's `validity` is a coarse CATEGORY, not the
+    // real duration — "200MB 3Day Plan for Daily" ships with validity "Daily",
+    // and "750MB 2Week Plan for Weekly" with "Weekly". Trusting that field
+    // would tell a customer a 3-day bundle lasts 1 day and file a 2-week bundle
+    // under Weekly. The exact duration, when there is one, is written into the
+    // description — so read that first and fall back to the category.
+    const days = parseDays(p.data) ?? parseDays(p.validity) ?? parseDays(p.name);
     const naira = Number(p.amount);
     const nairaPerGb =
       sizeMb && sizeMb > 0 && Number.isFinite(naira) && naira > 0
