@@ -19,7 +19,13 @@ import {
   isNgnUsdPair,
   type SwapSide,
 } from "./rates";
-import { feeFromBps, getFxMarginBps, getSwapSpreadBps, getUsdtNgnRate } from "./settings";
+import {
+  feeFromBps,
+  getFxSideMarginBps,
+  getSwapSpreadBps,
+  getUsdtNgnRate,
+  type FxSide,
+} from "./settings";
 import { awardCashback } from "./cashback";
 import { ensureUsdAsset } from "./ensureUsdAsset";
 import { ensureQuoteProviderRef } from "./ensureQuoteProviderRef";
@@ -204,6 +210,19 @@ export async function createConvertQuote(params: {
 }
 
 /**
+ * Which side of the book a NGN⇄USD conversion puts us on.
+ *
+ * Naming is from the business's side: the user paying naira is buying dollars
+ * from us, so that is our "sell_usd". Deriving it here rather than at each call
+ * site keeps the quote and the settlement on the same side of the spread — they
+ * must agree, or a conversion would be priced on one side and settled on the
+ * other.
+ */
+function fxSideFor(fromAsset: Asset): FxSide {
+  return fromAsset === Asset.NGN ? "sell_usd" : "buy_usd";
+}
+
+/**
  * Price a NGN↔USD convert from a live Maplerad FX quote and persist it with the
  * provider reference, so executeSwap can settle the very same quote. The tier
  * single-tx limit is enforced on the NGN leg (input when selling NGN, output
@@ -237,7 +256,8 @@ async function createFxConvertQuote(params: {
   // the amount it produces. Taken in the asset the user receives, so the
   // difference stays in treasury.
   const grossOutMinor = BigInt(fx.target.amount);
-  const amountOutMinor = grossOutMinor - feeFromBps(grossOutMinor, await getFxMarginBps());
+  const marginBps = await getFxSideMarginBps(fxSideFor(params.fromAsset));
+  const amountOutMinor = grossOutMinor - feeFromBps(grossOutMinor, marginBps);
   if (amountOutMinor <= 0n) {
     throw new ApiError(
       422,
@@ -526,7 +546,8 @@ async function executeFxSwap(params: {
   const creditMinor =
     settledGross === null
       ? quote.amountOut
-      : settledGross - feeFromBps(settledGross, await getFxMarginBps());
+      : settledGross -
+        feeFromBps(settledGross, await getFxSideMarginBps(fxSideFor(quote.fromAsset)));
 
   if (creditMinor !== quote.amountOut) {
     console.warn("[fx] settled amount differs from the quote — crediting what settled", {

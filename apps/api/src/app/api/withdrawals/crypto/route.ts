@@ -18,8 +18,8 @@ import { requestContext } from "@/lib/requestContext";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { notifyUser } from "@/lib/alerts";
 import { notifyAdminAlert } from "@/lib/adminAlert";
-import { cryptoToNgnKobo } from "@/lib/rates";
-import { getUsdtNgnRate } from "@/lib/settings";
+import { cryptoToNgnKobo, cryptoToUsdCents } from "@/lib/rates";
+import { getUsdtNgnRate, getWithdrawalMinUsd } from "@/lib/settings";
 import {
   assertWithdrawalAllowed,
   sumTodayWithdrawalsNgnKobo,
@@ -99,6 +99,23 @@ export async function POST(req: Request) {
       throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
     }
     const price = await getPriceFeed().getSpotUsdt(asset);
+
+    // Floor on the withdrawal, in dollars, checked before anything is reserved.
+    // Valued straight off the USDT price rather than via naira, so the floor
+    // does not move with the admin-set USDT→NGN rate.
+    const minUsd = await getWithdrawalMinUsd();
+    if (minUsd > 0) {
+      const valueUsdCents = cryptoToUsdCents(amountMinor, asset, price);
+      const minCents = BigInt(Math.round(minUsd * 100));
+      if (valueUsdCents < minCents) {
+        throw new ApiError(
+          422,
+          `The smallest withdrawal is $${minUsd.toFixed(2)} worth of crypto`,
+          "below_minimum",
+        );
+      }
+    }
+
     const ngnValueKobo = cryptoToNgnKobo(amountMinor, asset, price, new Prisma.Decimal(rate));
 
     const usedToday = await sumTodayWithdrawalsNgnKobo(auth.id);

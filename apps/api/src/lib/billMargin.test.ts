@@ -22,7 +22,12 @@ vi.mock("./env", () => ({ getEnv: () => ({ SWAP_SPREAD_BPS: 100 }) }));
 import {
   getBillMarginBps,
   getBillMargins,
+  getDepositMinUsd,
   getFxMarginBps,
+  getFxMargins,
+  getFxSideMarginBps,
+  getWithdrawalMinNgn,
+  getWithdrawalMinUsd,
   setBillMarginForService,
 } from "./settings";
 
@@ -112,5 +117,57 @@ describe("the NGN<->USD spread", () => {
   it("is read from its own key, not from the crypto swap spread", async () => {
     withSettings({ fx_margin_bps: "100", swap_spread_bps: "250" });
     await expect(getFxMarginBps()).resolves.toBe(100);
+  });
+});
+
+describe("the two sides of the NGN<->USD book", () => {
+  it("falls back to the shared spread when a side has no rate of its own", async () => {
+    withSettings({ fx_margin_bps: "100" });
+    await expect(getFxSideMarginBps("buy_usd")).resolves.toBe(100);
+    await expect(getFxSideMarginBps("sell_usd")).resolves.toBe(100);
+  });
+
+  it("lets the sides differ, so dollars leave dearer than they arrive", async () => {
+    withSettings({
+      fx_margin_bps: "100",
+      fx_margin_buy_usd_bps: "75",
+      fx_margin_sell_usd_bps: "150",
+    });
+    await expect(getFxSideMarginBps("buy_usd")).resolves.toBe(75);
+    await expect(getFxSideMarginBps("sell_usd")).resolves.toBe(150);
+  });
+
+  it("treats an explicit 0 on one side as a real rate", async () => {
+    withSettings({ fx_margin_bps: "100", fx_margin_buy_usd_bps: "0" });
+    await expect(getFxSideMarginBps("buy_usd")).resolves.toBe(0);
+    await expect(getFxSideMarginBps("sell_usd")).resolves.toBe(100);
+  });
+
+  it("reports both sides for the dashboard, null where each uses the default", async () => {
+    withSettings({ fx_margin_bps: "100", fx_margin_sell_usd_bps: "150" });
+    await expect(getFxMargins()).resolves.toEqual({
+      defaultBps: 100,
+      buyUsdBps: null,
+      sellUsdBps: 150,
+    });
+  });
+});
+
+describe("minimums", () => {
+  it("are 0 — no floor — until an admin sets them", async () => {
+    await expect(getWithdrawalMinNgn()).resolves.toBe(0);
+    await expect(getWithdrawalMinUsd()).resolves.toBe(0);
+    await expect(getDepositMinUsd()).resolves.toBe(0);
+  });
+
+  it("read back what was set", async () => {
+    withSettings({
+      withdrawal_min_ngn: "2000",
+      withdrawal_min_usd: "5",
+      deposit_min_usd: "5",
+    });
+    await expect(getWithdrawalMinNgn()).resolves.toBe(2000);
+    await expect(getWithdrawalMinUsd()).resolves.toBe(5);
+    await expect(getDepositMinUsd()).resolves.toBe(5);
   });
 });

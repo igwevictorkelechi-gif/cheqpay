@@ -5,40 +5,69 @@ import {
   getBillMargins,
   getCashbackConfig,
   getDepositFeeBps,
+  getDepositMinUsd,
   getFxMarginBps,
+  getFxMargins,
   getSwapSpreadBps,
   getUsdtNgnRate,
   getWithdrawalFeeNgn,
+  getWithdrawalMinNgn,
+  getWithdrawalMinUsd,
   setBillMarginBps,
   setBillMarginForService,
   setCashbackConfig,
   setDepositFeeBps,
+  setDepositMinUsd,
   setFxMarginBps,
+  setFxSideMarginBps,
   setSwapSpreadBps,
   setUsdtNgnRate,
   setWithdrawalFeeNgn,
+  setWithdrawalMinNgn,
+  setWithdrawalMinUsd,
   type BillMarginService,
+  type FxSide,
 } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
 async function snapshot() {
-  const [spreadBps, usdtNgnRate, depositFeeBps, withdrawalFeeNgn, fxMarginBps, billMargins, cashback] =
-    await Promise.all([
-      getSwapSpreadBps(),
-      getUsdtNgnRate(),
-      getDepositFeeBps(),
-      getWithdrawalFeeNgn(),
-      getFxMarginBps(),
-      getBillMargins(),
-      getCashbackConfig(),
-    ]);
+  const [
+    spreadBps,
+    usdtNgnRate,
+    depositFeeBps,
+    withdrawalFeeNgn,
+    fxMarginBps,
+    fxMargins,
+    billMargins,
+    withdrawalMinNgn,
+    withdrawalMinUsd,
+    depositMinUsd,
+    cashback,
+  ] = await Promise.all([
+    getSwapSpreadBps(),
+    getUsdtNgnRate(),
+    getDepositFeeBps(),
+    getWithdrawalFeeNgn(),
+    getFxMarginBps(),
+    getFxMargins(),
+    getBillMargins(),
+    getWithdrawalMinNgn(),
+    getWithdrawalMinUsd(),
+    getDepositMinUsd(),
+    getCashbackConfig(),
+  ]);
   return {
     spreadBps,
     usdtNgnRate,
     depositFeeBps,
     withdrawalFeeNgn,
     fxMarginBps,
+    /** Per side: a number overrides the shared spread, null means it uses it. */
+    fxMargins: { buyUsd: fxMargins.buyUsdBps, sellUsd: fxMargins.sellUsdBps },
+    withdrawalMinNgn,
+    withdrawalMinUsd,
+    depositMinUsd,
     billMarginBps: billMargins.defaultBps,
     /** Per service: a number overrides the default, null means it uses it. */
     billMargins: billMargins.perService,
@@ -75,6 +104,19 @@ export async function PUT(req: Request) {
       await setWithdrawalFeeNgn(body.withdrawalFeeNgn, updatedBy);
     if (body.billMarginBps !== undefined) await setBillMarginBps(body.billMarginBps, updatedBy);
     if (body.fxMarginBps !== undefined) await setFxMarginBps(body.fxMarginBps, updatedBy);
+    if (body.withdrawalMinNgn !== undefined)
+      await setWithdrawalMinNgn(body.withdrawalMinNgn, updatedBy);
+    if (body.withdrawalMinUsd !== undefined)
+      await setWithdrawalMinUsd(body.withdrawalMinUsd, updatedBy);
+    if (body.depositMinUsd !== undefined) await setDepositMinUsd(body.depositMinUsd, updatedBy);
+    if (body.fxMargins) {
+      // An omitted side is left alone; null clears its override.
+      for (const [side, bps] of Object.entries(body.fxMargins)) {
+        if (bps === undefined) continue;
+        const key = side === "buyUsd" ? "buy_usd" : "sell_usd";
+        await setFxSideMarginBps(key as FxSide, bps, updatedBy);
+      }
+    }
     if (body.billMargins) {
       // An omitted service is left alone; null clears its override.
       for (const [service, bps] of Object.entries(body.billMargins)) {

@@ -8,7 +8,7 @@ import { MAX_TIER } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { ngnWithdrawalSchema } from "@/lib/validation";
-import { getWithdrawalFeeNgn } from "@/lib/settings";
+import { getWithdrawalFeeNgn, getWithdrawalMinNgn } from "@/lib/settings";
 import { requestContext } from "@/lib/requestContext";
 
 import { assertFeatureEnabled } from "@/lib/features";
@@ -44,6 +44,18 @@ export async function POST(req: Request) {
 
     const body = ngnWithdrawalSchema.parse(await req.json());
     const amountMinor = toMinorUnits(body.amount, Asset.NGN);
+
+    // Floor on the payout, checked before anything is reserved. Every payout
+    // costs the same provider fee whatever its size, so a tiny one can cost
+    // more to send than it moves.
+    const minNgn = await getWithdrawalMinNgn();
+    if (minNgn > 0 && amountMinor < toMinorUnits(String(minNgn), Asset.NGN)) {
+      throw new ApiError(
+        422,
+        `The smallest withdrawal is ₦${minNgn.toLocaleString("en-NG")}`,
+        "below_minimum",
+      );
+    }
 
     // Idempotent replay.
     const existing = await prisma.transaction.findUnique({

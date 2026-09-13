@@ -188,3 +188,22 @@ export function cryptoToNgnKobo(
   );
   return floorToBigInt(cryptoWhole.mul(cryptoUsdtPrice).mul(usdtNgnRate).mul(100));
 }
+
+/**
+ * Value a crypto amount (minor units) in US cents at the given USDT price.
+ *
+ * Deliberately stops at USDT rather than going on to naira: a dollar-denominated
+ * floor should not depend on the business USDT→NGN rate, which is admin-set and
+ * can sit stale for weeks. USD is 1:1 with USDT here, the same peg
+ * `fiatUsdtPrice` uses. No spread — this is a valuation, not a trade.
+ */
+export function cryptoToUsdCents(
+  amountMinor: bigint,
+  cryptoAsset: Asset,
+  cryptoUsdtPrice: Decimal,
+): bigint {
+  const cryptoWhole = new D(amountMinor.toString()).div(
+    new D(10).pow(ASSET_DECIMALS[cryptoAsset])
+  );
+  return floorToBigInt(cryptoWhole.mul(cryptoUsdtPrice).mul(100));
+}

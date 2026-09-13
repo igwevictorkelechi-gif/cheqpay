@@ -228,6 +228,23 @@ export const platformSettingsUpdateSchema = z
     /** NGN⇄USD conversion spread in basis points (max 10%). */
     fxMarginBps: z.number().int().min(0).max(1_000).optional(),
     /**
+     * The two sides of that spread, named from the business's side: buyUsd is
+     * the user selling us dollars, sellUsd the user buying them. null clears a
+     * side back to the shared fxMarginBps.
+     */
+    fxMargins: z
+      .object({
+        buyUsd: z.number().int().min(0).max(1_000).nullable().optional(),
+        sellUsd: z.number().int().min(0).max(1_000).nullable().optional(),
+      })
+      .optional(),
+    /** Smallest NGN bank payout, whole naira (max ₦1,000,000). */
+    withdrawalMinNgn: z.number().min(0).max(1_000_000).optional(),
+    /** Smallest crypto withdrawal by USD value (max $10,000). */
+    withdrawalMinUsd: z.number().min(0).max(10_000).optional(),
+    /** Advertised deposit minimum in USD. Displayed, never enforced. */
+    depositMinUsd: z.number().min(0).max(10_000).optional(),
+    /**
      * Cashback. Rates are capped at 10% each — a slip of the decimal point
      * here pays real money out of the treasury on every transaction, so the
      * bound is deliberately tight and the per-transaction cap is separate.

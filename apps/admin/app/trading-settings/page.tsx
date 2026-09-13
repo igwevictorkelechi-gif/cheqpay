@@ -33,6 +33,10 @@ interface Settings {
   depositFeeBps: number;
   withdrawalFeeNgn: number;
   fxMarginBps: number;
+  fxMargins: { buyUsd: number | null; sellUsd: number | null };
+  withdrawalMinNgn: number;
+  withdrawalMinUsd: number;
+  depositMinUsd: number;
   billMarginBps: number;
   billMargins: BillMargins;
   cashbackEnabled: boolean;
@@ -49,6 +53,11 @@ export default function TradingSettingsPage() {
   const [depositFeeBps, setDepositFeeBps] = useState('');
   const [withdrawalFeeNgn, setWithdrawalFeeNgn] = useState('');
   const [fxMarginBps, setFxMarginBps] = useState('');
+  const [fxBuyUsd, setFxBuyUsd] = useState('');
+  const [fxSellUsd, setFxSellUsd] = useState('');
+  const [withdrawalMinNgn, setWithdrawalMinNgn] = useState('');
+  const [withdrawalMinUsd, setWithdrawalMinUsd] = useState('');
+  const [depositMinUsd, setDepositMinUsd] = useState('');
   const [billMarginBps, setBillMarginBps] = useState('');
   // '' means "uses the default" — distinct from '0', which pins face value.
   const [billMargins, setBillMargins] = useState<Record<string, string>>({});
@@ -68,6 +77,11 @@ export default function TradingSettingsPage() {
     setDepositFeeBps(String(data.depositFeeBps ?? 0));
     setWithdrawalFeeNgn(String(data.withdrawalFeeNgn ?? 0));
     setFxMarginBps(String(data.fxMarginBps ?? 0));
+    setFxBuyUsd(data.fxMargins?.buyUsd == null ? '' : String(data.fxMargins.buyUsd));
+    setFxSellUsd(data.fxMargins?.sellUsd == null ? '' : String(data.fxMargins.sellUsd));
+    setWithdrawalMinNgn(String(data.withdrawalMinNgn ?? 0));
+    setWithdrawalMinUsd(String(data.withdrawalMinUsd ?? 0));
+    setDepositMinUsd(String(data.depositMinUsd ?? 0));
     setBillMarginBps(String(data.billMarginBps ?? 0));
     setBillMargins(
       Object.fromEntries(
@@ -115,6 +129,14 @@ export default function TradingSettingsPage() {
       if (withdrawalFeeNgn !== '') payload.withdrawalFeeNgn = Number(withdrawalFeeNgn);
       if (billMarginBps !== '') payload.billMarginBps = Number(billMarginBps);
       if (fxMarginBps !== '') payload.fxMarginBps = Number(fxMarginBps);
+      // Blank clears a side back to the shared spread; '0' is a real rate.
+      payload.fxMargins = {
+        buyUsd: fxBuyUsd === '' ? null : Number(fxBuyUsd),
+        sellUsd: fxSellUsd === '' ? null : Number(fxSellUsd),
+      };
+      if (withdrawalMinNgn !== '') payload.withdrawalMinNgn = Number(withdrawalMinNgn);
+      if (withdrawalMinUsd !== '') payload.withdrawalMinUsd = Number(withdrawalMinUsd);
+      if (depositMinUsd !== '') payload.depositMinUsd = Number(depositMinUsd);
       // A blank box clears the override (null) so that service follows the
       // default again; '0' is sent as a real rate meaning face value.
       payload.billMargins = Object.fromEntries(
@@ -344,10 +366,149 @@ export default function TradingSettingsPage() {
             placeholder="0"
           />
           <p className="text-sm text-gray-500 mt-2">
-            Withheld from every NGN⇄USD conversion ({pct(fxMarginBps)}%). This rail is priced by
-            Maplerad, so the trading spread above never reaches it — at 0 the provider&apos;s raw
-            rate goes straight to the user and the business earns nothing. Max 1000 bps (10%).
+            The fallback spread ({pct(fxMarginBps)}%), used by either side below that has no rate
+            of its own. This rail is priced by Maplerad, so the trading spread above never reaches
+            it — at 0 the provider&apos;s raw rate goes straight to the user and the business earns
+            nothing. Max 1000 bps (10%).
           </p>
+
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <p className="text-sm font-semibold text-gray-700">The two sides</p>
+            <p className="text-xs text-gray-500 mt-1 mb-3">
+              Named from your side of the trade. Leave a box empty to use the fallback. Setting a
+              wider <span className="font-medium">sell</span> than{' '}
+              <span className="font-medium">buy</span> means dollars leave dearer than they arrive
+              — the usual shape when dollars are the scarce side.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="fx-buy" className="block text-xs font-medium text-gray-600 mb-1">
+                  You buy $ (user sells)
+                </label>
+                <input
+                  id="fx-buy"
+                  type="number"
+                  min={0}
+                  max={1000}
+                  step={1}
+                  value={fxBuyUsd}
+                  onChange={(e) => setFxBuyUsd(e.target.value)}
+                  disabled={loading || saving}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  placeholder={`default (${pct(fxMarginBps)}%)`}
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  {fxBuyUsd === ''
+                    ? `Using default · ${pct(fxMarginBps)}%`
+                    : `${pct(fxBuyUsd)}% below mid`}
+                </p>
+              </div>
+              <div>
+                <label htmlFor="fx-sell" className="block text-xs font-medium text-gray-600 mb-1">
+                  You sell $ (user buys)
+                </label>
+                <input
+                  id="fx-sell"
+                  type="number"
+                  min={0}
+                  max={1000}
+                  step={1}
+                  value={fxSellUsd}
+                  onChange={(e) => setFxSellUsd(e.target.value)}
+                  disabled={loading || saving}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  placeholder={`default (${pct(fxMarginBps)}%)`}
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  {fxSellUsd === ''
+                    ? `Using default · ${pct(fxMarginBps)}%`
+                    : `${pct(fxSellUsd)}% above mid`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h2 className="text-lg font-bold text-gray-900 pt-2">Minimums</h2>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-5">
+          <div>
+            <label
+              htmlFor="min-ngn"
+              className="flex items-center gap-2 text-gray-700 font-semibold mb-2"
+            >
+              <ArrowDownToLine size={18} className="text-brand-600" />
+              Smallest Naira withdrawal (₦)
+            </label>
+            <input
+              id="min-ngn"
+              type="number"
+              min={0}
+              step={100}
+              value={withdrawalMinNgn}
+              onChange={(e) => setWithdrawalMinNgn(e.target.value)}
+              disabled={loading || saving}
+              className={inputCls}
+              placeholder="0"
+            />
+            <p className="text-sm text-gray-500 mt-2">
+              Bank payouts below this are refused before any money moves. Each payout costs the
+              same provider fee whatever its size. 0 means no floor.
+            </p>
+          </div>
+
+          <div className="border-t border-gray-100 pt-5">
+            <label
+              htmlFor="min-usd"
+              className="flex items-center gap-2 text-gray-700 font-semibold mb-2"
+            >
+              <ArrowDownToLine size={18} className="text-brand-600" />
+              Smallest crypto withdrawal ($)
+            </label>
+            <input
+              id="min-usd"
+              type="number"
+              min={0}
+              step={1}
+              value={withdrawalMinUsd}
+              onChange={(e) => setWithdrawalMinUsd(e.target.value)}
+              disabled={loading || saving}
+              className={inputCls}
+              placeholder="0"
+            />
+            <p className="text-sm text-gray-500 mt-2">
+              Measured by the withdrawal&apos;s dollar value, priced off the coin&apos;s USDT price
+              rather than the Naira rate above — so this floor does not move when that rate is
+              changed. 0 means no floor.
+            </p>
+          </div>
+
+          <div className="border-t border-gray-100 pt-5">
+            <label
+              htmlFor="min-deposit"
+              className="flex items-center gap-2 text-gray-700 font-semibold mb-2"
+            >
+              <Banknote size={18} className="text-brand-600" />
+              Advertised minimum deposit ($)
+            </label>
+            <input
+              id="min-deposit"
+              type="number"
+              min={0}
+              step={1}
+              value={depositMinUsd}
+              onChange={(e) => setDepositMinUsd(e.target.value)}
+              disabled={loading || saving}
+              className={inputCls}
+              placeholder="0"
+            />
+            <p className="text-sm text-amber-700 mt-2">
+              <span className="font-semibold">Shown to users, never enforced.</span> A deposit has
+              already settled by the time we hear about it, so this can only set expectations
+              before someone sends. Every deposit that arrives is still credited in full — refusing
+              to credit one would mean keeping the user&apos;s money.
+            </p>
+          </div>
         </div>
 
         {/* Cashback rewards */}
