@@ -194,6 +194,39 @@ type MintResult = {
   message: string;
 };
 
+/** One row from GET/POST /api/users/{id}/reconcile-deposits. */
+type ReconcileItem = {
+  id: string;
+  currency: string | null;
+  asset: string | null;
+  entry: string | null;
+  status: string | null;
+  type: string | null;
+  rawAmount: string | null;
+  amountMinor: string | null;
+  feeMinor: string | null;
+  netMinor: string | null;
+  netDisplay: string | null;
+  reference: string | null;
+  createdAt: string | null;
+  source: { bankName: string | null; accountNumber: string | null; accountName: string | null };
+  alreadyCredited: boolean;
+  transactionId?: string;
+  creditable: boolean;
+  reason?: string;
+};
+type ReconcileResult = {
+  ok: true;
+  customerId: string;
+  items: ReconcileItem[];
+  summary: {
+    total: number;
+    alreadyCredited: number;
+    creditableMissing: number;
+    credited?: number;
+  };
+};
+
 /** Anything not captured shows a dash rather than an empty cell. */
 const DASH = '—';
 function show(v: string | number | null | undefined): string {
@@ -345,6 +378,16 @@ export default function UserDetailPage() {
   const [cwMinting, setCwMinting] = useState(false);
   const [cwResult, setCwResult] = useState<MintResult | null>(null);
   const [cwError, setCwError] = useState<string | null>(null);
+
+  // Deposit reconciliation: read what Maplerad recorded for this customer and
+  // credit any deposit that never reached the in-app balance. Operator-reviewed
+  // because the provider states amounts as strings with no documented unit — the
+  // net that would land is shown per row before anything is credited.
+  const [rec, setRec] = useState<ReconcileResult | null>(null);
+  const [recLoading, setRecLoading] = useState(false);
+  const [recCrediting, setRecCrediting] = useState(false);
+  const [recError, setRecError] = useState<string | null>(null);
+  const [recPicked, setRecPicked] = useState<Set<string>>(new Set());
 
   const [usdForm, setUsdForm] = useState({
     identificationNumber: '',
@@ -563,6 +606,75 @@ export default function UserDetailPage() {
     },
     [id, loadWallets],
   );
+
+  /** Read Maplerad's transaction record and classify each deposit. */
+  const loadReconciliation = useCallback(async () => {
+    setRecLoading(true);
+    setRecError(null);
+    setRecPicked(new Set());
+    try {
+      const r = await fetch(`/api/users/${id}/reconcile-deposits`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || d?.message || `Check failed (${r.status})`);
+      if (d.ok === false) {
+        setRecError(d.error || 'Maplerad could not return this customer’s transactions.');
+        setRec(null);
+      } else {
+        setRec(d as ReconcileResult);
+        // Pre-tick every creditable-and-missing row: the common case is "credit
+        // all of these", and the operator can untick any they don't want.
+        setRecPicked(
+          new Set(
+            (d as ReconcileResult).items
+              .filter((it) => it.creditable && !it.alreadyCredited)
+              .map((it) => it.id),
+          ),
+        );
+      }
+    } catch (e) {
+      setRecError((e as Error).message);
+    } finally {
+      setRecLoading(false);
+    }
+  }, [id]);
+
+  const toggleRecPick = useCallback((txId: string) => {
+    setRecPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(txId)) next.delete(txId);
+      else next.add(txId);
+      return next;
+    });
+  }, []);
+
+  /** Credit the ticked deposits, then refresh both this panel and the balances. */
+  const creditReconciled = useCallback(async () => {
+    const ids = Array.from(recPicked);
+    if (ids.length === 0) return;
+    setRecCrediting(true);
+    setRecError(null);
+    try {
+      const r = await fetch(`/api/users/${id}/reconcile-deposits`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || d?.message || `Credit failed (${r.status})`);
+      if (d.ok === false) {
+        setRecError(d.error || 'Crediting failed.');
+      } else {
+        setRec(d as ReconcileResult);
+        setRecPicked(new Set());
+        setNotice(`Credited ${d.summary?.credited ?? 0} deposit(s).`);
+        load(); // balances changed.
+      }
+    } catch (e) {
+      setRecError((e as Error).message);
+    } finally {
+      setRecCrediting(false);
+    }
+  }, [id, recPicked, load]);
 
   const usdFormValid =
     usdForm.identificationNumber.trim().length >= 3 &&
@@ -1368,6 +1480,139 @@ export default function UserDetailPage() {
                 </div>
               )}
             </div>
+          </section>
+
+          {/* Deposit reconciliation — recover deposits that never credited. */}
+          <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-gray-900">Deposit reconciliation</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Reads what Maplerad actually recorded for this customer and shows which deposits
+              reached the in-app balance and which did not. Use this when a user says a deposit
+              didn’t show up. Amounts are shown as the net that would land — review them before
+              crediting. Crediting is idempotent: it shares one key with the deposit webhook, so a
+              deposit can never be credited twice. Requires an enrolled Maplerad customer.
+            </p>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                onClick={loadReconciliation}
+                disabled={recLoading}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {recLoading ? 'Checking…' : 'Check Maplerad deposits'}
+              </button>
+              {rec && rec.summary.creditableMissing > 0 && (
+                <button
+                  onClick={creditReconciled}
+                  disabled={recCrediting || recPicked.size === 0}
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {recCrediting ? 'Crediting…' : `Credit selected (${recPicked.size})`}
+                </button>
+              )}
+            </div>
+
+            {recError && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {recError}
+              </div>
+            )}
+
+            {rec && (
+              <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+                <div className="flex flex-wrap gap-4 text-gray-700">
+                  <span>
+                    <strong>{rec.summary.total}</strong> transactions
+                  </span>
+                  <span>
+                    <strong>{rec.summary.alreadyCredited}</strong> already credited
+                  </span>
+                  <span>
+                    <strong>{rec.summary.creditableMissing}</strong> creditable & missing
+                  </span>
+                  {rec.summary.credited !== undefined && (
+                    <span className="text-green-700">
+                      <strong>{rec.summary.credited}</strong> credited just now
+                    </span>
+                  )}
+                </div>
+
+                {rec.items.length === 0 ? (
+                  <p className="mt-3 text-gray-700">Maplerad has no transactions for this customer.</p>
+                ) : (
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="border-b border-gray-200 text-left text-gray-500">
+                        <tr>
+                          <th className="py-2 pr-3 font-medium"> </th>
+                          <th className="py-2 pr-3 font-medium">Date</th>
+                          <th className="py-2 pr-3 font-medium">Type</th>
+                          <th className="py-2 pr-3 font-medium">Net to credit</th>
+                          <th className="py-2 pr-3 font-medium">Provider amount</th>
+                          <th className="py-2 pr-3 font-medium">From</th>
+                          <th className="py-2 font-medium">State</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rec.items.map((it) => {
+                          const canPick = it.creditable && !it.alreadyCredited;
+                          return (
+                            <tr key={it.id} className="border-b border-gray-100 align-top">
+                              <td className="py-2 pr-3">
+                                {canPick ? (
+                                  <input
+                                    type="checkbox"
+                                    checked={recPicked.has(it.id)}
+                                    onChange={() => toggleRecPick(it.id)}
+                                    className="h-4 w-4"
+                                  />
+                                ) : null}
+                              </td>
+                              <td className="py-2 pr-3 text-gray-700">
+                                {formatDateTime(it.createdAt)}
+                              </td>
+                              <td className="py-2 pr-3 text-gray-700">
+                                {show(it.type)}
+                                <span className="block text-xs text-gray-400">
+                                  {show(it.entry)} · {show(it.currency)}
+                                </span>
+                              </td>
+                              <td className="py-2 pr-3 font-medium text-gray-900">
+                                {it.netDisplay ?? DASH}
+                              </td>
+                              <td className="py-2 pr-3 font-mono text-xs text-gray-600">
+                                {show(it.rawAmount)}
+                              </td>
+                              <td className="py-2 pr-3 text-gray-700">
+                                {show(it.source.bankName)}
+                                {it.source.accountNumber ? (
+                                  <span className="block font-mono text-xs text-gray-400">
+                                    {it.source.accountNumber}
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="py-2">
+                                {it.alreadyCredited ? (
+                                  <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                                    Credited
+                                  </span>
+                                ) : it.creditable ? (
+                                  <span className="inline-flex rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
+                                    Missing
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-gray-400">{show(it.reason)}</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           {/* Where this account connects from. */}
