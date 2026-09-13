@@ -203,13 +203,15 @@ type StuckBill = {
   amountMinor: string;
   providerRef: string | null;
   createdAt: string;
-  confirmedByProvider: boolean;
+  providerStatus: string | null;
+  /** How it would be settled: completed, or failed-and-refunded. */
+  resolution: 'complete' | 'refund' | null;
   reason?: string;
 };
 type BillReconcileResult = {
   ok: true;
   items: StuckBill[];
-  summary: { total: number; confirmed: number; settled?: number };
+  summary: { total: number; resolvable: number; settled?: number };
 };
 
 /** One row from GET/POST /api/users/{id}/reconcile-deposits. */
@@ -1693,10 +1695,11 @@ export default function UserDetailPage() {
             <h2 className="text-lg font-semibold text-gray-900">Unsettled bills</h2>
             <p className="mt-1 text-sm text-gray-600">
               Bills settle on a provider webhook. When one never arrives the purchase stays
-              “processing” — the customer has been debited and nobody can say whether the airtime
-              landed. This checks each one against Maplerad’s own purchase history.
-              Being listed there proves it went through; <strong>not</strong> being listed proves
-              nothing, so an unconfirmed bill is left exactly as it is rather than refunded.
+              “processing” — the customer has been debited and nobody can say whether the bill
+              landed. This asks Maplerad about each one <em>by its own transaction id</em>: a bill
+              it reports successful is completed, one it reports failed is refunded (amount and
+              margin), and one it still calls pending is left exactly as it is, because “no answer
+              yet” is not an outcome.
             </p>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1707,13 +1710,13 @@ export default function UserDetailPage() {
               >
                 {billsLoading ? 'Checking…' : 'Check unsettled bills'}
               </button>
-              {bills && bills.summary.confirmed > 0 && (
+              {bills && bills.summary.resolvable > 0 && (
                 <button
                   onClick={settleStuckBills}
                   disabled={billsSettling}
                   className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {billsSettling ? 'Settling…' : `Settle confirmed (${bills.summary.confirmed})`}
+                  {billsSettling ? 'Settling…' : `Settle resolved (${bills.summary.resolvable})`}
                 </button>
               )}
             </div>
@@ -1731,7 +1734,7 @@ export default function UserDetailPage() {
                     <strong>{bills.summary.total}</strong> unsettled
                   </span>
                   <span>
-                    <strong>{bills.summary.confirmed}</strong> confirmed by provider
+                    <strong>{bills.summary.resolvable}</strong> the provider can resolve
                   </span>
                   {bills.summary.settled !== undefined && (
                     <span className="text-green-700">
@@ -1751,6 +1754,7 @@ export default function UserDetailPage() {
                           <th className="py-2 pr-3 font-medium">Service</th>
                           <th className="py-2 pr-3 font-medium">Amount</th>
                           <th className="py-2 pr-3 font-medium">Customer</th>
+                          <th className="py-2 pr-3 font-medium">Provider says</th>
                           <th className="py-2 font-medium">State</th>
                         </tr>
                       </thead>
@@ -1771,10 +1775,17 @@ export default function UserDetailPage() {
                             <td className="py-2 pr-3 font-mono text-xs text-gray-600">
                               {show(b.customer)}
                             </td>
+                            <td className="py-2 pr-3 text-xs text-gray-700">
+                              {show(b.providerStatus)}
+                            </td>
                             <td className="py-2">
-                              {b.confirmedByProvider ? (
-                                <span className="inline-flex rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
-                                  Confirmed — settle it
+                              {b.resolution === 'complete' ? (
+                                <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                                  Succeeded — complete it
+                                </span>
+                              ) : b.resolution === 'refund' ? (
+                                <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                                  Failed — refund it
                                 </span>
                               ) : (
                                 <span className="text-xs text-gray-400">{show(b.reason)}</span>

@@ -60,8 +60,12 @@ export interface VerifiedTransaction {
   summary?: string;
   reason?: string | null;
   reference?: string | null;
-  /** The destination virtual account id — matches a wallet's custody ref. */
-  account_id?: string;
+  /**
+   * The destination virtual account id — matches a wallet's custody ref.
+   * Explicitly nullable: a crypto collection has no virtual account and the
+   * provider sends `null` there.
+   */
+  account_id?: string | null;
   created_at?: string;
   updated_at?: string;
   customer?: {
