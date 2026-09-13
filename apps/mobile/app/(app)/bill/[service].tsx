@@ -4,7 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/components/brand';
-import { api, ApiError, type BillServiceConfig } from '@/services/api';
+import { api, ApiError, type BillCashback, type BillServiceConfig } from '@/services/api';
+import DataPlanGrid from '@/components/DataPlanGrid';
 
 type Stage = 'form' | 'review' | 'done';
 
@@ -22,6 +23,7 @@ export default function BillServiceScreen() {
   const service = String(serviceParam ?? '').toLowerCase();
 
   const [config, setConfig] = useState<BillServiceConfig | null>(null);
+  const [cashback, setCashback] = useState<BillCashback | undefined>();
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState(0);
   const [billerId, setBillerId] = useState('');
@@ -38,9 +40,10 @@ export default function BillServiceScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const { services } = await api.getBillCatalog();
+        const { services, cashback: cb } = await api.getBillCatalog();
         const c = services.find((s) => s.service === service) ?? null;
         setConfig(c);
+        setCashback(cb);
         if (c) setBillerId(c.billers.find((b) => !b.comingSoon)?.id ?? '');
         await api.ensureProvisioned();
         const { balances } = await api.getBalances();
@@ -268,25 +271,38 @@ export default function BillServiceScreen() {
               </>
             ) : (
               <>
-                <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-2">Select plan</Text>
-                {plans.map((p) => {
-                  const active = planId === p.id;
-                  return (
-                    <TouchableOpacity
-                      key={p.id}
-                      onPress={() => setPlanId(p.id)}
-                      className="flex-row items-center justify-between rounded-2xl p-4 mb-2"
-                      style={{
-                        backgroundColor: colors.card,
-                        borderWidth: 1,
-                        borderColor: active ? colors.brand : colors.border,
-                      }}
-                    >
-                      <Text className="text-ink dark:text-ink-dark font-semibold">{p.name}</Text>
-                      <Text className="text-ink dark:text-ink-dark font-bold">₦{Number(p.amount).toLocaleString()}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                {service === 'data' ? (
+                  // Data bundles come back ranked by value, so they get the grid
+                  // that leads with the best deals rather than a flat list.
+                  <DataPlanGrid
+                    plans={plans}
+                    selectedId={planId}
+                    onSelect={setPlanId}
+                    cashback={cashback}
+                  />
+                ) : (
+                  <>
+                    <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-2">Select plan</Text>
+                    {plans.map((p) => {
+                      const active = planId === p.id;
+                      return (
+                        <TouchableOpacity
+                          key={p.id}
+                          onPress={() => setPlanId(p.id)}
+                          className="flex-row items-center justify-between rounded-2xl p-4 mb-2"
+                          style={{
+                            backgroundColor: colors.card,
+                            borderWidth: 1,
+                            borderColor: active ? colors.brand : colors.border,
+                          }}
+                        >
+                          <Text className="text-ink dark:text-ink-dark font-semibold">{p.name}</Text>
+                          <Text className="text-ink dark:text-ink-dark font-bold">₦{Number(p.amount).toLocaleString()}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+                )}
               </>
             )}
 
