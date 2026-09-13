@@ -11,6 +11,8 @@ const h = vi.hoisted(() => ({
   createWithdrawal: vi.fn(),
   getSpotUsdt: vi.fn(),
   getUsdtNgnRate: vi.fn(),
+  getWithdrawalMinUsd: vi.fn(),
+  usdCents: vi.fn(),
   assertFeatureEnabled: vi.fn(),
 }));
 
@@ -50,8 +52,14 @@ vi.mock("@/custody", () => ({
   getCustodyProvider: () => ({ createWithdrawal: h.createWithdrawal }),
 }));
 vi.mock("@/market", () => ({ getPriceFeed: () => ({ getSpotUsdt: h.getSpotUsdt }) }));
-vi.mock("@/lib/settings", () => ({ getUsdtNgnRate: h.getUsdtNgnRate }));
-vi.mock("@/lib/rates", () => ({ cryptoToNgnKobo: () => 1_000_000n }));
+vi.mock("@/lib/settings", () => ({
+  getUsdtNgnRate: h.getUsdtNgnRate,
+  getWithdrawalMinUsd: h.getWithdrawalMinUsd,
+}));
+vi.mock("@/lib/rates", () => ({
+  cryptoToNgnKobo: () => 1_000_000n,
+  cryptoToUsdCents: () => h.usdCents(),
+}));
 vi.mock("@/lib/limits", () => ({
   assertWithdrawalAllowed: vi.fn(),
   sumTodayWithdrawalsNgnKobo: vi.fn().mockResolvedValue(0n),
@@ -100,6 +108,8 @@ describe("POST /api/withdrawals/crypto — receive-only chains are refused up fr
     h.userFindUnique.mockResolvedValue({ id: "u1", kycTier: 3, instantWithdrawal: true });
     h.assertFeatureEnabled.mockResolvedValue(undefined);
     h.isManualAsset.mockResolvedValue(false);
+    h.getWithdrawalMinUsd.mockResolvedValue(0); // no floor unless a test sets one
+    h.usdCents.mockReturnValue(1_000n);
     h.txFindUnique.mockResolvedValue(null);
     h.balanceUpdateMany.mockResolvedValue({ count: 1 });
     h.txCreate.mockResolvedValue({ id: "tx1", status: "PROCESSING" });
@@ -131,5 +141,43 @@ describe("POST /api/withdrawals/crypto — receive-only chains are refused up fr
     const res = await call({ ...base, network: "TRON" });
     expect(res.status).toBe(200);
     expect(h.createWithdrawal).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/withdrawals/crypto — the dollar floor", () => {
+  beforeEach(() => {
+    Object.values(h).forEach((fn) => fn.mockReset());
+    h.requireUser.mockResolvedValue({ id: "u1" });
+    h.userFindUnique.mockResolvedValue({ id: "u1", kycTier: 3, instantWithdrawal: true });
+    h.assertFeatureEnabled.mockResolvedValue(undefined);
+    h.isManualAsset.mockResolvedValue(false);
+    h.txFindUnique.mockResolvedValue(null);
+    h.balanceUpdateMany.mockResolvedValue({ count: 1 });
+    h.txCreate.mockResolvedValue({ id: "tx1", status: "PROCESSING" });
+    h.getUsdtNgnRate.mockResolvedValue(1600);
+    h.getSpotUsdt.mockResolvedValue({ mul: () => ({}) });
+    h.createWithdrawal.mockResolvedValue({ txHash: "0xabc" });
+    h.getWithdrawalMinUsd.mockResolvedValue(5);
+  });
+
+  it("refuses a withdrawal worth less than the floor, before any money is reserved", async () => {
+    h.usdCents.mockReturnValue(499n); // $4.99
+    const res = await call({ ...base, network: "SOLANA", toAddress: "B".repeat(32) });
+    expect(res.status).toBe(422);
+    expect(h.balanceUpdateMany).not.toHaveBeenCalled();
+    expect(h.createWithdrawal).not.toHaveBeenCalled();
+  });
+
+  it("allows one worth exactly the floor", async () => {
+    h.usdCents.mockReturnValue(500n); // $5.00 — the floor is a minimum, not a threshold
+    const res = await call({ ...base, network: "SOLANA", toAddress: "B".repeat(32) });
+    expect(res.status).toBe(200);
+  });
+
+  it("lets everything through when no floor is set", async () => {
+    h.getWithdrawalMinUsd.mockResolvedValue(0);
+    h.usdCents.mockReturnValue(1n); // one cent
+    const res = await call({ ...base, network: "SOLANA", toAddress: "B".repeat(32) });
+    expect(res.status).toBe(200);
   });
 });

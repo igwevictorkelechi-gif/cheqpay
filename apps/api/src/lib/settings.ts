@@ -23,6 +23,17 @@ export const SETTING_KEYS = {
   // rather than the synthetic USDT peg — so SWAP_SPREAD_BPS never reaches it
   // and it needs a margin of its own.
   FX_MARGIN_BPS: "fx_margin_bps",
+  // The two sides of that spread. A dealer sells the scarce currency dearer
+  // than it buys it, and in Nigeria dollars are the scarce side — so these
+  // exist to be set unevenly. Each falls back to FX_MARGIN_BPS when unset.
+  FX_MARGIN_BUY_USD_BPS: "fx_margin_buy_usd_bps", // user sells us USD (USD→NGN)
+  FX_MARGIN_SELL_USD_BPS: "fx_margin_sell_usd_bps", // user buys USD (NGN→USD)
+  // Floors on what a user may take out. Deposits have no floor here on purpose:
+  // an inbound transfer has already arrived by the time we see it, so the only
+  // honest minimum on that side is one shown before they send (see /api/limits).
+  WITHDRAWAL_MIN_NGN: "withdrawal_min_ngn", // whole naira, bank payouts
+  WITHDRAWAL_MIN_USD: "withdrawal_min_usd", // USD value, crypto withdrawals
+  DEPOSIT_MIN_USD: "deposit_min_usd", // guidance shown to the user, not enforced
   // Cashback rewards, paid in NGN. Rates are per transaction kind because the
   // economics differ (a bill carries margin, a deposit carries a fee, a payout
   // carries neither), and all default to 0 so nothing pays out until set.
@@ -206,6 +217,110 @@ export function getFxMarginBps(): Promise<number> {
 
 export async function setFxMarginBps(bps: number, updatedBy?: string) {
   await upsertSetting(SETTING_KEYS.FX_MARGIN_BPS, String(bps), updatedBy);
+}
+
+/**
+ * Which side of the dollar the business is taking.
+ *
+ * "sell_usd" is the user buying dollars from us (NGN→USD); "buy_usd" is the
+ * user selling dollars to us (USD→NGN). Named from OUR side, the way a dealer
+ * quotes a book, so that a wider `sell_usd` unambiguously means dollars leave
+ * dearer than they arrive.
+ */
+export type FxSide = "buy_usd" | "sell_usd";
+
+const FX_SIDE_KEYS: Record<FxSide, string> = {
+  buy_usd: SETTING_KEYS.FX_MARGIN_BUY_USD_BPS,
+  sell_usd: SETTING_KEYS.FX_MARGIN_SELL_USD_BPS,
+};
+
+/**
+ * The spread for one side of the book, falling back to the single FX_MARGIN_BPS
+ * when that side has no rate of its own — so a business that wants one
+ * symmetric number sets only that, and this stays a pure widening of it.
+ *
+ * Because the margin is always withheld from the leg the USER RECEIVES, both
+ * sides work out in the business's favour without any sign juggling: withhold
+ * on the way out and we sold dollars above mid; withhold on the way back and
+ * we bought them below it.
+ */
+export async function getFxSideMarginBps(side: FxSide): Promise<number> {
+  const row = await prisma.platformSetting.findUnique({
+    where: { key: FX_SIDE_KEYS[side] },
+  });
+  if (row) return parseNonNegNumber(row.value, FX_SIDE_KEYS[side]);
+  return getNumberSetting(SETTING_KEYS.FX_MARGIN_BPS, 0);
+}
+
+/** Both sides plus the shared fallback, for the admin dashboard. */
+export async function getFxMargins(): Promise<{
+  defaultBps: number;
+  buyUsdBps: number | null;
+  sellUsdBps: number | null;
+}> {
+  const [defaultBps, rows] = await Promise.all([
+    getNumberSetting(SETTING_KEYS.FX_MARGIN_BPS, 0),
+    prisma.platformSetting.findMany({
+      where: { key: { in: [FX_SIDE_KEYS.buy_usd, FX_SIDE_KEYS.sell_usd] } },
+    }),
+  ]);
+  const byKey = new Map(rows.map((r) => [r.key, r.value]));
+  const read = (key: string) => {
+    const raw = byKey.get(key);
+    return raw === undefined ? null : parseNonNegNumber(raw, key);
+  };
+  return {
+    defaultBps,
+    buyUsdBps: read(FX_SIDE_KEYS.buy_usd),
+    sellUsdBps: read(FX_SIDE_KEYS.sell_usd),
+  };
+}
+
+/** Set one side's spread, or clear it back to the shared default with null. */
+export async function setFxSideMarginBps(
+  side: FxSide,
+  bps: number | null,
+  updatedBy?: string,
+): Promise<void> {
+  const key = FX_SIDE_KEYS[side];
+  if (bps === null) {
+    await prisma.platformSetting.deleteMany({ where: { key } });
+    return;
+  }
+  await upsertSetting(key, String(bps), updatedBy);
+}
+
+// --- Minimums ----------------------------------------------------------------
+
+/** Smallest NGN bank payout, in whole naira. 0 = no floor. */
+export function getWithdrawalMinNgn(): Promise<number> {
+  return getNumberSetting(SETTING_KEYS.WITHDRAWAL_MIN_NGN, 0);
+}
+
+/** Smallest crypto withdrawal, measured in USD value. 0 = no floor. */
+export function getWithdrawalMinUsd(): Promise<number> {
+  return getNumberSetting(SETTING_KEYS.WITHDRAWAL_MIN_USD, 0);
+}
+
+/**
+ * The deposit minimum we ADVERTISE, in USD. Deliberately not enforced anywhere:
+ * a deposit is an inbound transfer that has already settled by the time we hear
+ * about it, so the only place a minimum can honestly act is on the screen the
+ * user reads before sending. Refusing to credit what arrived would just be
+ * keeping their money.
+ */
+export function getDepositMinUsd(): Promise<number> {
+  return getNumberSetting(SETTING_KEYS.DEPOSIT_MIN_USD, 0);
+}
+
+export async function setWithdrawalMinNgn(ngn: number, updatedBy?: string) {
+  await upsertSetting(SETTING_KEYS.WITHDRAWAL_MIN_NGN, String(ngn), updatedBy);
+}
+export async function setWithdrawalMinUsd(usd: number, updatedBy?: string) {
+  await upsertSetting(SETTING_KEYS.WITHDRAWAL_MIN_USD, String(usd), updatedBy);
+}
+export async function setDepositMinUsd(usd: number, updatedBy?: string) {
+  await upsertSetting(SETTING_KEYS.DEPOSIT_MIN_USD, String(usd), updatedBy);
 }
 
 export async function setDepositFeeBps(bps: number, updatedBy?: string) {
