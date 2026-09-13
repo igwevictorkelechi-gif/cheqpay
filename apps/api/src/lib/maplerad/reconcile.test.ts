@@ -7,6 +7,9 @@ const h = vi.hoisted(() => ({
   findUserByAccount: vi.fn(),
   creditUser: vi.fn(),
   getDepositFeeBps: vi.fn(),
+  userFindFirst: vi.fn(),
+  cryptoTxFindFirst: vi.fn(),
+  walletFindMany: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -18,9 +21,9 @@ vi.mock("@cheqpay/db", () => ({
   TransactionType: { DEPOSIT: "DEPOSIT" },
   // settle.ts now reaches the crypto-collection path, which reads these.
   prisma: {
-    user: { findFirst: vi.fn() },
-    transaction: { findFirst: vi.fn() },
-    wallet: { findMany: vi.fn() },
+    user: { findFirst: h.userFindFirst },
+    transaction: { findFirst: h.cryptoTxFindFirst },
+    wallet: { findMany: h.walletFindMany },
   },
 }));
 vi.mock("./transactions", () => ({
@@ -79,6 +82,9 @@ beforeEach(() => {
   h.findUserByAccount.mockResolvedValue({ userId: "user-1" });
   h.creditUser.mockResolvedValue(undefined);
   h.getDepositFeeBps.mockResolvedValue(0);
+  h.userFindFirst.mockResolvedValue({ id: "user-1" });
+  h.cryptoTxFindFirst.mockResolvedValue(null);
+  h.walletFindMany.mockResolvedValue([]);
 });
 
 describe("previewReconciliation", () => {
@@ -178,5 +184,58 @@ describe("commitReconciliation", () => {
     // hasProcessed true means toItem marks it already-credited, so it isn't even a target.
     expect(h.creditUser).not.toHaveBeenCalled();
     expect(res.summary.credited).toBe(0);
+  });
+});
+
+describe("a stablecoin collection in the panel", () => {
+  /** The live USDT deposit, exactly as production returned it. */
+  const usdt = (): VerifiedTransaction =>
+    ({
+      id: "19cb3252-7665-40e3-8aff-6e29fd8db9aa",
+      status: "SUCCESS",
+      entry: "CREDIT",
+      type: "COLLECTION",
+      amount: 1000,
+      currency: "USDT",
+      channel: "CRYPTO",
+      summary: "USDT Deposit | BSC | 0xEB2d…",
+      reference: "0x9ef258…",
+      account_id: null,
+      customer: { id: "678f9b4a-5120-4cfd-bcc4-e73cdd9995ce" },
+      source: { bank_name: "BSC", account_number: "0xEB2d…" },
+      created_at: "2026-09-13T14:15:37Z",
+    }) as VerifiedTransaction;
+
+  it("shows it as creditable at the offramped USD value, not 'unsupported currency'", async () => {
+    withDeposits([usdt()]);
+    const res = await previewReconciliation("cust");
+    expect(res.items[0]).toMatchObject({
+      currency: "USDT",
+      asset: "USD", // BSC cannot be withdrawn from, so it offramps
+      amountMinor: "1000",
+      feeMinor: "0", // crypto deposits carry no platform fee
+      netDisplay: "$10.00",
+      creditable: true,
+      alreadyCredited: false,
+    });
+    expect(res.items[0].reason).toBeUndefined();
+    expect(res.summary.creditableMissing).toBe(1);
+  });
+
+  it("shows it as already credited once it has been", async () => {
+    withDeposits([usdt()]);
+    h.cryptoTxFindFirst.mockResolvedValue({ id: "led-1" });
+    const res = await previewReconciliation("cust");
+    expect(res.items[0]).toMatchObject({ alreadyCredited: true, creditable: false });
+  });
+
+  it("explains, rather than crediting, when the owner cannot be placed", async () => {
+    withDeposits([usdt()]);
+    h.userFindFirst.mockResolvedValue(null);
+    const res = await previewReconciliation("cust");
+    expect(res.items[0]).toMatchObject({
+      creditable: false,
+      reason: "no user for this Maplerad customer",
+    });
   });
 });
