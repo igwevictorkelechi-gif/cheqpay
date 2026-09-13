@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { BillPlan } from "./bills";
 import {
   bucketFor,
+  isNightPlan,
+  parseBonus,
   formatSize,
   formatValidity,
   parseDays,
@@ -124,5 +126,33 @@ describe("valueDataPlans", () => {
       validityLabel: "30 Days",
       bucket: "monthly",
     });
+  });
+});
+
+describe("isNightPlan", () => {
+  it("spots the provider's night wording", () => {
+    expect(isNightPlan("500MB Night Plan")).toBe(true);
+    expect(isNightPlan("2GB midnight bundle")).toBe(true);
+    expect(isNightPlan("1GB off-peak")).toBe(true);
+    expect(isNightPlan("1GB · 30 days")).toBe(false);
+    expect(isNightPlan(null)).toBe(false);
+  });
+
+  it("is a flag, not a bucket — a night plan keeps its duration tab", () => {
+    const out = valueDataPlans([
+      plan({ id: "n", name: "500MB Night Plan · 1 day", amount: "100" }),
+    ]);
+    expect(out[0]).toMatchObject({ night: true, bucket: "daily" });
+  });
+});
+
+describe("parseBonus", () => {
+  it("reads a + segment and stops at a separator", () => {
+    expect(parseBonus("6GB + 2GB YouTube · 2 days")).toBe("2GB YouTube");
+    expect(parseBonus("12GB + 100 mins")).toBe("100 mins");
+  });
+  it("returns null when the name promises nothing extra", () => {
+    expect(parseBonus("1GB · 30 days")).toBeNull();
+    expect(parseBonus(null)).toBeNull();
   });
 });

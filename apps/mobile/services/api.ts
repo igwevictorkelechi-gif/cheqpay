@@ -149,6 +149,10 @@ export interface BillPlan {
   /** Naira per gigabyte, the metric the plans are ranked on. */
   nairaPerGb?: number | null;
   bucket?: 'daily' | 'weekly' | 'monthly' | 'extended' | 'other' | null;
+  /** A night / off-peak bundle. Also appears under its duration tab. */
+  night?: boolean;
+  /** An extra the bundle throws in, e.g. "2GB YouTube". */
+  bonusLabel?: string | null;
   /** One of the best deals, worth leading with. */
   hot?: boolean;
   /** The single best naira-per-gigabyte plan this biller sells. */

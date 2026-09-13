@@ -29,6 +29,18 @@ export interface PlanValue {
   /** Naira per gigabyte — the value metric everything is ranked on. */
   nairaPerGb: number | null;
   bucket: PlanBucket;
+  /**
+   * A night / off-peak bundle. It is a FLAG, not a bucket: a night plan still
+   * lasts a day or a month, so it belongs under its duration tab too and only
+   * additionally under "Extra Night".
+   */
+  night: boolean;
+  /**
+   * Anything the bundle throws in beyond the data itself — "2GB YouTube",
+   * "100 mins". Read from the provider's own name, never invented; null when
+   * the name carries no extra.
+   */
+  bonusLabel: string | null;
   /** True for the plans worth leading with (see pickHot). */
   hot: boolean;
   /** True for the single best naira-per-gigabyte plan in the list. */
@@ -113,6 +125,27 @@ export function formatValidity(days: number | null): string | null {
   return `${days} Days`;
 }
 
+/** A night / off-peak bundle, read from the provider's own wording. */
+export function isNightPlan(name: string | null | undefined): boolean {
+  return !!name && /\b(night|midnight|off[- ]?peak)\b/i.test(name);
+}
+
+/**
+ * The extra a bundle throws in, taken from the name.
+ *
+ * Only reads a "+" segment ("6GB + 2GB YouTube"), which is how providers
+ * actually write a bonus. Anything cleverer starts inventing perks from
+ * punctuation, and a perk we promise but cannot deliver is worse than no label.
+ */
+export function parseBonus(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const plus = name.indexOf("+");
+  if (plus === -1) return null;
+  // Stop at a separator so a trailing validity ("· 30 days") is not swept in.
+  const tail = name.slice(plus + 1).split(/[·|]/)[0].trim();
+  return tail.length >= 2 ? tail : null;
+}
+
 /**
  * Choose the plans to lead with.
  *
@@ -175,6 +208,8 @@ export function valueDataPlans(plans: BillPlan[], hotLimit = 8): ValuedPlan[] {
       validityLabel: formatValidity(days),
       nairaPerGb: nairaPerGb === null ? null : Number(nairaPerGb.toFixed(2)),
       bucket: bucketFor(days),
+      night: isNightPlan(p.name),
+      bonusLabel: parseBonus(p.name),
       hot: false,
       bestValue: false,
     };

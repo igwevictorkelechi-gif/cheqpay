@@ -51,6 +51,8 @@ export async function GET() {
           validityLabel: v.validityLabel ?? null,
           nairaPerGb: v.nairaPerGb ?? null,
           bucket: v.bucket ?? null,
+          night: v.night ?? false,
+          bonusLabel: v.bonusLabel ?? null,
           hot: v.hot ?? false,
           bestValue: v.bestValue ?? false,
         };

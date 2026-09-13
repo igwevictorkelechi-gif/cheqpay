@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/components/brand';
 import type { BillCashback, BillPlan } from '@/services/api';
 
@@ -8,23 +9,27 @@ import type { BillCashback, BillPlan } from '@/services/api';
  *
  * A provider returns bundles in its own storage order, which buries the good
  * deals — so the API ranks them by naira-per-gigabyte and flags the strongest
- * ones. This renders that ranking: "Best deals" leads with the best plan from
- * each duration (not just the cheapest per GB, which would be all monthly
- * bundles and nothing for someone who needs data today), and the duration tabs
- * let a customer who knows what they want go straight there.
+ * ones. This renders that ranking: HOT leads with the best plan from each
+ * duration (not just the cheapest per GB, which would be all monthly bundles
+ * and nothing for someone who needs data today), and the category tabs let a
+ * customer who knows what they want go straight there.
  *
  * Mirrors apps/web's DataPlanGrid so both apps present the same order; the
- * ranking itself lives on the server, not duplicated here.
+ * ranking itself lives on the server, not duplicated here. Every figure is one
+ * we actually hold — live price, the cashback rate the award path pays, and a
+ * bonus read from the provider's own bundle name.
  */
 
 type Bucket = NonNullable<BillPlan['bucket']>;
+type TabKey = Bucket | 'hot' | 'night';
 
-const TAB_LABELS: { key: Bucket | 'hot'; label: string }[] = [
-  { key: 'hot', label: 'Best deals' },
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'hot', label: 'HOT' },
+  { key: 'night', label: 'Extra Night' },
   { key: 'daily', label: 'Daily' },
   { key: 'weekly', label: 'Weekly' },
   { key: 'monthly', label: 'Monthly' },
-  { key: 'extended', label: 'Extended' },
+  { key: 'extended', label: '3-Month+' },
   { key: 'other', label: 'Other' },
 ];
 
@@ -47,6 +52,19 @@ function money(n: number): string {
   });
 }
 
+/** "250MB" -> ["250", "MB"], so the unit can be set smaller than the number. */
+function splitSize(label: string | null | undefined): [string, string] {
+  if (!label) return ['', ''];
+  const m = /^([\d.]+)\s*([A-Za-z]+)$/.exec(label);
+  return m ? [m[1], m[2]] : [label, ''];
+}
+
+function matches(p: BillPlan, tab: TabKey): boolean {
+  if (tab === 'hot') return !!p.hot;
+  if (tab === 'night') return !!p.night;
+  return (p.bucket ?? 'other') === tab;
+}
+
 export default function DataPlanGrid({
   plans,
   selectedId,
@@ -59,43 +77,67 @@ export default function DataPlanGrid({
   cashback?: BillCashback;
 }) {
   // Only offer tabs that actually hold something, so there are no dead tabs.
-  const tabs = useMemo(() => {
-    const present = new Set(plans.map((p) => p.bucket ?? 'other'));
-    return TAB_LABELS.filter((t) =>
-      t.key === 'hot' ? plans.some((p) => p.hot) : present.has(t.key as Bucket),
-    );
-  }, [plans]);
+  const tabs = useMemo(() => TABS.filter((t) => plans.some((p) => matches(p, t.key))), [plans]);
 
-  const [tab, setTab] = useState<Bucket | 'hot'>(() =>
-    plans.some((p) => p.hot) ? 'hot' : ((plans[0]?.bucket ?? 'other') as Bucket),
+  const [tab, setTab] = useState<TabKey>(() => tabs[0]?.key ?? 'hot');
+  const [dense, setDense] = useState(true);
+
+  const shown = useMemo(
+    // The API already returns plans best-value first, so no re-sorting here.
+    () => plans.filter((p) => matches(p, tab)),
+    [plans, tab],
   );
 
-  const shown = useMemo(() => {
-    // The API already returns plans best-value first, so no re-sorting here.
-    if (tab === 'hot') return plans.filter((p) => p.hot);
-    return plans.filter((p) => (p.bucket ?? 'other') === tab);
-  }, [plans, tab]);
+  const cols = dense ? 3 : 2;
+  const width = dense ? '31.5%' : '48%';
+  // Pad the last row so three-up cards stay left-aligned instead of spreading.
+  const fillers = (cols - (shown.length % cols)) % cols;
 
   if (plans.length === 0) {
     return (
-      <Text className="text-muted dark:text-muted-dark text-sm mt-4">
-        No plans available right now.
-      </Text>
+      <View className="rounded-3xl p-5 mt-4" style={{ backgroundColor: colors.card }}>
+        <Text className="text-muted dark:text-muted-dark text-sm">
+          No plans available right now.
+        </Text>
+      </View>
     );
   }
 
   return (
-    <View className="mt-6">
-      <Text className="text-muted dark:text-muted-dark text-sm font-semibold mb-3">
-        Data plans
-      </Text>
+    <View className="rounded-3xl p-4 mt-4" style={{ backgroundColor: colors.card }}>
+      <View className="flex-row items-center justify-between mb-4">
+        <Text className="text-ink dark:text-ink-dark font-extrabold" style={{ fontSize: 20 }}>
+          Data Plans
+        </Text>
+        <View className="flex-row items-center">
+          <TouchableOpacity
+            onPress={() => setDense(true)}
+            accessibilityLabel="Compact grid"
+            className="mr-3"
+            style={{ minHeight: 44, justifyContent: 'center' }}
+          >
+            <Ionicons name="grid" size={22} color={dense ? colors.brand : colors.muted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setDense(false)}
+            accessibilityLabel="Large grid"
+            style={{ minHeight: 44, justifyContent: 'center' }}
+          >
+            <Ionicons
+              name="apps"
+              size={22}
+              color={!dense ? colors.brand : colors.muted}
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
 
-      {/* Duration tabs */}
+      {/* Category tabs */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         className="mb-4"
-        contentContainerStyle={{ paddingRight: 20 }}
+        contentContainerStyle={{ paddingRight: 16 }}
       >
         {tabs.map((t) => {
           const active = tab === t.key;
@@ -104,7 +146,7 @@ export default function DataPlanGrid({
               key={t.key}
               onPress={() => setTab(t.key)}
               activeOpacity={0.8}
-              className="mr-5 pb-2"
+              className="mr-6 pb-1.5"
               style={{
                 minHeight: 44,
                 justifyContent: 'flex-end',
@@ -113,8 +155,8 @@ export default function DataPlanGrid({
               }}
             >
               <Text
-                className="text-sm font-bold"
-                style={{ color: active ? colors.ink : colors.muted }}
+                className="font-bold"
+                style={{ fontSize: 15, color: active ? colors.ink : colors.muted }}
               >
                 {t.label}
               </Text>
@@ -127,60 +169,82 @@ export default function DataPlanGrid({
         {shown.map((p) => {
           const cb = cashbackNaira(p.amount, cashback);
           const active = selectedId === p.id;
+          const [num, unit] = splitSize(p.sizeLabel);
+          const footer = p.bonusLabel ?? (p.night ? 'Night Plan' : null);
+
           return (
             <TouchableOpacity
               key={p.id}
               onPress={() => onSelect(p.id)}
               activeOpacity={0.85}
-              className="rounded-2xl p-3 mb-3"
+              className="rounded-2xl mb-3 overflow-hidden"
               style={{
-                width: '48%',
-                minHeight: 112,
-                backgroundColor: colors.card,
+                width,
+                backgroundColor: colors.surface,
                 borderWidth: 1,
                 borderColor: active ? colors.brand : colors.border,
               }}
             >
               {p.bestValue ? (
                 <View
-                  className="rounded-full px-2 py-0.5 self-start mb-1"
-                  style={{ backgroundColor: colors.brand }}
+                  className="absolute right-0 top-0 px-1.5 py-0.5"
+                  style={{ backgroundColor: colors.brand, borderBottomLeftRadius: 8, zIndex: 1 }}
                 >
-                  <Text className="text-white font-bold" style={{ fontSize: 9 }}>
-                    BEST VALUE
+                  <Text className="text-white font-bold" style={{ fontSize: 8 }}>
+                    BEST
                   </Text>
                 </View>
               ) : null}
 
-              <Text
-                className="text-ink dark:text-ink-dark font-extrabold"
-                style={{ fontSize: 20 }}
-              >
-                {p.sizeLabel ?? p.name}
-              </Text>
-              {p.validityLabel ? (
-                <Text className="text-muted dark:text-muted-dark text-xs mt-0.5">
-                  {p.validityLabel}
+              <View className="px-2.5 pt-4 pb-2.5">
+                <Text className="text-ink dark:text-ink-dark font-extrabold">
+                  <Text style={{ fontSize: 22 }}>{num || p.name}</Text>
+                  {unit ? <Text style={{ fontSize: 13 }}>{unit}</Text> : null}
                 </Text>
-              ) : null}
+                {p.validityLabel ? (
+                  <Text className="text-muted dark:text-muted-dark text-sm mt-1.5">
+                    {p.validityLabel}
+                  </Text>
+                ) : null}
 
-              <Text className="text-ink dark:text-ink-dark font-bold text-base mt-auto pt-2">
-                ₦{money(Number(p.amount))}
-              </Text>
+                <Text className="text-ink dark:text-ink-dark text-base mt-2">
+                  ₦{money(Number(p.amount))}
+                </Text>
 
-              {cb !== null ? (
-                <Text className="text-xs font-semibold" style={{ color: colors.brand }}>
-                  ₦{money(cb)} Cashback
-                </Text>
-              ) : null}
-              {p.nairaPerGb !== null && p.nairaPerGb !== undefined ? (
-                <Text className="text-muted dark:text-muted-dark" style={{ fontSize: 10 }}>
-                  ₦{money(Math.round(p.nairaPerGb))}/GB
-                </Text>
+                {cb !== null ? (
+                  <Text className="text-xs font-semibold" style={{ color: colors.brand }}>
+                    ₦{money(cb)} Cashback
+                  </Text>
+                ) : null}
+                {p.nairaPerGb !== null && p.nairaPerGb !== undefined ? (
+                  <Text className="text-muted dark:text-muted-dark" style={{ fontSize: 10 }}>
+                    ₦{money(Math.round(p.nairaPerGb))}/GB
+                  </Text>
+                ) : null}
+              </View>
+
+              {footer ? (
+                <View
+                  className="flex-row items-center justify-between px-2.5 py-1"
+                  style={{ backgroundColor: 'rgba(245,158,11,0.15)' }}
+                >
+                  <Text
+                    numberOfLines={1}
+                    className="font-semibold flex-1"
+                    style={{ fontSize: 10, color: '#F59E0B' }}
+                  >
+                    {footer}
+                  </Text>
+                  <Ionicons name="information-circle" size={11} color="#F59E0B" />
+                </View>
               ) : null}
             </TouchableOpacity>
           );
         })}
+
+        {Array.from({ length: fillers }).map((_, i) => (
+          <View key={`filler-${i}`} style={{ width }} />
+        ))}
       </View>
     </View>
   );

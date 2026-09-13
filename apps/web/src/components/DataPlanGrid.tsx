@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Grid, LayoutGrid, Info } from "lucide-react";
 import type { BillCashback, BillPlan } from "@/services/api";
 
 /**
@@ -8,23 +9,26 @@ import type { BillCashback, BillPlan } from "@/services/api";
  *
  * A provider returns bundles in its own storage order, which buries the good
  * deals — so the API ranks them by naira-per-gigabyte and flags the strongest
- * ones. This renders that ranking: "Best deals" leads with the best plan from
- * each duration (not just the cheapest per GB, which would be five monthly
- * bundles and nothing for someone who needs data today), and the duration tabs
- * let a customer who knows what they want go straight there.
+ * ones. This renders that ranking: HOT leads with the best plan from each
+ * duration (not just the cheapest per GB, which would be all monthly bundles
+ * and nothing for someone who needs data today), and the category tabs let a
+ * customer who knows what they want go straight there.
  *
- * Every number shown is real: the price is the provider's live price and the
- * cashback is computed from the same rate the award path pays.
+ * Every figure shown is one we actually hold: the provider's live price, the
+ * cashback computed from the same rate the award path pays, and a bonus label
+ * read from the provider's own bundle name. Nothing is illustrative.
  */
 
 type Bucket = NonNullable<BillPlan["bucket"]>;
+type TabKey = Bucket | "hot" | "night";
 
-const TAB_LABELS: { key: Bucket | "hot"; label: string }[] = [
-  { key: "hot", label: "Best deals" },
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "hot", label: "HOT" },
+  { key: "night", label: "Extra Night" },
   { key: "daily", label: "Daily" },
   { key: "weekly", label: "Weekly" },
   { key: "monthly", label: "Monthly" },
-  { key: "extended", label: "Extended" },
+  { key: "extended", label: "3-Month+" },
   { key: "other", label: "Other" },
 ];
 
@@ -47,6 +51,19 @@ function money(n: number): string {
   });
 }
 
+/** "250MB" -> ["250", "MB"], so the unit can be set smaller than the number. */
+function splitSize(label: string | null | undefined): [string, string] {
+  if (!label) return ["", ""];
+  const m = /^([\d.]+)\s*([A-Za-z]+)$/.exec(label);
+  return m ? [m[1], m[2]] : [label, ""];
+}
+
+function matches(p: BillPlan, tab: TabKey): boolean {
+  if (tab === "hot") return !!p.hot;
+  if (tab === "night") return !!p.night;
+  return (p.bucket ?? "other") === tab;
+}
+
 export default function DataPlanGrid({
   plans,
   selectedId,
@@ -59,44 +76,61 @@ export default function DataPlanGrid({
   cashback?: BillCashback;
 }) {
   // Only offer tabs that actually hold something, so there are no dead tabs.
-  const tabs = useMemo(() => {
-    const present = new Set(plans.map((p) => p.bucket ?? "other"));
-    return TAB_LABELS.filter(
-      (t) => (t.key === "hot" ? plans.some((p) => p.hot) : present.has(t.key as Bucket)),
-    );
-  }, [plans]);
-
-  const [tab, setTab] = useState<Bucket | "hot">(() =>
-    plans.some((p) => p.hot) ? "hot" : ((plans[0]?.bucket ?? "other") as Bucket),
+  const tabs = useMemo(
+    () => TABS.filter((t) => plans.some((p) => matches(p, t.key))),
+    [plans],
   );
 
-  const shown = useMemo(() => {
+  const [tab, setTab] = useState<TabKey>(() => tabs[0]?.key ?? "hot");
+  const [dense, setDense] = useState(true);
+
+  const shown = useMemo(
     // The API already returns plans best-value first, so no re-sorting here.
-    if (tab === "hot") return plans.filter((p) => p.hot);
-    return plans.filter((p) => (p.bucket ?? "other") === tab);
-  }, [plans, tab]);
+    () => plans.filter((p) => matches(p, tab)),
+    [plans, tab],
+  );
 
   if (plans.length === 0) {
-    return <p className="mt-4 text-sm text-muted">No plans available right now.</p>;
+    return (
+      <div className="mt-6 rounded-3xl bg-card p-5">
+        <p className="text-sm text-muted">No plans available right now.</p>
+      </div>
+    );
   }
 
   return (
-    <div className="mt-6">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm font-semibold text-muted">Data plans</p>
+    <div className="mt-4 rounded-3xl bg-card p-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-extrabold text-ink">Data Plans</h2>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setDense(true)}
+            aria-label="Compact grid"
+            aria-pressed={dense}
+            className={dense ? "text-brand" : "text-muted"}
+          >
+            <Grid className="h-6 w-6" />
+          </button>
+          <button
+            onClick={() => setDense(false)}
+            aria-label="Large grid"
+            aria-pressed={!dense}
+            className={!dense ? "text-brand" : "text-muted"}
+          >
+            <LayoutGrid className="h-6 w-6" />
+          </button>
+        </div>
       </div>
 
-      {/* Duration tabs */}
-      <div className="-mx-5 mb-4 overflow-x-auto px-5">
-        <div className="flex w-max gap-5 border-b border-border">
+      {/* Category tabs */}
+      <div className="-mx-4 mb-4 overflow-x-auto px-4">
+        <div className="flex w-max gap-6">
           {tabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`min-h-[44px] whitespace-nowrap border-b-2 px-1 pb-2 text-sm font-semibold transition-colors ${
-                tab === t.key
-                  ? "border-brand text-ink"
-                  : "border-transparent text-muted hover:text-ink"
+              className={`min-h-[44px] whitespace-nowrap border-b-2 pb-1.5 text-base font-bold transition-colors ${
+                tab === t.key ? "border-brand text-ink" : "border-transparent text-muted"
               }`}
             >
               {t.label}
@@ -105,40 +139,56 @@ export default function DataPlanGrid({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className={`grid gap-3 ${dense ? "grid-cols-3" : "grid-cols-2"}`}>
         {shown.map((p) => {
           const cb = cashbackNaira(p.amount, cashback);
           const selected = selectedId === p.id;
+          const [num, unit] = splitSize(p.sizeLabel);
+          const footer = p.bonusLabel ?? (p.night ? "Night Plan" : null);
+
           return (
             <button
               key={p.id}
               onClick={() => onSelect(p.id)}
-              className={`relative flex min-h-[112px] flex-col rounded-2xl border p-3 text-left transition-transform active:scale-[0.98] ${
-                selected ? "border-brand bg-card ring-1 ring-brand" : "border-border bg-card"
-              }`}
+              className={`relative flex flex-col overflow-hidden rounded-2xl border text-left transition-transform active:scale-[0.98] ${
+                selected ? "border-brand ring-1 ring-brand" : "border-border"
+              } bg-surface`}
             >
               {p.bestValue && (
-                <span className="absolute right-2 top-2 rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand">
-                  Best value
+                <span className="absolute right-0 top-0 rounded-bl-lg bg-brand px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">
+                  Best
                 </span>
               )}
 
-              <span className="text-xl font-extrabold leading-tight text-ink">
-                {p.sizeLabel ?? p.name}
-              </span>
-              {p.validityLabel && (
-                <span className="mt-0.5 text-xs text-muted">{p.validityLabel}</span>
-              )}
+              <div className="flex flex-1 flex-col px-2.5 pb-2.5 pt-4">
+                <p className="font-extrabold leading-none text-ink">
+                  <span className="text-2xl">{num || p.name}</span>
+                  {unit && <span className="ml-0.5 text-sm">{unit}</span>}
+                </p>
+                {p.validityLabel && (
+                  <p className="mt-1.5 text-sm text-muted">{p.validityLabel}</p>
+                )}
 
-              <span className="mt-auto pt-2 text-base font-bold text-ink">
-                ₦{money(Number(p.amount))}
-              </span>
+                <p className="mt-auto pt-2 text-base text-ink">₦{money(Number(p.amount))}</p>
 
-              {cb !== null && (
-                <span className="text-xs font-semibold text-brand">₦{money(cb)} Cashback</span>
-              )}
-              {p.nairaPerGb !== null && p.nairaPerGb !== undefined && (
-                <span className="text-[10px] text-muted">₦{money(Math.round(p.nairaPerGb))}/GB</span>
+                {cb !== null && (
+                  <p className="text-xs font-semibold text-brand">₦{money(cb)} Cashback</p>
+                )}
+                {p.nairaPerGb !== null && p.nairaPerGb !== undefined && (
+                  <p className="text-[10px] text-muted">
+                    ₦{money(Math.round(p.nairaPerGb))}/GB
+                  </p>
+                )}
+              </div>
+
+              {footer && (
+                <span
+                  title={footer}
+                  className="flex items-center justify-between gap-1 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-500"
+                >
+                  <span className="truncate">{footer}</span>
+                  <Info className="h-3 w-3 shrink-0" />
+                </span>
               )}
             </button>
           );

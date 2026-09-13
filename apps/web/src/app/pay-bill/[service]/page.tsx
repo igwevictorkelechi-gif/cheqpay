@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ChevronLeft,
+  ChevronDown,
   CheckCircle2,
   Loader2,
   ShieldCheck,
@@ -34,6 +35,9 @@ export default function BillServicePage() {
   const [balance, setBalance] = useState(0);
 
   const [billerId, setBillerId] = useState<string>("");
+  // Data uses a compact network chip that expands into the full picker, so the
+  // plan grid gets the screen instead of a permanent row of logos.
+  const [networkOpen, setNetworkOpen] = useState(false);
   const [customer, setCustomer] = useState("");
   const [planId, setPlanId] = useState<string>("");
   const [amount, setAmount] = useState("");
@@ -79,6 +83,8 @@ export default function BillServicePage() {
     [config, billerId]
   );
 
+  const isData = service === "data";
+  const selectedBiller = config?.billers.find((b) => b.id === billerId);
   const selectedPlan = plans.find((p) => p.id === planId);
   const payAmount = config?.variableAmount ? Number(amount || 0) : Number(selectedPlan?.amount ?? 0);
 
@@ -163,7 +169,17 @@ export default function BillServicePage() {
     <AppShell>
       <Header
         onBack={() => (stage === "review" ? setStage("form") : router.back())}
-        title={`${config.emoji} ${config.label}`}
+        title={isData ? "Mobile Data" : `${config.emoji} ${config.label}`}
+        action={
+          isData && stage === "form" ? (
+            <button
+              onClick={() => router.push("/transactions")}
+              className="min-h-[44px] text-base font-semibold text-brand-light"
+            >
+              History
+            </button>
+          ) : undefined
+        }
       />
 
       {stage === "form" && (
@@ -172,59 +188,122 @@ export default function BillServicePage() {
             NGN balance: <span className="font-semibold text-ink">₦{balance.toLocaleString()}</span>
           </p>
 
-          {/* Biller */}
-          <p className="mb-2 mt-5 text-sm font-semibold text-muted">Select provider</p>
-          <div className="grid grid-cols-3 gap-2">
-            {config.billers.map((b) => (
-              <button
-                key={b.id}
-                disabled={b.comingSoon}
-                onClick={() => {
-                  setBillerId(b.id);
-                  setPlanId("");
-                }}
-                className={`relative flex flex-col items-center gap-2 rounded-2xl border p-3 transition active:scale-95 ${
-                  billerId === b.id
-                    ? "border-brand bg-brand/10 ring-1 ring-brand"
-                    : "border-border bg-card"
-                } ${b.comingSoon ? "opacity-50" : ""}`}
-              >
-                {b.comingSoon && (
-                  <span className="absolute right-1.5 top-1.5 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-400">
-                    Soon
-                  </span>
-                )}
-                <BillerLogo brand={b} size={48} />
-                <span className="text-xs font-semibold text-ink">{b.name}</span>
-              </button>
-            ))}
-          </div>
+          {isData ? (
+            /* Network + number on one line: the network is a chip that expands
+               into the picker, so the plans get the screen. */
+            <div className="mt-4 rounded-3xl bg-card p-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setNetworkOpen((o) => !o)}
+                  aria-expanded={networkOpen}
+                  aria-label="Change network"
+                  className="flex min-h-[44px] shrink-0 items-center gap-1 active:scale-95"
+                >
+                  {selectedBiller ? (
+                    <BillerLogo brand={selectedBiller} size={44} />
+                  ) : (
+                    <span className="h-11 w-11 rounded-full bg-surface" />
+                  )}
+                  <ChevronDown
+                    className={`h-4 w-4 text-muted transition-transform ${
+                      networkOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
 
-          {/* Customer */}
-          <label className="mb-2 mt-6 block text-sm font-semibold text-muted">
-            {config.customerLabel}
-          </label>
-          <div className="flex gap-2">
-            <input
-              value={customer}
-              onChange={(e) => setCustomer(e.target.value)}
-              placeholder={config.customerPlaceholder}
-              className="w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand"
-            />
-            {config.requiresValidation && (
-              <button
-                onClick={validate}
-                disabled={validating || customer.trim().length < 3}
-                className="shrink-0 rounded-2xl bg-card px-4 font-bold text-brand-light active:scale-95 disabled:opacity-40"
-              >
-                {validating ? <Loader2 className="h-5 w-5 animate-spin" /> : "Verify"}
-              </button>
+                <span className="h-9 w-px shrink-0 bg-border" />
+
+                <input
+                  value={customer}
+                  onChange={(e) => setCustomer(e.target.value)}
+                  placeholder={config.customerPlaceholder}
+                  inputMode="tel"
+                  aria-label={config.customerLabel}
+                  className="w-full bg-transparent text-2xl font-bold tracking-wide text-ink placeholder-muted outline-none"
+                />
+              </div>
+
+              {networkOpen && (
+                <div className="mt-4 grid grid-cols-4 gap-2 border-t border-border pt-4">
+                  {config.billers.map((b) => (
+                    <button
+                      key={b.id}
+                      disabled={b.comingSoon}
+                      onClick={() => {
+                        setBillerId(b.id);
+                        setPlanId("");
+                        setNetworkOpen(false);
+                      }}
+                      className={`flex flex-col items-center gap-1.5 rounded-2xl border p-2 transition active:scale-95 ${
+                        billerId === b.id
+                          ? "border-brand bg-brand/10"
+                          : "border-transparent bg-surface"
+                      } ${b.comingSoon ? "opacity-40" : ""}`}
+                    >
+                      <BillerLogo brand={b} size={36} />
+                      <span className="text-[11px] font-semibold text-ink">{b.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+            {/* Biller */}
+            <p className="mb-2 mt-5 text-sm font-semibold text-muted">Select provider</p>
+            <div className="grid grid-cols-3 gap-2">
+              {config.billers.map((b) => (
+                <button
+                  key={b.id}
+                  disabled={b.comingSoon}
+                  onClick={() => {
+                    setBillerId(b.id);
+                    setPlanId("");
+                  }}
+                  className={`relative flex flex-col items-center gap-2 rounded-2xl border p-3 transition active:scale-95 ${
+                    billerId === b.id
+                      ? "border-brand bg-brand/10 ring-1 ring-brand"
+                      : "border-border bg-card"
+                  } ${b.comingSoon ? "opacity-50" : ""}`}
+                >
+                  {b.comingSoon && (
+                    <span className="absolute right-1.5 top-1.5 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+                      Soon
+                    </span>
+                  )}
+                  <BillerLogo brand={b} size={48} />
+                  <span className="text-xs font-semibold text-ink">{b.name}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Customer */}
+            <label className="mb-2 mt-6 block text-sm font-semibold text-muted">
+              {config.customerLabel}
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={customer}
+                onChange={(e) => setCustomer(e.target.value)}
+                placeholder={config.customerPlaceholder}
+                className="w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand"
+              />
+              {config.requiresValidation && (
+                <button
+                  onClick={validate}
+                  disabled={validating || customer.trim().length < 3}
+                  className="shrink-0 rounded-2xl bg-card px-4 font-bold text-brand-light active:scale-95 disabled:opacity-40"
+                >
+                  {validating ? <Loader2 className="h-5 w-5 animate-spin" /> : "Verify"}
+                </button>
+              )}
+            </div>
+            {customerName && (
+              <p className="mt-2 flex items-center gap-1.5 text-sm text-green-400">
+                <CheckCircle2 className="h-4 w-4" /> {customerName}
+              </p>
             )}
-          </div>
-          {customerName && (
-            <p className="mt-2 flex items-center gap-1.5 text-sm text-green-400">
-              <CheckCircle2 className="h-4 w-4" /> {customerName}
-            </p>
+            </>
           )}
 
           {/* Amount or plan */}
@@ -391,17 +470,33 @@ export default function BillServicePage() {
   );
 }
 
-function Header({ onBack, title }: { onBack: () => void; title: string }) {
+function Header({
+  onBack,
+  title,
+  action,
+}: {
+  onBack: () => void;
+  title: string;
+  /** Optional right-hand link. When present the title centres between the two. */
+  action?: React.ReactNode;
+}) {
   return (
     <div className="flex items-center gap-3 px-5 pb-4 pt-4">
       <button
         onClick={onBack}
-        className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-card text-ink active:scale-95"
         aria-label="Go back"
       >
         <ChevronLeft className="h-5 w-5" />
       </button>
-      <h1 className="text-xl font-bold text-ink">{title}</h1>
+      {action ? (
+        <>
+          <h1 className="flex-1 text-center text-xl font-bold text-ink">{title}</h1>
+          <div className="flex h-11 shrink-0 items-center justify-end">{action}</div>
+        </>
+      ) : (
+        <h1 className="text-xl font-bold text-ink">{title}</h1>
+      )}
     </div>
   );
 }
