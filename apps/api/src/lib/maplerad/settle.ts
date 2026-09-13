@@ -14,6 +14,7 @@
 import { Asset } from "@cheqpay/db";
 import { verifyTransaction, type VerifiedTransaction } from "./transactions";
 import { prismaLedgerPort } from "../mapleradCollections";
+import { creditCryptoCollection, isCryptoCollection } from "./cryptoCollection";
 import type { CreditResult } from "./deposits";
 import type { CollectionEventData } from "./types";
 
@@ -82,6 +83,21 @@ export async function settleCollectionById(transactionId: string): Promise<Credi
   if (!transactionId) return { outcome: "ignored", reason: "no transaction id" };
 
   const tx = await verifyTransaction(transactionId);
+
+  // A stablecoin deposit arrives as a COLLECTION too, but nothing about the
+  // fiat path fits it: the currency is USDT/USDC, the destination account is
+  // null, and `source` is the sender's chain address. Route it to the path that
+  // understands that shape rather than letting it fall out as "unsupported
+  // currency", which is what left a live USDT deposit uncredited.
+  if (isCryptoCollection(tx)) {
+    if (tx.entry && tx.entry.toUpperCase() !== "CREDIT") {
+      return { outcome: "ignored", reason: "not an incoming credit" };
+    }
+    if (tx.status && !CREDITABLE_STATUSES.has(tx.status.toUpperCase())) {
+      return { outcome: "ignored", reason: `status ${tx.status}` };
+    }
+    return creditCryptoCollection(tx);
+  }
 
   const cls = classifyVerified(tx);
   if (!cls.creditable) return { outcome: "ignored", reason: cls.reason };

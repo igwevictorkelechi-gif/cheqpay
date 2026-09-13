@@ -194,6 +194,24 @@ type MintResult = {
   message: string;
 };
 
+/** One row from GET/POST /api/users/{id}/reconcile-bills. */
+type StuckBill = {
+  transactionId: string;
+  service: string | null;
+  billerName: string | null;
+  customer: string | null;
+  amountMinor: string;
+  providerRef: string | null;
+  createdAt: string;
+  confirmedByProvider: boolean;
+  reason?: string;
+};
+type BillReconcileResult = {
+  ok: true;
+  items: StuckBill[];
+  summary: { total: number; confirmed: number; settled?: number };
+};
+
 /** One row from GET/POST /api/users/{id}/reconcile-deposits. */
 type ReconcileItem = {
   id: string;
@@ -388,6 +406,14 @@ export default function UserDetailPage() {
   const [recCrediting, setRecCrediting] = useState(false);
   const [recError, setRecError] = useState<string | null>(null);
   const [recPicked, setRecPicked] = useState<Set<string>>(new Set());
+
+  // Bills that never settled: a bill.* webhook that never arrived leaves the
+  // purchase PROCESSING with the customer debited. This checks them against the
+  // provider's own purchase history.
+  const [bills, setBills] = useState<BillReconcileResult | null>(null);
+  const [billsLoading, setBillsLoading] = useState(false);
+  const [billsSettling, setBillsSettling] = useState(false);
+  const [billsError, setBillsError] = useState<string | null>(null);
 
   const [usdForm, setUsdForm] = useState({
     identificationNumber: '',
@@ -675,6 +701,53 @@ export default function UserDetailPage() {
       setRecCrediting(false);
     }
   }, [id, recPicked, load]);
+
+  /** Read this user's stuck bills and what the provider can confirm. */
+  const loadStuckBills = useCallback(async () => {
+    setBillsLoading(true);
+    setBillsError(null);
+    try {
+      const r = await fetch(`/api/users/${id}/reconcile-bills`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || d?.message || `Check failed (${r.status})`);
+      if (d.ok === false) {
+        setBillsError(d.error || 'Maplerad could not return the purchase history.');
+        setBills(null);
+      } else {
+        setBills(d as BillReconcileResult);
+      }
+    } catch (e) {
+      setBillsError((e as Error).message);
+    } finally {
+      setBillsLoading(false);
+    }
+  }, [id]);
+
+  /** Settle every bill the provider confirms went through. */
+  const settleStuckBills = useCallback(async () => {
+    setBillsSettling(true);
+    setBillsError(null);
+    try {
+      const r = await fetch(`/api/users/${id}/reconcile-bills`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error || d?.message || `Settle failed (${r.status})`);
+      if (d.ok === false) {
+        setBillsError(d.error || 'Settling failed.');
+      } else {
+        setBills(d as BillReconcileResult);
+        setNotice(`Settled ${d.summary?.settled ?? 0} bill(s).`);
+        load();
+      }
+    } catch (e) {
+      setBillsError((e as Error).message);
+    } finally {
+      setBillsSettling(false);
+    }
+  }, [id, load]);
 
   const usdFormValid =
     usdForm.identificationNumber.trim().length >= 3 &&
@@ -1607,6 +1680,108 @@ export default function UserDetailPage() {
                             </tr>
                           );
                         })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* Bills that never settled. */}
+          <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-gray-900">Unsettled bills</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Bills settle on a provider webhook. When one never arrives the purchase stays
+              “processing” — the customer has been debited and nobody can say whether the airtime
+              landed. This checks each one against Maplerad’s own purchase history.
+              Being listed there proves it went through; <strong>not</strong> being listed proves
+              nothing, so an unconfirmed bill is left exactly as it is rather than refunded.
+            </p>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                onClick={loadStuckBills}
+                disabled={billsLoading}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {billsLoading ? 'Checking…' : 'Check unsettled bills'}
+              </button>
+              {bills && bills.summary.confirmed > 0 && (
+                <button
+                  onClick={settleStuckBills}
+                  disabled={billsSettling}
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {billsSettling ? 'Settling…' : `Settle confirmed (${bills.summary.confirmed})`}
+                </button>
+              )}
+            </div>
+
+            {billsError && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {billsError}
+              </div>
+            )}
+
+            {bills && (
+              <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+                <div className="flex flex-wrap gap-4 text-gray-700">
+                  <span>
+                    <strong>{bills.summary.total}</strong> unsettled
+                  </span>
+                  <span>
+                    <strong>{bills.summary.confirmed}</strong> confirmed by provider
+                  </span>
+                  {bills.summary.settled !== undefined && (
+                    <span className="text-green-700">
+                      <strong>{bills.summary.settled}</strong> settled just now
+                    </span>
+                  )}
+                </div>
+
+                {bills.items.length === 0 ? (
+                  <p className="mt-3 text-gray-700">No unsettled bills — everything has an outcome.</p>
+                ) : (
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="border-b border-gray-200 text-left text-gray-500">
+                        <tr>
+                          <th className="py-2 pr-3 font-medium">Date</th>
+                          <th className="py-2 pr-3 font-medium">Service</th>
+                          <th className="py-2 pr-3 font-medium">Amount</th>
+                          <th className="py-2 pr-3 font-medium">Customer</th>
+                          <th className="py-2 font-medium">State</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bills.items.map((b) => (
+                          <tr key={b.transactionId} className="border-b border-gray-100 align-top">
+                            <td className="py-2 pr-3 text-gray-700">{formatDateTime(b.createdAt)}</td>
+                            <td className="py-2 pr-3 text-gray-700">
+                              {show(b.service)}
+                              <span className="block text-xs text-gray-400">{show(b.billerName)}</span>
+                            </td>
+                            <td className="py-2 pr-3 font-medium text-gray-900">
+                              ₦{(Number(b.amountMinor) / 100).toLocaleString('en-NG', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </td>
+                            <td className="py-2 pr-3 font-mono text-xs text-gray-600">
+                              {show(b.customer)}
+                            </td>
+                            <td className="py-2">
+                              {b.confirmedByProvider ? (
+                                <span className="inline-flex rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
+                                  Confirmed — settle it
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400">{show(b.reason)}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
