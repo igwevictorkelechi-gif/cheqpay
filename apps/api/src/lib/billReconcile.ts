@@ -7,15 +7,26 @@
 // tell whether the airtime landed. This asks the provider what actually became
 // of each stuck bill and settles it from that answer.
 //
-// It verifies each bill BY ITS OWN TRANSACTION ID rather than scanning a
+// It asks about each bill BY ITS OWN TRANSACTION ID rather than scanning a
 // purchase-history list. The list was the first approach and was a bad one: it
 // only covered airtime, said nothing about a bill's status (presence was the
 // only signal, so a genuine failure could never be refunded), and it is a
 // single point of failure — GET /bills/airtime began returning HTTP 500 and
-// took the whole feature with it. Verifying one id is narrower, definitive,
+// took the whole feature with it. Asking about one id is narrower, definitive,
 // works for every bill type, and cannot be broken by an unrelated bill.
+//
+// Two sources answer that question, in order:
+//
+//  1. GET /transactions/verify/{id}. Live, but documented as verifying a
+//     COLLECTION — it answers "transaction not found" for a bill, which is
+//     exactly what it did for a real stuck airtime purchase.
+//  2. The bill.* webhook we already stored for that transaction. Maplerad
+//     signs every webhook and we reject and never persist one whose signature
+//     fails, so a stored event is the provider's own signed statement of the
+//     outcome — evidence at least as good as a live call, and the only one
+//     available for bills.
 
-import { TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
+import { Prisma, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { verifyTransaction } from "./maplerad/transactions";
 import { describeProviderError } from "./mapleradCustomer";
 import { billOutcomeFrom, settleBillByProviderRef, type BillOutcome } from "./billSettlement";
@@ -31,6 +42,8 @@ export interface StuckBill {
   createdAt: string;
   /** What the provider says became of it: SUCCESS / FAILED / still pending. */
   providerStatus: string | null;
+  /** Where that answer came from: a live verify, or the stored signed webhook. */
+  evidence: "verify" | "webhook" | null;
   /** How it would be settled: completed, or failed-and-refunded. Null if not yet. */
   resolution: "complete" | "refund" | null;
   /** Why it cannot be settled from here (when it cannot). */
@@ -47,6 +60,37 @@ function readMeta(metadata: unknown, key: string): string | null {
   if (!metadata || typeof metadata !== "object") return null;
   const v = (metadata as Record<string, unknown>)[key];
   return typeof v === "string" && v ? v : null;
+}
+
+/**
+ * Maplerad's own signed word on this bill, from the webhook we stored.
+ *
+ * Only signature-valid events are ever persisted (an invalid one is rejected
+ * with a 401 and never written), so a match here is the provider stating the
+ * outcome itself. Used when the live verify cannot answer — which for bills is
+ * always, since that endpoint covers collections.
+ */
+async function storedWebhookOutcome(
+  providerRef: string,
+): Promise<{ outcome: BillOutcome; status: string | null } | null> {
+  const event = await prisma.webhookEvent.findFirst({
+    where: {
+      source: "maplerad",
+      signatureValid: true,
+      // The bill payload is flat: the provider transaction id sits at the top.
+      payload: { path: ["id"], equals: providerRef } as Prisma.JsonFilter,
+    },
+    orderBy: { receivedAt: "desc" },
+    select: { payload: true },
+  });
+  if (!event) return null;
+
+  const p = (event.payload ?? {}) as Record<string, unknown>;
+  const name = typeof p.event === "string" ? p.event : "";
+  if (!name.startsWith("bill.")) return null;
+
+  const status = typeof p.status === "string" ? p.status : undefined;
+  return { outcome: billOutcomeFrom(name, status), status: status ?? null };
 }
 
 /** Every bill of this user's that is still awaiting an outcome. */
@@ -80,6 +124,7 @@ async function checkOne(row: {
     providerRef: ref,
     createdAt: row.createdAt.toISOString(),
     providerStatus: null,
+    evidence: null,
     resolution: null,
   };
 
@@ -89,22 +134,38 @@ async function checkOne(row: {
   }
 
   let outcome: BillOutcome;
-  let status: string | undefined;
+  let status: string | null = null;
+  let evidence: "verify" | "webhook";
   try {
     const tx = await verifyTransaction(ref);
-    status = tx.status;
+    status = tx.status ?? null;
     outcome = billOutcomeFrom("", tx.status);
+    evidence = "verify";
   } catch (err) {
-    // One bill the provider cannot answer for must not hide the others.
-    return { ...base, reason: describeProviderError(err) };
+    // The live endpoint verifies collections, so it answers "transaction not
+    // found" for a bill. Fall back to the provider's own signed webhook.
+    const stored = await storedWebhookOutcome(ref);
+    if (!stored) {
+      // One bill nobody can answer for must not hide the others.
+      return { ...base, reason: describeProviderError(err) };
+    }
+    outcome = stored.outcome;
+    status = stored.status;
+    evidence = "webhook";
   }
 
   if (outcome === "pending") {
-    return { ...base, providerStatus: status ?? null, reason: "the provider still reports it pending" };
+    return {
+      ...base,
+      providerStatus: status,
+      evidence,
+      reason: "the provider still reports it pending",
+    };
   }
   return {
     ...base,
-    providerStatus: status ?? null,
+    providerStatus: status,
+    evidence,
     resolution: outcome === "successful" ? "complete" : "refund",
   };
 }
