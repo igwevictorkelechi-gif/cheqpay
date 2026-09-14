@@ -135,6 +135,16 @@ export const reviewActionSchema = z.object({
 });
 export type ReviewActionInput = z.infer<typeof reviewActionSchema>;
 
+/** Fund or withdraw from a virtual card. USD amount, up to 2 dp. */
+export const cardFundSchema = z.object({
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Expected a USD amount like 10 or 10.50"),
+});
+export type CardFundInput = z.infer<typeof cardFundSchema>;
+
+/** Freeze (true) or unfreeze (false) a virtual card. */
+export const cardFreezeSchema = z.object({ freeze: z.boolean() });
+export type CardFreezeInput = z.infer<typeof cardFreezeSchema>;
+
 /** Request a crypto withdrawal to an external address. */
 export const cryptoWithdrawalSchema = z.object({
   asset: z.enum(["BTC", "USDT", "USDC"]),

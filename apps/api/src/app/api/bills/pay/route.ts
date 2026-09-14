@@ -138,7 +138,8 @@ export async function POST(req: Request) {
     try {
       const result = await psp.payBill({
         service: body.service,
-        billerCode: biller.mapleradId,
+        // The purchase identifier, which for data is not the catalog slug.
+        billerCode: biller.mapleradPayId ?? biller.mapleradId,
         planCode,
         customer: body.customer,
         amount,

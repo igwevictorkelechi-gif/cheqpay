@@ -52,37 +52,108 @@ export async function createCard(input: CreateCardInput): Promise<CardCreationAc
 }
 
 /**
- * Create a business card (funded from the business wallet).
- * POST /issuing/business  (path inferred — confirm in sandbox)
+ * The full detail of one card. `card_number` and `cvv` are the live secrets —
+ * they are returned ONLY to the card's owner (see the reveal route) and are
+ * masked in every log by the client's redaction. `balance` is in minor units
+ * (cents). Accepts the card id OR the creation reference in {id}.
+ *
+ * GET /issuing/{id}
  */
-export async function createBusinessCard(input: {
-  currency?: "USD";
-  brand?: CardBrand;
-  amount?: Minor;
-  autoApprove?: boolean;
-}): Promise<CardCreationAck> {
-  return mapleradRequest<CardCreationAck>("/issuing/business", {
+export interface CardDetail {
+  id: string;
+  name?: string;
+  card_number?: string; // full PAN — sensitive
+  masked_pan?: string;
+  expiry?: string; // "MM/YY"
+  cvv?: string; // sensitive
+  status?: string; // "ACTIVE" | "DISABLED" | ...
+  type?: string;
+  issuer?: string; // "VISA" | "MASTERCARD"
+  currency?: string;
+  balance?: number; // minor units (cents)
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    country?: string;
+  };
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+export async function getCard(idOrReference: string): Promise<CardDetail> {
+  return mapleradRequest<CardDetail>(`/issuing/${encodeURIComponent(idOrReference)}`);
+}
+
+/**
+ * Credit a card with `amountMinor` cents. The money is debited from the
+ * business's Maplerad balance, so the caller must first debit the user's own
+ * USD balance in our ledger. Synchronous: a 200 means the card was funded.
+ *
+ * POST /issuing/{id}/fund
+ */
+export async function fundCard(cardId: string, amountMinor: number): Promise<{ id?: string }> {
+  return mapleradRequest<{ id?: string }>(`/issuing/${encodeURIComponent(cardId)}/fund`, {
     method: "POST",
-    body: {
-      currency: input.currency ?? "USD",
-      brand: input.brand ?? "VISA",
-      amount: input.amount,
-      auto_approve: input.autoApprove ?? true,
-    },
+    body: { amount: amountMinor },
   });
 }
 
 /**
- * List card-declined charges (for support / dashboards).
- * GET /issuing/charges/declined  (path inferred — confirm in sandbox)
+ * Debit a card by `amountMinor` cents, crediting the business's Maplerad
+ * balance; the caller then credits the user's own USD balance. Synchronous.
+ *
+ * POST /issuing/{id}/withdraw
  */
-export async function getCardDeclines(params?: {
-  page?: number;
-  pageSize?: number;
-}): Promise<unknown[]> {
-  return mapleradRequest<unknown[]>("/issuing/charges/declined", {
-    query: { page: params?.page, page_size: params?.pageSize },
+export async function withdrawFromCard(
+  cardId: string,
+  amountMinor: number,
+): Promise<{ id?: string }> {
+  return mapleradRequest<{ id?: string }>(`/issuing/${encodeURIComponent(cardId)}/withdraw`, {
+    method: "POST",
+    body: { amount: amountMinor },
   });
+}
+
+/** Freeze a card: no funding or spending until unfrozen. PATCH /issuing/{id}/freeze */
+export async function freezeCard(cardId: string): Promise<void> {
+  await mapleradRequest(`/issuing/${encodeURIComponent(cardId)}/freeze`, { method: "PATCH" });
+}
+
+/** Unfreeze a previously frozen card. PATCH /issuing/{id}/unfreeze */
+export async function unfreezeCard(cardId: string): Promise<void> {
+  await mapleradRequest(`/issuing/${encodeURIComponent(cardId)}/unfreeze`, { method: "PATCH" });
+}
+
+/** One row of a card's own spending history, as Maplerad reports it. */
+export interface CardTransaction {
+  id: string;
+  amount: number; // minor units
+  currency?: string;
+  description?: string;
+  status?: string;
+  entry?: string; // "CREDIT" | "DEBIT"
+  merchant?: { name?: string; city?: string; country?: string };
+  created_at?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * A card's transactions, newest first, as the provider records them — this is
+ * the source of truth for card spend, not our ledger (our ledger only tracks
+ * the USD moving on and off the card). GET /issuing/{id}/transactions
+ */
+export async function getCardTransactions(
+  cardId: string,
+  params?: { page?: number; pageSize?: number },
+): Promise<CardTransaction[]> {
+  const data = await mapleradRequest<unknown>(
+    `/issuing/${encodeURIComponent(cardId)}/transactions`,
+    { query: { page: params?.page, page_size: params?.pageSize } },
+  );
+  return Array.isArray(data) ? (data as CardTransaction[]) : [];
 }
 
 // ---- Webhook finalize -----------------------------------------------------
