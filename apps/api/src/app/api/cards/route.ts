@@ -5,6 +5,7 @@ import { assertFeatureEnabled } from "@/lib/features";
 import { ensureCardsTable } from "@/lib/ensureCards";
 import { cardsAvailable } from "@/lib/cards";
 import { createCard } from "@/lib/maplerad/issuing";
+import { describeProviderError } from "@/lib/mapleradCustomer";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +60,26 @@ export async function POST(req: Request) {
       );
     }
 
-    const ack = await createCard({ customerId: user.mapleradCustomerId, currency: "USD" });
+    // A provider failure here is not our bug and must not read as one. Left
+    // unhandled it surfaces as a bare 500 "Internal server error", which tells
+    // the user nothing and hides that the call never reached Maplerad — the
+    // live failure was the egress proxy answering 502 "upstream unreachable"
+    // for POST /issuing while proxying every other Maplerad call fine.
+    let ack: Awaited<ReturnType<typeof createCard>>;
+    try {
+      ack = await createCard({ customerId: user.mapleradCustomerId, currency: "USD" });
+    } catch (err) {
+      console.error("[cards] issuing failed", {
+        userId: auth.id,
+        customerId: user.mapleradCustomerId,
+        error: describeProviderError(err),
+      });
+      throw new ApiError(
+        502,
+        "Our card provider could not be reached just now, so no card was created. Please try again shortly.",
+        "card_issuing_unavailable",
+      );
+    }
 
     const card = await prisma.card.create({
       data: {

@@ -169,33 +169,29 @@ export default function CardsPage() {
             title="Coming soon"
             body="USD virtual cards are on the way. We'll let you know the moment they're ready to create."
           />
-        ) : cards.length === 0 ? (
-          <>
-            <EmptyState
-              icon={<CreditCard className="h-7 w-7 text-muted" />}
-              title="No cards yet"
-              body="Create a virtual dollar card to pay online, subscribe and shop."
-            />
-            <CreateButton onClick={createCard} busy={creating} />
-          </>
         ) : (
           <>
-            {activeCard && (
-              <CardPocket
-                card={activeCard}
-                stackCount={cards.length}
-                holder={user?.full_name ?? null}
-                usdAvailable={usdBalance?.availableFormatted ?? null}
-                onFunded={async () => {
-                  await Promise.all([refreshCard(activeCard.id), refreshUsd()]);
-                }}
-                onFrozen={(status) =>
-                  setCards((prev) =>
-                    prev.map((c) => (c.id === activeCard.id ? { ...c, status } : c)),
-                  )
-                }
-              />
-            )}
+            {/* The card and its pocket are the page, with or without a card:
+                before the first one is issued the same shell renders as a
+                placeholder so this reads as a wallet from the first visit,
+                rather than a bare "nothing here" screen. */}
+            <CardPocket
+              card={activeCard}
+              stackCount={cards.length}
+              holder={user?.full_name ?? null}
+              usdAvailable={usdBalance?.availableFormatted ?? null}
+              creating={creating}
+              onCreate={createCard}
+              onFunded={async () => {
+                if (!activeCard) return;
+                await Promise.all([refreshCard(activeCard.id), refreshUsd()]);
+              }}
+              onFrozen={(status) =>
+                setCards((prev) =>
+                  prev.map((c) => (c.id === activeCard?.id ? { ...c, status } : c)),
+                )
+              }
+            />
 
             {cards.length > 1 && (
               <div className="mt-4 flex items-center justify-center gap-2">
@@ -213,9 +209,11 @@ export default function CardsPage() {
               </div>
             )}
 
-            {activeCard && <CardActivity cardId={activeCard.id} />}
+            <CardActivity cardId={activeCard?.id ?? null} />
 
-            <CreateButton onClick={createCard} busy={creating} label="Create another card" />
+            {cards.length > 0 && (
+              <CreateButton onClick={createCard} busy={creating} label="Create another card" />
+            )}
           </>
         )}
 
@@ -268,29 +266,44 @@ function CreateButton({
   );
 }
 
-/** The card face behind a pocket panel, plus its live balance and actions. */
+const QUICK = ["5", "10", "25", "50", "100"];
+
+/**
+ * The card, its pocket, and the quick-load row — the whole wallet.
+ *
+ * The card face sits BEHIND a pocket panel that overlaps it, so only its top
+ * band shows, the way a card sits in a wallet. `card` may be null: before the
+ * first card is issued the same shell renders as a placeholder with "Create
+ * your first card" as the pocket's action, so the page reads as a wallet from
+ * the very first visit instead of an empty screen.
+ */
 function CardPocket({
   card,
   stackCount,
   holder,
   usdAvailable,
+  creating,
+  onCreate,
   onFunded,
   onFrozen,
 }: {
-  card: VirtualCard;
+  card: VirtualCard | null;
   stackCount: number;
   holder: string | null;
   usdAvailable: string | null;
+  creating: boolean;
+  onCreate: () => void;
   onFunded: () => Promise<void>;
   onFrozen: (status: string) => void;
 }) {
   const toast = useToast();
-  const frozen = card.status === "frozen";
-  const pending = card.status === "pending";
-  const active = card.status === "active";
-  const balance = usd(card.balanceMinor);
+  const frozen = card?.status === "frozen";
+  const pending = card?.status === "pending";
+  const active = card?.status === "active";
+  const balance = usd(card?.balanceMinor);
 
   const [sheet, setSheet] = useState<null | "fund" | "withdraw">(null);
+  const [prefill, setPrefill] = useState("");
   const [revealed, setRevealed] = useState<{
     number: string | null;
     cvv: string | null;
@@ -300,6 +313,7 @@ function CardPocket({
   const [freezing, setFreezing] = useState(false);
 
   async function reveal() {
+    if (!card) return;
     if (revealed) {
       setRevealed(null);
       return;
@@ -322,6 +336,7 @@ function CardPocket({
   }
 
   async function toggleFreeze() {
+    if (!card) return;
     setFreezing(true);
     try {
       const { status } = await api.setCardFrozen(card.id, !frozen);
@@ -332,6 +347,11 @@ function CardPocket({
     } finally {
       setFreezing(false);
     }
+  }
+
+  function openSheet(mode: "fund" | "withdraw", amount = "") {
+    setPrefill(amount);
+    setSheet(mode);
   }
 
   return (
@@ -345,19 +365,25 @@ function CardPocket({
       )}
 
       <div className="relative">
-        {/* Card face. */}
-        <div className="rounded-2xl bg-gradient-to-br from-brand-light to-brand px-5 pb-16 pt-5 text-white shadow-lg">
+        {/* Card face — dimmed while there is no real card behind it. */}
+        <div
+          className={`rounded-2xl bg-gradient-to-br from-brand-light to-brand px-5 pb-16 pt-5 text-white shadow-lg ${
+            card ? "" : "opacity-70"
+          }`}
+        >
           <div className="flex items-start justify-between">
             <p className="max-w-[60%] truncate text-[17px] font-bold tracking-tight">
               {holder ?? "CheqPay card"}
             </p>
-            <span className="text-lg font-black italic tracking-tight">{card.brand ?? "VISA"}</span>
+            <span className="text-lg font-black italic tracking-tight">
+              {card?.brand ?? "VISA"}
+            </span>
           </div>
           <div className="mt-2 flex items-end justify-between">
             <p className="font-mono text-sm tracking-[0.18em] opacity-90">
               {revealed?.number
                 ? revealed.number.replace(/(.{4})/g, "$1 ").trim()
-                : (card.maskedPan ?? "•••• •••• •••• ••••")}
+                : (card?.maskedPan ?? "•••• •••• •••• ••••")}
             </p>
             <p className="text-xs font-semibold opacity-80">
               {revealed?.expiry ? `Valid ${revealed.expiry}` : active ? "Valid ••/••" : "—"}
@@ -392,7 +418,7 @@ function CardPocket({
                   ) : (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   )}
-                  {card.status}
+                  {card?.status}
                 </span>
               )}
             </div>
@@ -401,66 +427,113 @@ function CardPocket({
               {balance ?? <span className="opacity-60">$—</span>}
             </p>
             <p className="mt-1.5 text-[11px] text-white/60">
-              {balance
-                ? usdAvailable
-                  ? `${usdAvailable} available to load`
-                  : " "
-                : "Balance appears once the card is active"}
+              {!card
+                ? "Create a card to start spending online"
+                : balance
+                  ? usdAvailable
+                    ? `${usdAvailable} available to load`
+                    : "\u00A0"
+                  : "Balance appears once the card is active"}
             </p>
 
-            <div className="mt-4 flex items-center gap-2">
+            {/* No card yet — the pocket's action is to make one. */}
+            {!card ? (
               <button
-                onClick={() => setSheet("fund")}
-                disabled={!active}
-                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-white/15 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-50"
+                onClick={onCreate}
+                disabled={creating}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-white/15 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-50"
               >
-                <Plus className="h-4 w-4" /> Add money
-              </button>
-              <button
-                onClick={() => setSheet("withdraw")}
-                disabled={!active}
-                aria-label="Withdraw from card"
-                className="rounded-full bg-white/15 px-4 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-50"
-              >
-                Withdraw
-              </button>
-              <button
-                onClick={reveal}
-                disabled={!active || revealing}
-                aria-label={revealed ? "Hide card details" : "Show card details"}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white active:scale-95 disabled:opacity-50"
-              >
-                {revealing ? (
+                {creating ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
-                ) : revealed ? (
-                  <EyeOff className="h-4 w-4" />
                 ) : (
-                  <Eye className="h-4 w-4" />
+                  <Plus className="h-4 w-4" />
                 )}
+                {creating ? "Creating…" : "Create your first card"}
               </button>
-              <button
-                onClick={toggleFreeze}
-                disabled={pending || freezing}
-                aria-label={frozen ? "Unfreeze card" : "Freeze card"}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white active:scale-95 disabled:opacity-50"
-              >
-                {freezing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : frozen ? (
-                  <Sun className="h-4 w-4" />
-                ) : (
-                  <Snowflake className="h-4 w-4" />
-                )}
-              </button>
-            </div>
+            ) : (
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  onClick={() => openSheet("fund")}
+                  disabled={!active}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-full bg-white/15 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" /> Add money
+                </button>
+                <button
+                  onClick={() => openSheet("withdraw")}
+                  disabled={!active}
+                  className="rounded-full bg-white/15 px-4 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-50"
+                >
+                  Withdraw
+                </button>
+                <button
+                  onClick={reveal}
+                  disabled={!active || revealing}
+                  aria-label={revealed ? "Hide card details" : "Show card details"}
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white active:scale-95 disabled:opacity-50"
+                >
+                  {revealing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : revealed ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+                <button
+                  onClick={toggleFreeze}
+                  disabled={pending || freezing}
+                  aria-label={frozen ? "Unfreeze card" : "Freeze card"}
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white active:scale-95 disabled:opacity-50"
+                >
+                  {freezing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : frozen ? (
+                    <Sun className="h-4 w-4" />
+                  ) : (
+                    <Snowflake className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {sheet && (
+      {/* Quick load — the card's answer to the reference's contact row. */}
+      <section className="mt-7">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-bold text-ink">Quick load</h2>
+          {usdAvailable && <span className="text-xs text-muted">{usdAvailable} available</span>}
+        </div>
+        <div className="-mx-5 mt-3 flex gap-3 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {QUICK.map((amount) => (
+            <button
+              key={amount}
+              onClick={() => openSheet("fund", amount)}
+              disabled={!active}
+              className="flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center rounded-2xl bg-card text-ink active:scale-95 disabled:opacity-40"
+            >
+              <span className="text-lg font-extrabold">${amount}</span>
+              <span className="mt-0.5 text-[11px] text-muted">load</span>
+            </button>
+          ))}
+          <button
+            onClick={() => openSheet("fund")}
+            disabled={!active}
+            className="flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center rounded-2xl border border-dashed border-border text-brand-light active:scale-95 disabled:opacity-40"
+          >
+            <Plus className="h-5 w-5" />
+            <span className="mt-0.5 text-[11px]">Other</span>
+          </button>
+        </div>
+      </section>
+
+      {sheet && card && (
         <AmountSheet
           mode={sheet}
           cardId={card.id}
+          initialAmount={prefill}
           cardBalance={balance}
           usdAvailable={usdAvailable}
           onClose={() => setSheet(null)}
@@ -479,12 +552,11 @@ function copy(text: string, done: () => void) {
   navigator.clipboard?.writeText(text).then(done).catch(() => undefined);
 }
 
-const QUICK = ["5", "10", "25", "50", "100"];
-
 /** A bottom sheet for funding or withdrawing a card. */
 function AmountSheet({
   mode,
   cardId,
+  initialAmount,
   cardBalance,
   usdAvailable,
   onClose,
@@ -492,13 +564,14 @@ function AmountSheet({
 }: {
   mode: "fund" | "withdraw";
   cardId: string;
+  initialAmount: string;
   cardBalance: string | null;
   usdAvailable: string | null;
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
   const toast = useToast();
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(initialAmount);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const isFund = mode === "fund";
@@ -513,7 +586,9 @@ function AmountSheet({
     try {
       if (isFund) await api.fundCard(cardId, amount);
       else await api.withdrawFromCard(cardId, amount);
-      toast.show(isFund ? `Loaded $${amount} onto the card.` : `Withdrew $${amount} to your balance.`);
+      toast.show(
+        isFund ? `Loaded $${amount} onto the card.` : `Withdrew $${amount} to your balance.`,
+      );
       await onDone();
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "That didn't go through. Please try again.");
@@ -574,11 +649,7 @@ function AmountSheet({
           disabled={busy}
           className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 font-bold text-white active:scale-[0.99] disabled:opacity-50"
         >
-          {busy ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <Check className="h-5 w-5" />
-          )}
+          {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
           {busy ? "Working…" : isFund ? "Add money" : "Withdraw"}
         </button>
       </div>
@@ -586,10 +657,14 @@ function AmountSheet({
   );
 }
 
-function CardActivity({ cardId }: { cardId: string }) {
-  const [txns, setTxns] = useState<CardTransaction[] | null>(null);
+function CardActivity({ cardId }: { cardId: string | null }) {
+  const [txns, setTxns] = useState<CardTransaction[] | null>(cardId ? null : []);
 
   useEffect(() => {
+    if (!cardId) {
+      setTxns([]);
+      return;
+    }
     let active = true;
     setTxns(null);
     api
@@ -636,11 +711,7 @@ function CardActivity({ cardId }: { cardId: string }) {
                     {t.status ? ` · ${t.status}` : ""}
                   </p>
                 </div>
-                <span
-                  className={`shrink-0 text-sm font-bold ${
-                    credit ? "text-success" : "text-ink"
-                  }`}
-                >
+                <span className={`shrink-0 text-sm font-bold ${credit ? "text-success" : "text-ink"}`}>
                   {amt}
                 </span>
               </div>
