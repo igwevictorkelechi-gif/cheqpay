@@ -64,6 +64,8 @@ enum TransactionType {
   CASHBACK // NGN reward credited on a qualifying transaction
   TRANSFER_OUT // sent to another CheqPay user (internal)
   TRANSFER_IN // received from another CheqPay user (internal)
+  CARD_FUND // USD moved from the in-app balance onto a virtual card
+  CARD_WITHDRAW // USD moved off a virtual card back to the in-app balance
 }
 
 enum TransactionStatus {

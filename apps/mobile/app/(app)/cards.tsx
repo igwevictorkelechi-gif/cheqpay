@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,31 +6,40 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
+  Clipboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors, TopBar } from '@/components/brand';
 import { useAuthStore } from '@/store';
-import { api, ApiError, type Balance, type VirtualCard } from '@/services/api';
+import {
+  api,
+  ApiError,
+  type Balance,
+  type CardTransaction,
+  type VirtualCard,
+} from '@/services/api';
 import { useFeatures } from '@/lib/useFeatures';
 
 /**
- * Virtual USD cards (Maplerad).
- *
- * Two gates cover the screen: the admin `virtual_cards` flag AND a configured
- * Maplerad key on the API — until both are on it shows "coming soon" rather
- * than creating a card.
- *
- * Within the screen, issuing a card and reading its status are wired end to
- * end; revealing its numbers, loading it and listing its spending are not,
- * because those Maplerad endpoints are still marked "inferred" in
- * lib/maplerad/issuing.ts. Each of those says so when tapped instead of
- * silently doing nothing.
+ * Virtual USD cards (Maplerad). Two gates cover the screen: the admin
+ * virtual_cards flag AND a configured Maplerad key. Everything on the card is
+ * real: live balance, Add money / Withdraw between the in-app balance and the
+ * card, Reveal (behind step-up 2FA), Freeze, and the card's own activity.
  */
 
-const AWAITING_PROVIDER = "We're finishing this with our card provider — not long now.";
-const LOAD_AMOUNTS = [5, 10, 25, 50, 100];
+const usd = (cents?: string | null): string | null =>
+  cents == null || !Number.isFinite(Number(cents))
+    ? null
+    : `$${(Number(cents) / 100).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+
+const QUICK = ['5', '10', '25', '50', '100'];
 
 export default function CardsScreen() {
   const insets = useSafeAreaInsets();
@@ -43,6 +52,29 @@ export default function CardsScreen() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const activeCard = useMemo(
+    () => cards.find((c) => c.id === activeId) ?? cards[0] ?? null,
+    [cards, activeId],
+  );
+
+  const refreshUsd = useCallback(async () => {
+    try {
+      const { balances } = await api.getBalances();
+      setUsdBalance(balances.find((b) => b.asset === 'USD') ?? null);
+    } catch {
+      /* keep last known */
+    }
+  }, []);
+
+  const refreshCard = useCallback(async (id: string) => {
+    try {
+      const { card } = await api.getCard(id);
+      setCards((prev) => prev.map((c) => (c.id === id ? { ...c, ...card } : c)));
+    } catch {
+      /* keep the row */
+    }
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -63,10 +95,10 @@ export default function CardsScreen() {
     })();
   }, []);
 
-  const activeCard = useMemo(
-    () => cards.find((c) => c.id === activeId) ?? cards[0] ?? null,
-    [cards, activeId],
-  );
+  useEffect(() => {
+    if (activeCard?.id) void refreshCard(activeCard.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCard?.id]);
 
   async function createCard() {
     setError(null);
@@ -82,7 +114,6 @@ export default function CardsScreen() {
     }
   }
 
-  const notReady = () => Alert.alert('Almost there', AWAITING_PROVIDER);
   const comingSoon = !features.virtual_cards || !available;
 
   return (
@@ -93,10 +124,7 @@ export default function CardsScreen() {
         icons={[{ name: 'search-outline' }, { name: 'notifications-outline' }]}
       />
 
-      <Text
-        className="text-ink dark:text-ink-dark font-extrabold px-5 mt-3"
-        style={{ fontSize: 32 }}
-      >
+      <Text className="text-ink dark:text-ink-dark font-extrabold px-5 mt-3" style={{ fontSize: 32 }}>
         Virtual cards
       </Text>
 
@@ -131,11 +159,19 @@ export default function CardsScreen() {
           ) : (
             <>
               {activeCard && (
-                <CardWallet
+                <CardPocket
                   card={activeCard}
                   stackCount={cards.length}
                   holder={user?.full_name ?? null}
-                  onUnavailable={notReady}
+                  usdAvailable={usdBalance?.availableFormatted ?? null}
+                  onFunded={async () => {
+                    await Promise.all([refreshCard(activeCard.id), refreshUsd()]);
+                  }}
+                  onFrozen={(status) =>
+                    setCards((prev) =>
+                      prev.map((c) => (c.id === activeCard.id ? { ...c, status } : c)),
+                    )
+                  }
                 />
               )}
 
@@ -145,121 +181,18 @@ export default function CardsScreen() {
                     <TouchableOpacity
                       key={c.id}
                       onPress={() => setActiveId(c.id)}
-                      accessibilityLabel={`Show card ending ${c.maskedPan?.slice(-4) ?? ''}`}
                       style={{
                         height: 8,
                         width: c.id === activeCard?.id ? 24 : 8,
                         borderRadius: 4,
-                        backgroundColor:
-                          c.id === activeCard?.id ? colors.brandLight : colors.border,
+                        backgroundColor: c.id === activeCard?.id ? colors.brandLight : colors.border,
                       }}
                     />
                   ))}
                 </View>
               )}
 
-              {usdBalance && (
-                <Text
-                  className="text-muted dark:text-muted-dark text-xs text-center"
-                  style={{ marginTop: 12 }}
-                >
-                  <Text style={{ color: colors.ink, fontWeight: '700' }}>
-                    {usdBalance.availableFormatted}
-                  </Text>{' '}
-                  in your dollar balance to load
-                </Text>
-              )}
-
-              {/* Quick load — the card equivalent of a contacts row. */}
-              <Text
-                className="text-ink dark:text-ink-dark font-bold mt-8"
-                style={{ fontSize: 18 }}
-              >
-                Quick load
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 12, paddingVertical: 12 }}
-              >
-                {LOAD_AMOUNTS.map((amount) => (
-                  <TouchableOpacity
-                    key={amount}
-                    onPress={notReady}
-                    className="items-center justify-center"
-                    style={{
-                      height: 76,
-                      width: 76,
-                      borderRadius: 16,
-                      backgroundColor: colors.card,
-                    }}
-                  >
-                    <Text style={{ color: colors.ink, fontSize: 18, fontWeight: '800' }}>
-                      ${amount}
-                    </Text>
-                    <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>load</Text>
-                  </TouchableOpacity>
-                ))}
-                <TouchableOpacity
-                  onPress={notReady}
-                  className="items-center justify-center"
-                  style={{
-                    height: 76,
-                    width: 76,
-                    borderRadius: 16,
-                    borderWidth: 1,
-                    borderStyle: 'dashed',
-                    borderColor: colors.border,
-                  }}
-                >
-                  <Ionicons name="add" size={20} color={colors.brandLight} />
-                  <Text style={{ color: colors.brandLight, fontSize: 11, marginTop: 2 }}>
-                    Other
-                  </Text>
-                </TouchableOpacity>
-              </ScrollView>
-
-              <Text
-                className="text-ink dark:text-ink-dark font-bold mt-6"
-                style={{ fontSize: 18 }}
-              >
-                Card activity
-              </Text>
-              <View
-                className="items-center"
-                style={{
-                  marginTop: 12,
-                  borderRadius: 16,
-                  backgroundColor: colors.card,
-                  paddingVertical: 32,
-                  paddingHorizontal: 20,
-                }}
-              >
-                <View
-                  className="items-center justify-center"
-                  style={{
-                    height: 48,
-                    width: 48,
-                    borderRadius: 24,
-                    backgroundColor: colors.circle,
-                  }}
-                >
-                  <Ionicons name="lock-closed-outline" size={20} color={colors.muted} />
-                </View>
-                <Text style={{ color: colors.ink, fontWeight: '600', marginTop: 12 }}>
-                  Nothing to show yet
-                </Text>
-                <Text
-                  style={{
-                    color: colors.muted,
-                    fontSize: 12,
-                    marginTop: 4,
-                    textAlign: 'center',
-                  }}
-                >
-                  Once your card is live, everything you spend on it appears here.
-                </Text>
-              </View>
+              {activeCard && <CardActivity cardId={activeCard.id} />}
 
               <CreateButton onPress={createCard} busy={creating} label="Create another card" />
             </>
@@ -332,23 +265,67 @@ function CreateButton({
   );
 }
 
-/**
- * The card sits BEHIND a pocket panel that overlaps it, so only its top band —
- * name, brand, last four, expiry — shows, the way a card sits in a wallet.
- */
-function CardWallet({
+function CardPocket({
   card,
   stackCount,
   holder,
-  onUnavailable,
+  usdAvailable,
+  onFunded,
+  onFrozen,
 }: {
   card: VirtualCard;
   stackCount: number;
   holder: string | null;
-  onUnavailable: () => void;
+  usdAvailable: string | null;
+  onFunded: () => Promise<void>;
+  onFrozen: (status: string) => void;
 }) {
   const frozen = card.status === 'frozen';
   const pending = card.status === 'pending';
+  const active = card.status === 'active';
+  const balance = usd(card.balanceMinor);
+
+  const [sheet, setSheet] = useState<null | 'fund' | 'withdraw'>(null);
+  const [revealed, setRevealed] = useState<{ number: string | null; cvv: string | null; expiry: string | null } | null>(
+    null,
+  );
+  const [revealing, setRevealing] = useState(false);
+  const [freezing, setFreezing] = useState(false);
+
+  async function reveal() {
+    if (revealed) {
+      setRevealed(null);
+      return;
+    }
+    setRevealing(true);
+    try {
+      const { card: c } = await api.revealCard(card.id);
+      setRevealed({ number: c.number, cvv: c.cvv, expiry: c.expiry });
+    } catch (e) {
+      Alert.alert(
+        'Card details',
+        e instanceof ApiError && e.status === 403
+          ? 'Turn on two-factor authentication to reveal card details.'
+          : e instanceof ApiError
+            ? e.message
+            : 'Couldn’t reveal the card right now.',
+      );
+    } finally {
+      setRevealing(false);
+    }
+  }
+
+  async function toggleFreeze() {
+    setFreezing(true);
+    try {
+      const { status } = await api.setCardFrozen(card.id, !frozen);
+      onFrozen(status);
+    } catch (e) {
+      Alert.alert('Card', e instanceof ApiError ? e.message : 'Couldn’t update the card.');
+    } finally {
+      setFreezing(false);
+    }
+  }
 
   return (
     <View style={{ marginTop: 8 }}>
@@ -366,7 +343,7 @@ function CardWallet({
         />
       )}
 
-      {/* Card face. Bottom padding leaves room for the pocket to overlap. */}
+      {/* Card face. */}
       <View
         style={{
           borderRadius: 20,
@@ -377,50 +354,47 @@ function CardWallet({
         }}
       >
         <View className="flex-row items-start justify-between">
-          <Text
-            numberOfLines={1}
-            style={{ color: colors.white, fontSize: 17, fontWeight: '700', maxWidth: '60%' }}
-          >
+          <Text numberOfLines={1} style={{ color: colors.white, fontSize: 17, fontWeight: '700', maxWidth: '60%' }}>
             {holder ?? 'CheqPay card'}
           </Text>
-          <Text
-            style={{
-              color: colors.white,
-              fontSize: 18,
-              fontWeight: '900',
-              fontStyle: 'italic',
-            }}
-          >
+          <Text style={{ color: colors.white, fontSize: 18, fontWeight: '900', fontStyle: 'italic' }}>
             {card.brand ?? 'VISA'}
           </Text>
         </View>
         <View className="flex-row items-end justify-between" style={{ marginTop: 8 }}>
-          <Text
-            style={{
-              color: colors.white,
-              opacity: 0.9,
-              fontSize: 14,
-              letterSpacing: 3,
-              fontVariant: ['tabular-nums'],
-            }}
-          >
-            {card.maskedPan ?? '•••• •••• •••• ••••'}
+          <Text style={{ color: colors.white, opacity: 0.9, fontSize: 14, letterSpacing: 2, fontVariant: ['tabular-nums'] }}>
+            {revealed?.number
+              ? revealed.number.replace(/(.{4})/g, '$1 ').trim()
+              : (card.maskedPan ?? '•••• •••• •••• ••••')}
           </Text>
           <Text style={{ color: colors.white, opacity: 0.8, fontSize: 11, fontWeight: '600' }}>
-            Valid {card.status === 'active' ? '••/••' : '—'}
+            {revealed?.expiry ? `Valid ${revealed.expiry}` : active ? 'Valid ••/••' : '—'}
           </Text>
         </View>
+        {revealed?.cvv && (
+          <View className="flex-row items-center" style={{ marginTop: 12, gap: 16 }}>
+            <TouchableOpacity
+              onPress={() => {
+                Clipboard.setString(revealed.number?.replace(/\s/g, '') ?? '');
+                Alert.alert('Copied', 'Card number copied.');
+              }}
+              className="flex-row items-center px-2.5 py-1 rounded-full"
+              style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}
+            >
+              <Ionicons name="copy-outline" size={12} color={colors.white} />
+              <Text style={{ color: colors.white, fontSize: 12, fontWeight: '600', marginLeft: 4 }}>
+                Copy number
+              </Text>
+            </TouchableOpacity>
+            <Text style={{ color: colors.white, fontSize: 12, fontWeight: '600', opacity: 0.9 }}>
+              CVV {revealed.cvv}
+            </Text>
+          </View>
+        )}
       </View>
 
-      {/* Pocket, overlapping the card. */}
-      <View
-        style={{
-          marginTop: -40,
-          borderRadius: 20,
-          backgroundColor: colors.brand,
-          padding: 6,
-        }}
-      >
+      {/* Pocket. */}
+      <View style={{ marginTop: -40, borderRadius: 20, backgroundColor: colors.brand, padding: 6 }}>
         <View
           style={{
             borderRadius: 14,
@@ -445,73 +419,291 @@ function CardWallet({
               Card balance
             </Text>
             {(frozen || pending) && (
-              <View
-                className="flex-row items-center px-2 py-0.5 rounded-full"
-                style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}
-              >
+              <View className="flex-row items-center px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}>
                 <Ionicons name={frozen ? 'snow' : 'time-outline'} size={11} color={colors.white} />
-                <Text style={{ color: colors.white, fontSize: 11, marginLeft: 4 }}>
-                  {card.status}
-                </Text>
+                <Text style={{ color: colors.white, fontSize: 11, marginLeft: 4 }}>{card.status}</Text>
               </View>
             )}
           </View>
 
-          {/* No balance until the provider reports one — $0.00 would read as
-              "empty card" rather than "not known yet". */}
           <Text style={{ color: colors.white, fontSize: 32, fontWeight: '800', marginTop: 4 }}>
-            <Text style={{ opacity: 0.6 }}>$</Text>—
+            {balance ?? <Text style={{ opacity: 0.6 }}>$—</Text>}
           </Text>
           <Text style={{ color: colors.white, opacity: 0.6, fontSize: 11, marginTop: 6 }}>
-            Balance shown once the card is live
+            {balance
+              ? usdAvailable
+                ? `${usdAvailable} available to load`
+                : ' '
+              : 'Balance appears once the card is active'}
           </Text>
 
           <View className="flex-row items-center" style={{ marginTop: 16, gap: 8 }}>
             <TouchableOpacity
-              onPress={onUnavailable}
+              onPress={() => setSheet('fund')}
+              disabled={!active}
               className="flex-1 flex-row items-center justify-center"
-              style={{
-                borderRadius: 999,
-                backgroundColor: 'rgba(255,255,255,0.15)',
-                paddingVertical: 12,
-              }}
+              style={{ borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.15)', paddingVertical: 12, opacity: active ? 1 : 0.5 }}
             >
               <Ionicons name="add" size={16} color={colors.white} />
-              <Text
-                style={{ color: colors.white, fontWeight: '700', fontSize: 14, marginLeft: 6 }}
-              >
-                Add money
-              </Text>
+              <Text style={{ color: colors.white, fontWeight: '700', fontSize: 14, marginLeft: 6 }}>Add money</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={onUnavailable}
-              accessibilityLabel="Show card details"
-              className="items-center justify-center"
-              style={{
-                height: 44,
-                width: 44,
-                borderRadius: 22,
-                backgroundColor: 'rgba(255,255,255,0.15)',
-              }}
+              onPress={() => setSheet('withdraw')}
+              disabled={!active}
+              style={{ borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.15)', paddingVertical: 12, paddingHorizontal: 14, opacity: active ? 1 : 0.5 }}
             >
-              <Ionicons name="eye-outline" size={17} color={colors.white} />
+              <Text style={{ color: colors.white, fontWeight: '700', fontSize: 14 }}>Withdraw</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={onUnavailable}
+              onPress={reveal}
+              disabled={!active || revealing}
+              accessibilityLabel={revealed ? 'Hide card details' : 'Show card details'}
+              className="items-center justify-center"
+              style={{ height: 44, width: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.15)', opacity: active ? 1 : 0.5 }}
+            >
+              {revealing ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Ionicons name={revealed ? 'eye-off-outline' : 'eye-outline'} size={17} color={colors.white} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={toggleFreeze}
+              disabled={pending || freezing}
               accessibilityLabel={frozen ? 'Unfreeze card' : 'Freeze card'}
               className="items-center justify-center"
-              style={{
-                height: 44,
-                width: 44,
-                borderRadius: 22,
-                backgroundColor: 'rgba(255,255,255,0.15)',
-              }}
+              style={{ height: 44, width: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.15)', opacity: pending ? 0.5 : 1 }}
             >
-              <Ionicons name={frozen ? 'sunny-outline' : 'snow-outline'} size={17} color={colors.white} />
+              {freezing ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Ionicons name={frozen ? 'sunny-outline' : 'snow-outline'} size={17} color={colors.white} />
+              )}
             </TouchableOpacity>
           </View>
         </View>
       </View>
+
+      <AmountSheet
+        visible={sheet !== null}
+        mode={sheet ?? 'fund'}
+        cardId={card.id}
+        cardBalance={balance}
+        usdAvailable={usdAvailable}
+        onClose={() => setSheet(null)}
+        onDone={async () => {
+          setSheet(null);
+          await onFunded();
+        }}
+      />
+    </View>
+  );
+}
+
+function AmountSheet({
+  visible,
+  mode,
+  cardId,
+  cardBalance,
+  usdAvailable,
+  onClose,
+  onDone,
+}: {
+  visible: boolean;
+  mode: 'fund' | 'withdraw';
+  cardId: string;
+  cardBalance: string | null;
+  usdAvailable: string | null;
+  onClose: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const [amount, setAmount] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const isFund = mode === 'fund';
+
+  useEffect(() => {
+    if (visible) {
+      setAmount('');
+      setErr(null);
+    }
+  }, [visible, mode]);
+
+  async function submit() {
+    setErr(null);
+    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
+      setErr('Enter an amount like 10 or 10.50');
+      return;
+    }
+    setBusy(true);
+    try {
+      if (isFund) await api.fundCard(cardId, amount);
+      else await api.withdrawFromCard(cardId, amount);
+      await onDone();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'That didn’t go through. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onClose}
+        style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => {}}
+          style={{
+            backgroundColor: colors.surface,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            padding: 20,
+            paddingBottom: 36,
+          }}
+        >
+          <View className="flex-row items-center justify-between" style={{ marginBottom: 16 }}>
+            <Text style={{ color: colors.ink, fontSize: 18, fontWeight: '700' }}>
+              {isFund ? 'Add money to card' : 'Withdraw from card'}
+            </Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={22} color={colors.muted} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 8 }}>
+            {isFund
+              ? `From your dollar balance${usdAvailable ? ` · ${usdAvailable} available` : ''}`
+              : `To your dollar balance${cardBalance ? ` · ${cardBalance} on card` : ''}`}
+          </Text>
+
+          <View
+            className="flex-row items-center"
+            style={{ backgroundColor: colors.card, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12 }}
+          >
+            <Text style={{ fontSize: 24, fontWeight: '800', color: colors.muted }}>$</Text>
+            <TextInput
+              autoFocus
+              keyboardType="decimal-pad"
+              value={amount}
+              onChangeText={setAmount}
+              placeholder="0.00"
+              placeholderTextColor={colors.muted}
+              style={{ flex: 1, fontSize: 24, fontWeight: '800', color: colors.ink, paddingLeft: 6 }}
+            />
+          </View>
+
+          <View className="flex-row" style={{ marginTop: 12, gap: 8, flexWrap: 'wrap' }}>
+            {QUICK.map((a) => (
+              <TouchableOpacity
+                key={a}
+                onPress={() => setAmount(a)}
+                style={{ backgroundColor: colors.card, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8 }}
+              >
+                <Text style={{ color: colors.ink, fontWeight: '700', fontSize: 14 }}>${a}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {err && <Text style={{ color: '#F87171', marginTop: 12 }}>{err}</Text>}
+
+          <TouchableOpacity
+            onPress={submit}
+            disabled={busy}
+            className="flex-row items-center justify-center"
+            style={{ marginTop: 20, backgroundColor: colors.brand, borderRadius: 16, paddingVertical: 16, opacity: busy ? 0.5 : 1 }}
+          >
+            {busy ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Ionicons name="checkmark" size={18} color={colors.white} />
+            )}
+            <Text style={{ color: colors.white, fontWeight: '700', marginLeft: 8 }}>
+              {busy ? 'Working…' : isFund ? 'Add money' : 'Withdraw'}
+            </Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+function CardActivity({ cardId }: { cardId: string }) {
+  const [txns, setTxns] = useState<CardTransaction[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setTxns(null);
+    api
+      .getCardTransactions(cardId)
+      .then(({ transactions }) => active && setTxns(transactions))
+      .catch(() => active && setTxns([]));
+    return () => {
+      active = false;
+    };
+  }, [cardId]);
+
+  return (
+    <View style={{ marginTop: 32 }}>
+      <Text className="text-ink dark:text-ink-dark font-bold" style={{ fontSize: 18 }}>
+        Card activity
+      </Text>
+      {txns === null ? (
+        <ActivityIndicator color={colors.muted} style={{ marginTop: 16 }} />
+      ) : txns.length === 0 ? (
+        <View
+          className="items-center"
+          style={{ marginTop: 12, borderRadius: 16, backgroundColor: colors.card, paddingVertical: 32, paddingHorizontal: 20 }}
+        >
+          <View
+            className="items-center justify-center"
+            style={{ height: 48, width: 48, borderRadius: 24, backgroundColor: colors.circle }}
+          >
+            <Ionicons name="lock-closed-outline" size={20} color={colors.muted} />
+          </View>
+          <Text style={{ color: colors.ink, fontWeight: '600', marginTop: 12 }}>Nothing to show yet</Text>
+          <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: 'center' }}>
+            Everything you spend on this card will appear here.
+          </Text>
+        </View>
+      ) : (
+        <View style={{ marginTop: 12, borderRadius: 16, backgroundColor: colors.card, overflow: 'hidden' }}>
+          {txns.map((t, i) => {
+            const credit = t.entry === 'CREDIT';
+            const amt = t.amountMinor
+              ? `${credit ? '+' : '-'}$${(Number(t.amountMinor) / 100).toFixed(2)}`
+              : '—';
+            return (
+              <View
+                key={t.id}
+                className="flex-row items-center justify-between"
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  borderTopWidth: i === 0 ? 0 : 1,
+                  borderTopColor: colors.border,
+                }}
+              >
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text numberOfLines={1} style={{ color: colors.ink, fontSize: 14, fontWeight: '600' }}>
+                    {t.merchant ?? t.description ?? 'Transaction'}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>
+                    {t.createdAt ? new Date(t.createdAt).toLocaleDateString() : ''}
+                    {t.status ? ` · ${t.status}` : ''}
+                  </Text>
+                </View>
+                <Text style={{ color: credit ? colors.positive : colors.ink, fontSize: 14, fontWeight: '700' }}>
+                  {amt}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }

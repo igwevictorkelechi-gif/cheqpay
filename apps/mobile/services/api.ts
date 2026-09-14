@@ -584,6 +584,51 @@ export const api = {
     return apiFetch('/api/cards', { method: 'POST' });
   },
 
+  getCard(id: string): Promise<{ card: VirtualCard }> {
+    return apiFetch(`/api/cards/${id}`);
+  },
+
+  /** Full PAN, CVV and expiry — requires step-up 2FA. Never cache these. */
+  revealCard(id: string): Promise<{
+    card: {
+      name: string | null;
+      number: string | null;
+      maskedPan: string | null;
+      expiry: string | null;
+      cvv: string | null;
+      brand: string | null;
+    };
+  }> {
+    return apiFetch(`/api/cards/${id}/reveal`);
+  },
+
+  fundCard(id: string, amount: string): Promise<{ transactionId: string; status: string }> {
+    return apiFetch(`/api/cards/${id}/fund`, {
+      method: 'POST',
+      headers: { 'idempotency-key': idemKey() },
+      body: JSON.stringify({ amount }),
+    });
+  },
+
+  withdrawFromCard(id: string, amount: string): Promise<{ transactionId: string; status: string }> {
+    return apiFetch(`/api/cards/${id}/withdraw`, {
+      method: 'POST',
+      headers: { 'idempotency-key': idemKey() },
+      body: JSON.stringify({ amount }),
+    });
+  },
+
+  setCardFrozen(id: string, freeze: boolean): Promise<{ status: string }> {
+    return apiFetch(`/api/cards/${id}/freeze`, {
+      method: 'POST',
+      body: JSON.stringify({ freeze }),
+    });
+  },
+
+  getCardTransactions(id: string): Promise<{ transactions: CardTransaction[] }> {
+    return apiFetch(`/api/cards/${id}/transactions`);
+  },
+
   /** Admin-published in-app popup (null when none is live). */
   getPopup(): Promise<{
     popup: {
@@ -619,6 +664,17 @@ export interface FeatureFlags {
   p2p_transfers: boolean;
 }
 
+export interface CardTransaction {
+  id: string;
+  amountMinor: string | null;
+  currency: string;
+  description: string | null;
+  status: string | null;
+  entry: string | null;
+  merchant: string | null;
+  createdAt: string | null;
+}
+
 export interface VirtualCard {
   id: string;
   currency: string;
@@ -626,6 +682,10 @@ export interface VirtualCard {
   maskedPan: string | null;
   status: string;
   createdAt: string;
+  /** Live balance in minor units (cents), or null when it could not be read. */
+  balanceMinor?: string | null;
+  /** The provider's current status, when read live. */
+  liveStatus?: string | null;
 }
 
 export interface Bank {

@@ -154,7 +154,8 @@ export async function mapleradRequest<T>(
  *  - The request body is redacted before logging: the BVN / identification
  *    number, the ID image and any secret are masked. The phone, name, dob and
  *    address are kept, because those are exactly what a "why is this tier 0"
- *    investigation needs to see. The RESPONSE is logged as-is.
+ *    investigation needs to see. The RESPONSE is redacted the same way, so a
+ *    card_number or cvv in a card-detail response never reaches the log.
  *  - It never throws: a logging failure must not affect the call. Silenced with
  *    MAPLERAD_LOG_RESPONSES=0 without a redeploy.
  */
@@ -173,7 +174,11 @@ function logMaplerad(
     const line = `[maplerad] ${method} ${path} -> HTTP ${status || "network-error"} ok=${ok}`;
     const payload = {
       request: redactForLog(reqBody),
-      response: resBody,
+      // Redact the RESPONSE too, not just the request: GET /issuing/{id}
+      // returns a full card_number and cvv, and those must never reach a log.
+      // redactForLog masks exactly those keys and leaves masked_pan, expiry,
+      // balance and status visible for debugging.
+      response: redactForLog(resBody),
     };
     const detail = truncate(JSON.stringify(payload));
     if (ok) console.log(line, detail);
