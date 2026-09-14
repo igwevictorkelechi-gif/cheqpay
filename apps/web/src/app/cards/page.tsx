@@ -371,23 +371,45 @@ function CardPocket({
             card ? "" : "opacity-70"
           }`}
         >
+          {/* Brand and card type. The supplied logo artwork is a purple
+              wordmark on a light ground, which would disappear on this purple
+              face, so the card carries the name set in white — the way a card
+              face normally carries a brand. */}
           <div className="flex items-start justify-between">
-            <p className="max-w-[60%] truncate text-[17px] font-bold tracking-tight">
-              {holder ?? "CheqPay card"}
-            </p>
-            <span className="text-lg font-black italic tracking-tight">
-              {card?.brand ?? "VISA"}
+            <span className="text-[17px] font-extrabold tracking-tight">CheqPay</span>
+            <span className="rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+              {card?.currency ?? "USD"} Virtual
             </span>
           </div>
-          <div className="mt-2 flex items-end justify-between">
-            <p className="font-mono text-sm tracking-[0.18em] opacity-90">
-              {revealed?.number
-                ? revealed.number.replace(/(.{4})/g, "$1 ").trim()
-                : (card?.maskedPan ?? "•••• •••• •••• ••••")}
-            </p>
-            <p className="text-xs font-semibold opacity-80">
-              {revealed?.expiry ? `Valid ${revealed.expiry}` : active ? "Valid ••/••" : "—"}
-            </p>
+
+          <p className="mt-4 font-mono text-[15px] tracking-[0.18em] opacity-95">
+            {revealed?.number
+              ? revealed.number.replace(/(.{4})/g, "$1 ").trim()
+              : (card?.maskedPan ?? "•••• •••• •••• ••••")}
+          </p>
+
+          <div className="mt-3 flex items-end justify-between">
+            <div className="min-w-0">
+              <p className="text-[9px] font-semibold uppercase tracking-wider opacity-60">
+                Card holder
+              </p>
+              <p className="max-w-[180px] truncate text-[13px] font-bold">
+                {holder ?? "—"}
+              </p>
+            </div>
+            <div className="flex items-end gap-4">
+              <div className="text-right">
+                <p className="text-[9px] font-semibold uppercase tracking-wider opacity-60">
+                  Valid thru
+                </p>
+                <p className="text-[13px] font-bold">
+                  {revealed?.expiry ?? (active ? "••/••" : "—")}
+                </p>
+              </div>
+              <span className="text-lg font-black italic leading-none tracking-tight">
+                {card?.brand ?? "VISA"}
+              </span>
+            </div>
           </div>
           {revealed?.cvv && (
             <div className="mt-3 flex items-center gap-4 text-xs">
@@ -448,7 +470,7 @@ function CardPocket({
                 ) : (
                   <Plus className="h-4 w-4" />
                 )}
-                {creating ? "Creating…" : "Create your first card"}
+                {creating ? "Creating…" : "Create virtual card"}
               </button>
             ) : (
               <div className="mt-4 flex items-center gap-2">

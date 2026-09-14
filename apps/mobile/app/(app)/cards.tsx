@@ -362,23 +362,73 @@ function CardPocket({
           paddingBottom: 64,
         }}
       >
+        {/* Brand and card type. The supplied logo artwork is a purple wordmark
+            on a light ground and would disappear on this purple face, so the
+            card carries the name set in white — the way a card face normally
+            carries a brand. */}
         <View className="flex-row items-start justify-between">
-          <Text numberOfLines={1} style={{ color: colors.white, fontSize: 17, fontWeight: '700', maxWidth: '60%' }}>
-            {holder ?? 'CheqPay card'}
+          <Text style={{ color: colors.white, fontSize: 17, fontWeight: '800', letterSpacing: -0.3 }}>
+            CheqPay
           </Text>
-          <Text style={{ color: colors.white, fontSize: 18, fontWeight: '900', fontStyle: 'italic' }}>
-            {card?.brand ?? 'VISA'}
-          </Text>
+          <View
+            style={{
+              borderRadius: 999,
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.white,
+                fontSize: 10,
+                fontWeight: '700',
+                textTransform: 'uppercase',
+                letterSpacing: 1,
+              }}
+            >
+              {card?.currency ?? 'USD'} Virtual
+            </Text>
+          </View>
         </View>
-        <View className="flex-row items-end justify-between" style={{ marginTop: 8 }}>
-          <Text style={{ color: colors.white, opacity: 0.9, fontSize: 14, letterSpacing: 2, fontVariant: ['tabular-nums'] }}>
-            {revealed?.number
-              ? revealed.number.replace(/(.{4})/g, '$1 ').trim()
-              : (card?.maskedPan ?? '•••• •••• •••• ••••')}
-          </Text>
-          <Text style={{ color: colors.white, opacity: 0.8, fontSize: 11, fontWeight: '600' }}>
-            {revealed?.expiry ? `Valid ${revealed.expiry}` : active ? 'Valid ••/••' : '—'}
-          </Text>
+
+        <Text
+          style={{
+            color: colors.white,
+            opacity: 0.95,
+            fontSize: 15,
+            letterSpacing: 2.5,
+            marginTop: 16,
+            fontVariant: ['tabular-nums'],
+          }}
+        >
+          {revealed?.number
+            ? revealed.number.replace(/(.{4})/g, '$1 ').trim()
+            : (card?.maskedPan ?? '•••• •••• •••• ••••')}
+        </Text>
+
+        <View className="flex-row items-end justify-between" style={{ marginTop: 12 }}>
+          <View style={{ flexShrink: 1 }}>
+            <Text style={{ color: colors.white, opacity: 0.6, fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 }}>
+              Card holder
+            </Text>
+            <Text numberOfLines={1} style={{ color: colors.white, fontSize: 13, fontWeight: '700', maxWidth: 180 }}>
+              {holder ?? '—'}
+            </Text>
+          </View>
+          <View className="flex-row items-end" style={{ gap: 16 }}>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{ color: colors.white, opacity: 0.6, fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 }}>
+                Valid thru
+              </Text>
+              <Text style={{ color: colors.white, fontSize: 13, fontWeight: '700' }}>
+                {revealed?.expiry ?? (active ? '••/••' : '—')}
+              </Text>
+            </View>
+            <Text style={{ color: colors.white, fontSize: 18, fontWeight: '900', fontStyle: 'italic' }}>
+              {card?.brand ?? 'VISA'}
+            </Text>
+          </View>
         </View>
         {revealed?.cvv && (
           <View className="flex-row items-center" style={{ marginTop: 12, gap: 16 }}>
@@ -468,7 +518,7 @@ function CardPocket({
                 <Ionicons name="add" size={16} color={colors.white} />
               )}
               <Text style={{ color: colors.white, fontWeight: '700', fontSize: 14, marginLeft: 6 }}>
-                {creating ? 'Creating…' : 'Create your first card'}
+                {creating ? 'Creating…' : 'Create virtual card'}
               </Text>
             </TouchableOpacity>
           ) : (
