@@ -192,7 +192,7 @@ export default function TransactionPinScreen() {
                 <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 8 }}>
                   Turning this on stores your PIN on this device, in the secure
                   keystore, so Face ID can submit it for you. It never leaves the
-                  phone — but anyone who can pass this device's Face ID or
+                  phone — but anyone who can pass this device’s Face ID or
                   fingerprint can approve payments. Turning it off deletes it.
                 </Text>
                 {!bioOn && (

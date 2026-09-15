@@ -65,7 +65,7 @@ export default function LoginScreen() {
             editable={!loading}
           />
           <Text className="text-gray-500 text-xs mt-2">
-            We'll email you a 6-digit code to sign in
+            We’ll email you a 6-digit code to sign in
           </Text>
         </View>
 
@@ -86,7 +86,7 @@ export default function LoginScreen() {
 
         {/* Sign Up Link */}
         <View className="flex-row justify-center items-center">
-          <Text className="text-gray-600">Don't have an account? </Text>
+          <Text className="text-gray-600">Don’t have an account? </Text>
           <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
             <Text className="text-green-600 font-bold">Sign Up</Text>
           </TouchableOpacity>
