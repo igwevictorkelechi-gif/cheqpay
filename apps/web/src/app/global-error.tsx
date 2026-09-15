@@ -1,11 +1,15 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
+import { reportError } from "@/instrumentation-client";
 
 /**
  * Root error boundary. Reports uncaught render errors to Sentry (no-op without
  * a DSN) and shows a minimal recovery screen.
+ *
+ * Reports through instrumentation-client rather than importing Sentry here: a
+ * static import in this file would pull the SDK back into the shared bundle
+ * and undo the code-splitting that keeps it off every page that never errors.
  */
 export default function GlobalError({
   error,
@@ -15,7 +19,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    reportError(error);
   }, [error]);
 
   return (
