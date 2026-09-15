@@ -39,6 +39,17 @@ const rows: Row[] = [
     href: "/change-password",
   },
   {
+    // Deliberately listed above App lock: this is the PIN that guards money,
+    // and the two are easy to confuse. App lock decides whether the app opens
+    // on this device; the transaction PIN decides whether a payment goes out.
+    icon: ShieldCheck,
+    iconColor: "#34D399",
+    iconBg: "rgba(52,211,153,0.15)",
+    title: "Transaction PIN",
+    subtitle: "The PIN you type to approve payments",
+    href: "/transaction-pin",
+  },
+  {
     icon: Lock,
     iconColor: "#8A7BB5",
     iconBg: "rgba(138,123,181,0.2)",

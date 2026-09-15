@@ -7,6 +7,7 @@ import { SuccessAnimation } from "@/components/Lottie";
 import { api, ApiError, type Balance } from "@/services/api";
 import { useFeatures } from "@/lib/useFeatures";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 
 type Step = "form" | "done";
 
@@ -55,19 +56,31 @@ export default function SendToUserPage() {
     }
   }
 
+  const { authorize } = useTransactionPin();
+
   async function send() {
     setError(null);
     setSending(true);
     try {
-      const res = await api.sendToUser({
-        username: confirmed ?? username,
-        asset,
-        amount,
-        note: note.trim() || undefined,
-      });
+      const res = await authorize(
+        (pin) =>
+          api.sendToUser(
+            {
+              username: confirmed ?? username,
+              asset,
+              amount,
+              note: note.trim() || undefined,
+            },
+            pin,
+          ),
+        { title: "Confirm this transfer", detail: `Sending ${amount} ${asset} to @${confirmed ?? username}.` },
+      );
       setSent({ amount: res.amountFormatted, asset: res.asset, to: res.recipient });
       setStep("done");
     } catch (e) {
+      // Dismissing the PIN prompt is a deliberate "not now", not a failure —
+      // showing an error for it would read as though the send went wrong.
+      if (e instanceof Error && e.message === PIN_CANCELLED) return;
       setError(e instanceof ApiError ? e.message : "Couldn’t send. Please try again.");
     } finally {
       setSending(false);

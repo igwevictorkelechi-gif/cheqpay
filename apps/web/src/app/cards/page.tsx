@@ -28,6 +28,7 @@ import {
   type VirtualCard,
 } from "@/services/api";
 import { useFeatures } from "@/lib/useFeatures";
+import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 
 /**
  * Virtual USD cards, issued via Maplerad.
@@ -592,6 +593,7 @@ function AmountSheet({
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
+  const { authorize } = useTransactionPin();
   const toast = useToast();
   const [amount, setAmount] = useState(initialAmount);
   const [busy, setBusy] = useState(false);
@@ -606,13 +608,24 @@ function AmountSheet({
     }
     setBusy(true);
     try {
-      if (isFund) await api.fundCard(cardId, amount);
-      else await api.withdrawFromCard(cardId, amount);
+      await authorize(
+        (pin) =>
+          isFund
+            ? api.fundCard(cardId, amount, pin)
+            : api.withdrawFromCard(cardId, amount, pin),
+        {
+          title: isFund ? "Confirm this card load" : "Confirm this card withdrawal",
+          detail: isFund
+            ? `Moving $${amount} from your balance onto the card.`
+            : `Moving $${amount} from the card back to your balance.`,
+        },
+      );
       toast.show(
         isFund ? `Loaded $${amount} onto the card.` : `Withdrew $${amount} to your balance.`,
       );
       await onDone();
     } catch (e) {
+      if (e instanceof Error && e.message === PIN_CANCELLED) return;
       setErr(e instanceof ApiError ? e.message : "That didn't go through. Please try again.");
     } finally {
       setBusy(false);
