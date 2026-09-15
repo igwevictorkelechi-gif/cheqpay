@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { NIGERIAN_BANKS } from "@cheqpay/shared";
 import { api, ApiError, type Bank, type Beneficiary } from "@/services/api";
+import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 import DesktopSidebar from "@/components/DesktopSidebar";
 
 type Mode = "list" | "add";
@@ -115,18 +116,32 @@ export default function WithdrawBeneficiaryPage() {
     if (selectedId === id) setSelectedId(null);
   }
 
+  const { authorize } = useTransactionPin();
+
   async function payout() {
     if (!selected) return;
     setPayError(null);
     setSubmitting(true);
     try {
-      await api.createNgnWithdrawal({
-        amount: String(amount),
-        bankCode: selected.bankCode,
-        accountNumber: selected.accountNumber,
-      });
+      await authorize(
+        (pin) =>
+          api.createNgnWithdrawal(
+            {
+              amount: String(amount),
+              bankCode: selected.bankCode,
+              accountNumber: selected.accountNumber,
+            },
+            pin,
+          ),
+        { title: "Confirm this withdrawal", detail: `Sending ₦${amount} to ${selected.accountNumber}.` },
+      );
       router.replace(`/withdraw/done?amount=${amount}`);
     } catch (e) {
+      // A dismissed PIN prompt means "not now", not a failed payout.
+      if (e instanceof Error && e.message === PIN_CANCELLED) {
+        setSubmitting(false);
+        return;
+      }
       setPayError(e instanceof ApiError ? e.message : "Withdrawal failed. Please try again.");
       setSubmitting(false);
     }

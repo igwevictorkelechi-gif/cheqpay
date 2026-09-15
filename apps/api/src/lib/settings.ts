@@ -34,6 +34,13 @@ export const SETTING_KEYS = {
   WITHDRAWAL_MIN_NGN: "withdrawal_min_ngn", // whole naira, bank payouts
   WITHDRAWAL_MIN_USD: "withdrawal_min_usd", // USD value, crypto withdrawals
   DEPOSIT_MIN_USD: "deposit_min_usd", // guidance shown to the user, not enforced
+  // Whether a transaction PIN is REQUIRED before money may leave an account.
+  // Defaults OFF, and that default is a rollout decision rather than a security
+  // opinion: switching it on blocks every existing user — none of whom has a
+  // PIN yet — until they set one. Turn it on once the apps that prompt for a
+  // PIN are live. Note that OFF is not "no PIN checking": a user who HAS set a
+  // PIN always has it verified, so opting in protects you immediately.
+  TRANSACTION_PIN_REQUIRED: "transaction_pin_required", // "1" | "0"
   // Cashback rewards, paid in NGN. Rates are per transaction kind because the
   // economics differ (a bill carries margin, a deposit carries a fee, a payout
   // carries neither), and all default to 0 so nothing pays out until set.
@@ -428,6 +435,29 @@ export async function setSupportContact(
     await upsertSetting(SETTING_KEYS.SUPPORT_PHONE, patch.phone.trim(), updatedBy);
   if (patch.whatsapp !== undefined)
     await upsertSetting(SETTING_KEYS.SUPPORT_WHATSAPP, patch.whatsapp.trim(), updatedBy);
+}
+
+/**
+ * Whether money movement REQUIRES a transaction PIN.
+ *
+ * Defaults false so that deploying the PIN does not strand every existing
+ * account — none of them has a PIN yet, and a hard gate would refuse their
+ * next transfer with no way through until they set one. A user who HAS set a
+ * PIN is verified regardless of this switch, so turning it on is the step that
+ * makes the PIN mandatory, not the step that makes it real.
+ */
+export async function isTransactionPinRequired(): Promise<boolean> {
+  const row = await prisma.platformSetting.findUnique({
+    where: { key: SETTING_KEYS.TRANSACTION_PIN_REQUIRED },
+  });
+  return row?.value === "1";
+}
+
+export async function setTransactionPinRequired(
+  required: boolean,
+  updatedBy?: string
+): Promise<void> {
+  await upsertSetting(SETTING_KEYS.TRANSACTION_PIN_REQUIRED, required ? "1" : "0", updatedBy);
 }
 
 async function upsertSetting(key: string, value: string, updatedBy?: string) {

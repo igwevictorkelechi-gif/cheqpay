@@ -14,6 +14,7 @@ import {
 import { useFeatures } from "@/lib/useFeatures";
 import { readCache, writeCache, invalidateMoneyCaches } from "@/lib/cache";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 
 interface AssetSnapshot {
   priceNgn: string | null;
@@ -357,6 +358,7 @@ function TradeSheet({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { authorize } = useTransactionPin();
   const [side, setSide] = useState<"buy" | "sell">(initialSide);
   const [amount, setAmount] = useState("");
   const [quote, setQuote] = useState<Awaited<ReturnType<typeof api.createQuote>> | null>(null);
@@ -389,11 +391,14 @@ function TradeSheet({
     setBusy(true);
     setMsg(null);
     try {
-      await api.executeSwap(quote.quoteId);
+      await authorize((pin) => api.executeSwap(quote.quoteId, pin), {
+        title: "Confirm this trade",
+      });
       invalidateMoneyCaches();
       setDone(true);
       setTimeout(onDone, 1100);
     } catch (e) {
+      if (e instanceof Error && e.message === PIN_CANCELLED) return;
       setMsg(e instanceof ApiError ? e.message : "Swap failed");
     } finally {
       setBusy(false);

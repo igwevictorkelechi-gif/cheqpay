@@ -16,6 +16,7 @@ import { invalidateMoneyCaches } from "@/lib/cache";
 import { getAssetMeta } from "@/lib/cryptoAssets";
 import { isAddressForNetwork, shortAddress } from "@/lib/address";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -31,6 +32,7 @@ function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: 
 type Stage = "form" | "review" | "checking" | "done";
 
 export default function SendCryptoDetailPage() {
+  const { authorize } = useTransactionPin();
   const router = useRouter();
   const params = useParams<{ symbol: string }>();
   const symbol = (params?.symbol ?? "").toUpperCase();
@@ -188,16 +190,28 @@ export default function SendCryptoDetailPage() {
       await new Promise((r) => setTimeout(r, 700));
     }
     try {
-      const res = await api.createCryptoWithdrawal({
-        asset: meta!.symbol,
-        network: (liveNetwork ?? meta!.network) as "BITCOIN" | "TRON" | "ETHEREUM" | "BSC",
-        toAddress: toAddress.trim(),
-        amount: amount.trim(),
-      });
+      const res = await authorize(
+        (pin) =>
+          api.createCryptoWithdrawal(
+            {
+              asset: meta!.symbol,
+              network: (liveNetwork ?? meta!.network) as "BITCOIN" | "TRON" | "ETHEREUM" | "BSC",
+              toAddress: toAddress.trim(),
+              amount: amount.trim(),
+            },
+            pin,
+          ),
+        { title: "Confirm this withdrawal", detail: `Sending ${amount.trim()} ${meta!.symbol} off-platform. This cannot be reversed.` },
+      );
       invalidateMoneyCaches();
       setTxHash(res.txHash);
       setStage("done");
     } catch (e) {
+      // A dismissed PIN prompt is "not now" — nothing was sent, say nothing.
+      if (e instanceof Error && e.message === PIN_CANCELLED) {
+        setStage("form");
+        return;
+      }
       const msg =
         e instanceof ApiError
           ? e.message

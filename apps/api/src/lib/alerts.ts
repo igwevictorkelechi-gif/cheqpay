@@ -2,6 +2,12 @@ import { prisma } from "@cheqpay/db";
 import { sendPush } from "./push";
 import { isEmailConfigured, sendEmail } from "./email";
 import { resolvePrefs, type NotificationCategory } from "./notifications";
+import {
+  kindForCategory,
+  renderEmail,
+  subjectFor,
+  type EmailContent,
+} from "./emailTemplates";
 
 /**
  * Fan a money event out to every channel the user is opted into: push to their
@@ -22,36 +28,19 @@ export interface AlertMessage {
   data?: Record<string, unknown>;
   /** Optional extra lines rendered under the body in the email only. */
   details?: { label: string; value: string }[];
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c
-  );
-}
-
-function renderHtml(msg: AlertMessage): string {
-  const rows = (msg.details ?? [])
-    .map(
-      (d) =>
-        `<tr><td style="padding:6px 16px 6px 0;color:#6b6880;font-size:13px">${escapeHtml(
-          d.label
-        )}</td><td style="padding:6px 0;color:#1F1B29;font-size:13px;font-weight:600">${escapeHtml(
-          d.value
-        )}</td></tr>`
-    )
-    .join("");
-  return `
-    <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#1F1B29;max-width:520px">
-      <p style="font-size:18px;font-weight:700;margin:0 0 8px">${escapeHtml(msg.title)}</p>
-      <p style="margin:0 0 16px;line-height:1.5">${escapeHtml(msg.body)}</p>
-      ${rows ? `<table style="border-collapse:collapse;margin-bottom:16px">${rows}</table>` : ""}
-      <p style="color:#6b6880;font-size:12px;line-height:1.5;margin:0">
-        You're receiving this because transaction alerts are on for your CheqPay account.
-        You can change which alerts you get under Settings &rsaquo; Notifications.
-      </p>
-      <p style="color:#6b6880;font-size:12px;margin:12px 0 0">— CheqPay</p>
-    </div>`;
+  /**
+   * The figure to lead with, already formatted ("₦12,500.00"). Email only —
+   * push already carries it in the body. Omitted for anything with no amount,
+   * so a security notice never renders as though it had one.
+   */
+  amount?: string;
+  /**
+   * A value the user must copy — an electricity token, a reference. Given its
+   * own block rather than buried in the detail table.
+   */
+  copyable?: { label: string; value: string };
+  /** Overrides the template chosen from the category. */
+  emailKind?: EmailContent["kind"];
 }
 
 /** Email half of the fanout. Silent when unconfigured or opted out. */
@@ -65,10 +54,21 @@ async function sendEmailAlert(userId: string, msg: AlertMessage): Promise<boolea
     if (!user?.email) return false;
     if (!resolvePrefs(user.notificationPrefs)[msg.category]) return false;
 
+    // The template is chosen by what the message IS, so a deposit, a payout,
+    // a bill receipt and a security notice are visibly different things in an
+    // inbox rather than one layout with different words in it.
+    const content: EmailContent = {
+      kind: msg.emailKind ?? kindForCategory(msg.category),
+      title: msg.title,
+      body: msg.body,
+      amount: msg.amount,
+      details: msg.details,
+      copyable: msg.copyable,
+    };
     await sendEmail({
       to: user.email,
-      subject: `CheqPay — ${msg.title}`,
-      html: renderHtml(msg),
+      subject: subjectFor(content),
+      html: renderEmail(content),
     });
     return true;
   } catch (err) {

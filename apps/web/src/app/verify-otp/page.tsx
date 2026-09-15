@@ -10,7 +10,7 @@ import { useAuthStore } from "@/store";
 function VerifyOTPForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setUser, setLoading: setAuthLoading } = useAuthStore();
+  const { setUser } = useAuthStore();
 
   const type = searchParams.get("type") || "login";
   const fullName = searchParams.get("fullName") || "";

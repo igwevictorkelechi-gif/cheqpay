@@ -10,6 +10,7 @@ import { enforceRateLimit } from "@/lib/ratelimit";
 import { ngnWithdrawalSchema } from "@/lib/validation";
 import { getWithdrawalFeeNgn, getWithdrawalMinNgn } from "@/lib/settings";
 import { requestContext } from "@/lib/requestContext";
+import { readPin, requireTransactionPin } from "@/lib/transactionPin";
 
 import { assertFeatureEnabled } from "@/lib/features";
 
@@ -64,6 +65,12 @@ export async function POST(req: Request) {
     if (existing) {
       return jsonOk({ transactionId: existing.id, status: existing.status });
     }
+
+    // Authorise the payout. Placed AFTER the replay short-circuit so a client
+    // retrying a payout that already went through still gets its answer, and
+    // BEFORE the first write so a wrong PIN leaves no transaction behind and
+    // does not burn the caller's idempotency key.
+    await requireTransactionPin(auth.id, readPin(req));
 
     const usedToday = await sumTodayWithdrawalsNgnKobo(auth.id);
     const effectiveTier = getEnv().RELAX_WITHDRAWAL_GUARDS ? MAX_TIER : user.kycTier;

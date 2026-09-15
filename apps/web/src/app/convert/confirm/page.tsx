@@ -13,6 +13,7 @@ import {
   resolveConvertMode,
   type ConvertSymbol,
 } from "@/lib/cryptoAssets";
+import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -38,6 +39,7 @@ function Leg({ caption, amount, symbol }: { caption: string; amount: string; sym
 }
 
 function ConfirmInner() {
+  const { authorize } = useTransactionPin();
   const router = useRouter();
   const params = useSearchParams();
   const amount = params.get("amount") || "0";
@@ -88,7 +90,10 @@ function ConfirmInner() {
     setProcessing(true);
     setError(null);
     try {
-      await api.executeSwap(quoteId);
+      await authorize((pin) => api.executeSwap(quoteId, pin), {
+        title: "Confirm this conversion",
+        detail: `Converting ${amount} ${fromSym} to about ${out} ${toSym}.`,
+      });
       invalidateMoneyCaches();
       const q = new URLSearchParams({
         from: amount,
@@ -98,6 +103,10 @@ function ConfirmInner() {
       }).toString();
       router.replace(`/convert/success?${q}`);
     } catch (e) {
+      if (e instanceof Error && e.message === PIN_CANCELLED) {
+        setProcessing(false);
+        return;
+      }
       const msg = e instanceof Error ? e.message : "Swap failed";
       // Expired/used quote → refresh and let the user retry.
       if (/expired|used|consumed/i.test(msg)) {

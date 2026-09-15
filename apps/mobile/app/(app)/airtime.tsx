@@ -21,7 +21,7 @@ export default function AirtimeScreen() {
           Airtime service coming soon
         </Text>
         <Text className="text-gray-400 mt-2 text-center">
-          We're working on integrating airtime purchases. This feature will be available shortly.
+          We’re working on integrating airtime purchases. This feature will be available shortly.
         </Text>
       </View>
     </View>

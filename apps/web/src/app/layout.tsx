@@ -4,6 +4,7 @@ import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import { SITE_URL } from "@/lib/site";
 import InstallPrompt from "@/components/InstallPrompt";
 import LockGate from "@/components/LockGate";
+import TransactionPinProvider from "@/components/TransactionPinProvider";
 import AuthGuard from "@/components/AuthGuard";
 
 export const metadata: Metadata = {
@@ -101,7 +102,11 @@ export default function RootLayout({
       </head>
       <body>
         <AuthGuard>
-          <div className="min-h-screen">{children}</div>
+          {/* Wraps the tree so any page can ask for the transaction PIN before
+              moving money, without each one carrying its own dialog. */}
+          <TransactionPinProvider>
+            <div className="min-h-screen">{children}</div>
+          </TransactionPinProvider>
         </AuthGuard>
         <LockGate />
         <InstallPrompt />

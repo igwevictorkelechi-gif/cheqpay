@@ -17,6 +17,7 @@ import { NIGERIAN_BANKS } from '@cheqpay/shared';
 import { colors } from '@/components/brand';
 import { SuccessAnimation } from '@/components/Lottie';
 import { api, ApiError, type Bank, type Beneficiary } from '@/services/api';
+import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 
 // Amount -> choose/add a verified own-name beneficiary -> payout -> done.
 // Payouts can only go to a bank account in the user's own name (verified at
@@ -126,18 +127,28 @@ export default function WithdrawScreen() {
     if (selectedId === id) setSelectedId(null);
   }
 
+  const { authorize } = useTransactionPin();
+
   async function payout() {
     if (!selected) return;
     setError(null);
     setLoading(true);
     try {
-      await api.createNgnWithdrawal({
-        amount: String(amt),
-        bankCode: selected.bankCode,
-        accountNumber: selected.accountNumber,
-      });
+      await authorize(
+        (pin) =>
+          api.createNgnWithdrawal(
+            {
+              amount: String(amt),
+              bankCode: selected.bankCode,
+              accountNumber: selected.accountNumber,
+            },
+            pin,
+          ),
+        { title: 'Confirm this withdrawal', detail: `Sending ₦${amt} to ${selected.accountNumber}.` },
+      );
       setStage('done');
     } catch (e) {
+      if (e instanceof Error && e.message === PIN_CANCELLED) return;
       setError(e instanceof ApiError ? e.message : 'Withdrawal failed. Please try again.');
     } finally {
       setLoading(false);
