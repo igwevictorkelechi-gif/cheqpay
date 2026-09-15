@@ -36,6 +36,14 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+/**
+ * The transaction PIN travels as a header, never in the body — the server
+ * reads it there so it can never be swept into a stored transaction payload.
+ */
+function pinHeader(pin?: string): Record<string, string> {
+  return pin ? { 'x-transaction-pin': pin } : {};
+}
+
 function idemKey(): string {
   return (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
 }
@@ -284,10 +292,10 @@ export const api = {
     });
   },
 
-  executeSwap(quoteId: string): Promise<{ transactionId: string; status: string }> {
+  executeSwap(quoteId: string, pin?: string): Promise<{ transactionId: string; status: string }> {
     return apiFetch('/api/swaps', {
       method: 'POST',
-      headers: { 'idempotency-key': idemKey() },
+      headers: { 'idempotency-key': idemKey(), ...pinHeader(pin) },
       body: JSON.stringify({ quoteId }),
     });
   },
@@ -325,11 +333,44 @@ export const api = {
     network: 'BITCOIN' | 'TRON' | 'ETHEREUM' | 'BSC';
     toAddress: string;
     amount: string;
-  }): Promise<{ transactionId: string; status: string; txHash?: string }> {
+  }, pin?: string): Promise<{ transactionId: string; status: string; txHash?: string }> {
     return apiFetch('/api/withdrawals/crypto', {
       method: 'POST',
-      headers: { 'idempotency-key': idemKey() },
+      headers: { 'idempotency-key': idemKey(), ...pinHeader(pin) },
       body: JSON.stringify(input),
+    });
+  },
+
+  getTransactionPinStatus(): Promise<{
+    isSet: boolean;
+    locked: boolean;
+    lockedUntil: string | null;
+    attemptsRemaining: number | null;
+    minLength: number;
+    maxLength: number;
+  }> {
+    return apiFetch('/api/security/transaction-pin');
+  },
+
+  setTransactionPin(pin: string): Promise<{ isSet: boolean }> {
+    return apiFetch('/api/security/transaction-pin', {
+      method: 'POST',
+      body: JSON.stringify({ pin }),
+    });
+  },
+
+  /** Prove a PIN is correct without moving money. Same lockout as a payment. */
+  verifyTransactionPin(pin: string): Promise<{ valid: boolean }> {
+    return apiFetch('/api/security/transaction-pin/verify', {
+      method: 'POST',
+      body: JSON.stringify({ pin }),
+    });
+  },
+
+  changeTransactionPin(currentPin: string, pin: string): Promise<{ isSet: boolean }> {
+    return apiFetch('/api/security/transaction-pin', {
+      method: 'PUT',
+      body: JSON.stringify({ currentPin, pin }),
     });
   },
 
@@ -338,10 +379,10 @@ export const api = {
     bankCode: string;
     accountNumber: string;
     narration?: string;
-  }): Promise<{ transactionId: string; status: string }> {
+  }, pin?: string): Promise<{ transactionId: string; status: string }> {
     return apiFetch('/api/withdrawals/ngn', {
       method: 'POST',
-      headers: { 'idempotency-key': idemKey() },
+      headers: { 'idempotency-key': idemKey(), ...pinHeader(pin) },
       body: JSON.stringify(input),
     });
   },
@@ -481,10 +522,10 @@ export const api = {
     customer: string;
     planId?: string;
     amount?: string;
-  }): Promise<{ transactionId: string; status: string; providerRef?: string; token?: string | null }> {
+  }, pin?: string): Promise<{ transactionId: string; status: string; providerRef?: string; token?: string | null }> {
     return apiFetch('/api/bills/pay', {
       method: 'POST',
-      headers: { 'idempotency-key': idemKey() },
+      headers: { 'idempotency-key': idemKey(), ...pinHeader(pin) },
       body: JSON.stringify(input),
     });
   },
@@ -544,7 +585,7 @@ export const api = {
     asset: string;
     amount: string;
     note?: string;
-  }): Promise<{
+  }, pin?: string): Promise<{
     transactionId: string;
     status: string;
     asset: string;
@@ -554,7 +595,7 @@ export const api = {
     return apiFetch('/api/transfers', {
       method: 'POST',
       body: JSON.stringify(input),
-      headers: { 'idempotency-key': idemKey() },
+      headers: { 'idempotency-key': idemKey(), ...pinHeader(pin) },
     });
   },
 
@@ -602,18 +643,18 @@ export const api = {
     return apiFetch(`/api/cards/${id}/reveal`);
   },
 
-  fundCard(id: string, amount: string): Promise<{ transactionId: string; status: string }> {
+  fundCard(id: string, amount: string, pin?: string): Promise<{ transactionId: string; status: string }> {
     return apiFetch(`/api/cards/${id}/fund`, {
       method: 'POST',
-      headers: { 'idempotency-key': idemKey() },
+      headers: { 'idempotency-key': idemKey(), ...pinHeader(pin) },
       body: JSON.stringify({ amount }),
     });
   },
 
-  withdrawFromCard(id: string, amount: string): Promise<{ transactionId: string; status: string }> {
+  withdrawFromCard(id: string, amount: string, pin?: string): Promise<{ transactionId: string; status: string }> {
     return apiFetch(`/api/cards/${id}/withdraw`, {
       method: 'POST',
-      headers: { 'idempotency-key': idemKey() },
+      headers: { 'idempotency-key': idemKey(), ...pinHeader(pin) },
       body: JSON.stringify({ amount }),
     });
   },

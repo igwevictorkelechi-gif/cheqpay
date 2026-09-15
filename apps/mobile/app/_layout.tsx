@@ -6,6 +6,7 @@ import { useAuthStore, useUIStore } from '@/store';
 import { authService } from '@/services/auth';
 import { LockGate } from '@/components/LockGate';
 import { applyPalette } from '@/components/brand';
+import TransactionPinProvider from '@/components/TransactionPinProvider';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -50,6 +51,9 @@ export default function RootLayout() {
 
   return (
     <LockGate>
+      {/* Wraps the navigator so any screen can ask for the transaction PIN
+          before moving money, without each carrying its own sheet. */}
+      <TransactionPinProvider>
       {/* Keyed on the theme so switching remounts the navigator and every
           screen re-reads the palette. Screens react-navigation is holding in
           the background would otherwise keep the old colours until refocused,
@@ -60,6 +64,7 @@ export default function RootLayout() {
         <Stack.Screen name="(app)" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style={darkMode ? 'light' : 'dark'} />
+      </TransactionPinProvider>
     </LockGate>
   );
 }

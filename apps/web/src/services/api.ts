@@ -717,6 +717,14 @@ export const api = {
     });
   },
 
+  /** Prove a PIN is correct without moving money. Same lockout as a payment. */
+  verifyTransactionPin(pin: string): Promise<{ valid: boolean }> {
+    return apiFetch("/api/security/transaction-pin/verify", {
+      method: "POST",
+      body: JSON.stringify({ pin }),
+    });
+  },
+
   /** Replace an existing PIN. The current one is verified, and counts to lockout. */
   changeTransactionPin(currentPin: string, pin: string): Promise<{ isSet: boolean }> {
     return apiFetch("/api/security/transaction-pin", {

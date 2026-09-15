@@ -12,6 +12,7 @@ import {
   resolveConvertMode,
   type ConvertSymbol,
 } from '@/lib/assets';
+import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 
 function CoinBadge({ symbol, size = 44 }: { symbol: string; size?: number }) {
   const m = ASSET_META[symbol as ConvertSymbol] ?? { bg: colors.brand, glyph: symbol.charAt(0) };
@@ -92,14 +93,20 @@ export default function SwapConfirmScreen() {
     fetchQuote();
   }, [fetchQuote]);
 
+  const { authorize } = useTransactionPin();
+
   const confirm = async () => {
     if (!quoteId) return;
     setProcessing(true);
     setError(null);
     try {
-      await api.executeSwap(quoteId);
+      await authorize((pin) => api.executeSwap(quoteId, pin), {
+        title: 'Confirm this conversion',
+        detail: `Converting ${amount} ${fromSym} to about ${out} ${toSym}.`,
+      });
       router.replace({ pathname: '/(app)/swap-success', params: { from: String(amount), to: out, fromSym, toSym } });
     } catch (e) {
+      if (e instanceof Error && e.message === PIN_CANCELLED) { setProcessing(false); return; }
       const msg = e instanceof ApiError ? e.message : 'Swap failed';
       if (/expired|used|consumed/i.test(msg)) {
         setError('Rate expired. Refreshing…');
