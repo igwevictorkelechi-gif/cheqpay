@@ -171,6 +171,7 @@ export async function POST(req: Request) {
         category: "withdrawals",
         title: "Money sent",
         body: `You sent ${pretty} to ${recipientLabel}.`,
+        amount: pretty,
         data: { transactionId: out.id },
         details: [
           { label: "To", value: recipientLabel },
@@ -182,6 +183,7 @@ export async function POST(req: Request) {
         category: "deposits",
         title: "Money received",
         body: `${senderLabel} sent you ${pretty}.`,
+        amount: pretty,
         data: { transactionId: out.id },
         details: [
           { label: "From", value: senderLabel },

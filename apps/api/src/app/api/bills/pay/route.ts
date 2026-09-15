@@ -208,7 +208,20 @@ export async function POST(req: Request) {
           title: "Bill paid",
           body: `${biller.name} — ₦${fromMinorUnits(amountMinor, Asset.NGN)}${
             body.customer ? ` for ${body.customer}` : ""
-          }.${result.token ? " Your recharge token is in the receipt." : ""}`,
+          }.${result.token ? " Your recharge token is below." : ""}`,
+          amount: `₦${fromMinorUnits(amountMinor, Asset.NGN)}`,
+          // A prepaid meter token is the entire point of the email for anyone
+          // who buys electricity, so it gets its own block instead of being
+          // buried in a sentence the way it was.
+          ...(result.token
+            ? { copyable: { label: "Recharge token", value: result.token } }
+            : {}),
+          details: [
+            { label: "Biller", value: biller.name },
+            ...(planName ? [{ label: "Plan", value: planName }] : []),
+            ...(body.customer ? [{ label: config.customerLabel, value: body.customer }] : []),
+            ...(result.providerRef ? [{ label: "Reference", value: result.providerRef }] : []),
+          ],
           data: { transactionId: tx.id },
         });
       }
