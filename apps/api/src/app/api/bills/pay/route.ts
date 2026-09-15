@@ -12,6 +12,7 @@ import { notifyUser } from "@/lib/alerts";
 import { BillPaymentError } from "@/payments/types";
 import { feeFromBps, getBillMarginBps } from "@/lib/settings";
 import { requestContext } from "@/lib/requestContext";
+import { readPin, requireTransactionPin } from "@/lib/transactionPin";
 
 import { assertFeatureEnabled } from "@/lib/features";
 
@@ -102,6 +103,10 @@ export async function POST(req: Request) {
     if (existing) {
       return jsonOk({ transactionId: existing.id, status: existing.status });
     }
+
+    // Authorise the purchase. After the replay short-circuit and before the
+    // debit, so a wrong PIN neither charges the user nor burns their key.
+    await requireTransactionPin(auth.id, readPin(req));
 
     // Atomic debit + record. Rolls back on insufficient funds.
     const tx = await prisma.$transaction(async (db) => {

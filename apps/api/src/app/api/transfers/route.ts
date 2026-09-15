@@ -8,6 +8,7 @@ import { userTransferSchema } from "@/lib/validation";
 import { notifyUser } from "@/lib/alerts";
 import { ensureTransferEnums } from "@/lib/ensureTransfers";
 import { requestContext } from "@/lib/requestContext";
+import { readPin, requireTransactionPin } from "@/lib/transactionPin";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +71,12 @@ export async function POST(req: Request) {
         alreadyProcessed: true,
       });
     }
+
+    // Authorise the send. After the replay short-circuit so a retried transfer
+    // still returns its original result, and before the first write so a wrong
+    // PIN leaves no transaction row and does not burn the idempotency key —
+    // a user who fat-fingers their PIN must be able to retry the same payment.
+    await requireTransactionPin(auth.id, readPin(req));
 
     await ensureTransferEnums();
 

@@ -28,6 +28,7 @@ import {
 import { amlConfigFromEnv, assessWithdrawal } from "@/lib/aml";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { cryptoWithdrawalSchema } from "@/lib/validation";
+import { readPin, requireTransactionPin } from "@/lib/transactionPin";
 
 import { assertFeatureEnabled } from "@/lib/features";
 
@@ -152,6 +153,13 @@ export async function POST(req: Request) {
     if (existing) {
       return jsonOk({ transactionId: existing.id, status: existing.status });
     }
+
+    // Authorise the withdrawal. This sits alongside the AAL2 step-up rather
+    // than replacing it: 2FA proves the session is the account's owner, the
+    // PIN proves the person at the keyboard right now meant to send THIS.
+    // After the replay short-circuit and before the first write, so a wrong
+    // PIN neither records a transaction nor burns the idempotency key.
+    await requireTransactionPin(auth.id, readPin(req));
 
     // Manual-custody assets always queue as PENDING (resolved above): the
     // business pays out from its own wallet, then the admin marks it complete.
