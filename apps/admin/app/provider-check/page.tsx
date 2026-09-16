@@ -85,9 +85,10 @@ export default function ProviderCheckPage() {
       <div className="mb-6 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
         <PlugZap size={18} className="mt-0.5 shrink-0" />
         <p>
-          These probes only <strong>read</strong> — bank lists, business wallets and billers.
-          Nothing moves money, enrolls a customer or creates an account, so this is safe to
-          run against live keys at any time.
+          These probes only <strong>read</strong> — bank lists, business wallets, billers, and
+          a lookup of a non-existent card to test the issuing path. Nothing moves money,
+          enrolls a customer or creates a card, so this is safe to run against live keys at
+          any time.
         </p>
       </div>
 
