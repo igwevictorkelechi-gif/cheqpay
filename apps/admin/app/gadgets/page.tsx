@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Plus, Package, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { Plus, Package, Loader2, Pencil } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
 interface Product {
@@ -12,30 +13,11 @@ interface Product {
   priceFormatted: string;
   imageUrl: string | null;
   category: string;
+  specs: { label: string; value: string }[];
   stock: number | null;
   available: boolean;
   active: boolean;
 }
-
-interface DraftFields {
-  name: string;
-  price: string;
-  description: string;
-  imageUrl: string;
-  category: string;
-  stock: string; // "" = untracked
-  active: boolean;
-}
-
-const EMPTY_DRAFT: DraftFields = {
-  name: '',
-  price: '',
-  description: '',
-  imageUrl: '',
-  category: '',
-  stock: '',
-  active: true,
-};
 
 /** Naira minor units → a plain decimal string for the price input. */
 function minorToNaira(minor: string): string {
@@ -63,8 +45,23 @@ function ProductRow({
   return (
     <tr>
       <td className="px-4 py-3">
-        <div className="font-semibold text-gray-900">{product.name}</div>
-        {product.category ? <div className="text-xs text-gray-500">{product.category}</div> : null}
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100">
+            {product.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={product.imageUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <Package size={16} className="text-gray-400" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="font-semibold text-gray-900">{product.name}</div>
+            <div className="text-xs text-gray-500">
+              {product.category || 'Uncategorised'}
+              {product.specs.length > 0 ? ` · ${product.specs.length} specs` : ''}
+            </div>
+          </div>
+        </div>
       </td>
       <td className="px-4 py-3">
         <input className={INPUT_CLS + ' w-28'} value={price} inputMode="decimal"
@@ -94,6 +91,12 @@ function ProductRow({
               Save
             </button>
           )}
+          <Link
+            href={`/gadgets/${product.id}/edit`}
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            <Pencil size={13} /> Edit
+          </Link>
           <button
             disabled={busy}
             onClick={() => onPatch(product.id, { active: !product.active })}
@@ -111,9 +114,8 @@ export default function GadgetCatalogPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState<DraftFields>(EMPTY_DRAFT);
   const [busy, setBusy] = useState<string | null>(null);
+  const [filter, setFilter] = useState('');
 
   async function load() {
     setLoading(true);
@@ -132,40 +134,6 @@ export default function GadgetCatalogPage() {
   useEffect(() => {
     void load();
   }, []);
-
-  function draftToBody(d: DraftFields) {
-    return {
-      name: d.name.trim(),
-      price: d.price.trim(),
-      description: d.description.trim() || undefined,
-      imageUrl: d.imageUrl.trim() || undefined,
-      category: d.category.trim() || undefined,
-      stock: d.stock.trim() === '' ? null : Number(d.stock),
-      active: d.active,
-    };
-  }
-
-  async function create() {
-    setBusy('create');
-    setMessage(null);
-    try {
-      const res = await fetch('/api/gadgets', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(draftToBody(draft)),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Could not create the product');
-      setDraft(EMPTY_DRAFT);
-      setCreating(false);
-      setMessage({ kind: 'ok', text: 'Product added.' });
-      await load();
-    } catch (e) {
-      setMessage({ kind: 'err', text: e instanceof Error ? e.message : 'Could not create' });
-    } finally {
-      setBusy(null);
-    }
-  }
 
   async function patch(id: string, body: Record<string, unknown>) {
     setBusy(id);
@@ -186,24 +154,29 @@ export default function GadgetCatalogPage() {
     }
   }
 
-  const inputCls =
-    'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none';
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) if (p.category) set.add(p.category);
+    return Array.from(set).sort();
+  }, [products]);
+
+  const shown = filter ? products.filter((p) => p.category === filter) : products;
 
   return (
     <DashboardLayout>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Gadget Catalog</h1>
           <p className="mt-2 text-gray-600">
             Products shown in the app store. The store must be switched on under Feature Toggles.
           </p>
         </div>
-        <button
-          onClick={() => setCreating((c) => !c)}
+        <Link
+          href="/gadgets/new"
           className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white hover:bg-brand-700"
         >
           <Plus size={18} /> Add product
-        </button>
+        </Link>
       </div>
 
       {message && (
@@ -219,38 +192,32 @@ export default function GadgetCatalogPage() {
         </div>
       )}
 
-      {creating && (
-        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-3 font-semibold text-gray-900">New product</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <input className={inputCls} placeholder="Name" value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-            <input className={inputCls} placeholder="Price (₦, e.g. 45000)" value={draft.price}
-              onChange={(e) => setDraft({ ...draft, price: e.target.value })} />
-            <input className={inputCls} placeholder="Category (optional)" value={draft.category}
-              onChange={(e) => setDraft({ ...draft, category: e.target.value })} />
-            <input className={inputCls} placeholder="Stock (blank = untracked)" value={draft.stock}
-              inputMode="numeric"
-              onChange={(e) => setDraft({ ...draft, stock: e.target.value.replace(/\D/g, '') })} />
-            <input className={inputCls + ' col-span-2'} placeholder="Image URL (optional)" value={draft.imageUrl}
-              onChange={(e) => setDraft({ ...draft, imageUrl: e.target.value })} />
-            <textarea className={inputCls + ' col-span-2'} placeholder="Description (optional)" rows={2}
-              value={draft.description}
-              onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
-          </div>
-          <div className="mt-4 flex gap-3">
-            <button
-              onClick={create}
-              disabled={busy === 'create' || !draft.name.trim() || !draft.price.trim()}
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
-            >
-              {busy === 'create' && <Loader2 size={16} className="animate-spin" />} Save product
-            </button>
-            <button onClick={() => { setCreating(false); setDraft(EMPTY_DRAFT); }}
-              className="rounded-lg px-4 py-2 font-semibold text-gray-600 hover:bg-gray-100">
-              Cancel
-            </button>
-          </div>
+      {categories.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => setFilter('')}
+            className={
+              'rounded-full px-3 py-1.5 text-sm font-semibold ' +
+              (filter === '' ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')
+            }
+          >
+            All ({products.length})
+          </button>
+          {categories.map((c) => {
+            const count = products.filter((p) => p.category === c).length;
+            return (
+              <button
+                key={c}
+                onClick={() => setFilter(c)}
+                className={
+                  'rounded-full px-3 py-1.5 text-sm font-semibold ' +
+                  (filter === c ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')
+                }
+              >
+                {c} ({count})
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -259,7 +226,11 @@ export default function GadgetCatalogPage() {
       ) : products.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500">
           <Package className="mx-auto mb-3 text-gray-300" size={40} />
-          No products yet. Add your first to stock the store.
+          No products yet.{' '}
+          <Link href="/gadgets/new" className="font-semibold text-brand-600 hover:underline">
+            Add your first
+          </Link>{' '}
+          to stock the store.
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -274,7 +245,7 @@ export default function GadgetCatalogPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {products.map((p) => (
+              {shown.map((p) => (
                 <ProductRow key={p.id} product={p} busy={busy === p.id} onPatch={patch} />
               ))}
             </tbody>

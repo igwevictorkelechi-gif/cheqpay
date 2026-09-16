@@ -28,6 +28,7 @@ export default function GadgetsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [step, setStep] = useState<Step>("browse");
+  const [category, setCategory] = useState<string>("");
   const [selected, setSelected] = useState<GadgetProduct | null>(null);
   const [qty, setQty] = useState(1);
   const [delivery, setDelivery] = useState<GadgetDelivery>(EMPTY_DELIVERY);
@@ -91,6 +92,14 @@ export default function GadgetsPage() {
   const inputCls =
     "w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-ink placeholder-muted outline-none focus:border-brand";
 
+  // Category chips for the browse view, derived from what's actually in stock.
+  const categories = Array.from(
+    new Set((products ?? []).map((p) => p.category).filter(Boolean)),
+  ).sort();
+  const visibleProducts = (products ?? []).filter(
+    (p) => !category || p.category === category,
+  );
+
   // ---- Success ----
   if (step === "done" && selected) {
     return (
@@ -148,6 +157,27 @@ export default function GadgetsPage() {
               <p className="mt-2 text-sm leading-relaxed text-muted">{selected.description}</p>
             ) : null}
           </div>
+
+          {/* Specifications */}
+          {selected.specs && selected.specs.length > 0 ? (
+            <div className="mt-6">
+              <h2 className="text-lg font-bold text-ink">Specifications</h2>
+              <dl className="mt-3 overflow-hidden rounded-2xl border border-border">
+                {selected.specs.map((s, i) => (
+                  <div
+                    key={i}
+                    className={
+                      "flex justify-between gap-4 px-4 py-3 text-sm " +
+                      (i % 2 === 0 ? "bg-card" : "bg-transparent")
+                    }
+                  >
+                    <dt className="text-muted">{s.label}</dt>
+                    <dd className="text-right font-semibold text-ink">{s.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ) : null}
 
           {/* Quantity */}
           <div className="mt-6 flex items-center justify-between">
@@ -231,7 +261,33 @@ export default function GadgetsPage() {
       </div>
 
       <h1 className="mb-1 mt-3 px-5 text-[32px] font-extrabold text-ink">Gadgets</h1>
-      <p className="mb-5 px-5 text-sm text-muted">Buy from CheqPay, delivered to you.</p>
+      <p className="mb-4 px-5 text-sm text-muted">Buy from CheqPay, delivered to you.</p>
+
+      {categories.length > 0 && (
+        <div className="mb-4 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <button
+            onClick={() => setCategory("")}
+            className={
+              "shrink-0 rounded-full px-4 py-2 text-sm font-semibold " +
+              (category === "" ? "bg-brand text-white" : "bg-card text-muted")
+            }
+          >
+            All
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategory(c)}
+              className={
+                "shrink-0 rounded-full px-4 py-2 text-sm font-semibold " +
+                (category === c ? "bg-brand text-white" : "bg-card text-muted")
+              }
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
 
       {products === null ? (
         <div className="flex justify-center py-20">
@@ -263,7 +319,7 @@ export default function GadgetsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 px-5 pb-10">
-          {products.map((p) => (
+          {visibleProducts.map((p) => (
             <button
               key={p.id}
               onClick={() => p.available && openBuy(p)}

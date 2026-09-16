@@ -231,6 +231,7 @@ export interface GadgetProduct {
   priceFormatted: string;
   imageUrl: string | null;
   category: string;
+  specs: { label: string; value: string }[];
   stock: number | null;
   available: boolean;
 }

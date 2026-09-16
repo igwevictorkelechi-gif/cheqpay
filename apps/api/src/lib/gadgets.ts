@@ -40,6 +40,35 @@ export interface DeliveryDetails {
   state: string;
 }
 
+/** One row of a product's detailed specifications, e.g. { "RAM", "8 GB" }. */
+export interface GadgetSpec {
+  label: string;
+  value: string;
+}
+
+/**
+ * Coerce a stored/submitted specs value into a clean, ordered list.
+ *
+ * Used both to read specs out of the JSON column and to sanitise specs coming
+ * in from the admin form: it accepts anything, keeps only {label, value} rows
+ * where at least one side has text, trims, caps the lengths, and caps the row
+ * count so a product page can never be flooded.
+ */
+export function normalizeSpecs(raw: unknown): GadgetSpec[] {
+  if (!Array.isArray(raw)) return [];
+  const out: GadgetSpec[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const label = typeof r.label === "string" ? r.label.trim().slice(0, 80) : "";
+    const value = typeof r.value === "string" ? r.value.trim().slice(0, 400) : "";
+    if (!label && !value) continue;
+    out.push({ label, value });
+    if (out.length >= 40) break;
+  }
+  return out;
+}
+
 /** Shape returned to clients — BigInt priced fields rendered as strings. */
 export interface ProductView {
   id: string;
@@ -49,6 +78,8 @@ export interface ProductView {
   priceFormatted: string;
   imageUrl: string | null;
   category: string;
+  /** Detailed specifications, ordered as entered by the admin. */
+  specs: GadgetSpec[];
   /** null when stock is not tracked; otherwise the units left. */
   stock: number | null;
   /** false when the item cannot currently be bought (inactive or sold out). */
@@ -63,6 +94,7 @@ function toProductView(p: {
   priceMinor: bigint;
   imageUrl: string | null;
   category: string;
+  specs?: unknown;
   stock: number | null;
   active: boolean;
 }): ProductView {
@@ -75,6 +107,7 @@ function toProductView(p: {
     priceFormatted: `₦${fromMinorUnits(p.priceMinor, Asset.NGN)}`,
     imageUrl: p.imageUrl,
     category: p.category,
+    specs: normalizeSpecs(p.specs),
     stock: p.stock,
     available: p.active && inStock,
     active: p.active,

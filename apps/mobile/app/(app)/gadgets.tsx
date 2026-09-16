@@ -34,6 +34,7 @@ export default function GadgetsScreen() {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [category, setCategory] = useState('');
 
   useEffect(() => {
     api
@@ -159,6 +160,30 @@ export default function GadgetsScreen() {
             <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 8 }}>{selected.description}</Text>
           ) : null}
 
+          {selected.specs && selected.specs.length > 0 ? (
+            <View style={{ marginTop: 20 }}>
+              <Text style={{ color: colors.ink, fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Specifications</Text>
+              <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 16, overflow: 'hidden' }}>
+                {selected.specs.map((s, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                      backgroundColor: i % 2 === 0 ? colors.card : 'transparent',
+                    }}
+                  >
+                    <Text style={{ color: colors.muted, fontSize: 13, flexShrink: 1 }}>{s.label}</Text>
+                    <Text style={{ color: colors.ink, fontSize: 13, fontWeight: '700', textAlign: 'right', flexShrink: 1 }}>{s.value}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 24 }}>
             <Text style={{ color: colors.ink, fontSize: 16, fontWeight: '600' }}>Quantity</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
@@ -213,6 +238,11 @@ export default function GadgetsScreen() {
   }
 
   // ---- Browse ----
+  const categories = Array.from(
+    new Set((products ?? []).map((p) => p.category).filter(Boolean)),
+  ).sort();
+  const visibleProducts = (products ?? []).filter((p) => !category || p.category === category);
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
@@ -230,9 +260,38 @@ export default function GadgetsScreen() {
         </View>
 
         <Text style={{ color: colors.ink, fontSize: 32, fontWeight: '800', paddingHorizontal: 20, marginTop: 12 }}>Gadgets</Text>
-        <Text style={{ color: colors.muted, fontSize: 14, paddingHorizontal: 20, marginTop: 4, marginBottom: 16 }}>
+        <Text style={{ color: colors.muted, fontSize: 14, paddingHorizontal: 20, marginTop: 4, marginBottom: 12 }}>
           Buy from CheqPay, delivered to you.
         </Text>
+
+        {categories.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
+            style={{ marginBottom: 16 }}
+          >
+            {['', ...categories].map((c) => {
+              const activeChip = category === c;
+              return (
+                <TouchableOpacity
+                  key={c || 'all'}
+                  onPress={() => setCategory(c)}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 999,
+                    backgroundColor: activeChip ? colors.brandLight : colors.card,
+                  }}
+                >
+                  <Text style={{ color: activeChip ? colors.white : colors.muted, fontWeight: '700', fontSize: 13 }}>
+                    {c || 'All'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : null}
 
         {products === null ? (
           <ActivityIndicator color={colors.muted} style={{ marginTop: 60 }} />
@@ -258,7 +317,7 @@ export default function GadgetsScreen() {
           </View>
         ) : (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 20 }}>
-            {products.map((p) => (
+            {visibleProducts.map((p) => (
               <TouchableOpacity
                 key={p.id}
                 activeOpacity={0.85}

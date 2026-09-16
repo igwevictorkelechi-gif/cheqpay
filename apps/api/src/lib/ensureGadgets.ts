@@ -12,6 +12,12 @@ import { prisma } from "@cheqpay/db";
  * The GADGET_PURCHASE enum value is added separately (ensureGadgetTxnType),
  * because Postgres will not use an enum value in the same transaction that
  * added it.
+ *
+ * NOTE: gadget_products.specs is added with ALTER TABLE ... ADD COLUMN below,
+ * for stores whose table predates that column. Because Prisma now selects
+ * `specs` on EVERY gadget_products query, this helper is wired into
+ * instrumentation.ts so the column exists before the first query — the same
+ * select-all rule the column-adding helpers follow (see schemaBootstrap.test).
  */
 let ensured: Promise<void> | null = null;
 
@@ -26,12 +32,17 @@ export function ensureGadgetSchema(): Promise<void> {
           price_minor bigint NOT NULL,
           image_url text,
           category text NOT NULL DEFAULT '',
+          specs jsonb,
           stock integer,
           active boolean NOT NULL DEFAULT true,
           created_at timestamptz NOT NULL DEFAULT now(),
           updated_at timestamptz NOT NULL DEFAULT now()
         )
       `);
+      // For stores whose gadget_products predates the specs column.
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE gadget_products ADD COLUMN IF NOT EXISTS specs jsonb`,
+      );
       await prisma.$executeRawUnsafe(
         `CREATE INDEX IF NOT EXISTS gadget_products_active_idx ON gadget_products(active)`,
       );

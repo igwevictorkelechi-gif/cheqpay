@@ -480,6 +480,8 @@ model GadgetProduct {
   priceMinor  BigInt   @map("price_minor")
   imageUrl    String?  @map("image_url")
   category    String   @default("")
+  /// Detailed specifications as an ordered list of {label, value} pairs.
+  specs       Json?
   /// null = not stock-tracked; a number is decremented per sale.
   stock       Int?
   /// Hidden from the storefront when false, without deleting order history.

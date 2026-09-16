@@ -43,8 +43,47 @@ vi.mock("./ensureGadgets", () => ({ ensureGadgetSchema: vi.fn().mockResolvedValu
 vi.mock("./ensureGadgetTxnType", () => ({ ensureGadgetTxnType: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./alerts", () => ({ notifyUser: h.notifyUser }));
 
-import { checkoutGadget } from "./gadgets";
+import { checkoutGadget, normalizeSpecs } from "./gadgets";
 import { ApiError } from "./http";
+
+describe("normalizeSpecs", () => {
+  it("keeps well-formed rows in order", () => {
+    expect(
+      normalizeSpecs([
+        { label: "RAM", value: "8 GB" },
+        { label: "Storage", value: "256 GB" },
+      ]),
+    ).toEqual([
+      { label: "RAM", value: "8 GB" },
+      { label: "Storage", value: "256 GB" },
+    ]);
+  });
+
+  it("trims and drops rows that are entirely empty", () => {
+    expect(
+      normalizeSpecs([
+        { label: "  Battery ", value: " 5000 mAh " },
+        { label: "   ", value: "  " },
+        { label: "Colour", value: "" },
+      ]),
+    ).toEqual([
+      { label: "Battery", value: "5000 mAh" },
+      { label: "Colour", value: "" },
+    ]);
+  });
+
+  it("returns an empty array for non-array or junk input", () => {
+    expect(normalizeSpecs(null)).toEqual([]);
+    expect(normalizeSpecs(undefined)).toEqual([]);
+    expect(normalizeSpecs("nope")).toEqual([]);
+    expect(normalizeSpecs([1, "x", { nope: true }])).toEqual([]);
+  });
+
+  it("caps the number of rows at 40", () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({ label: `L${i}`, value: `${i}` }));
+    expect(normalizeSpecs(many)).toHaveLength(40);
+  });
+});
 
 const delivery = {
   name: "Ada Obi",

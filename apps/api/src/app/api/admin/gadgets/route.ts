@@ -5,12 +5,17 @@ import { createProduct, listAllProducts } from "@/lib/gadgetsAdmin";
 
 export const dynamic = "force-dynamic";
 
+const specSchema = z
+  .array(z.object({ label: z.string().max(80), value: z.string().max(400) }))
+  .max(40);
+
 const createSchema = z.object({
   name: z.string().min(1).max(160),
   description: z.string().max(2000).optional(),
   price: z.string().min(1), // NGN decimal string; validated in the lib
   imageUrl: z.string().url().max(2000).optional().or(z.literal("")),
   category: z.string().max(80).optional(),
+  specs: specSchema.optional(),
   stock: z.number().int().min(0).nullable().optional(),
   active: z.boolean().optional(),
 });

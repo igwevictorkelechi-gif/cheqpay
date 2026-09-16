@@ -7,6 +7,7 @@
 import {
   Asset,
   GadgetOrderStatus,
+  Prisma,
   TransactionStatus,
   TransactionType,
   prisma,
@@ -15,7 +16,14 @@ import { ApiError } from "./http";
 import { toMinorUnits } from "./money";
 import { ensureGadgetSchema } from "./ensureGadgets";
 import { ensureGadgetTxnType } from "./ensureGadgetTxnType";
-import { toOrderView, toProductView, type OrderView, type ProductView } from "./gadgets";
+import {
+  normalizeSpecs,
+  toOrderView,
+  toProductView,
+  type GadgetSpec,
+  type OrderView,
+  type ProductView,
+} from "./gadgets";
 
 // ---- Catalog CRUD ---------------------------------------------------------
 
@@ -26,6 +34,14 @@ export async function listAllProducts(): Promise<ProductView[]> {
   return rows.map(toProductView);
 }
 
+/** One product by id, active or not — for the catalog editor. */
+export async function getProductById(id: string): Promise<ProductView> {
+  await ensureGadgetSchema();
+  const row = await prisma.gadgetProduct.findUnique({ where: { id } });
+  if (!row) throw new ApiError(404, "Product not found.", "product_not_found");
+  return toProductView(row);
+}
+
 export interface ProductInput {
   name: string;
   description?: string;
@@ -33,6 +49,8 @@ export interface ProductInput {
   price: string;
   imageUrl?: string | null;
   category?: string;
+  /** Detailed specifications as {label, value} rows. */
+  specs?: GadgetSpec[];
   /** null / omitted = not stock-tracked. */
   stock?: number | null;
   active?: boolean;
@@ -65,6 +83,7 @@ export async function createProduct(input: ProductInput): Promise<ProductView> {
       priceMinor: priceToMinor(input.price),
       imageUrl: input.imageUrl?.trim() || null,
       category: input.category?.trim() ?? "",
+      specs: normalizeSpecs(input.specs) as unknown as Prisma.InputJsonValue,
       stock: cleanStock(input.stock),
       active: input.active ?? true,
     },
@@ -88,6 +107,9 @@ export async function updateProduct(
       ...(patch.price !== undefined ? { priceMinor: priceToMinor(patch.price) } : {}),
       ...(patch.imageUrl !== undefined ? { imageUrl: patch.imageUrl?.trim() || null } : {}),
       ...(patch.category !== undefined ? { category: patch.category.trim() } : {}),
+      ...(patch.specs !== undefined
+        ? { specs: normalizeSpecs(patch.specs) as unknown as Prisma.InputJsonValue }
+        : {}),
       ...(patch.stock !== undefined ? { stock: cleanStock(patch.stock) } : {}),
       ...(patch.active !== undefined ? { active: patch.active } : {}),
       updatedAt: new Date(),
