@@ -15,6 +15,7 @@ export const FEATURE_DEFS = [
   { key: "bill_payments", label: "Bill payments", description: "Airtime, data, electricity and cable" },
   { key: "virtual_cards", label: "Virtual cards", description: "USD virtual cards (requires Maplerad keys)" },
   { key: "p2p_transfers", label: "User transfers", description: "Send Naira or crypto to another CheqPay user" },
+  { key: "gadgets", label: "Gadget store", description: "Buy gadgets, paid from the NGN balance and fulfilled by us" },
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_DEFS)[number]["key"];
@@ -57,6 +58,10 @@ const DEFAULT_OFF: readonly FeatureKey[] = [
   "crypto_deposits",
   "crypto_withdrawals",
   "virtual_cards",
+  // Gadgets ships OFF: the storefront cannot serve a real user until there is a
+  // catalog to sell and someone staffed to fulfil orders. Turn it on from the
+  // admin dashboard once products are added and delivery is ready.
+  "gadgets",
 ];
 
 const DEFAULTS: Record<FeatureKey, boolean> = Object.fromEntries(

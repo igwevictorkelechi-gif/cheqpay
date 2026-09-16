@@ -66,6 +66,19 @@ enum TransactionType {
   TRANSFER_IN // received from another CheqPay user (internal)
   CARD_FUND // USD moved from the in-app balance onto a virtual card
   CARD_WITHDRAW // USD moved off a virtual card back to the in-app balance
+  GADGET_PURCHASE // NGN spent buying a gadget from the in-app store
+}
+
+/// Fulfilment states for a gadget order. Payment is captured at checkout, so an
+/// order only exists once PAID — there is no unpaid state. From there it is a
+/// physical-goods lifecycle the operations team drives from the admin panel.
+enum GadgetOrderStatus {
+  PAID // money taken, awaiting the team to start fulfilment
+  PROCESSING // being prepared / sourced
+  SHIPPED // handed to delivery
+  DELIVERED // received by the customer
+  CANCELLED // cancelled before dispatch (refunded)
+  REFUNDED // money returned to the customer's balance
 }
 
 enum TransactionStatus {
@@ -171,6 +184,7 @@ model User {
   auditLogs     AuditLog[]
   beneficiaries Beneficiary[]
   cards         Card[]
+  gadgetOrders  GadgetOrder[]
   sessions      UserSession[]
 
   @@index([bvnFingerprint])
@@ -448,6 +462,70 @@ model AuditLog {
   @@index([userId])
   @@index([createdAt])
   @@map("audit_logs_v2")
+}
+
+// A gadget the store sells. Prices are NGN minor units (kobo) as BigInt, like
+// every other amount in this schema. `imageUrl` is a hosted URL the admin
+// pastes — no upload pipeline for v1. `stock` null means "not tracked" (made to
+// order); a number is decremented on each sale and blocks checkout at zero.
+//
+// The physical table is created at runtime by ensureGadgetSchema(), the same
+// lazy-DDL approach the cards table uses, because migrations are not applied on
+// deploy here.
+model GadgetProduct {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String   @default("")
+  /// NGN minor units (kobo).
+  priceMinor  BigInt   @map("price_minor")
+  imageUrl    String?  @map("image_url")
+  category    String   @default("")
+  /// null = not stock-tracked; a number is decremented per sale.
+  stock       Int?
+  /// Hidden from the storefront when false, without deleting order history.
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  orders GadgetOrder[]
+
+  @@index([active])
+  @@map("gadget_products")
+}
+
+// One purchase. Single product per order for v1 (with a quantity) — a cart is
+// the obvious next step. Price and name are SNAPSHOTTED at purchase so a later
+// catalog edit never rewrites what the customer was charged or ordered. The
+// delivery address is captured at checkout because physical goods need one.
+model GadgetOrder {
+  id             String            @id @default(uuid()) @db.Uuid
+  userId         String            @map("user_id") @db.Uuid
+  productId      String?           @map("product_id") @db.Uuid
+  /// Snapshot — survives product edits/deletes.
+  productName    String            @map("product_name")
+  quantity       Int               @default(1)
+  /// Snapshot of unit price and the line total, NGN minor units.
+  unitPriceMinor BigInt            @map("unit_price_minor")
+  totalMinor     BigInt            @map("total_minor")
+  status         GadgetOrderStatus @default(PAID)
+  deliveryName   String            @map("delivery_name")
+  deliveryPhone  String            @map("delivery_phone")
+  deliveryAddress String           @map("delivery_address")
+  deliveryCity   String            @map("delivery_city")
+  deliveryState  String            @map("delivery_state")
+  note           String?
+  /// The ledger transaction that took payment, for cross-reference and refunds.
+  transactionId  String?           @map("transaction_id") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @default(now()) @updatedAt @map("updated_at")
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product GadgetProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("gadget_orders")
 }
 
 // Admin-uploaded brand logos for bill billers (keyed by catalog biller id).

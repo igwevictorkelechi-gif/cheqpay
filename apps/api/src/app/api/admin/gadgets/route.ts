@@ -1,0 +1,39 @@
+import { z } from "zod";
+import { requireAdmin } from "@/lib/auth";
+import { jsonOk, toErrorResponse } from "@/lib/http";
+import { createProduct, listAllProducts } from "@/lib/gadgetsAdmin";
+
+export const dynamic = "force-dynamic";
+
+const createSchema = z.object({
+  name: z.string().min(1).max(160),
+  description: z.string().max(2000).optional(),
+  price: z.string().min(1), // NGN decimal string; validated in the lib
+  imageUrl: z.string().url().max(2000).optional().or(z.literal("")),
+  category: z.string().max(80).optional(),
+  stock: z.number().int().min(0).nullable().optional(),
+  active: z.boolean().optional(),
+});
+
+/** Admin: the full catalog, active or not. */
+export async function GET(req: Request) {
+  try {
+    await requireAdmin(req);
+    const products = await listAllProducts();
+    return jsonOk({ products });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+/** Admin: add a product to the catalog. */
+export async function POST(req: Request) {
+  try {
+    await requireAdmin(req);
+    const body = createSchema.parse(await req.json());
+    const product = await createProduct(body);
+    return jsonOk({ product }, 201);
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}

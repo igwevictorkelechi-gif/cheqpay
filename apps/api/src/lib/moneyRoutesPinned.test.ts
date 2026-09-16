@@ -28,6 +28,7 @@ const MONEY_ROUTES = [
   "swaps/route.ts",
   "cards/[id]/fund/route.ts",
   "cards/[id]/withdraw/route.ts",
+  "gadgets/orders/route.ts",
 ];
 
 /**

@@ -246,6 +246,44 @@ export interface BillServiceConfig {
 }
 
 // ---- Endpoints ----
+export interface GadgetProduct {
+  id: string;
+  name: string;
+  description: string;
+  priceMinor: string;
+  priceFormatted: string;
+  imageUrl: string | null;
+  category: string;
+  stock: number | null;
+  available: boolean;
+}
+export interface GadgetDelivery {
+  name: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+}
+export type GadgetOrderStatus =
+  | "PAID"
+  | "PROCESSING"
+  | "SHIPPED"
+  | "DELIVERED"
+  | "CANCELLED"
+  | "REFUNDED";
+export interface GadgetOrder {
+  id: string;
+  productName: string;
+  quantity: number;
+  unitPriceFormatted: string;
+  totalFormatted: string;
+  totalMinor: string;
+  status: GadgetOrderStatus;
+  delivery: GadgetDelivery;
+  note: string | null;
+  createdAt: string;
+}
+
 export const api = {
   /** Idempotently create the app-side profile + wallets. Call after login. */
   async ensureProvisioned(): Promise<void> {
@@ -733,6 +771,34 @@ export const api = {
     });
   },
 
+  // ---- Gadget store ----
+  getGadgets(): Promise<{ products: GadgetProduct[] }> {
+    return apiFetch("/api/gadgets");
+  },
+
+  getGadget(id: string): Promise<{ product: GadgetProduct }> {
+    return apiFetch(`/api/gadgets/${id}`);
+  },
+
+  buyGadget(
+    input: { productId: string; quantity: number; delivery: GadgetDelivery; note?: string },
+    pin?: string,
+  ): Promise<{ order: GadgetOrder }> {
+    return apiFetch("/api/gadgets/orders", {
+      method: "POST",
+      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
+      body: JSON.stringify(input),
+    });
+  },
+
+  getGadgetOrders(): Promise<{ orders: GadgetOrder[] }> {
+    return apiFetch("/api/gadgets/orders");
+  },
+
+  getGadgetOrder(id: string): Promise<{ order: GadgetOrder }> {
+    return apiFetch(`/api/gadgets/orders/${id}`);
+  },
+
   createNgnWithdrawal(input: {
     amount: string;
     bankCode: string;
@@ -756,6 +822,7 @@ export interface FeatureFlags {
   bill_payments: boolean;
   virtual_cards: boolean;
   p2p_transfers: boolean;
+  gadgets: boolean;
 }
 
 export interface CardTransaction {

@@ -11,6 +11,7 @@ export const ALL_ON: FeatureFlags = {
   bill_payments: true,
   virtual_cards: true,
   p2p_transfers: true,
+  gadgets: true,
 };
 
 /** Admin feature switches for hiding disabled features in the app UI. */
