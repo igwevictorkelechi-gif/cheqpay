@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { createProduct, listAllProducts } from "@/lib/gadgetsAdmin";
+import { imageValue } from "@/lib/gadgetImage";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ const createSchema = z.object({
   name: z.string().min(1).max(160),
   description: z.string().max(2000).optional(),
   price: z.string().min(1), // NGN decimal string; validated in the lib
-  imageUrl: z.string().url().max(2000).optional().or(z.literal("")),
+  imageUrl: imageValue.optional(),
   category: z.string().max(80).optional(),
   specs: specSchema.optional(),
   stock: z.number().int().min(0).nullable().optional(),
