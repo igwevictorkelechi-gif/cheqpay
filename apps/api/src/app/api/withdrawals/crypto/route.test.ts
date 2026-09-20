@@ -72,6 +72,13 @@ vi.mock("@/lib/aml", () => ({
 vi.mock("@/lib/alerts", () => ({ notifyUser: vi.fn() }));
 vi.mock("@/lib/adminAlert", () => ({ notifyAdminAlert: vi.fn() }));
 vi.mock("@/lib/ratelimit", () => ({ enforceRateLimit: vi.fn() }));
+// The PIN gate has its own tests (lib/transactionPin.test.ts) and its presence
+// on every money route is asserted statically in moneyRoutesPinned.test.ts.
+// Here it is stubbed so these cases stay about the withdrawal rules.
+vi.mock("@/lib/transactionPin", () => ({
+  readPin: () => "8305",
+  requireTransactionPin: vi.fn(),
+}));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ RELAX_WITHDRAWAL_GUARDS: true }) }));
 
 import { POST } from "./route";

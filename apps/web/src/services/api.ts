@@ -40,6 +40,17 @@ function idemKey(): string {
   return (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
 }
 
+/**
+ * The transaction PIN travels as a header, never in the body — the server
+ * reads it there for a reason (a `pin` body field risks being spread into a
+ * stored transaction payload). Absent PIN sends no header at all, which the
+ * server answers with 401 `pin_required` or, if the account has no PIN yet and
+ * the platform requires one, 428 `pin_not_set`.
+ */
+function pinHeader(pin?: string): Record<string, string> {
+  return pin ? { "x-transaction-pin": pin } : {};
+}
+
 // ---- Types ----
 export type AssetSymbol = "BTC" | "USDT" | "USDC";
 export type ChartRange = "day" | "week" | "month" | "year" | "all";
@@ -235,6 +246,45 @@ export interface BillServiceConfig {
 }
 
 // ---- Endpoints ----
+export interface GadgetProduct {
+  id: string;
+  name: string;
+  description: string;
+  priceMinor: string;
+  priceFormatted: string;
+  imageUrl: string | null;
+  category: string;
+  specs: { label: string; value: string }[];
+  stock: number | null;
+  available: boolean;
+}
+export interface GadgetDelivery {
+  name: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+}
+export type GadgetOrderStatus =
+  | "PAID"
+  | "PROCESSING"
+  | "SHIPPED"
+  | "DELIVERED"
+  | "CANCELLED"
+  | "REFUNDED";
+export interface GadgetOrder {
+  id: string;
+  productName: string;
+  quantity: number;
+  unitPriceFormatted: string;
+  totalFormatted: string;
+  totalMinor: string;
+  status: GadgetOrderStatus;
+  delivery: GadgetDelivery;
+  note: string | null;
+  createdAt: string;
+}
+
 export const api = {
   /** Idempotently create the app-side profile + wallets. Call after login. */
   async ensureProvisioned(): Promise<void> {
@@ -465,18 +515,18 @@ export const api = {
     customer: string;
     planId?: string;
     amount?: string;
-  }): Promise<{ transactionId: string; status: string; providerRef?: string; token?: string | null }> {
+  }, pin?: string): Promise<{ transactionId: string; status: string; providerRef?: string; token?: string | null }> {
     return apiFetch("/api/bills/pay", {
       method: "POST",
-      headers: { "idempotency-key": idemKey() },
+      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
       body: JSON.stringify(input),
     });
   },
 
-  executeSwap(quoteId: string): Promise<{ transactionId: string; status: string }> {
+  executeSwap(quoteId: string, pin?: string): Promise<{ transactionId: string; status: string }> {
     return apiFetch("/api/swaps", {
       method: "POST",
-      headers: { "idempotency-key": idemKey() },
+      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
       body: JSON.stringify({ quoteId }),
     });
   },
@@ -486,10 +536,10 @@ export const api = {
     network: "BITCOIN" | "TRON" | "ETHEREUM" | "BSC";
     toAddress: string;
     amount: string;
-  }): Promise<{ transactionId: string; status: string; txHash?: string }> {
+  }, pin?: string): Promise<{ transactionId: string; status: string; txHash?: string }> {
     return apiFetch("/api/withdrawals/crypto", {
       method: "POST",
-      headers: { "idempotency-key": idemKey() },
+      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
       body: JSON.stringify(input),
     });
   },
@@ -577,7 +627,7 @@ export const api = {
     asset: string;
     amount: string;
     note?: string;
-  }): Promise<{
+  }, pin?: string): Promise<{
     transactionId: string;
     status: string;
     asset: string;
@@ -587,7 +637,7 @@ export const api = {
     return apiFetch("/api/transfers", {
       method: "POST",
       body: JSON.stringify(input),
-      headers: { "idempotency-key": idemKey() },
+      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
     });
   },
 
@@ -635,18 +685,18 @@ export const api = {
     return apiFetch(`/api/cards/${id}/reveal`);
   },
 
-  fundCard(id: string, amount: string): Promise<{ transactionId: string; status: string }> {
+  fundCard(id: string, amount: string, pin?: string): Promise<{ transactionId: string; status: string }> {
     return apiFetch(`/api/cards/${id}/fund`, {
       method: "POST",
-      headers: { "idempotency-key": idemKey() },
+      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
       body: JSON.stringify({ amount }),
     });
   },
 
-  withdrawFromCard(id: string, amount: string): Promise<{ transactionId: string; status: string }> {
+  withdrawFromCard(id: string, amount: string, pin?: string): Promise<{ transactionId: string; status: string }> {
     return apiFetch(`/api/cards/${id}/withdraw`, {
       method: "POST",
-      headers: { "idempotency-key": idemKey() },
+      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
       body: JSON.stringify({ amount }),
     });
   },
@@ -686,15 +736,79 @@ export const api = {
     });
   },
 
+  /** Whether this account has a transaction PIN, and whether it is locked. */
+  getTransactionPinStatus(): Promise<{
+    isSet: boolean;
+    locked: boolean;
+    lockedUntil: string | null;
+    attemptsRemaining: number | null;
+    minLength: number;
+    maxLength: number;
+  }> {
+    return apiFetch("/api/security/transaction-pin");
+  },
+
+  /** Set a PIN for the first time. Refused (409) if one already exists. */
+  setTransactionPin(pin: string): Promise<{ isSet: boolean }> {
+    return apiFetch("/api/security/transaction-pin", {
+      method: "POST",
+      body: JSON.stringify({ pin }),
+    });
+  },
+
+  /** Prove a PIN is correct without moving money. Same lockout as a payment. */
+  verifyTransactionPin(pin: string): Promise<{ valid: boolean }> {
+    return apiFetch("/api/security/transaction-pin/verify", {
+      method: "POST",
+      body: JSON.stringify({ pin }),
+    });
+  },
+
+  /** Replace an existing PIN. The current one is verified, and counts to lockout. */
+  changeTransactionPin(currentPin: string, pin: string): Promise<{ isSet: boolean }> {
+    return apiFetch("/api/security/transaction-pin", {
+      method: "PUT",
+      body: JSON.stringify({ currentPin, pin }),
+    });
+  },
+
+  // ---- Gadget store ----
+  getGadgets(): Promise<{ products: GadgetProduct[] }> {
+    return apiFetch("/api/gadgets");
+  },
+
+  getGadget(id: string): Promise<{ product: GadgetProduct }> {
+    return apiFetch(`/api/gadgets/${id}`);
+  },
+
+  buyGadget(
+    input: { productId: string; quantity: number; delivery: GadgetDelivery; note?: string },
+    pin?: string,
+  ): Promise<{ order: GadgetOrder }> {
+    return apiFetch("/api/gadgets/orders", {
+      method: "POST",
+      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
+      body: JSON.stringify(input),
+    });
+  },
+
+  getGadgetOrders(): Promise<{ orders: GadgetOrder[] }> {
+    return apiFetch("/api/gadgets/orders");
+  },
+
+  getGadgetOrder(id: string): Promise<{ order: GadgetOrder }> {
+    return apiFetch(`/api/gadgets/orders/${id}`);
+  },
+
   createNgnWithdrawal(input: {
     amount: string;
     bankCode: string;
     accountNumber: string;
     narration?: string;
-  }): Promise<{ transactionId: string; status: string }> {
+  }, pin?: string): Promise<{ transactionId: string; status: string }> {
     return apiFetch("/api/withdrawals/ngn", {
       method: "POST",
-      headers: { "idempotency-key": idemKey() },
+      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
       body: JSON.stringify(input),
     });
   },
@@ -709,6 +823,7 @@ export interface FeatureFlags {
   bill_payments: boolean;
   virtual_cards: boolean;
   p2p_transfers: boolean;
+  gadgets: boolean;
 }
 
 export interface CardTransaction {

@@ -5,6 +5,7 @@ import { MapleradError } from "@/lib/maplerad/client";
 import { getInstitutions } from "@/lib/maplerad/accounts";
 import { getWallets } from "@/lib/maplerad/wallets";
 import { getBillers } from "@/lib/maplerad/bills";
+import { getCard } from "@/lib/maplerad/issuing";
 import { mapleradIfConfigured } from "@/payments";
 import { BillPaymentError } from "@/payments/types";
 
@@ -20,8 +21,9 @@ export const dynamic = "force-dynamic";
  * whitelisted, or whether collections are enabled on the business. Those only
  * come from making real calls, which is what this route does.
  *
- * Every probe is READ-ONLY — listing banks, wallets and billers. Nothing here
- * moves money, enrolls anyone, or creates an account, so it is safe to run
+ * Every probe is READ-ONLY — listing banks, wallets and billers, and looking up
+ * a non-existent card to test whether the /issuing path is reachable. Nothing
+ * here moves money, enrolls anyone, or creates a card, so it is safe to run
  * against live credentials whenever something looks wrong.
  *
  * The important failure to recognise is HTTP 403 on every probe: that is
@@ -60,6 +62,28 @@ async function probe(
 }
 
 /**
+ * "Unreachable" means the request never got an answer FROM Maplerad: a
+ * transport failure (status 0) or a gateway error from the egress proxy in
+ * front of it (502/503/504). It is distinct from Maplerad itself answering
+ * with a 4xx, which — however unwelcome — proves the round trip completed.
+ */
+function isUnreachable(err: MapleradError): boolean {
+  return err.status === 0 || err.status === 502 || err.status === 503 || err.status === 504;
+}
+
+/** Pull the egress proxy's own words out of a failure body, if present. */
+function proxyDetail(body: unknown): string | null {
+  if (body && typeof body === "object") {
+    const b = body as { error?: unknown; detail?: unknown; message?: unknown };
+    const parts = [b.error, b.detail, b.message].filter(
+      (v): v is string => typeof v === "string" && v.length > 0,
+    );
+    if (parts.length) return parts.join(" — ");
+  }
+  return null;
+}
+
+/**
  * Turn a failure into something an operator can act on. The status code carries
  * most of the meaning with Maplerad, so it is named explicitly rather than left
  * inside a generic message.
@@ -82,6 +106,15 @@ function describe(err: unknown): string {
     }
     if (err.status === 0) {
       return `Could not reach Maplerad at all: ${err.message}`;
+    }
+    if (err.status === 502 || err.status === 503 || err.status === 504) {
+      // A gateway error is the egress proxy, not Maplerad — Maplerad never
+      // answered. Surface the proxy's own words (its body uses `error`/`detail`,
+      // which the client's message extraction, keyed on `message`, drops).
+      const detail = proxyDetail(err.body);
+      return `HTTP ${err.status} from the egress proxy (MAPLERAD_BASE_URL), not from Maplerad — the proxy could not reach Maplerad for this path.${
+        detail ? ` Proxy said: "${detail}".` : ""
+      } If reads on other paths pass but this one fails, the proxy's allowlist or timeout is scoped per-path; open POST/GET /issuing and give it a generous timeout.`;
     }
     return `HTTP ${err.status} — ${err.message}`;
   }
@@ -197,16 +230,71 @@ export async function GET(req: Request) {
       ),
     );
 
+    // Card issuing. This is the one path card creation needs and the one that
+    // fails in production: POST /issuing returns 502 "upstream unreachable"
+    // from the egress proxy while every probe above passes. A POST cannot be
+    // probed safely (it would mint a real card), so this READS the same path
+    // instead: GET /issuing/{a non-existent id}. We do not expect to find a
+    // card — we expect Maplerad to ANSWER, with a 404. What is being tested is
+    // whether the proxy can reach Maplerad on the /issuing path AT ALL.
+    //
+    //   - Maplerad answers (404/400/422) -> the proxy allows /issuing. The
+    //     POST failure is then about the POST itself, and the overwhelmingly
+    //     likely cause is the proxy timing out on the slower create call.
+    //   - Still "upstream unreachable" (502/504/0) -> the whole /issuing prefix
+    //     is unreachable through the proxy, i.e. a path allowlist that never
+    //     included it. This is the same wall POST /issuing hits.
+    const SENTINEL_CARD_ID = "00000000-0000-0000-0000-000000000000";
+    probes.push(
+      await probe(
+        "Card issuing path reachable",
+        "The proxy can reach Maplerad on /issuing — the hop card creation needs",
+        async () => {
+          try {
+            // Try once: if the proxy times out slowly on /issuing, three
+            // retries would exceed the page's 60s budget and this precise
+            // answer would be lost behind a generic timeout.
+            await getCard(SENTINEL_CARD_ID, { retries: 1 });
+            // Finding a card for the sentinel id is impossible, but if the
+            // provider somehow returns one the path is plainly reachable.
+            return "Reached Maplerad on /issuing (unexpectedly found a card for the sentinel id).";
+          } catch (err) {
+            // A Maplerad answer — any real HTTP status — PROVES the proxy
+            // reached the issuing path. Only a genuine unreachable is a failure.
+            if (err instanceof MapleradError && !isUnreachable(err)) {
+              return `Reached Maplerad on /issuing: it answered HTTP ${err.status} for a non-existent card, which is expected. The proxy allows this path, so POST /issuing failing points at the POST itself — most likely the proxy timing out on the slower card-creation call. Check the proxy's timeout for /issuing.`;
+            }
+            // Re-throw the unreachable so it lands in the failure branch with a
+            // targeted message (see describe()).
+            throw err;
+          }
+        },
+      ),
+    );
+
     const failed = probes.filter((p) => !p.ok);
     const allForbidden =
       failed.length === probes.length &&
       failed.every((p) => p.detail.startsWith("HTTP 403"));
 
+    // The specific pattern behind the card-creation outage: the issuing path
+    // is the ONLY thing that fails, and it fails unreachable. That is not a
+    // credentials or IP problem — those would take down every probe — it is
+    // the proxy declining or timing out on /issuing alone.
+    const issuingProbe = probes.find((p) => p.name === "Card issuing path reachable");
+    const issuingIsolated =
+      issuingProbe !== undefined &&
+      !issuingProbe.ok &&
+      failed.length === 1 &&
+      failed[0] === issuingProbe;
+
     const summary = allForbidden
       ? "Every call was rejected with 403. This server's outbound IP is not whitelisted with Maplerad — the keys themselves may be fine. See apps/api/GO-LIVE.md."
-      : failed.length === 0
-        ? "All checks passed. Maplerad is reachable and usable from this deployment."
-        : `${failed.length} of ${probes.length} checks failed.`;
+      : issuingIsolated
+        ? "Everything works EXCEPT card issuing: the proxy reaches Maplerad for banks, wallets and bills but not for /issuing. This is the cause of card creation failing. It is not credentials or IP (those would fail every check) — the egress proxy at MAPLERAD_BASE_URL is not passing the /issuing path. Open it (both GET and POST) with a generous timeout, since card creation is slower than the other calls."
+        : failed.length === 0
+          ? "All checks passed, including the card-issuing path. Maplerad is reachable and usable from this deployment — card creation should work; turn on the virtual_cards flag."
+          : `${failed.length} of ${probes.length} checks failed.`;
 
     return jsonOk({
       configured: true,

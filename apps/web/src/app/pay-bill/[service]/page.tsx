@@ -21,6 +21,7 @@ import {
 import DataPlanGrid from "@/components/DataPlanGrid";
 import { SuccessAnimation } from "@/components/Lottie";
 import { invalidateMoneyCaches } from "@/lib/cache";
+import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 
 type Stage = "form" | "review" | "done";
 
@@ -118,22 +119,37 @@ export default function BillServicePage() {
     setStage("review");
   }
 
+  const { authorize } = useTransactionPin();
+
   async function confirm() {
     if (!config) return;
     setProcessing(true);
     setError(null);
     try {
-      const res = await api.payBill({
-        service,
-        billerId,
-        customer: customer.trim(),
-        ...(config.variableAmount ? { amount: String(payAmount) } : { planId }),
-      });
+      const res = await authorize(
+        (pin) =>
+          api.payBill(
+            {
+              service,
+              billerId,
+              customer: customer.trim(),
+              ...(config.variableAmount ? { amount: String(payAmount) } : { planId }),
+            },
+            pin,
+          ),
+        { title: "Confirm this purchase", detail: `Paying ₦${payAmount} for ${service}.` },
+      );
       invalidateMoneyCaches();
       setProviderRef(res.providerRef);
       setBillToken(res.token ?? null);
       setStage("done");
     } catch (e) {
+      // A dismissed PIN prompt means "not now" — return to review, no error.
+      if (e instanceof Error && e.message === PIN_CANCELLED) {
+        setStage("review");
+        setProcessing(false);
+        return;
+      }
       setError(e instanceof ApiError ? e.message : "Payment failed");
       setStage("review");
     } finally {

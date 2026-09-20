@@ -32,6 +32,17 @@ const rows: Row[] = [
     route: '/(app)/change-password',
   },
   {
+    // Above App lock on purpose: this is the PIN that guards money, and the
+    // two are easy to confuse. App lock decides whether the app opens on this
+    // device; the transaction PIN decides whether a payment goes out.
+    icon: 'shield-checkmark',
+    iconColor: '#34D399',
+    iconBg: 'rgba(52,211,153,0.15)',
+    title: 'Transaction PIN',
+    subtitle: 'The PIN or Face ID you use to approve payments',
+    route: '/(app)/transaction-pin',
+  },
+  {
     icon: 'lock-closed',
     iconColor: '#8A7BB5',
     iconBg: 'rgba(138,123,181,0.2)',

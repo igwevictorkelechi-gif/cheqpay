@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/components/brand';
 import { api, ApiError, type BillCashback, type BillServiceConfig } from '@/services/api';
 import DataPlanGrid from '@/components/DataPlanGrid';
+import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 
 type Stage = 'form' | 'review' | 'done';
 
@@ -101,20 +102,31 @@ export default function BillServiceScreen() {
     setStage('review');
   }
 
+  const { authorize } = useTransactionPin();
+
   async function confirm() {
     if (!config) return;
     setProcessing(true);
     setError(null);
     try {
-      const res = await api.payBill({
-        service,
-        billerId,
-        customer: customer.trim(),
-        ...(config.variableAmount ? { amount: String(payAmount) } : { planId }),
-      });
+      const res = await authorize(
+        (pin) =>
+          api.payBill(
+            {
+              service,
+              billerId,
+              customer: customer.trim(),
+              ...(config.variableAmount ? { amount: String(payAmount) } : { planId }),
+            },
+            pin,
+          ),
+        { title: 'Confirm this purchase', detail: `Paying ₦${payAmount} for ${service}.` },
+      );
       setProviderRef(res.providerRef);
       setStage('done');
     } catch (e) {
+      // A dismissed PIN sheet is "not now", not a failure.
+      if (e instanceof Error && e.message === PIN_CANCELLED) { setStage('review'); return; }
       setError(e instanceof ApiError ? e.message : 'Payment failed');
       setStage('review');
     } finally {

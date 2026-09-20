@@ -11,6 +11,7 @@ import {
   Zap,
   Tv,
   Ticket,
+  Laptop,
   type LucideIcon,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -31,6 +32,7 @@ const services: Service[] = [
   { label: "Betting", icon: Dice5, color: "#16A34A", route: "/pay-bill/betting" },
   { label: "Electricity", icon: Zap, color: "#F5A623", route: "/pay-bill/electricity", badge: "New" },
   { label: "Cable TV", icon: Tv, color: "#EC4899", route: "/pay-bill/cabletv", badge: "New" },
+  { label: "Gadgets", icon: Laptop, color: "#0EA5A0", route: "/gadgets", badge: "New" },
   { label: "Vouchers", icon: Ticket, color: "#6E6880" },
 ];
 
@@ -51,7 +53,7 @@ export default function PayBillPage() {
       />
 
       <h1 className="mb-5 mt-3 px-5 text-[32px] font-extrabold text-ink">
-        Quick payments
+        Services
       </h1>
 
       {/* Services */}
@@ -107,24 +109,6 @@ export default function PayBillPage() {
         </Card>
       </div>
 
-      {/* Payment history shortcut */}
-      <div className="px-5">
-        <Card>
-          <button
-            onClick={() => router.push("/transactions")}
-            className="flex w-full items-center"
-          >
-            <span className="text-[26px]">🧾</span>
-            <div className="ml-4 flex-1 text-left">
-              <p className="text-lg font-bold text-ink">Payment history</p>
-              <p className="mt-1 text-sm text-muted">
-                View your airtime, data and bill payments.
-              </p>
-            </div>
-            <ChevronDown className="h-5 w-5 -rotate-90 text-muted" />
-          </button>
-        </Card>
-      </div>
       {toast.node}
     </AppShell>
   );

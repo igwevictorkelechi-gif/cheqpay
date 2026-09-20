@@ -18,6 +18,7 @@ const services: Service[] = [
   { label: 'Electricity', emoji: '💡', badge: 'New', route: '/(app)/bill/electricity' },
   { label: 'Cable TV', emoji: '📺', badge: 'New', route: '/(app)/bill/cabletv' },
   { label: 'Food delivery', emoji: '🛵', badge: 'New', route: '/(app)/bill/food' },
+  { label: 'Gadgets', emoji: '💻', badge: 'New', route: '/(app)/gadgets' },
   { label: 'Vouchers', emoji: '🎟️' },
 ];
 
@@ -64,7 +65,7 @@ export default function PayBillScreen() {
         />
 
         <Text className="text-ink dark:text-ink-dark font-extrabold px-5 mt-3 mb-5" style={{ fontSize: 32 }}>
-          Quick payments
+          Services
         </Text>
 
         {/* Services */}
@@ -91,20 +92,6 @@ export default function PayBillScreen() {
           </Card>
         </View>
 
-        {/* Empty transactions */}
-        <View className="px-5">
-          <Card>
-            <View className="flex-row items-center">
-              <Text style={{ fontSize: 26 }}>🧾</Text>
-              <View className="ml-4 flex-1">
-                <Text className="text-ink dark:text-ink-dark font-bold text-lg">No transactions yet</Text>
-                <Text className="text-muted dark:text-muted-dark text-sm mt-1">
-                  Your first transaction will show up here, make it count!
-                </Text>
-              </View>
-            </View>
-          </Card>
-        </View>
       </ScrollView>
     </View>
   );

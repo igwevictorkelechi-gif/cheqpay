@@ -8,7 +8,7 @@ import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
   Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search,
-  ShieldAlert, Monitor, type LucideIcon,
+  ShieldAlert, Monitor, Package, ShoppingBag, type LucideIcon,
 } from 'lucide-react';
 
 type Item = { label: string; href: string; icon: LucideIcon };
@@ -63,6 +63,14 @@ const categories: Category[] = [
     icon: Receipt,
     items: [
       { label: 'Bill Logos', href: '/bill-logos', icon: Receipt },
+    ],
+  },
+  {
+    label: 'Gadget Store',
+    icon: ShoppingBag,
+    items: [
+      { label: 'Catalog', href: '/gadgets', icon: Package },
+      { label: 'Orders', href: '/gadgets/orders', icon: ShoppingBag },
     ],
   },
   {

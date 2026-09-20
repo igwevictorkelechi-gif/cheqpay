@@ -5,6 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors } from '@/components/brand';
 import { api, getAccessToken } from '@/services/api';
+import {
+  PUSH_STATUS_TEXT,
+  lastPushStatus,
+  registerForPushNotifications,
+  type PushStatus,
+} from '@/services/push';
 
 const rows: { key: string; title: string; subtitle: string }[] = [
   { key: 'deposits', title: 'Deposits', subtitle: 'When money lands in your wallet' },
@@ -19,6 +25,12 @@ const rows: { key: string; title: string; subtitle: string }[] = [
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const [prefs, setPrefs] = useState<Record<string, boolean> | null>(null);
+  /**
+   * Whether this device can actually RECEIVE what these switches turn on.
+   * Without it the screen happily shows seven enabled toggles on a device that
+   * is not registered for push at all, which is a lie told by omission.
+   */
+  const [pushStatus, setPushStatus] = useState<PushStatus | null>(lastPushStatus());
 
   useEffect(() => {
     (async () => {
@@ -30,6 +42,9 @@ export default function NotificationsScreen() {
         /* leave loading */
       }
     })();
+    // Re-check registration on open rather than trusting the value from app
+    // start: permission can be revoked in the OS while the app is running.
+    void registerForPushNotifications().then(setPushStatus);
   }, []);
 
   const flip = async (key: string) => {
@@ -60,6 +75,24 @@ export default function NotificationsScreen() {
         <Text className="text-muted dark:text-muted-dark text-sm mt-2 mb-4">
           Choose what CheqPay lets you know about.
         </Text>
+
+        {pushStatus && pushStatus !== 'registered' && (
+          <View
+            style={{
+              backgroundColor: 'rgba(245,166,35,0.12)',
+              borderRadius: 16,
+              padding: 14,
+              marginBottom: 16,
+              flexDirection: 'row',
+              gap: 10,
+            }}
+          >
+            <Ionicons name="alert-circle" size={20} color="#F5A623" />
+            <Text style={{ color: colors.ink, fontSize: 13, lineHeight: 19, flex: 1 }}>
+              {PUSH_STATUS_TEXT[pushStatus]}
+            </Text>
+          </View>
+        )}
 
         {!prefs ? (
           <View className="py-12 items-center">

@@ -9,6 +9,7 @@ import { SuccessAnimation } from '@/components/Lottie';
 import { api, ApiError } from '@/services/api';
 import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
 import { isAddressForNetwork, shortAddress } from '@/lib/address';
+import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 
 type Sym = 'BTC' | 'USDT' | 'USDC';
 const ASSETS: Sym[] = ['BTC', 'USDT', 'USDC'];
@@ -88,20 +89,30 @@ export default function SendCryptoScreen() {
     setStage('review');
   }
 
+  const { authorize } = useTransactionPin();
+
   async function confirmSend() {
     setError(null);
     setStage('checking');
     await new Promise((r) => setTimeout(r, 1600));
     try {
-      const res = await api.createCryptoWithdrawal({
-        asset: sym!,
-        network: (live[sym!]?.network ?? info!.network) as 'BITCOIN' | 'TRON' | 'ETHEREUM' | 'BSC',
-        toAddress: toAddress.trim(),
-        amount: amount.trim(),
-      });
+      const res = await authorize(
+        (pin) =>
+          api.createCryptoWithdrawal(
+            {
+              asset: sym!,
+              network: (live[sym!]?.network ?? info!.network) as 'BITCOIN' | 'TRON' | 'ETHEREUM' | 'BSC',
+              toAddress: toAddress.trim(),
+              amount: amount.trim(),
+            },
+            pin,
+          ),
+        { title: 'Confirm this withdrawal', detail: `Sending ${amount.trim()} ${sym} off-platform. This cannot be reversed.` },
+      );
       setTxHash(res.txHash);
       setStage('done');
     } catch (e) {
+      if (e instanceof Error && e.message === PIN_CANCELLED) { setStage('review'); return; }
       setError(e instanceof ApiError ? e.message : 'Could not complete the transfer.');
       setStage('review');
     }

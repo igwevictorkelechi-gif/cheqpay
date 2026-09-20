@@ -93,11 +93,15 @@ async function ensureSchema(): Promise<void> {
       { ensureActivitySchema },
       { ensureMapleradSchema, ensureKycDocSchema },
       { ensureQuoteProviderRef },
+      { ensureTransactionPinColumns },
+      { ensureGadgetSchema },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
       import("@/lib/mapleradCustomer"),
       import("@/lib/ensureQuoteProviderRef"),
+      import("@/lib/ensureTransactionPin"),
+      import("@/lib/ensureGadgets"),
     ]);
     await Promise.all([
       ensureRetentionSchema(),
@@ -112,6 +116,16 @@ async function ensureSchema(): Promise<void> {
       ensureMapleradSchema(),
       // The government-ID columns, same hazard: every User query selects them.
       ensureKycDocSchema(),
+      // The transaction-PIN columns, same hazard again: the moment they joined
+      // the User model every User query began selecting them, so creating them
+      // on first PIN use would take out login, KYC and every balance read —
+      // including the request that would have created them.
+      ensureTransactionPinColumns(),
+      // gadget_products.specs is added to an existing table by this helper, so
+      // it must run at boot: the moment `specs` joined the GadgetProduct model
+      // every gadget_products query began selecting it. (It also creates the
+      // gadget tables, which is harmless to do at boot.)
+      ensureGadgetSchema(),
     ]);
     // NB: the KYC document TABLE (image bytes) is created lazily by
     // lib/kycDocuments on first use, not here. It is a new table, so it is

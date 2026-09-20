@@ -83,8 +83,18 @@ export interface CardDetail {
   [key: string]: unknown;
 }
 
-export async function getCard(idOrReference: string): Promise<CardDetail> {
-  return mapleradRequest<CardDetail>(`/issuing/${encodeURIComponent(idOrReference)}`);
+export async function getCard(
+  idOrReference: string,
+  opts?: { retries?: number },
+): Promise<CardDetail> {
+  // `retries` is exposed so the admin reachability probe can try exactly once:
+  // if the proxy's failure on /issuing is a slow timeout, the default 3 retries
+  // would blow the diagnostic's time budget and hide the real answer. Normal
+  // callers omit it and keep the default retry behaviour.
+  return mapleradRequest<CardDetail>(
+    `/issuing/${encodeURIComponent(idOrReference)}`,
+    opts?.retries !== undefined ? { retries: opts.retries } : {},
+  );
 }
 
 /**
