@@ -37,6 +37,9 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
         <p className="mt-6 text-center text-sm text-muted">
           © 2026 CheqPay. All rights reserved.
         </p>
+        <p className="mt-1 text-center text-xs text-muted">
+          App ID Version 1.1 by Boli Labs Limited
+        </p>
       </div>
     </div>
   );
