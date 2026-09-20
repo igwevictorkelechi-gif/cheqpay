@@ -152,7 +152,17 @@ export default function GadgetsPage() {
               />
             ) : null}
             <h1 className="text-2xl font-extrabold text-ink">{selected.name}</h1>
-            <p className="mt-1 text-lg font-bold text-brand">{selected.priceFormatted}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="text-lg font-bold text-brand">{selected.priceFormatted}</span>
+              {selected.compareAtFormatted ? (
+                <span className="text-sm text-muted line-through">{selected.compareAtFormatted}</span>
+              ) : null}
+              {selected.discountPercent ? (
+                <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs font-bold text-brand">
+                  Save {selected.discountPercent}%
+                </span>
+              ) : null}
+            </div>
             {selected.description ? (
               <p className="mt-2 text-sm leading-relaxed text-muted">{selected.description}</p>
             ) : null}
@@ -223,7 +233,7 @@ export default function GadgetsPage() {
           <div className="mt-6 flex items-center justify-between rounded-2xl bg-card px-4 py-4">
             <span className="text-sm text-muted">Total</span>
             <span className="text-xl font-extrabold text-ink">
-              ₦{(Number(selected.priceMinor) * qty / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+              ₦{((Number(selected.priceMinor) * qty) / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
             </span>
           </div>
 
@@ -336,7 +346,17 @@ export default function GadgetsPage() {
               </div>
               <div className="p-3">
                 <p className="line-clamp-2 text-sm font-bold text-ink">{p.name}</p>
-                <p className="mt-1 text-sm font-extrabold text-brand">{p.priceFormatted}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                  <span className="text-sm font-extrabold text-brand">{p.priceFormatted}</span>
+                  {p.compareAtFormatted ? (
+                    <span className="text-xs text-muted line-through">{p.compareAtFormatted}</span>
+                  ) : null}
+                </div>
+                {p.discountPercent ? (
+                  <span className="mt-1 inline-block rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-bold text-brand">
+                    Save {p.discountPercent}%
+                  </span>
+                ) : null}
                 {!p.available ? (
                   <p className="mt-1 text-xs font-semibold text-muted">Sold out</p>
                 ) : null}

@@ -478,6 +478,9 @@ model GadgetProduct {
   description String   @default("")
   /// NGN minor units (kobo).
   priceMinor  BigInt   @map("price_minor")
+  /// Optional "was" price in NGN minor units; when set above priceMinor the
+  /// storefront shows it struck through next to the current price.
+  compareAtMinor BigInt? @map("compare_at_minor")
   imageUrl    String?  @map("image_url")
   category    String   @default("")
   /// Detailed specifications as an ordered list of {label, value} pairs.

@@ -10,6 +10,7 @@ const patchSchema = z.object({
   name: z.string().min(1).max(160).optional(),
   description: z.string().max(2000).optional(),
   price: z.string().min(1).optional(),
+  compareAt: z.string().max(40).nullable().optional(),
   imageUrl: imageValue.nullable().optional(),
   category: z.string().max(80).optional(),
   specs: z

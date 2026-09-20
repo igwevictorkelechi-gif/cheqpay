@@ -47,6 +47,8 @@ export interface ProductInput {
   description?: string;
   /** Naira as a decimal string, e.g. "45000" or "45000.00". */
   price: string;
+  /** Optional "was" price as a decimal string; "" / null clears it. */
+  compareAt?: string | null;
   imageUrl?: string | null;
   category?: string;
   /** Detailed specifications as {label, value} rows. */
@@ -60,6 +62,16 @@ function priceToMinor(price: string): bigint {
   const minor = toMinorUnits(price, Asset.NGN);
   if (minor <= 0n) {
     throw new ApiError(422, "Price must be greater than zero.", "bad_price");
+  }
+  return minor;
+}
+
+/** Optional compare-at ("was") price. Empty/blank clears it (returns null). */
+function compareAtToMinor(value: string | null | undefined): bigint | null {
+  if (value === null || value === undefined || value.trim() === "") return null;
+  const minor = toMinorUnits(value, Asset.NGN);
+  if (minor <= 0n) {
+    throw new ApiError(422, "Compare-at price must be greater than zero.", "bad_compare_at");
   }
   return minor;
 }
@@ -81,6 +93,7 @@ export async function createProduct(input: ProductInput): Promise<ProductView> {
       name: input.name.trim(),
       description: input.description?.trim() ?? "",
       priceMinor: priceToMinor(input.price),
+      compareAtMinor: compareAtToMinor(input.compareAt),
       imageUrl: input.imageUrl?.trim() || null,
       category: input.category?.trim() ?? "",
       specs: normalizeSpecs(input.specs) as unknown as Prisma.InputJsonValue,
@@ -105,6 +118,9 @@ export async function updateProduct(
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
       ...(patch.description !== undefined ? { description: patch.description.trim() } : {}),
       ...(patch.price !== undefined ? { priceMinor: priceToMinor(patch.price) } : {}),
+      ...(patch.compareAt !== undefined
+        ? { compareAtMinor: compareAtToMinor(patch.compareAt) }
+        : {}),
       ...(patch.imageUrl !== undefined ? { imageUrl: patch.imageUrl?.trim() || null } : {}),
       ...(patch.category !== undefined ? { category: patch.category.trim() } : {}),
       ...(patch.specs !== undefined

@@ -24,13 +24,30 @@ import {
   prisma,
 } from "@cheqpay/db";
 import { ApiError } from "./http";
-import { fromMinorUnits } from "./money";
 import { ensureGadgetSchema } from "./ensureGadgets";
 import { ensureGadgetTxnType } from "./ensureGadgetTxnType";
 import { notifyUser } from "./alerts";
 
 /** Sanity ceiling on a single order line — a storefront, not a wholesaler. */
 const MAX_QUANTITY = 20;
+
+/**
+ * Money for display: grouped thousands, and no ".00" on whole-naira amounts.
+ *
+ * fromMinorUnits is deliberately separator-free (it is the exact, canonical
+ * value used for ledgers and idempotency), so it reads as "1200000.00". The
+ * storefront wants "₦1,200,000". This formats straight from BigInt minor units
+ * to avoid any float rounding on large prices.
+ */
+export function formatNairaMinor(minor: bigint): string {
+  const neg = minor < 0n;
+  const abs = neg ? -minor : minor;
+  const naira = abs / 100n;
+  const kobo = abs % 100n;
+  const grouped = naira.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const body = kobo === 0n ? grouped : `${grouped}.${kobo.toString().padStart(2, "0")}`;
+  return `${neg ? "-" : ""}₦${body}`;
+}
 
 export interface DeliveryDetails {
   name: string;
@@ -76,6 +93,11 @@ export interface ProductView {
   description: string;
   priceMinor: string;
   priceFormatted: string;
+  /** Optional "was" price, shown struck through. null when not on offer. */
+  compareAtMinor: string | null;
+  compareAtFormatted: string | null;
+  /** Whole-number percent off, when a valid compare-at is set. null otherwise. */
+  discountPercent: number | null;
   imageUrl: string | null;
   category: string;
   /** Detailed specifications, ordered as entered by the admin. */
@@ -92,6 +114,7 @@ function toProductView(p: {
   name: string;
   description: string;
   priceMinor: bigint;
+  compareAtMinor?: bigint | null;
   imageUrl: string | null;
   category: string;
   specs?: unknown;
@@ -99,12 +122,22 @@ function toProductView(p: {
   active: boolean;
 }): ProductView {
   const inStock = p.stock === null || p.stock > 0;
+  // A compare-at only counts when it is genuinely higher than the price.
+  const onOffer = p.compareAtMinor != null && p.compareAtMinor > p.priceMinor;
+  const discountPercent = onOffer
+    ? Math.round(
+        Number(((p.compareAtMinor! - p.priceMinor) * 100n) / p.compareAtMinor!),
+      )
+    : null;
   return {
     id: p.id,
     name: p.name,
     description: p.description,
     priceMinor: p.priceMinor.toString(),
-    priceFormatted: `₦${fromMinorUnits(p.priceMinor, Asset.NGN)}`,
+    priceFormatted: formatNairaMinor(p.priceMinor),
+    compareAtMinor: onOffer ? p.compareAtMinor!.toString() : null,
+    compareAtFormatted: onOffer ? formatNairaMinor(p.compareAtMinor!) : null,
+    discountPercent,
     imageUrl: p.imageUrl,
     category: p.category,
     specs: normalizeSpecs(p.specs),
@@ -179,8 +212,8 @@ function toOrderView(o: {
     id: o.id,
     productName: o.productName,
     quantity: o.quantity,
-    unitPriceFormatted: `₦${fromMinorUnits(o.unitPriceMinor, Asset.NGN)}`,
-    totalFormatted: `₦${fromMinorUnits(o.totalMinor, Asset.NGN)}`,
+    unitPriceFormatted: formatNairaMinor(o.unitPriceMinor),
+    totalFormatted: formatNairaMinor(o.totalMinor),
     totalMinor: o.totalMinor.toString(),
     status: o.status,
     delivery: {
@@ -332,11 +365,11 @@ export async function checkoutGadget(input: CheckoutInput): Promise<OrderView> {
     emailKind: "money_out",
     title: "Order placed",
     body: `Your order for ${qty} × ${product.name} is confirmed. We’ll be in touch about delivery.`,
-    amount: `₦${fromMinorUnits(totalMinor, Asset.NGN)}`,
+    amount: formatNairaMinor(totalMinor),
     data: { orderId: order.id },
     details: [
       { label: "Item", value: `${qty} × ${product.name}` },
-      { label: "Total", value: `₦${fromMinorUnits(totalMinor, Asset.NGN)}` },
+      { label: "Total", value: formatNairaMinor(totalMinor) },
       { label: "Deliver to", value: `${input.delivery.address.trim()}, ${input.delivery.city.trim()}` },
     ],
   }).catch(() => {});

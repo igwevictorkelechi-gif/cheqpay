@@ -155,7 +155,17 @@ export default function GadgetsScreen() {
             <Image source={{ uri: selected.imageUrl }} style={{ width: '100%', height: 190, borderRadius: 16, marginTop: 16 }} resizeMode="cover" />
           ) : null}
           <Text style={{ color: colors.ink, fontSize: 24, fontWeight: '800', marginTop: 16 }}>{selected.name}</Text>
-          <Text style={{ color: colors.brandLight, fontSize: 18, fontWeight: '700', marginTop: 4 }}>{selected.priceFormatted}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+            <Text style={{ color: colors.brandLight, fontSize: 18, fontWeight: '700' }}>{selected.priceFormatted}</Text>
+            {selected.compareAtFormatted ? (
+              <Text style={{ color: colors.muted, fontSize: 14, marginLeft: 8, textDecorationLine: 'line-through' }}>
+                {selected.compareAtFormatted}
+              </Text>
+            ) : null}
+            {selected.discountPercent ? (
+              <Text style={{ color: colors.brandLight, fontSize: 13, fontWeight: '800', marginLeft: 8 }}>Save {selected.discountPercent}%</Text>
+            ) : null}
+          </View>
           {selected.description ? (
             <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 8 }}>{selected.description}</Text>
           ) : null}
@@ -214,7 +224,7 @@ export default function GadgetsScreen() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 20 }}>
             <Text style={{ color: colors.muted, fontSize: 14 }}>Total</Text>
             <Text style={{ color: colors.ink, fontSize: 20, fontWeight: '800' }}>
-              ₦{total.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+              ₦{total.toLocaleString('en-NG', { maximumFractionDigits: 2 })}
             </Text>
           </View>
 
@@ -334,7 +344,17 @@ export default function GadgetsScreen() {
                 </View>
                 <View style={{ padding: 12 }}>
                   <Text numberOfLines={2} style={{ color: colors.ink, fontWeight: '700', fontSize: 14 }}>{p.name}</Text>
-                  <Text style={{ color: colors.brandLight, fontWeight: '800', fontSize: 14, marginTop: 4 }}>{p.priceFormatted}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+                    <Text style={{ color: colors.brandLight, fontWeight: '800', fontSize: 14 }}>{p.priceFormatted}</Text>
+                    {p.compareAtFormatted ? (
+                      <Text style={{ color: colors.muted, fontSize: 12, marginLeft: 6, textDecorationLine: 'line-through' }}>
+                        {p.compareAtFormatted}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {p.discountPercent ? (
+                    <Text style={{ color: colors.brandLight, fontSize: 11, fontWeight: '800', marginTop: 2 }}>Save {p.discountPercent}%</Text>
+                  ) : null}
                   {!p.available ? <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', marginTop: 4 }}>Sold out</Text> : null}
                 </View>
               </TouchableOpacity>
