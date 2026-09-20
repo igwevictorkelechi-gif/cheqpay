@@ -43,8 +43,23 @@ vi.mock("./ensureGadgets", () => ({ ensureGadgetSchema: vi.fn().mockResolvedValu
 vi.mock("./ensureGadgetTxnType", () => ({ ensureGadgetTxnType: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./alerts", () => ({ notifyUser: h.notifyUser }));
 
-import { checkoutGadget, normalizeSpecs } from "./gadgets";
+import { checkoutGadget, formatNairaMinor, normalizeSpecs } from "./gadgets";
 import { ApiError } from "./http";
+
+describe("formatNairaMinor", () => {
+  it("groups thousands and drops .00 on whole amounts", () => {
+    expect(formatNairaMinor(120_000_00n)).toBe("₦120,000");
+    expect(formatNairaMinor(1_200_000_00n)).toBe("₦1,200,000");
+    expect(formatNairaMinor(0n)).toBe("₦0");
+    expect(formatNairaMinor(500_00n)).toBe("₦500");
+  });
+
+  it("keeps two decimals when there are kobo", () => {
+    expect(formatNairaMinor(1_200_000_50n)).toBe("₦1,200,000.50");
+    expect(formatNairaMinor(99n)).toBe("₦0.99");
+    expect(formatNairaMinor(1_05n)).toBe("₦1.05");
+  });
+});
 
 describe("normalizeSpecs", () => {
   it("keeps well-formed rows in order", () => {
@@ -151,7 +166,7 @@ describe("checkoutGadget", () => {
         data: { available: { decrement: 9_000_000n } },
       }),
     );
-    expect(order.totalFormatted).toBe("₦90000.00");
+    expect(order.totalFormatted).toBe("₦90,000");
     expect(order.quantity).toBe(2);
   });
 

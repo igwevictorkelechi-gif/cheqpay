@@ -30,6 +30,7 @@ export function ensureGadgetSchema(): Promise<void> {
           name text NOT NULL,
           description text NOT NULL DEFAULT '',
           price_minor bigint NOT NULL,
+          compare_at_minor bigint,
           image_url text,
           category text NOT NULL DEFAULT '',
           specs jsonb,
@@ -39,9 +40,12 @@ export function ensureGadgetSchema(): Promise<void> {
           updated_at timestamptz NOT NULL DEFAULT now()
         )
       `);
-      // For stores whose gadget_products predates the specs column.
+      // For stores whose gadget_products predates these columns.
       await prisma.$executeRawUnsafe(
         `ALTER TABLE gadget_products ADD COLUMN IF NOT EXISTS specs jsonb`,
+      );
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE gadget_products ADD COLUMN IF NOT EXISTS compare_at_minor bigint`,
       );
       await prisma.$executeRawUnsafe(
         `CREATE INDEX IF NOT EXISTS gadget_products_active_idx ON gadget_products(active)`,

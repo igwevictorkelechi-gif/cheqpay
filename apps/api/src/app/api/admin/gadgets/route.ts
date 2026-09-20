@@ -14,6 +14,7 @@ const createSchema = z.object({
   name: z.string().min(1).max(160),
   description: z.string().max(2000).optional(),
   price: z.string().min(1), // NGN decimal string; validated in the lib
+  compareAt: z.string().max(40).nullable().optional(),
   imageUrl: imageValue.optional(),
   category: z.string().max(80).optional(),
   specs: specSchema.optional(),

@@ -12,6 +12,7 @@ interface Product {
   name: string;
   description: string;
   priceMinor: string;
+  compareAtMinor: string | null;
   category: string;
   imageUrl: string | null;
   stock: number | null;
@@ -38,6 +39,7 @@ export default function EditGadgetPage() {
         setInitial({
           name: p.name,
           price: minorToNaira(p.priceMinor),
+          compareAt: p.compareAtMinor ? minorToNaira(p.compareAtMinor) : '',
           category: p.category ?? '',
           description: p.description ?? '',
           imageUrl: p.imageUrl ?? '',

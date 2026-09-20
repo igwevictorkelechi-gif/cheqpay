@@ -27,6 +27,7 @@ export interface SpecRow {
 export interface ProductFormValues {
   name: string;
   price: string; // NGN decimal string
+  compareAt: string; // optional "was" price; "" = none
   category: string;
   description: string;
   imageUrl: string;
@@ -44,6 +45,7 @@ const OTHER = '__other__';
 export const EMPTY_PRODUCT: ProductFormValues = {
   name: '',
   price: '',
+  compareAt: '',
   category: '',
   description: '',
   imageUrl: '',
@@ -131,6 +133,7 @@ export default function ProductForm({
     const body = {
       name: v.name.trim(),
       price: v.price.trim(),
+      compareAt: v.compareAt.trim() || null,
       description: v.description.trim() || undefined,
       imageUrl: v.imageUrl.trim() || undefined,
       category: effectiveCategory || undefined,
@@ -218,11 +221,25 @@ export default function ProductForm({
             <label className={LABEL_CLS}>Price (₦)</label>
             <input
               className={INPUT_CLS}
-              placeholder="e.g. 1250000"
+              placeholder="e.g. 1200000"
               inputMode="decimal"
               value={v.price}
               onChange={(e) => set('price', e.target.value)}
             />
+          </div>
+
+          <div>
+            <label className={LABEL_CLS}>Compare-at price (₦) — optional</label>
+            <input
+              className={INPUT_CLS}
+              placeholder="e.g. 1300000"
+              inputMode="decimal"
+              value={v.compareAt}
+              onChange={(e) => set('compareAt', e.target.value)}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              The old price, shown struck through. Leave blank for no discount; must be above the price to show.
+            </p>
           </div>
 
           <div>

@@ -229,6 +229,9 @@ export interface GadgetProduct {
   description: string;
   priceMinor: string;
   priceFormatted: string;
+  compareAtMinor: string | null;
+  compareAtFormatted: string | null;
+  discountPercent: number | null;
   imageUrl: string | null;
   category: string;
   specs: { label: string; value: string }[];
