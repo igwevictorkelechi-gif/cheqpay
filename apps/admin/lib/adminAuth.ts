@@ -7,6 +7,48 @@
 
 export const SESSION_COOKIE = "cheqpay_admin";
 
+export type AdminRole = "admin" | "super";
+
+export interface SessionInfo {
+  email: string;
+  role: AdminRole;
+}
+
+// Areas only Super Admins may reach. Enforced in middleware for both the page
+// and the API proxy behind it (the backend is only reachable through these
+// proxies, which hold the shared secret — so blocking here is real, not just
+// cosmetic). Matched by prefix, so "/features" also covers "/features/popup".
+export const SUPER_ONLY_PAGE_PREFIXES = [
+  "/roles",
+  "/provider-settings",
+  "/payment-settings",
+  "/provider-check",
+  "/adjust-balance",
+  "/features",
+];
+
+export const SUPER_ONLY_API_PREFIXES = [
+  "/api/roles",
+  "/api/provider-status",
+  "/api/provider-check",
+  "/api/adjust-balance",
+  "/api/admin-otp",
+  "/api/features",
+  "/api/popup",
+];
+
+export function isSuperOnlyPage(pathname: string): boolean {
+  return SUPER_ONLY_PAGE_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + "/"),
+  );
+}
+
+export function isSuperOnlyApi(pathname: string): boolean {
+  return SUPER_ONLY_API_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + "/"),
+  );
+}
+
 /** Secret used to sign the session. Falls back to the API secret if set. */
 export function adminSecret(): string {
   return process.env.ADMIN_DASHBOARD_SECRET || process.env.ADMIN_API_SECRET || "";
@@ -44,34 +86,49 @@ export function timingSafeEqual(a: string, b: string): boolean {
   return out === 0;
 }
 
-/** Build the signed session cookie value for an authenticated admin email. */
-export async function sessionCookieValue(email: string): Promise<string> {
+/**
+ * Build the signed session cookie value for an authenticated admin.
+ *
+ * Format: b64url(email).b64url(role).hmac(`session:${email}:${role}`). The role
+ * is signed alongside the email so it can be trusted in Edge middleware without
+ * a database round-trip; a demotion takes effect on the admin's next sign-in.
+ */
+export async function sessionCookieValue(email: string, role: AdminRole): Promise<string> {
   const e = email.trim().toLowerCase();
-  const sig = await hmacHex(adminSecret(), `session:${e}`);
-  return `${b64urlEncode(e)}.${sig}`;
+  const sig = await hmacHex(adminSecret(), `session:${e}:${role}`);
+  return `${b64urlEncode(e)}.${b64urlEncode(role)}.${sig}`;
 }
 
 /**
- * Validate a session cookie and return the admin email it belongs to, or null.
- * Re-checks the allowlist so removing an email revokes access immediately.
+ * Validate a session cookie and return its { email, role }, or null.
+ *
+ * Only the current three-segment format is accepted; older role-less cookies
+ * fail verification and the admin is asked to sign in again (which mints a
+ * cookie carrying their role).
  */
-export async function sessionEmail(cookie: string | undefined): Promise<string | null> {
+export async function sessionInfo(cookie: string | undefined): Promise<SessionInfo | null> {
   const secret = adminSecret();
   if (!cookie || !secret) return null;
-  const dot = cookie.indexOf(".");
-  if (dot <= 0) return null;
+  const parts = cookie.split(".");
+  if (parts.length !== 3) return null;
   let email: string;
+  let role: string;
   try {
-    email = b64urlDecode(cookie.slice(0, dot));
+    email = b64urlDecode(parts[0]);
+    role = b64urlDecode(parts[1]);
   } catch {
     return null;
   }
-  const sig = cookie.slice(dot + 1);
-  const expected = await hmacHex(secret, `session:${email}`);
-  if (!timingSafeEqual(sig, expected)) return null;
-  return email;
+  const expected = await hmacHex(secret, `session:${email}:${role}`);
+  if (!timingSafeEqual(parts[2], expected)) return null;
+  return { email, role: role === "super" ? "super" : "admin" };
+}
+
+/** The signed-in admin's email, or null. */
+export async function sessionEmail(cookie: string | undefined): Promise<string | null> {
+  return (await sessionInfo(cookie))?.email ?? null;
 }
 
 export async function isValidSession(cookie: string | undefined): Promise<boolean> {
-  return (await sessionEmail(cookie)) !== null;
+  return (await sessionInfo(cookie)) !== null;
 }

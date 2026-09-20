@@ -10,6 +10,7 @@ import {
   Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search,
   ShieldAlert, Monitor, Package, ShoppingBag, type LucideIcon,
 } from 'lucide-react';
+import { isSuperOnlyPage, type AdminRole } from '@/lib/adminAuth';
 
 type Item = { label: string; href: string; icon: LucideIcon };
 type Category = { label: string; icon: LucideIcon; items: Item[] };
@@ -92,11 +93,15 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
   const pathname = usePathname();
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
+  const [role, setRole] = useState<AdminRole | null>(null);
   const [pendingWithdrawals, setPendingWithdrawals] = useState(0);
   useEffect(() => {
     fetch('/api/auth')
       .then((r) => r.json())
-      .then((d) => setEmail(d.email ?? null))
+      .then((d) => {
+        setEmail(d.email ?? null);
+        setRole(d.role ?? null);
+      })
       .catch(() => {});
   }, []);
   // Live count of withdrawals awaiting review — surfaced as a nav badge so the
@@ -126,6 +131,16 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
   });
   const toggle = (label: string) => setOpenCats((s) => ({ ...s, [label]: !s[label] }));
 
+  // Hide Super-Admin-only items from regular admins. While the role is still
+  // loading (null) we withhold them too, so a restricted link never flashes.
+  const canSuper = role === 'super';
+  const visibleCategories = categories
+    .map((cat) => ({
+      ...cat,
+      items: cat.items.filter((i) => canSuper || !isSuperOnlyPage(i.href)),
+    }))
+    .filter((cat) => cat.items.length > 0);
+
   return (
     <>
       {open && (
@@ -146,13 +161,13 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
             width={180}
             height={75}
             priority
-            className="h-auto w-[160px] brightness-0 invert"
+            className="h-auto w-[160px]"
           />
           <p className="mt-2 text-sm text-gray-500">Admin Panel</p>
         </div>
 
         <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1">
-          {categories.map((cat) => {
+          {visibleCategories.map((cat) => {
             const CatIcon = cat.icon;
             const expanded = openCats[cat.label];
             const hasActive = cat.items.some((i) => i.href === pathname);
@@ -223,7 +238,20 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
                 <span className="block truncate text-sm font-semibold text-gray-900">
                   {email ?? 'Admin'}
                 </span>
-                <span className="block text-xs text-gray-500">View profile</span>
+                {role ? (
+                  <span
+                    className={
+                      'mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ' +
+                      (role === 'super'
+                        ? 'bg-brand-100 text-brand-700'
+                        : 'bg-gray-100 text-gray-600')
+                    }
+                  >
+                    {role === 'super' ? 'Super Admin' : 'Admin'}
+                  </span>
+                ) : (
+                  <span className="block text-xs text-gray-500">View profile</span>
+                )}
               </span>
             </Link>
             <button

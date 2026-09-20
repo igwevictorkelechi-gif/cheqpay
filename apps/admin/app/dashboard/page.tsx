@@ -90,6 +90,16 @@ export default function Dashboard() {
   const [recent, setRecent] = useState<AdminTx[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [denied, setDenied] = useState(false);
+
+  // Set when middleware bounced a regular admin away from a Super-Admin area.
+  useEffect(() => {
+    try {
+      setDenied(new URLSearchParams(window.location.search).get('denied') === '1');
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -166,6 +176,12 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      {denied && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          That area is restricted to Super Admins. Ask a Super Admin if you need access.
+        </div>
+      )}
 
       {error && (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
