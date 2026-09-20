@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { deactivateProduct, getProductById, updateProduct } from "@/lib/gadgetsAdmin";
+import { imageValue } from "@/lib/gadgetImage";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ const patchSchema = z.object({
   name: z.string().min(1).max(160).optional(),
   description: z.string().max(2000).optional(),
   price: z.string().min(1).optional(),
-  imageUrl: z.string().url().max(2000).nullable().optional().or(z.literal("")),
+  imageUrl: imageValue.nullable().optional(),
   category: z.string().max(80).optional(),
   specs: z
     .array(z.object({ label: z.string().max(80), value: z.string().max(400) }))

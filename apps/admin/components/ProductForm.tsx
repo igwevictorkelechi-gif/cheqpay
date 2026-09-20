@@ -1,9 +1,23 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Plus, Trash2, Wand2 } from 'lucide-react';
+import { ImagePlus, Loader2, Plus, Trash2, Wand2 } from 'lucide-react';
 import { CATEGORY_LABELS, templateFor } from '@/lib/gadgetCategories';
+
+// Images are stored as base64 data URLs in the product's imageUrl column — the
+// same approach as bill-provider logos. Keep raw files small; base64 inflates
+// the stored string by ~33%, and every product image ships in the catalog JSON.
+const MAX_IMAGE_BYTES = 300 * 1024;
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result));
+    fr.onerror = () => reject(new Error('Could not read the image file'));
+    fr.readAsDataURL(file);
+  });
+}
 
 export interface SpecRow {
   label: string;
@@ -48,6 +62,7 @@ export default function ProductForm({
   initial: ProductFormValues;
 }) {
   const router = useRouter();
+  const fileInput = useRef<HTMLInputElement>(null);
   const [v, setV] = useState<ProductFormValues>(initial);
   // A category not in the canonical list is edited as free text ("Other").
   const knownCategory = v.category === '' || CATEGORY_LABELS.includes(v.category);
@@ -70,6 +85,27 @@ export default function ProductForm({
   }
   function removeSpec(i: number) {
     setV((s) => ({ ...s, specs: s.specs.filter((_, j) => j !== i) }));
+  }
+
+  async function onPickImage(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file (PNG, JPG, WebP, or SVG).');
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError('Image must be under 300KB. Try a smaller or optimised file.');
+      return;
+    }
+    try {
+      const dataUrl = await readAsDataUrl(file);
+      set('imageUrl', dataUrl);
+    } catch {
+      setError('Could not read that image. Try another file.');
+    } finally {
+      if (fileInput.current) fileInput.current.value = '';
+    }
   }
 
   // Seed the spec editor from the chosen category's template, keeping any rows
@@ -200,14 +236,49 @@ export default function ProductForm({
             />
           </div>
 
-          <div>
-            <label className={LABEL_CLS}>Image URL</label>
+          <div className="sm:col-span-2">
+            <label className={LABEL_CLS}>Product image</label>
             <input
-              className={INPUT_CLS}
-              placeholder="https://…"
-              value={v.imageUrl}
-              onChange={(e) => set('imageUrl', e.target.value)}
+              ref={fileInput}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              className="hidden"
+              onChange={(e) => void onPickImage(e.target.files?.[0])}
             />
+            <div className="flex items-center gap-4">
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                {v.imageUrl.trim() ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={v.imageUrl.trim()}
+                    alt="Product"
+                    className="h-full w-full object-cover"
+                    onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
+                  />
+                ) : (
+                  <ImagePlus size={22} className="text-gray-300" />
+                )}
+              </div>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  <ImagePlus size={16} /> {v.imageUrl.trim() ? 'Replace image' : 'Upload image'}
+                </button>
+                {v.imageUrl.trim() ? (
+                  <button
+                    type="button"
+                    onClick={() => set('imageUrl', '')}
+                    className="ml-2 rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                  >
+                    Remove
+                  </button>
+                ) : null}
+                <p className="mt-1 text-xs text-gray-500">PNG, JPG, WebP or SVG · under 300KB.</p>
+              </div>
+            </div>
           </div>
 
           <div className="sm:col-span-2">
@@ -221,16 +292,6 @@ export default function ProductForm({
             />
           </div>
         </div>
-
-        {v.imageUrl.trim() ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={v.imageUrl.trim()}
-            alt="Preview"
-            className="mt-4 h-40 w-40 rounded-lg border border-gray-200 object-cover"
-            onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
-          />
-        ) : null}
       </section>
 
       {/* Specifications */}
