@@ -67,6 +67,14 @@ enum TransactionType {
   CARD_FUND // USD moved from the in-app balance onto a virtual card
   CARD_WITHDRAW // USD moved off a virtual card back to the in-app balance
   GADGET_PURCHASE // NGN spent buying a gadget from the in-app store
+  TICKET_PURCHASE // NGN spent buying event tickets
+}
+
+enum TicketStatus {
+  VALID // issued, not yet used
+  USED // checked in at the gate
+  CANCELLED // voided (e.g. order refunded)
+  REFUNDED // money returned to the buyer
 }
 
 /// Fulfilment states for a gadget order. Payment is captured at checkout, so an
@@ -185,6 +193,8 @@ model User {
   beneficiaries Beneficiary[]
   cards         Card[]
   gadgetOrders  GadgetOrder[]
+  ticketOrders  TicketOrder[]
+  tickets       Ticket[]
   sessions      UserSession[]
 
   @@index([bvnFingerprint])
@@ -519,6 +529,95 @@ model GadgetDiscountCode {
   updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
 
   @@map("gadget_discount_codes")
+}
+
+/// A ticketed event (concert, show, etc.) the business sells tickets to.
+model Event {
+  id          String    @id @default(uuid()) @db.Uuid
+  title       String
+  description String    @default("")
+  venue       String    @default("")
+  city        String    @default("")
+  imageUrl    String?   @map("image_url")
+  /// When the event happens (optional).
+  startsAt    DateTime? @map("starts_at")
+  /// Hidden from the storefront when false, without deleting sold tickets.
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  tiers TicketTier[]
+
+  @@index([active])
+  @@map("events")
+}
+
+/// A ticket type within an event, e.g. Regular / VIP, each with its own price.
+model TicketTier {
+  id         String   @id @default(uuid()) @db.Uuid
+  eventId    String   @map("event_id") @db.Uuid
+  name       String
+  /// NGN minor units (kobo).
+  priceMinor BigInt   @map("price_minor")
+  /// null = unlimited; otherwise the cap, with `sold` counting issued tickets.
+  capacity   Int?
+  sold       Int      @default(0)
+  active     Boolean  @default(true)
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("ticket_tiers")
+}
+
+/// The payment for a batch of tickets bought together.
+model TicketOrder {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  eventId       String   @map("event_id") @db.Uuid
+  quantity      Int      @default(1)
+  totalMinor    BigInt   @map("total_minor")
+  /// "PAID" | "REFUNDED".
+  status        String   @default("PAID")
+  transactionId String?  @map("transaction_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tickets Ticket[]
+
+  @@index([userId])
+  @@index([eventId])
+  @@map("ticket_orders")
+}
+
+/// One admitted person: a single scannable ticket with a unique reference.
+model Ticket {
+  id           String       @id @default(uuid()) @db.Uuid
+  orderId      String       @map("order_id") @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  eventId      String       @map("event_id") @db.Uuid
+  tierId       String?      @map("tier_id") @db.Uuid
+  /// Snapshots — survive event/tier edits.
+  eventTitle   String       @map("event_title")
+  tierName     String       @map("tier_name")
+  priceMinor   BigInt       @map("price_minor")
+  /// Unique, unguessable code encoded in the QR and checked at the gate.
+  reference    String       @unique
+  status       TicketStatus @default(VALID)
+  usedAt       DateTime?    @map("used_at")
+  checkedInBy  String?      @map("checked_in_by")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  order TicketOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([eventId])
+  @@map("tickets")
 }
 
 // One purchase. Single product per order for v1 (with a quantity) — a cart is

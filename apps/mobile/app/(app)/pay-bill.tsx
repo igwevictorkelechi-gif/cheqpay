@@ -19,6 +19,7 @@ const services: Service[] = [
   { label: 'Cable TV', emoji: '📺', badge: 'New', route: '/(app)/bill/cabletv' },
   { label: 'Food delivery', emoji: '🛵', badge: 'New', route: '/(app)/bill/food' },
   { label: 'Gadgets', emoji: '💻', badge: 'New', route: '/(app)/gadgets' },
+  { label: 'Events', emoji: '🎫', badge: 'New', route: '/(app)/events' },
   { label: 'Vouchers', emoji: '🎟️' },
 ];
 
