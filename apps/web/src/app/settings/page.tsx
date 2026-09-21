@@ -7,7 +7,7 @@ import { Settings } from "lucide-react";
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
-  const { darkMode, setDarkMode } = useUIStore();
+  const { darkMode, setDarkMode, sound, setSound } = useUIStore();
   const [notifications, setNotifications] = useState(true);
   const [biometric, setBiometric] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -116,6 +116,29 @@ export default function SettingsPage() {
                 <span
                   className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
                     darkMode ? "translate-x-7" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="border-t border-border pt-4 flex items-center justify-between">
+              <div>
+                <p className="font-medium text-ink">Button sounds</p>
+                <p className="text-sm text-muted">A subtle click when you tap</p>
+              </div>
+              <button
+                onClick={() => setSound(!sound)}
+                role="switch"
+                aria-checked={sound}
+                aria-label="Button sounds"
+                data-no-sound
+                className={`tap relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                  sound ? "bg-brand" : "bg-circle"
+                }`}
+              >
+                <span
+                  className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                    sound ? "translate-x-7" : "translate-x-1"
                   }`}
                 />
               </button>
