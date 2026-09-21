@@ -42,8 +42,8 @@ export default function SoundProvider() {
         osc.frequency.setValueAtTime(520, now);
         osc.frequency.exponentialRampToValueAtTime(360, now + 0.05);
         gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(0.05, now + 0.005);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.022, now + 0.006);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
         osc.connect(gain).connect(ctx.destination);
         osc.start(now);
         osc.stop(now + 0.07);
