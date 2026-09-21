@@ -1,7 +1,12 @@
 "use client";
 
+// A non-dynamic route on purpose: the static export (output: "export") can't
+// enumerate runtime event IDs at build time, so the event id travels in the
+// query string (?id=…) and is read client-side, rather than in a /events/[id]
+// path segment.
+
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, CalendarDays, MapPin, Ticket, Check } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, useToast } from "@/components/MobileUI";
@@ -14,11 +19,11 @@ function whenLabel(iso: string | null): string | null {
 }
 
 export default function EventDetailPage() {
-  const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();
   const { authorize } = useTransactionPin();
 
+  const [eventId, setEventId] = useState<string | null>(null);
   const [event, setEvent] = useState<EventItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tierId, setTierId] = useState<string | null>(null);
@@ -27,6 +32,17 @@ export default function EventDetailPage() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
+    let id: string | null = null;
+    try {
+      id = new URLSearchParams(window.location.search).get("id");
+    } catch {
+      /* ignore */
+    }
+    if (!id) {
+      setError("Event not found.");
+      return;
+    }
+    setEventId(id);
     api.getEvent(id)
       .then(({ event }) => {
         setEvent(event);
@@ -34,18 +50,18 @@ export default function EventDetailPage() {
         setTierId(first ? first.id : null);
       })
       .catch((e) => setError(e instanceof ApiError ? e.message : "Couldn't load this event."));
-  }, [id]);
+  }, []);
 
   const tier: EventTier | undefined = event?.tiers.find((t) => t.id === tierId);
   const maxQty = Math.min(10, tier?.remaining ?? 10);
   const canPay = !!tier && tier.available && qty >= 1 && !busy;
 
   async function pay() {
-    if (!event || !tier) return;
+    if (!event || !tier || !eventId) return;
     setBusy(true);
     try {
       await authorize(
-        (pin) => api.buyTickets({ eventId: event.id, tierId: tier.id, quantity: qty }, pin),
+        (pin) => api.buyTickets({ eventId, tierId: tier.id, quantity: qty }, pin),
         { title: "Confirm this purchase", detail: `${qty} × ${tier.name} — ${tier.priceFormatted} each.` },
       );
       setDone(true);
@@ -103,7 +119,6 @@ export default function EventDetailPage() {
           {event.venue || event.city ? <p className="mt-1 flex items-center gap-1.5 text-sm text-muted"><MapPin className="h-4 w-4" /> {[event.venue, event.city].filter(Boolean).join(", ")}</p> : null}
           {event.description ? <p className="mt-3 text-sm leading-relaxed text-muted">{event.description}</p> : null}
 
-          {/* Tiers */}
           <h2 className="mt-6 text-lg font-bold text-ink">Choose a ticket</h2>
           <div className="mt-3 space-y-2">
             {event.tiers.length === 0 && <p className="text-sm text-muted">No tickets available.</p>}

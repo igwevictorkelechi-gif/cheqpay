@@ -59,7 +59,7 @@ export default function EventsPage() {
       ) : (
         <div className="space-y-3 px-5 pb-10">
           {events.map((ev) => (
-            <button key={ev.id} onClick={() => router.push(`/events/${ev.id}`)}
+            <button key={ev.id} onClick={() => router.push(`/events/view?id=${ev.id}`)}
               className="flex w-full overflow-hidden rounded-2xl bg-card text-left transition active:scale-[0.99]">
               <div className="flex h-24 w-24 shrink-0 items-center justify-center bg-circle">
                 {ev.imageUrl ? (
