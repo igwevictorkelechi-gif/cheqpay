@@ -24,30 +24,21 @@ import {
   prisma,
 } from "@cheqpay/db";
 import { ApiError } from "./http";
+import { formatNairaMinor } from "./money";
 import { ensureGadgetSchema } from "./ensureGadgets";
+import {
+  assertDiscountUsable,
+  computeDiscountMinor,
+  findUsableCode,
+} from "./gadgetDiscounts";
 import { ensureGadgetTxnType } from "./ensureGadgetTxnType";
 import { notifyUser } from "./alerts";
 
 /** Sanity ceiling on a single order line — a storefront, not a wholesaler. */
 const MAX_QUANTITY = 20;
 
-/**
- * Money for display: grouped thousands, and no ".00" on whole-naira amounts.
- *
- * fromMinorUnits is deliberately separator-free (it is the exact, canonical
- * value used for ledgers and idempotency), so it reads as "1200000.00". The
- * storefront wants "₦1,200,000". This formats straight from BigInt minor units
- * to avoid any float rounding on large prices.
- */
-export function formatNairaMinor(minor: bigint): string {
-  const neg = minor < 0n;
-  const abs = neg ? -minor : minor;
-  const naira = abs / 100n;
-  const kobo = abs % 100n;
-  const grouped = naira.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  const body = kobo === 0n ? grouped : `${grouped}.${kobo.toString().padStart(2, "0")}`;
-  return `${neg ? "-" : ""}₦${body}`;
-}
+// Kept exported from here for existing callers/tests.
+export { formatNairaMinor };
 
 export interface DeliveryDetails {
   name: string;
@@ -177,6 +168,8 @@ export interface CheckoutInput {
   quantity: number;
   delivery: DeliveryDetails;
   note?: string;
+  /** Optional discount code, validated and applied server-side. */
+  discountCode?: string;
   idempotencyKey: string;
 }
 
@@ -187,6 +180,10 @@ export interface OrderView {
   unitPriceFormatted: string;
   totalFormatted: string;
   totalMinor: string;
+  /** The discount taken off, if any (null when none). */
+  discountCode: string | null;
+  discountMinor: string;
+  discountFormatted: string | null;
   status: GadgetOrderStatus;
   delivery: DeliveryDetails;
   note: string | null;
@@ -199,6 +196,8 @@ function toOrderView(o: {
   quantity: number;
   unitPriceMinor: bigint;
   totalMinor: bigint;
+  discountCode?: string | null;
+  discountMinor?: bigint | null;
   status: GadgetOrderStatus;
   deliveryName: string;
   deliveryPhone: string;
@@ -208,6 +207,7 @@ function toOrderView(o: {
   note: string | null;
   createdAt: Date;
 }): OrderView {
+  const discountMinor = o.discountMinor ?? 0n;
   return {
     id: o.id,
     productName: o.productName,
@@ -215,6 +215,9 @@ function toOrderView(o: {
     unitPriceFormatted: formatNairaMinor(o.unitPriceMinor),
     totalFormatted: formatNairaMinor(o.totalMinor),
     totalMinor: o.totalMinor.toString(),
+    discountCode: o.discountCode ?? null,
+    discountMinor: discountMinor.toString(),
+    discountFormatted: discountMinor > 0n ? formatNairaMinor(discountMinor) : null,
     status: o.status,
     delivery: {
       name: o.deliveryName,
@@ -281,7 +284,24 @@ export async function checkoutGadget(input: CheckoutInput): Promise<OrderView> {
   }
 
   const unitPriceMinor = product.priceMinor;
-  const totalMinor = unitPriceMinor * BigInt(qty);
+  const subtotalMinor = unitPriceMinor * BigInt(qty);
+
+  // Discount: validated and computed on the server. The code row is captured
+  // here; its redemption counter is incremented inside the transaction below so
+  // a capped code can't be over-redeemed by concurrent checkouts.
+  let discountMinor = 0n;
+  let discountCode: string | null = null;
+  let discountCodeId: string | null = null;
+  let discountMaxRedemptions: number | null = null;
+  if (input.discountCode && input.discountCode.trim()) {
+    const codeRow = await findUsableCode(input.discountCode);
+    assertDiscountUsable(codeRow, subtotalMinor);
+    discountMinor = computeDiscountMinor(codeRow.kind, codeRow.value, subtotalMinor);
+    discountCode = codeRow.code;
+    discountCodeId = codeRow.id;
+    discountMaxRedemptions = codeRow.maxRedemptions;
+  }
+  const totalMinor = subtotalMinor - discountMinor;
 
   const order = await prisma.$transaction(async (db) => {
     // Guarded debit: a balance floor means an overdraw changes zero rows.
@@ -291,6 +311,25 @@ export async function checkoutGadget(input: CheckoutInput): Promise<OrderView> {
     });
     if (debit.count !== 1) {
       throw new ApiError(422, "Insufficient NGN balance", "insufficient_funds");
+    }
+
+    // Redeem the code atomically. With a cap, guard the increment so it can't
+    // exceed maxRedemptions; without one, just count the use.
+    if (discountCodeId) {
+      if (discountMaxRedemptions !== null) {
+        const used = await db.gadgetDiscountCode.updateMany({
+          where: { id: discountCodeId, redemptions: { lt: discountMaxRedemptions } },
+          data: { redemptions: { increment: 1 } },
+        });
+        if (used.count !== 1) {
+          throw new ApiError(409, "That code has been fully redeemed.", "code_exhausted");
+        }
+      } else {
+        await db.gadgetDiscountCode.update({
+          where: { id: discountCodeId },
+          data: { redemptions: { increment: 1 } },
+        });
+      }
     }
 
     // Guarded stock decrement: untracked (null) always passes; a tracked count
@@ -319,6 +358,9 @@ export async function checkoutGadget(input: CheckoutInput): Promise<OrderView> {
           productId: product.id,
           productName: product.name,
           quantity: qty,
+          ...(discountCode
+            ? { discountCode, discountMinor: discountMinor.toString() }
+            : {}),
         },
       },
     });
@@ -331,6 +373,8 @@ export async function checkoutGadget(input: CheckoutInput): Promise<OrderView> {
         quantity: qty,
         unitPriceMinor,
         totalMinor,
+        discountCode,
+        discountMinor,
         status: GadgetOrderStatus.PAID,
         deliveryName: input.delivery.name.trim(),
         deliveryPhone: input.delivery.phone.trim(),
@@ -352,6 +396,7 @@ export async function checkoutGadget(input: CheckoutInput): Promise<OrderView> {
           productId: product.id,
           quantity: qty,
           totalMinor: totalMinor.toString(),
+          ...(discountCode ? { discountCode, discountMinor: discountMinor.toString() } : {}),
         },
       },
     });
@@ -369,6 +414,9 @@ export async function checkoutGadget(input: CheckoutInput): Promise<OrderView> {
     data: { orderId: order.id },
     details: [
       { label: "Item", value: `${qty} × ${product.name}` },
+      ...(discountMinor > 0n
+        ? [{ label: `Discount (${discountCode})`, value: `-${formatNairaMinor(discountMinor)}` }]
+        : []),
       { label: "Total", value: formatNairaMinor(totalMinor) },
       { label: "Deliver to", value: `${input.delivery.address.trim()}, ${input.delivery.city.trim()}` },
     ],

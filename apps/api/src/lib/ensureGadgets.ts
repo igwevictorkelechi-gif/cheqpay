@@ -81,6 +81,35 @@ export function ensureGadgetSchema(): Promise<void> {
       await prisma.$executeRawUnsafe(
         `CREATE INDEX IF NOT EXISTS gadget_orders_created_at_idx ON gadget_orders(created_at)`,
       );
+      // Discount fields on the order (columns on the existing gadget_orders
+      // table — must run at boot, which this helper does).
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE gadget_orders ADD COLUMN IF NOT EXISTS discount_code text`,
+      );
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE gadget_orders ADD COLUMN IF NOT EXISTS discount_minor bigint NOT NULL DEFAULT 0`,
+      );
+
+      // Discount codes.
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS gadget_discount_codes (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          code text NOT NULL,
+          kind text NOT NULL,
+          value bigint NOT NULL,
+          active boolean NOT NULL DEFAULT true,
+          starts_at timestamptz,
+          expires_at timestamptz,
+          max_redemptions integer,
+          redemptions integer NOT NULL DEFAULT 0,
+          min_subtotal_minor bigint,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )
+      `);
+      await prisma.$executeRawUnsafe(
+        `CREATE UNIQUE INDEX IF NOT EXISTS gadget_discount_codes_code_key ON gadget_discount_codes(code)`,
+      );
     })().catch((err) => {
       ensured = null; // allow retry on the next request
       throw err;

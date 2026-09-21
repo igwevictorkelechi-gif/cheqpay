@@ -19,6 +19,7 @@ const checkoutSchema = z.object({
     state: z.string().min(1).max(120),
   }),
   note: z.string().max(500).optional(),
+  discountCode: z.string().max(40).optional(),
 });
 
 /** The signed-in user's own orders, newest first. */
@@ -64,6 +65,7 @@ export async function POST(req: Request) {
       quantity: body.quantity,
       delivery: body.delivery,
       note: body.note,
+      discountCode: body.discountCode,
       idempotencyKey,
     });
 

@@ -22,6 +22,24 @@ export function decimalsFor(asset: Asset): number {
 }
 
 /**
+ * NGN for display: grouped thousands, and no ".00" on whole-naira amounts.
+ *
+ * fromMinorUnits is deliberately separator-free (it is the exact, canonical
+ * value used for ledgers and idempotency), so it reads as "1200000.00". This
+ * renders "₦1,200,000" straight from BigInt minor units, avoiding any float
+ * rounding on large prices.
+ */
+export function formatNairaMinor(minor: bigint): string {
+  const neg = minor < 0n;
+  const abs = neg ? -minor : minor;
+  const naira = abs / 100n;
+  const kobo = abs % 100n;
+  const grouped = naira.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const body = kobo === 0n ? grouped : `${grouped}.${kobo.toString().padStart(2, "0")}`;
+  return `${neg ? "-" : ""}₦${body}`;
+}
+
+/**
  * Convert a human decimal string (e.g. "0.00123456") to integer minor units
  * for the given asset. Pure string math — no floating point, no precision loss.
  * Throws on malformed input or excess precision.

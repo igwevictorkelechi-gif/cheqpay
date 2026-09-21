@@ -12,7 +12,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors, Card } from '@/components/brand';
-import { api, ApiError, type GadgetProduct, type GadgetDelivery } from '@/services/api';
+import {
+  api,
+  ApiError,
+  type GadgetProduct,
+  type GadgetDelivery,
+  type GadgetDiscountQuote,
+} from '@/services/api';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 
 type Step = 'browse' | 'buy' | 'done';
@@ -35,6 +41,10 @@ export default function GadgetsScreen() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [category, setCategory] = useState('');
+  const [code, setCode] = useState('');
+  const [quote, setQuote] = useState<GadgetDiscountQuote | null>(null);
+  const [codeMsg, setCodeMsg] = useState<string | null>(null);
+  const [applyingCode, setApplyingCode] = useState(false);
 
   useEffect(() => {
     api
@@ -57,7 +67,36 @@ export default function GadgetsScreen() {
     setDelivery(EMPTY);
     setNote('');
     setFormError(null);
+    setCode('');
+    setQuote(null);
+    setCodeMsg(null);
     setStep('buy');
+  }
+
+  function changeQty(next: number) {
+    setQty(Math.min(20, Math.max(1, next)));
+    setQuote(null);
+    setCodeMsg(null);
+  }
+
+  async function applyCode() {
+    if (!selected || !code.trim()) return;
+    setApplyingCode(true);
+    setCodeMsg(null);
+    try {
+      const { quote: q } = await api.validateGadgetDiscount({
+        code: code.trim(),
+        productId: selected.id,
+        quantity: qty,
+      });
+      setQuote(q);
+      setCodeMsg(`Applied — you save ${q.discountFormatted}.`);
+    } catch (e) {
+      setQuote(null);
+      setCodeMsg(e instanceof ApiError ? e.message : "Couldn't apply that code.");
+    } finally {
+      setApplyingCode(false);
+    }
   }
 
   const deliveryComplete = Object.values(delivery).every((v) => v.trim().length > 0);
@@ -74,7 +113,13 @@ export default function GadgetsScreen() {
       await authorize(
         (pin) =>
           api.buyGadget(
-            { productId: selected.id, quantity: qty, delivery, note: note.trim() || undefined },
+            {
+              productId: selected.id,
+              quantity: qty,
+              delivery,
+              note: note.trim() || undefined,
+              discountCode: quote?.code,
+            },
             pin,
           ),
         { title: 'Confirm this order', detail: `${qty} × ${selected.name}` },
@@ -197,11 +242,11 @@ export default function GadgetsScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 24 }}>
             <Text style={{ color: colors.ink, fontSize: 16, fontWeight: '600' }}>Quantity</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-              <TouchableOpacity onPress={() => setQty((q) => Math.max(1, q - 1))} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' }}>
+              <TouchableOpacity onPress={() => changeQty(qty - 1)} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' }}>
                 <Text style={{ color: colors.ink, fontSize: 20, fontWeight: '800' }}>−</Text>
               </TouchableOpacity>
               <Text style={{ color: colors.ink, fontSize: 18, fontWeight: '800', width: 24, textAlign: 'center' }}>{qty}</Text>
-              <TouchableOpacity onPress={() => setQty((q) => Math.min(20, q + 1))} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' }}>
+              <TouchableOpacity onPress={() => changeQty(qty + 1)} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' }}>
                 <Text style={{ color: colors.ink, fontSize: 20, fontWeight: '800' }}>+</Text>
               </TouchableOpacity>
             </View>
@@ -221,11 +266,52 @@ export default function GadgetsScreen() {
             style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14, color: colors.ink, fontSize: 15 }}
           />
 
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 20 }}>
-            <Text style={{ color: colors.muted, fontSize: 14 }}>Total</Text>
-            <Text style={{ color: colors.ink, fontSize: 20, fontWeight: '800' }}>
-              ₦{total.toLocaleString('en-NG', { maximumFractionDigits: 2 })}
-            </Text>
+          <Text style={{ color: colors.ink, fontSize: 18, fontWeight: '700', marginTop: 28, marginBottom: 12 }}>Discount code</Text>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TextInput
+              placeholder="Enter code"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="characters"
+              value={code}
+              onChangeText={(t) => { setCode(t.toUpperCase()); setQuote(null); setCodeMsg(null); }}
+              style={{ flex: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14, color: colors.ink, fontSize: 15 }}
+            />
+            <TouchableOpacity
+              onPress={applyCode}
+              disabled={!code.trim() || applyingCode}
+              style={{ backgroundColor: colors.ink, borderRadius: 16, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center', opacity: !code.trim() || applyingCode ? 0.5 : 1 }}
+            >
+              <Text style={{ color: colors.white, fontWeight: '800' }}>{quote ? 'Applied' : 'Apply'}</Text>
+            </TouchableOpacity>
+          </View>
+          {codeMsg ? (
+            <Text style={{ color: quote ? colors.brandLight : '#F87171', fontSize: 13, marginTop: 8 }}>{codeMsg}</Text>
+          ) : null}
+
+          <View style={{ backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 20 }}>
+            {quote ? (
+              <>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: colors.muted, fontSize: 14 }}>Subtotal</Text>
+                  <Text style={{ color: colors.muted, fontSize: 14 }}>{quote.subtotalFormatted}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                  <Text style={{ color: colors.brandLight, fontSize: 14 }}>Discount ({quote.code})</Text>
+                  <Text style={{ color: colors.brandLight, fontSize: 14 }}>−{quote.discountFormatted}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
+                  <Text style={{ color: colors.muted, fontSize: 14 }}>Total</Text>
+                  <Text style={{ color: colors.ink, fontSize: 20, fontWeight: '800' }}>{quote.totalFormatted}</Text>
+                </View>
+              </>
+            ) : (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: colors.muted, fontSize: 14 }}>Total</Text>
+                <Text style={{ color: colors.ink, fontSize: 20, fontWeight: '800' }}>
+                  ₦{total.toLocaleString('en-NG', { maximumFractionDigits: 2 })}
+                </Text>
+              </View>
+            )}
           </View>
 
           {formError ? (
