@@ -357,7 +357,7 @@ export default function GadgetsPage() {
         </button>
       </div>
 
-      <h1 className="mb-1 mt-3 px-5 text-[32px] font-extrabold text-ink">Gadgets</h1>
+      <h1 className="mb-1 mt-3 px-5 text-2xl font-extrabold text-ink">Gadgets</h1>
       <p className="mb-4 px-5 text-sm text-muted">Buy from CheqPay, delivered to you.</p>
 
       {categories.length > 0 && (

@@ -51,7 +51,7 @@ export default function GadgetOrdersPage() {
           <ArrowLeft className="h-5 w-5" />
         </button>
       </div>
-      <h1 className="mb-5 mt-3 px-5 text-[32px] font-extrabold text-ink">My orders</h1>
+      <h1 className="mb-5 mt-3 px-5 text-2xl font-extrabold text-ink">My orders</h1>
 
       {orders === null ? (
         <div className="flex justify-center py-20">

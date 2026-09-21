@@ -52,7 +52,7 @@ export default function PayBillPage() {
         ]}
       />
 
-      <h1 className="mb-5 mt-3 px-5 text-[32px] font-extrabold text-ink">
+      <h1 className="mb-5 mt-3 px-5 text-2xl font-extrabold text-ink">
         Services
       </h1>
 

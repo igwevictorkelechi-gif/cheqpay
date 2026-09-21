@@ -217,7 +217,7 @@ export default function AssetPage() {
 
           {/* Price + change */}
           <div className="mt-6 px-5">
-            <p className="text-[40px] font-extrabold leading-none text-ink">{fmtNgn(priceNgn)}</p>
+            <p className="text-[34px] font-extrabold leading-none text-ink">{fmtNgn(priceNgn)}</p>
             <div className="mt-2 flex items-center gap-3">
               <span className="text-sm text-muted">${Number(priceUsd).toLocaleString()} · Market price</span>
               {changePct !== null && (

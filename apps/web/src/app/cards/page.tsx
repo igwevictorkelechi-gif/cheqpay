@@ -143,7 +143,7 @@ export default function CardsPage() {
       <div className="flex flex-col px-5 pb-8">
         <div className="mt-3 flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[32px] font-extrabold leading-tight text-ink">Virtual cards</h1>
+            <h1 className="text-2xl font-extrabold leading-tight text-ink">Virtual cards</h1>
             <p className="mt-1 text-sm text-muted">
               Dollar cards for online payments and subscriptions.
             </p>
@@ -446,7 +446,7 @@ function CardPocket({
               )}
             </div>
 
-            <p className="mt-1 text-[32px] font-extrabold leading-none text-white">
+            <p className="mt-1 text-[28px] font-extrabold leading-none text-white">
               {balance ?? <span className="opacity-60">$—</span>}
             </p>
             <p className="mt-1.5 text-[11px] text-white/60">
