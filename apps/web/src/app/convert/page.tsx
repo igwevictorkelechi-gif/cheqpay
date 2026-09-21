@@ -44,7 +44,7 @@ function AssetCard({
       </div>
       <p
         className={`mt-3 truncate text-center font-extrabold text-ink ${
-          emphasize ? "text-[40px]" : "text-[34px]"
+          emphasize ? "text-[34px]" : "text-[28px]"
         } leading-none`}
       >
         {amount}

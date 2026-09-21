@@ -75,6 +75,21 @@ html[data-theme="light"] {
 html {
   scroll-behavior: smooth;
   color-scheme: dark;
+  /*
+   * Global UI scale. Every rem-based size in the app — type, padding, gaps,
+   * button heights — is relative to this, so one value tunes the whole app's
+   * density at once and keeps it consistent across every screen. The design was
+   * drawn a touch large for a phone column; 15px on phones tightens it without
+   * shrinking body text to an uncomfortable size, and desktop (where the
+   * sidebar layout has room) returns to 16px. Tune here, not per screen.
+   */
+  font-size: 15px;
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: 16px;
+  }
 }
 
 body {

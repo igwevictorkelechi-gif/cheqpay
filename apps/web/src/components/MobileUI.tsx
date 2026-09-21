@@ -95,7 +95,7 @@ export function BalanceBlock({
       <span className="text-base text-muted">{label}</span>
       {/* tnum: the balance re-renders as money moves, and proportional digits
           make it jump sideways under its own update. */}
-      <span className="tnum mt-2 text-[40px] font-extrabold leading-none tracking-[-0.02em] text-ink">
+      <span className="tnum mt-2 text-[34px] font-extrabold leading-none tracking-[-0.02em] text-ink">
         {amount}
       </span>
     </div>
