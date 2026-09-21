@@ -36,17 +36,17 @@ export default function SoundProvider() {
         const now = ctx.currentTime;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        // A soft, short tick — quiet, quick decay, so it reads as tactile
-        // feedback rather than a beep.
-        osc.type = "triangle";
-        osc.frequency.setValueAtTime(520, now);
-        osc.frequency.exponentialRampToValueAtTime(360, now + 0.05);
+        // A soft, low bass "thock" — a deep sine that drops in pitch and decays
+        // quickly, so it reads as a subtle tactile thud rather than a beep.
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.exponentialRampToValueAtTime(90, now + 0.06);
         gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(0.022, now + 0.006);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
+        gain.gain.exponentialRampToValueAtTime(0.03, now + 0.006);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
         osc.connect(gain).connect(ctx.destination);
         osc.start(now);
-        osc.stop(now + 0.07);
+        osc.stop(now + 0.08);
       } catch {
         /* audio unavailable — stay silent */
       }
