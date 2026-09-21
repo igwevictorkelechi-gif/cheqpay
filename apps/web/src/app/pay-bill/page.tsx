@@ -12,6 +12,7 @@ import {
   Tv,
   Ticket,
   Laptop,
+  CalendarDays,
   type LucideIcon,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -33,6 +34,7 @@ const services: Service[] = [
   { label: "Electricity", icon: Zap, color: "#F5A623", route: "/pay-bill/electricity", badge: "New" },
   { label: "Cable TV", icon: Tv, color: "#EC4899", route: "/pay-bill/cabletv", badge: "New" },
   { label: "Gadgets", icon: Laptop, color: "#0EA5A0", route: "/gadgets", badge: "New" },
+  { label: "Events", icon: CalendarDays, color: "#7C3AED", route: "/events", badge: "New" },
   { label: "Vouchers", icon: Ticket, color: "#6E6880" },
 ];
 

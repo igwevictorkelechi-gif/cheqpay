@@ -29,6 +29,7 @@ const MONEY_ROUTES = [
   "cards/[id]/fund/route.ts",
   "cards/[id]/withdraw/route.ts",
   "gadgets/orders/route.ts",
+  "events/tickets/route.ts",
 ];
 
 /**

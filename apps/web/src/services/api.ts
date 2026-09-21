@@ -300,6 +300,51 @@ export interface GadgetDiscountQuote {
   totalFormatted: string;
 }
 
+// ---- Events / tickets ----
+export interface EventTier {
+  id: string;
+  name: string;
+  priceMinor: string;
+  priceFormatted: string;
+  remaining: number | null;
+  available: boolean;
+}
+export interface EventItem {
+  id: string;
+  title: string;
+  description: string;
+  venue: string;
+  city: string;
+  imageUrl: string | null;
+  startsAt: string | null;
+  active: boolean;
+  tiers: EventTier[];
+  fromPriceFormatted: string | null;
+}
+export type TicketStatus = "VALID" | "USED" | "CANCELLED" | "REFUNDED";
+export interface EventTicket {
+  id: string;
+  reference: string;
+  eventId: string;
+  eventTitle: string;
+  tierName: string;
+  priceFormatted: string;
+  status: TicketStatus;
+  venue: string | null;
+  startsAt: string | null;
+  createdAt: string;
+}
+export interface TicketOrderResult {
+  id: string;
+  eventTitle: string;
+  tierName: string;
+  quantity: number;
+  totalFormatted: string;
+  totalMinor: string;
+  tickets: { id: string; reference: string; status: TicketStatus }[];
+  createdAt: string;
+}
+
 export const api = {
   /** Idempotently create the app-side profile + wallets. Call after login. */
   async ensureProvisioned(): Promise<void> {
@@ -828,6 +873,30 @@ export const api = {
     return apiFetch("/api/gadgets/orders");
   },
 
+  // ---- Events / tickets ----
+  getEvents(): Promise<{ events: EventItem[] }> {
+    return apiFetch("/api/events");
+  },
+
+  getEvent(id: string): Promise<{ event: EventItem }> {
+    return apiFetch(`/api/events/${id}`);
+  },
+
+  getMyTickets(): Promise<{ tickets: EventTicket[] }> {
+    return apiFetch("/api/events/tickets");
+  },
+
+  buyTickets(
+    input: { eventId: string; tierId: string; quantity: number },
+    pin?: string,
+  ): Promise<{ order: TicketOrderResult }> {
+    return apiFetch("/api/events/tickets", {
+      method: "POST",
+      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
+      body: JSON.stringify(input),
+    });
+  },
+
   getGadgetOrder(id: string): Promise<{ order: GadgetOrder }> {
     return apiFetch(`/api/gadgets/orders/${id}`);
   },
@@ -856,6 +925,7 @@ export interface FeatureFlags {
   virtual_cards: boolean;
   p2p_transfers: boolean;
   gadgets: boolean;
+  events: boolean;
 }
 
 export interface CardTransaction {
