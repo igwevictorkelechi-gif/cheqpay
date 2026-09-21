@@ -60,12 +60,25 @@ interface UIStore {
   showBalance: boolean;
   darkMode: boolean;
   sidebarOpen: boolean;
+  /** Play a subtle click sound on button taps. */
+  sound: boolean;
   toggleBalance: () => void;
   setDarkMode: (darkMode: boolean) => void;
   setSidebarOpen: (sidebarOpen: boolean) => void;
+  setSound: (sound: boolean) => void;
 }
 
 const THEME_KEY = "cheqpay:theme";
+const SOUND_KEY = "cheqpay:sound";
+
+function initialSound(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem(SOUND_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
 
 /** Apply the theme to <html data-theme>. Dark is the default (no attribute). */
 function applyTheme(dark: boolean) {
@@ -83,6 +96,7 @@ export const useUIStore = create<UIStore>((set) => ({
   showBalance: true,
   darkMode: initialDarkMode(),
   sidebarOpen: true,
+  sound: initialSound(),
   toggleBalance: () => set((state) => ({ showBalance: !state.showBalance })),
   setDarkMode: (darkMode) => {
     try {
@@ -94,4 +108,12 @@ export const useUIStore = create<UIStore>((set) => ({
     set({ darkMode });
   },
   setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
+  setSound: (sound) => {
+    try {
+      window.localStorage.setItem(SOUND_KEY, sound ? "on" : "off");
+    } catch {
+      /* storage unavailable */
+    }
+    set({ sound });
+  },
 }));

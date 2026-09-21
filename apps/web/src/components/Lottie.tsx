@@ -33,13 +33,25 @@ export function LoadingAnimation({ size = 90 }: { size?: number }) {
   );
 }
 
-/** Full-screen route loading state (used by Next.js loading.tsx). */
+/**
+ * Full-screen route loading state (used by Next.js loading.tsx).
+ *
+ * Shows the CheqPay app mark (the favicon) with a gentle pulse — a lighter,
+ * on-brand loader than the animation, and instantly recognisable.
+ */
 export function LoadingScreen() {
   return (
     <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface">
       <div className="flex min-h-screen w-full max-w-[480px] flex-col items-center justify-center bg-surface lg:max-w-none">
-        <LoadingAnimation />
-        <p className="-mt-2 text-sm font-semibold text-muted">Loading…</p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/cheqpay-icon.png"
+          alt="CheqPay"
+          width={72}
+          height={72}
+          className="h-[72px] w-[72px] animate-pulse rounded-2xl"
+        />
+        <p className="mt-4 text-sm font-semibold text-muted">Loading…</p>
       </div>
     </div>
   );

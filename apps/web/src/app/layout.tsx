@@ -6,6 +6,8 @@ import InstallPrompt from "@/components/InstallPrompt";
 import LockGate from "@/components/LockGate";
 import TransactionPinProvider from "@/components/TransactionPinProvider";
 import AuthGuard from "@/components/AuthGuard";
+import SplashScreen from "@/components/SplashScreen";
+import SoundProvider from "@/components/SoundProvider";
 
 export const metadata: Metadata = {
   // Every relative URL below (canonicals, OG images) resolves against this, and
@@ -111,6 +113,8 @@ export default function RootLayout({
         <LockGate />
         <InstallPrompt />
         <ServiceWorkerRegister />
+        <SoundProvider />
+        <SplashScreen />
       </body>
     </html>
   );
