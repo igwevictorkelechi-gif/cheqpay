@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Package, ShoppingBag } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, useToast } from "@/components/MobileUI";
-import { api, ApiError, type GadgetProduct, type GadgetDelivery } from "@/services/api";
+import {
+  api,
+  ApiError,
+  type GadgetProduct,
+  type GadgetDelivery,
+  type GadgetDiscountQuote,
+} from "@/services/api";
 import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 
 type Step = "browse" | "buy" | "done";
@@ -34,6 +40,10 @@ export default function GadgetsPage() {
   const [delivery, setDelivery] = useState<GadgetDelivery>(EMPTY_DELIVERY);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [code, setCode] = useState("");
+  const [quote, setQuote] = useState<GadgetDiscountQuote | null>(null);
+  const [codeMsg, setCodeMsg] = useState<string | null>(null);
+  const [applyingCode, setApplyingCode] = useState(false);
 
   useEffect(() => {
     api
@@ -56,7 +66,37 @@ export default function GadgetsPage() {
     setQty(1);
     setDelivery(EMPTY_DELIVERY);
     setNote("");
+    setCode("");
+    setQuote(null);
+    setCodeMsg(null);
     setStep("buy");
+  }
+
+  // Changing quantity invalidates any applied code preview — the total changed.
+  function changeQty(next: number) {
+    setQty(Math.min(20, Math.max(1, next)));
+    setQuote(null);
+    setCodeMsg(null);
+  }
+
+  async function applyCode() {
+    if (!selected || !code.trim()) return;
+    setApplyingCode(true);
+    setCodeMsg(null);
+    try {
+      const { quote: q } = await api.validateGadgetDiscount({
+        code: code.trim(),
+        productId: selected.id,
+        quantity: qty,
+      });
+      setQuote(q);
+      setCodeMsg(`Applied — you save ${q.discountFormatted}.`);
+    } catch (e) {
+      setQuote(null);
+      setCodeMsg(e instanceof ApiError ? e.message : "Couldn't apply that code.");
+    } finally {
+      setApplyingCode(false);
+    }
   }
 
   const deliveryComplete = Object.values(delivery).every((v) => v.trim().length > 0);
@@ -69,7 +109,13 @@ export default function GadgetsPage() {
       await authorize(
         (pin) =>
           api.buyGadget(
-            { productId: selected.id, quantity: qty, delivery, note: note.trim() || undefined },
+            {
+              productId: selected.id,
+              quantity: qty,
+              delivery,
+              note: note.trim() || undefined,
+              discountCode: quote?.code,
+            },
             pin,
           ),
         {
@@ -194,7 +240,7 @@ export default function GadgetsPage() {
             <span className="text-base font-semibold text-ink">Quantity</span>
             <div className="flex items-center gap-4">
               <button
-                onClick={() => setQty((q) => Math.max(1, q - 1))}
+                onClick={() => changeQty(qty - 1)}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-xl font-bold text-ink"
                 aria-label="Decrease"
               >
@@ -202,7 +248,7 @@ export default function GadgetsPage() {
               </button>
               <span className="w-6 text-center text-lg font-bold text-ink">{qty}</span>
               <button
-                onClick={() => setQty((q) => Math.min(20, q + 1))}
+                onClick={() => changeQty(qty + 1)}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-xl font-bold text-ink"
                 aria-label="Increase"
               >
@@ -230,11 +276,52 @@ export default function GadgetsPage() {
               onChange={(e) => setNote(e.target.value)} />
           </div>
 
-          <div className="mt-6 flex items-center justify-between rounded-2xl bg-card px-4 py-4">
-            <span className="text-sm text-muted">Total</span>
-            <span className="text-xl font-extrabold text-ink">
-              ₦{((Number(selected.priceMinor) * qty) / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
-            </span>
+          {/* Discount code */}
+          <h2 className="mt-7 text-lg font-bold text-ink">Discount code</h2>
+          <div className="mt-3 flex gap-2">
+            <input
+              className={inputCls}
+              placeholder="Enter code"
+              value={code}
+              autoCapitalize="characters"
+              onChange={(e) => { setCode(e.target.value.toUpperCase()); setQuote(null); setCodeMsg(null); }}
+            />
+            <button
+              onClick={applyCode}
+              disabled={!code.trim() || applyingCode}
+              className="shrink-0 rounded-2xl bg-ink/90 px-5 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {applyingCode ? "…" : quote ? "Applied" : "Apply"}
+            </button>
+          </div>
+          {codeMsg ? (
+            <p className={"mt-2 text-sm " + (quote ? "text-brand" : "text-red-500")}>{codeMsg}</p>
+          ) : null}
+
+          <div className="mt-6 rounded-2xl bg-card px-4 py-4">
+            {quote ? (
+              <>
+                <div className="flex items-center justify-between text-sm text-muted">
+                  <span>Subtotal</span>
+                  <span>{quote.subtotalFormatted}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-sm text-brand">
+                  <span>Discount ({quote.code})</span>
+                  <span>−{quote.discountFormatted}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between border-t border-border pt-2">
+                  <span className="text-sm text-muted">Total</span>
+                  <span className="text-xl font-extrabold text-ink">{quote.totalFormatted}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted">Total</span>
+                <span className="text-xl font-extrabold text-ink">
+                  ₦{((Number(selected.priceMinor) * qty) / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
           </div>
 
           <button

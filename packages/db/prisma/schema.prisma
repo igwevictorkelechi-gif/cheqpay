@@ -498,6 +498,29 @@ model GadgetProduct {
   @@map("gadget_products")
 }
 
+/// A promo/discount code applied to a gadget order at checkout.
+model GadgetDiscountCode {
+  id               String    @id @default(uuid()) @db.Uuid
+  /// Stored uppercased; unique.
+  code             String    @unique
+  /// "percent" (value = whole percent, 1–100) or "fixed" (value = NGN minor units off).
+  kind             String
+  value            BigInt
+  active           Boolean   @default(true)
+  /// Optional validity window.
+  startsAt         DateTime? @map("starts_at")
+  expiresAt        DateTime? @map("expires_at")
+  /// Optional cap on total uses, and the running count.
+  maxRedemptions   Int?      @map("max_redemptions")
+  redemptions      Int       @default(0)
+  /// Optional minimum order subtotal (NGN minor units) to qualify.
+  minSubtotalMinor BigInt?   @map("min_subtotal_minor")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("gadget_discount_codes")
+}
+
 // One purchase. Single product per order for v1 (with a quantity) — a cart is
 // the obvious next step. Price and name are SNAPSHOTTED at purchase so a later
 // catalog edit never rewrites what the customer was charged or ordered. The
@@ -511,7 +534,11 @@ model GadgetOrder {
   quantity       Int               @default(1)
   /// Snapshot of unit price and the line total, NGN minor units.
   unitPriceMinor BigInt            @map("unit_price_minor")
+  /// The amount actually charged: (unitPrice * quantity) - discountMinor.
   totalMinor     BigInt            @map("total_minor")
+  /// Discount code applied at checkout (snapshot) and the amount it took off.
+  discountCode   String?           @map("discount_code")
+  discountMinor  BigInt            @default(0) @map("discount_minor")
   status         GadgetOrderStatus @default(PAID)
   deliveryName   String            @map("delivery_name")
   deliveryPhone  String            @map("delivery_phone")

@@ -44,7 +44,58 @@ vi.mock("./ensureGadgetTxnType", () => ({ ensureGadgetTxnType: vi.fn().mockResol
 vi.mock("./alerts", () => ({ notifyUser: h.notifyUser }));
 
 import { checkoutGadget, formatNairaMinor, normalizeSpecs } from "./gadgets";
+import { computeDiscountMinor, assertDiscountUsable, type DiscountRow } from "./gadgetDiscounts";
 import { ApiError } from "./http";
+
+const baseCode: DiscountRow = {
+  id: "code-1",
+  code: "SAVE10",
+  kind: "percent",
+  value: 10n,
+  active: true,
+  startsAt: null,
+  expiresAt: null,
+  maxRedemptions: null,
+  redemptions: 0,
+  minSubtotalMinor: null,
+};
+
+describe("computeDiscountMinor", () => {
+  it("takes a percent off the subtotal", () => {
+    expect(computeDiscountMinor("percent", 10n, 1_000_000n)).toBe(100_000n); // 10% of ₦10,000
+  });
+  it("takes a fixed amount off, clamped to the subtotal", () => {
+    expect(computeDiscountMinor("fixed", 500_00n, 1_000_000n)).toBe(500_00n);
+    expect(computeDiscountMinor("fixed", 2_000_000n, 1_000_000n)).toBe(1_000_000n); // never below zero
+  });
+  it("clamps a percent to 0–100", () => {
+    expect(computeDiscountMinor("percent", 150n, 1_000_000n)).toBe(1_000_000n);
+    expect(computeDiscountMinor("percent", -5n, 1_000_000n)).toBe(0n);
+  });
+});
+
+describe("assertDiscountUsable", () => {
+  it("passes a plain active code", () => {
+    expect(() => assertDiscountUsable(baseCode, 1_000_000n)).not.toThrow();
+  });
+  it("rejects inactive, expired, and exhausted codes", () => {
+    expect(() => assertDiscountUsable({ ...baseCode, active: false }, 1_000_000n)).toThrow(ApiError);
+    expect(() =>
+      assertDiscountUsable({ ...baseCode, expiresAt: new Date(Date.now() - 1000) }, 1_000_000n),
+    ).toThrow(ApiError);
+    expect(() =>
+      assertDiscountUsable({ ...baseCode, maxRedemptions: 5, redemptions: 5 }, 1_000_000n),
+    ).toThrow(ApiError);
+  });
+  it("enforces the minimum subtotal", () => {
+    expect(() =>
+      assertDiscountUsable({ ...baseCode, minSubtotalMinor: 2_000_000n }, 1_000_000n),
+    ).toThrow(ApiError);
+    expect(() =>
+      assertDiscountUsable({ ...baseCode, minSubtotalMinor: 500_000n }, 1_000_000n),
+    ).not.toThrow();
+  });
+});
 
 describe("formatNairaMinor", () => {
   it("groups thousands and drops .00 on whole amounts", () => {

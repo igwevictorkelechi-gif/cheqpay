@@ -254,10 +254,22 @@ export interface GadgetOrder {
   unitPriceFormatted: string;
   totalFormatted: string;
   totalMinor: string;
+  discountCode: string | null;
+  discountMinor: string;
+  discountFormatted: string | null;
   status: GadgetOrderStatus;
   delivery: GadgetDelivery;
   note: string | null;
   createdAt: string;
+}
+export interface GadgetDiscountQuote {
+  code: string;
+  subtotalMinor: string;
+  subtotalFormatted: string;
+  discountMinor: string;
+  discountFormatted: string;
+  totalMinor: string;
+  totalFormatted: string;
 }
 
 export const api = {
@@ -419,8 +431,25 @@ export const api = {
     return apiFetch(`/api/gadgets/${id}`);
   },
 
+  validateGadgetDiscount(input: {
+    code: string;
+    productId: string;
+    quantity: number;
+  }): Promise<{ quote: GadgetDiscountQuote }> {
+    return apiFetch('/api/gadgets/discount', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+
   buyGadget(
-    input: { productId: string; quantity: number; delivery: GadgetDelivery; note?: string },
+    input: {
+      productId: string;
+      quantity: number;
+      delivery: GadgetDelivery;
+      note?: string;
+      discountCode?: string;
+    },
     pin?: string,
   ): Promise<{ order: GadgetOrder }> {
     return apiFetch('/api/gadgets/orders', {
