@@ -131,6 +131,29 @@ const envSchema = z.object({
   // it stays "coming soon" until a BTC custodian is wired.
   CUSTODY_PROVIDER: providerEnum("CUSTODY_PROVIDER", ["mock", "maplerad"], "mock"),
 
+  // Tatum — per-user crypto deposit addresses and instant deposit webhooks.
+  //
+  // Entirely optional: with no API key, or no xpub for a given chain, that
+  // chain keeps using the manual shared wallet and nothing changes. Read
+  // directly from process.env in lib/tatum, so these entries are for
+  // documentation and validation.
+  //
+  // Only the XPUB is ever held by the server. An xpub derives addresses but
+  // cannot spend, so automating deposits never puts a key that can move
+  // customer funds on the server — the mnemonic stays offline with the
+  // business, which is also why withdrawals remain a deliberate human action.
+  TATUM_API_KEY: z.string().optional(),
+  TATUM_API_BASE: z.string().url().default("https://api.tatum.io"),
+  // HMAC secret configured in the Tatum dashboard; verifies inbound webhooks.
+  TATUM_WEBHOOK_SECRET: z.string().optional(),
+  // Where Tatum should call. Defaults to API_PUBLIC_URL + /api/webhooks/tatum.
+  TATUM_WEBHOOK_URL: z.string().url().optional(),
+  TATUM_XPUB_BITCOIN: z.string().optional(),
+  TATUM_XPUB_ETHEREUM: z.string().optional(),
+  TATUM_XPUB_BSC: z.string().optional(),
+  TATUM_XPUB_TRON: z.string().optional(),
+  TATUM_XPUB_POLYGON: z.string().optional(),
+
   // Phase 3 (Naira rails). Maplerad is the rail: bills, payouts, name enquiry
   // and banks. "mock" (the default) keeps dev and tests free of external calls.
   PAYMENT_PROVIDER: providerEnum("PAYMENT_PROVIDER", ["mock", "maplerad"], "mock"),

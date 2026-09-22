@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { readSvixHeaders, verifyWebhook } from "@/lib/maplerad/webhooks";
 import {
   claimWebhookEvent,
+  releaseWebhookEvent,
   finalizeWithdrawal,
   markProcessed,
   notifySettlement,
@@ -67,12 +68,16 @@ export async function POST(req: Request): Promise<Response> {
 
   const name = event.event ?? event.type ?? "";
 
+  // Set once the claim exists, so a failure below can hand it back.
+  let claimed = false;
+
   try {
     // Idempotency: svix-id is unique per delivery, so a retried delivery is a
     // no-op rather than a second credit/reversal.
     if (!(await claimWebhookEvent(SOURCE, svix.id, event))) {
       return NextResponse.json({ status: "duplicate", eventId: svix.id });
     }
+    claimed = true;
 
     if (name.startsWith("transfer.")) {
       // We set `reference` to our transaction id when initiating the payout.
@@ -217,7 +222,10 @@ export async function POST(req: Request): Promise<Response> {
     await markProcessed(SOURCE, svix.id);
     return NextResponse.json({ status: "ignored", eventId: svix.id });
   } catch (err) {
-    // 500 so Maplerad retries the delivery.
+    // 500 so Maplerad retries the delivery — and hand the claim back, or that
+    // retry would dedupe against a delivery we never actually finished and a
+    // real deposit would stay uncredited.
+    if (claimed) await releaseWebhookEvent(SOURCE, svix.id);
     console.error("[maplerad webhook] handler error", { id: svix.id, name, err });
     return NextResponse.json({ error: "handler error" }, { status: 500 });
   }
