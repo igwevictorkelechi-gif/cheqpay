@@ -19,6 +19,8 @@ import { Asset, Network, TransactionType, prisma } from "@cheqpay/db";
 import { creditBalance } from "../ledger";
 import { notifyUser } from "../alerts";
 import { fromMinorUnits, ASSET_DECIMALS } from "../money";
+import { CRYPTO_COINS, isWithdrawableNetwork } from "../assets";
+import { ensureUsdAsset } from "../ensureUsdAsset";
 import { TATUM_CHAINS } from "./config";
 
 /** Official mainnet token contracts, lowercased. Nothing else is credited. */
@@ -153,12 +155,31 @@ export interface TatumCreditOutcome {
   userId?: string;
 }
 
+/**
+ * What a deposit actually lands as.
+ *
+ * A stablecoin is credited as DOLLARS on any chain we cannot send from, which
+ * today is every chain but Solana. Crediting the coin there would hand the user
+ * a USDT balance they can never withdraw — real to them, unmovable in practice.
+ * This is the same rule the Maplerad path applies, and the two must agree:
+ * otherwise the asset a deposit lands as would depend on which provider happened
+ * to mint the address, which is invisible to the user.
+ */
+export function creditedAssetFor(d: ParsedTatumDeposit): Asset | null {
+  const coin = assetForDeposit(d);
+  if (!coin) return null;
+  const offramp =
+    (CRYPTO_COINS as ReadonlyArray<Asset>).includes(coin) && !isWithdrawableNetwork(d.network);
+  return offramp ? Asset.USD : coin;
+}
+
 /** Credit a parsed deposit to the address's owner. Idempotent per transfer. */
 export async function creditTatumDeposit(
   d: ParsedTatumDeposit,
 ): Promise<TatumCreditOutcome> {
-  const asset = assetForDeposit(d);
-  if (!asset) {
+  const coin = assetForDeposit(d);
+  const asset = creditedAssetFor(d);
+  if (!asset || !coin) {
     return {
       outcome: "ignored",
       reason: `unrecognised ${d.type} ${d.contract ?? d.asset ?? ""} on ${d.network}`.trim(),
@@ -172,9 +193,21 @@ export async function creditTatumDeposit(
   });
   if (!wallet) return { outcome: "unmatched", reason: "no wallet for address" };
 
+  // Migrations are not applied on deploy, so USD is added to the Asset enum
+  // lazily. Without this the first offramped deposit throws on the enum value,
+  // the webhook 500s, Tatum retries into the same failure, and real money sits
+  // uncredited — the exact failure this handler exists to prevent.
+  if (asset === Asset.USD) await ensureUsdAsset();
+
   const amountMinor = wholeToMinor(d.amount, asset);
-  if (amountMinor === null || amountMinor <= 0n) {
+  if (amountMinor === null) {
     return { outcome: "unmatched", reason: `unreadable amount ${d.amount}` };
+  }
+  if (amountMinor <= 0n) {
+    // Dust below the ledger's precision (a fraction of a cent once a stablecoin
+    // is credited as dollars). There is nothing to credit and nothing for a
+    // human to place, so this is ignored rather than raised as unmatched.
+    return { outcome: "ignored", reason: `amount ${d.amount} rounds to zero ${asset}` };
   }
 
   const { created, transactionId } = await creditBalance({
@@ -194,6 +227,9 @@ export async function creditTatumDeposit(
       contract: d.contract ?? null,
       type: d.type,
       address: d.address,
+      // What was actually sent, when it differs from what we credited.
+      coin: coin !== asset ? coin : null,
+      offramp: coin !== asset,
     },
   });
 
@@ -202,7 +238,10 @@ export async function creditTatumDeposit(
   await notifyUser(wallet.userId, {
     category: "deposits",
     title: "Deposit received",
-    body: `${fromMinorUnits(amountMinor, asset)} ${asset} has landed in your wallet.`,
+    body:
+      asset === Asset.USD
+        ? `Your crypto deposit was converted and $${fromMinorUnits(amountMinor, asset)} added to your balance.`
+        : `${fromMinorUnits(amountMinor, asset)} ${asset} has landed in your wallet.`,
     data: { transactionId },
   }).catch(() => undefined);
 

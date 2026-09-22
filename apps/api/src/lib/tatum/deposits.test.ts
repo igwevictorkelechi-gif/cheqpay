@@ -4,6 +4,7 @@ const h = vi.hoisted(() => ({
   walletFindFirst: vi.fn(),
   creditBalance: vi.fn(),
   notifyUser: vi.fn(),
+  ensureUsdAsset: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -23,9 +24,11 @@ vi.mock("@cheqpay/db", () => ({
 }));
 vi.mock("../ledger", () => ({ creditBalance: h.creditBalance }));
 vi.mock("../alerts", () => ({ notifyUser: h.notifyUser }));
+vi.mock("../ensureUsdAsset", () => ({ ensureUsdAsset: h.ensureUsdAsset }));
 
 import {
   assetForDeposit,
+  creditedAssetFor,
   creditTatumDeposit,
   networkForChain,
   parseTatumDeposit,
@@ -53,6 +56,7 @@ beforeEach(() => {
   h.walletFindFirst.mockResolvedValue({ userId: "u1" });
   h.creditBalance.mockResolvedValue({ created: true, transactionId: "t1" });
   h.notifyUser.mockResolvedValue(undefined);
+  h.ensureUsdAsset.mockResolvedValue(undefined);
 });
 
 describe("networkForChain", () => {
@@ -205,6 +209,43 @@ describe("assetForDeposit", () => {
   });
 });
 
+describe("creditedAssetFor", () => {
+  it("lands stablecoins as dollars on chains we cannot send from", () => {
+    // Crediting USDT on BSC would give the user a balance they can never
+    // withdraw. The Maplerad path applies the same rule; the two must agree,
+    // or the asset would depend on which provider minted the address.
+    expect(creditedAssetFor(deposit())).toBe("USD");
+    expect(
+      assetForDeposit(deposit()),
+    ).toBe("USDT"); // the coin sent is still known, for the ledger metadata
+    expect(
+      creditedAssetFor(
+        deposit({
+          network: "TRON" as ParsedTatumDeposit["network"],
+          contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t".toLowerCase(),
+        }),
+      ),
+    ).toBe("USD");
+  });
+
+  it("leaves a native coin as itself", () => {
+    // BTC is not a stablecoin standing in for dollars, so it lands as BTC.
+    expect(
+      creditedAssetFor(
+        deposit({
+          network: "BITCOIN" as ParsedTatumDeposit["network"],
+          type: "native",
+          contract: undefined,
+        }),
+      ),
+    ).toBe("BTC");
+  });
+
+  it("stays null for anything not creditable", () => {
+    expect(creditedAssetFor(deposit({ contract: "0xdead", asset: "USDT" }))).toBeNull();
+  });
+});
+
 describe("creditTatumDeposit", () => {
   it("credits the address owner and notifies them", async () => {
     const res = await creditTatumDeposit(deposit());
@@ -213,8 +254,9 @@ describe("creditTatumDeposit", () => {
     expect(h.creditBalance).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: "u1",
-        asset: "USDT",
-        amountMinor: 25_000_000n,
+        // Dollars, not USDT: BSC is not a chain we can send from.
+        asset: "USD",
+        amountMinor: 25_00n,
         type: "DEPOSIT",
         network: "BSC",
         txHash: "0xtx1",
@@ -264,11 +306,31 @@ describe("creditTatumDeposit", () => {
     expect(h.creditBalance).not.toHaveBeenCalled();
   });
 
-  it("does not credit a zero or unreadable amount", async () => {
-    for (const amount of ["0", "0.0000001", "not-a-number"]) {
+  it("records the coin actually sent alongside the dollars credited", async () => {
+    await creditTatumDeposit(deposit());
+    expect(h.creditBalance.mock.calls[0][0].metadata).toMatchObject({
+      source: "tatum",
+      coin: "USDT",
+      offramp: true,
+    });
+  });
+
+  it("does not credit an unreadable amount", async () => {
+    for (const amount of ["not-a-number", "1e6", "-5"]) {
       h.creditBalance.mockClear();
       const res = await creditTatumDeposit(deposit({ amount }));
       expect(res.outcome).toBe("unmatched");
+      expect(h.creditBalance).not.toHaveBeenCalled();
+    }
+  });
+
+  it("ignores dust below the ledger's precision instead of paging a human", async () => {
+    // Credited as dollars, "0.001" USDT is a tenth of a cent: nothing to
+    // credit, and nothing for a human to place either.
+    for (const amount of ["0", "0.001"]) {
+      h.creditBalance.mockClear();
+      const res = await creditTatumDeposit(deposit({ amount }));
+      expect(res.outcome).toBe("ignored");
       expect(h.creditBalance).not.toHaveBeenCalled();
     }
   });
