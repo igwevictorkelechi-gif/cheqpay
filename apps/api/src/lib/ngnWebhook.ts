@@ -57,6 +57,30 @@ export async function claimWebhookEvent(
   }
 }
 
+/**
+ * Undo a claim whose handler failed before finishing.
+ *
+ * The claim row is written BEFORE the work, so a handler that throws midway
+ * would otherwise leave a row that makes the provider's retry look like a
+ * duplicate — and a deposit that really arrived would never be credited.
+ * Dropping the unprocessed row lets the retry do the work for real; every
+ * credit path is idempotent on its own key, so re-running is safe even when the
+ * failure happened after the money was already booked.
+ *
+ * Only unprocessed rows are removed, so a completed delivery keeps its record.
+ */
+export async function releaseWebhookEvent(source: string, eventId: string): Promise<void> {
+  try {
+    await prisma.webhookEvent.deleteMany({
+      where: { source, eventId, processedAt: null },
+    });
+  } catch (err) {
+    // Best-effort: the retry would dedupe, which is bad, but throwing here
+    // would mask the original handler error, which is worse.
+    console.error("[webhook] failed to release claim", { source, eventId, err });
+  }
+}
+
 /** Tell the user their money moved. Best-effort — never blocks settlement. */
 export async function notifySettlement(result: SettlementResult): Promise<void> {
   if (!result.userId) return;

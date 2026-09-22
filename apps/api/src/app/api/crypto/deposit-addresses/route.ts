@@ -6,6 +6,8 @@ import { getFeatureFlags } from "@/lib/features";
 import { listWallets, provisionWalletsDetailed } from "@/lib/wallets";
 import { CRYPTO_COINS, CRYPTO_NETWORKS } from "@/lib/assets";
 import { rateLimit } from "@/lib/ratelimit";
+import { tatumNetworks } from "@/lib/tatum/config";
+import { ensureTatumWalletsForUser } from "@/lib/tatum/addresses";
 
 export const dynamic = "force-dynamic";
 
@@ -66,16 +68,34 @@ export async function GET(req: Request) {
     let wallets = wallets0;
     let blocked: string | undefined;
     let mintError: string | undefined;
-    if (wallets.length === 0) {
+    const wantTatum = tatumNetworks().length > 0;
+    if (wallets.length === 0 || wantTatum) {
       if (rateLimit(`mint:auto:${auth.id}`, 1, 60_000).allowed) {
-        const report = await provisionWalletsDetailed(auth.id).catch((err) => {
-          console.error("[deposit-addresses] provisioning failed", err);
-          return { wallets: [], outcomes: [], blocked: String(err) };
-        });
-        wallets = report.wallets;
-        blocked = report.blocked;
-        mintError = report.outcomes.find((o) => o.status === "failed")?.error;
-      } else {
+        // Tatum first where it is configured: those addresses are watched by a
+        // subscription, so a deposit credits itself.
+        //
+        // This runs even for a user who already has wallets, because it only
+        // fills in combinations they are MISSING. Existing rows are returned
+        // untouched — a deposit address a user has already saved must never
+        // change underneath them — so an account minted before Tatum keeps its
+        // old addresses and gains watched ones for any chain it lacked.
+        if (wantTatum) {
+          await ensureTatumWalletsForUser(auth.id).catch((err) => {
+            console.error("[deposit-addresses] tatum provisioning failed", err);
+          });
+          wallets = await listWallets(auth.id);
+        }
+
+        if (wallets.length === 0) {
+          const report = await provisionWalletsDetailed(auth.id).catch((err) => {
+            console.error("[deposit-addresses] provisioning failed", err);
+            return { wallets: [], outcomes: [], blocked: String(err) };
+          });
+          wallets = report.wallets;
+          blocked = report.blocked;
+          mintError = report.outcomes.find((o) => o.status === "failed")?.error;
+        }
+      } else if (wallets.length === 0) {
         blocked = "address is still being generated";
       }
     }
