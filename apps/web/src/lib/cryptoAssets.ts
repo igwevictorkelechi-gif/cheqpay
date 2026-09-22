@@ -182,3 +182,31 @@ export function formatConvertRate(
     maximumFractionDigits: 8,
   })} ${toSym}`;
 }
+
+/**
+ * Networks people most often confuse with the one they are sending to.
+ *
+ * A deposit address is only valid on the chain it was issued for, but several
+ * chains share the same 0x… address format and, worse, similar names — a user
+ * reading "BNB" on our screen can pick "opBNB" in their exchange and lose the
+ * funds to a chain we do not watch. Naming the specific look-alikes is far more
+ * effective than a generic "use the right network" warning, which everyone has
+ * learned to skip.
+ */
+export function confusableNetworks(networkLabel: string): string[] {
+  const l = networkLabel.toLowerCase();
+  if (l.includes("bnb") || l.includes("bep-20") || l.includes("bep20")) {
+    return ["opBNB", "Ethereum", "Arbitrum", "Base", "Polygon"];
+  }
+  if (l.includes("ethereum") || l.includes("erc-20") || l.includes("erc20")) {
+    return ["Arbitrum", "Optimism", "Base", "BNB Smart Chain", "Polygon"];
+  }
+  if (l.includes("base")) return ["Ethereum", "Arbitrum", "Optimism", "opBNB"];
+  if (l.includes("polygon")) return ["Ethereum", "BNB Smart Chain", "Base"];
+  if (l.includes("tron") || l.includes("trc-20") || l.includes("trc20")) {
+    return ["Ethereum", "BNB Smart Chain"];
+  }
+  if (l.includes("solana") || l.includes("spl")) return ["Ethereum", "BNB Smart Chain"];
+  if (l.includes("bitcoin")) return ["Bitcoin Cash", "Bitcoin SV", "Lightning"];
+  return [];
+}

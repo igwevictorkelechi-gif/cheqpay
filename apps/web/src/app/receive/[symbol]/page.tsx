@@ -6,7 +6,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { ChevronLeft, ChevronDown, Copy, Share2, Check, AlertTriangle } from "lucide-react";
 import { api, ApiError } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
-import { getAssetMeta } from "@/lib/cryptoAssets";
+import { getAssetMeta, confusableNetworks } from "@/lib/cryptoAssets";
 import DesktopSidebar from "@/components/DesktopSidebar";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
@@ -386,6 +386,16 @@ export default function ReceiveDetailPage() {
             <span className="font-bold">{netLabel ?? meta.networkLabel}</span> network to this
             address. Sending any other coin or using the wrong network will result in permanent
             loss of funds.
+            {confusableNetworks(netLabel ?? meta.networkLabel).length > 0 ? (
+              <>
+                {" "}
+                <span className="font-bold">
+                  Do NOT send on{" "}
+                  {confusableNetworks(netLabel ?? meta.networkLabel).join(", ")}
+                </span>{" "}
+                — these are different networks, even where the name looks similar.
+              </>
+            ) : null}
           </p>
         </div>
 
