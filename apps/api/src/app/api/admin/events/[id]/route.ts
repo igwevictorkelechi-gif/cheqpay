@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
-import { imageValue } from "@/lib/gadgetImage";
+import { imageValue } from "@/lib/uploadedImage";
 import { deactivateEvent, getEventDetail, updateEvent } from "@/lib/eventsAdmin";
 
 export const dynamic = "force-dynamic";
