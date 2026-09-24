@@ -43,6 +43,13 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "CheqPay needs access to your photos so you can upload your ID document for identity verification.",
+          "cameraPermission": false
+        }
+      ],
+      [
         "expo-notifications",
         {
           "defaultChannel": "default",

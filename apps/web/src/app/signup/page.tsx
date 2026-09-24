@@ -9,6 +9,7 @@ import { authService } from "@/services/auth";
 export default function SignupPage() {
   const router = useRouter();
   const [form, setForm] = useState({ fullName: "", email: "", phone: "" });
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLocalLoading] = useState(false);
 
@@ -25,6 +26,10 @@ export default function SignupPage() {
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
       setError("Please enter a valid email address");
+      return;
+    }
+    if (!agreed) {
+      setError("Please agree to the Terms of Service and Privacy Policy to continue");
       return;
     }
 
@@ -101,13 +106,34 @@ export default function SignupPage() {
             />
           </div>
 
+          <label className="flex items-start gap-2.5 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              disabled={loading}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
+            />
+            <span>
+              I agree to CheqPay&apos;s{" "}
+              <Link href="/terms" target="_blank" className="font-semibold text-brand-light hover:underline">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" target="_blank" className="font-semibold text-brand-light hover:underline">
+                Privacy Policy
+              </Link>
+              , including the collection of my identity information for verification.
+            </span>
+          </label>
+
           {error && (
             <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
           )}
 
           <button
             type="submit"
-            disabled={loading || !form.fullName || !form.email}
+            disabled={loading || !form.fullName || !form.email || !agreed}
             className="btn-primary w-full"
           >
             {loading ? "Sending code..." : "Create Account"}
