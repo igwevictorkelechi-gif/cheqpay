@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { API_URL } from "@/lib/apiUrl";
+import { adminHeaders } from "@/lib/backend";
 
 // Server-side proxy to the backend admin provider-status endpoint.
-const ADMIN_SECRET = process.env.ADMIN_API_SECRET ?? "";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const res = await fetch(`${API_URL}/api/admin/provider-status`, {
-    headers: { "x-admin-secret": ADMIN_SECRET },
+    headers: await adminHeaders(),
     cache: "no-store",
   });
   const data = await res.json().catch(() => ({ error: "Bad response from API" }));

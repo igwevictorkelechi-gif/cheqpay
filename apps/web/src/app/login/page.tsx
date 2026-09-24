@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "@/components/AuthLayout";
@@ -11,6 +11,19 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLocalLoading] = useState(false);
+
+  // Sent here by the API client when the account has been blocked. Read from
+  // window.location rather than useSearchParams: this page is statically
+  // exported, and the flag only matters in the browser anyway.
+  useEffect(() => {
+    try {
+      if (new URLSearchParams(window.location.search).get("blocked") === "1") {
+        setError("This account has been blocked. Contact support if you believe this is a mistake.");
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -6,6 +6,7 @@ import { getEnv } from "@/lib/env";
 import { profileUpdateSchema } from "@/lib/validation";
 import { assignUsernameIfMissing, ensureUsernameCaseIndex } from "@/lib/username";
 import { closeAccountWithRetention } from "@/lib/retention";
+import { AccountBlockedError, blockIfLinkedToBlocked } from "@/lib/accessControl";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,13 @@ export async function POST(req: Request) {
       } else {
         throw e;
       }
+    }
+
+    // A phone already tied to a blocked account marks this signup as the same
+    // person coming back under a new email. Checked on provisioning, which every
+    // new account passes through first. (The BVN is checked again at KYC.)
+    if (auth.phone && (await blockIfLinkedToBlocked(user.id, { phone: auth.phone }))) {
+      throw new AccountBlockedError();
     }
 
     // Every account needs a username or it cannot receive a P2P transfer —

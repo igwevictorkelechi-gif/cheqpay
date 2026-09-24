@@ -1,6 +1,8 @@
-import { Asset, Network, TransactionType, prisma } from "@cheqpay/db";
+import { Asset, Network, TransactionType, UserStatus, prisma } from "@cheqpay/db";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { recordAdminAction, requireAdminActor, requireAdminOtp } from "@/lib/adminGuard";
+import { adminCreditHeadroom } from "@/lib/adminCreditCap";
+import { isPlausibleTxHash } from "@/lib/txHashFormat";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { creditBalance } from "@/lib/ledger";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
@@ -23,15 +25,24 @@ const creditSchema = z.object({
  * Admin: credit a user's crypto balance for a deposit received in the manual
  * business wallet. Idempotent per (asset, txHash) so the same on-chain deposit
  * can never be credited twice, even across admins.
+ *
+ * This is an admin ASSERTING that money arrived, so it is guarded like one: a
+ * named admin, a fresh authenticator code, an ACTIVE account, a hash that is at
+ * least shaped like a real transaction on that chain (22 Sep used the made-up
+ * "ptprobed0f5ac83"), and the same 24-hour admin credit cap as Adjust Balance.
  */
 export async function POST(req: Request) {
   try {
-    await requireAdmin(req);
+    const actor = await requireAdminActor(req);
     const body = creditSchema.parse(await req.json());
+    await requireAdminOtp(req);
 
     const user = await prisma.user.findUnique({ where: { email: body.email } });
     if (!user) {
       throw new ApiError(404, `No user with email ${body.email}`, "user_not_found");
+    }
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new ApiError(422, `This account is ${user.status.toLowerCase()} — it can't be credited.`, "account_not_active");
     }
 
     const asset = body.asset as Asset;
@@ -45,7 +56,25 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!isPlausibleTxHash(entry.network, body.txHash)) {
+      throw new ApiError(
+        422,
+        `That isn't a valid ${entry.network} transaction hash. Copy it from the block explorer.`,
+        "bad_tx_hash",
+      );
+    }
+
     const amountMinor = toMinorUnits(body.amount, asset);
+    const headroom = await adminCreditHeadroom(asset);
+    if (amountMinor > headroom.remainingMinor) {
+      throw new ApiError(
+        422,
+        `That's over the 24-hour admin credit limit for ${asset} (remaining ${fromMinorUnits(headroom.remainingMinor, asset)}). ` +
+          "Raise ADMIN_CREDIT_DAILY_LIMITS in the deployment if this volume is expected.",
+        "admin_credit_cap",
+      );
+    }
+
     const result = await creditBalance({
       userId: user.id,
       asset,
@@ -57,18 +86,17 @@ export async function POST(req: Request) {
       metadata: { source: "manual_admin_credit", note: body.note ?? null },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        action: "admin.crypto_deposit.credited",
-        resourceType: "Transaction",
-        resourceId: result.transactionId,
-        details: {
-          asset,
-          amountMinor: amountMinor.toString(),
-          txHash: body.txHash,
-          duplicate: !result.created,
-        },
+    await recordAdminAction(req, actor, {
+      action: "admin.crypto_deposit.credited",
+      summary: `Credited ${fromMinorUnits(amountMinor, asset)} ${asset} deposit to ${user.email}${result.created ? "" : " (duplicate, no change)"}`,
+      userId: user.id,
+      resourceType: "Transaction",
+      resourceId: result.transactionId,
+      details: {
+        asset,
+        amountMinor: amountMinor.toString(),
+        txHash: body.txHash,
+        duplicate: !result.created,
       },
     });
 

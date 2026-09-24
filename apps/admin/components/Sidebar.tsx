@@ -8,7 +8,7 @@ import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
   Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search,
-  ShieldAlert, Monitor, Package, ShoppingBag, Ticket, CalendarDays, ScanLine, type LucideIcon,
+  ShieldAlert, Monitor, Ban, Package, ShoppingBag, Ticket, CalendarDays, ScanLine, type LucideIcon,
 } from 'lucide-react';
 import { isSuperOnlyPage, type AdminRole } from '@/lib/adminAuth';
 
@@ -38,6 +38,7 @@ const categories: Category[] = [
     icon: ShieldAlert,
     items: [
       { label: 'Login & Devices', href: '/security/login-activity', icon: Monitor },
+      { label: 'Blocked IPs', href: '/security/blocked-ips', icon: Ban },
       { label: 'Compliance Lookup', href: '/compliance', icon: Search },
     ],
   },

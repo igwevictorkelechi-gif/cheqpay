@@ -1,5 +1,6 @@
 import { KycStatus, prisma } from "@cheqpay/db";
 import { requireAdmin } from "@/lib/auth";
+import { recordAdminAction, requireAdminActor, requireAdminOtp } from "@/lib/adminGuard";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { sendPush } from "@/lib/push";
 import { kycReviewSchema } from "@/lib/validation";
@@ -62,8 +63,8 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   try {
-    await requireAdmin(req);
-    const actor = req.headers.get("x-admin-actor") ?? "admin";
+    const actorInfo = await requireAdminActor(req);
+    const actor = actorInfo.email;
     const { recordId, action, tier } = kycReviewSchema.parse(await req.json());
 
     const record = await prisma.kycRecord.findUnique({ where: { id: recordId } });
@@ -71,6 +72,16 @@ export async function POST(req: Request) {
 
     const grantTier = tier ?? 2;
     const approving = action === "approve";
+
+    // Approving raises limits and unlocks withdrawals: a fresh authenticator
+    // code, and tier 3 (enhanced due diligence) is a Super Admin's call.
+    // Rejecting takes nothing away from the platform and needs neither.
+    if (approving) {
+      if (grantTier >= 3 && actorInfo.role !== "super") {
+        throw new ApiError(403, "Only a Super Admin can grant tier 3.", "super_only");
+      }
+      await requireAdminOtp(req);
+    }
 
     await prisma.$transaction(async (db) => {
       await db.kycRecord.update({
@@ -98,6 +109,18 @@ export async function POST(req: Request) {
         },
       });
     });
+
+    if (approving) {
+      const owner = await prisma.user.findUnique({ where: { id: record.userId }, select: { email: true } });
+      await recordAdminAction(req, actorInfo, {
+        action: "admin.kyc.approved",
+        summary: `KYC approved at tier ${grantTier} for ${owner?.email ?? record.userId}`,
+        userId: record.userId,
+        resourceType: "KycRecord",
+        resourceId: recordId,
+        details: { tier: grantTier },
+      });
+    }
 
     await sendPush(record.userId, {
       category: "security",

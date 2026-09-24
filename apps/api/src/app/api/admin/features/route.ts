@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@cheqpay/db";
 import { requireAdmin } from "@/lib/auth";
+import { requireAdminActor } from "@/lib/adminGuard";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { FEATURE_DEFS, getFeatureFlags, setFeatureFlags } from "@/lib/features";
 
@@ -27,8 +28,7 @@ const patchSchema = z
 /** Admin: flip feature switches. Takes effect for all clients immediately. */
 export async function PUT(req: Request) {
   try {
-    await requireAdmin(req);
-    const actor = req.headers.get("x-admin-actor") ?? "admin";
+    const actor = (await requireAdminActor(req)).email;
     const patch = patchSchema.parse(await req.json());
     const features = await setFeatureFlags(patch, actor);
     await prisma.auditLog.create({

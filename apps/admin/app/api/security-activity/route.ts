@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { API_URL } from "@/lib/apiUrl";
+import { adminHeaders } from "@/lib/backend";
 
-const ADMIN_SECRET = process.env.ADMIN_API_SECRET ?? "";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const search = new URL(req.url).search;
   const res = await fetch(`${API_URL}/api/admin/security/activity${search}`, {
-    headers: { "x-admin-secret": ADMIN_SECRET },
+    headers: await adminHeaders(),
     cache: "no-store",
   });
   return NextResponse.json(await res.json(), { status: res.status });

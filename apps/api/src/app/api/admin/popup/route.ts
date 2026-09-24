@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@cheqpay/db";
 import { requireAdmin } from "@/lib/auth";
+import { requireAdminActor } from "@/lib/adminGuard";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { getAppPopup, setAppPopup } from "@/lib/popup";
 
@@ -28,8 +29,7 @@ const popupSchema = z.object({
 /** Admin: replace the popup. Saving mints a new id so everyone sees it once. */
 export async function PUT(req: Request) {
   try {
-    await requireAdmin(req);
-    const actor = req.headers.get("x-admin-actor") ?? "admin";
+    const actor = (await requireAdminActor(req)).email;
     const body = popupSchema.parse(await req.json());
     if (
       body.imageUrl &&

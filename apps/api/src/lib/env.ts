@@ -201,6 +201,13 @@ const envSchema = z.object({
   // payout queues, or a payout is held for review). Works with Slack /
   // Discord / Zapier "incoming webhook" URLs — no extra service required.
   ADMIN_ALERT_WEBHOOK: z.string().url().optional(),
+  // Where security alerts for sensitive admin actions are emailed (comma-
+  // separated). Falls back to ADMIN_EMAILS. See lib/adminGuard.ts.
+  ADMIN_SECURITY_EMAIL: z.string().optional(),
+  // Break-glass: set to "true" to allow replacing an enrolled admin
+  // authenticator WITHOUT a code from it (a lost phone). Only someone who can
+  // change the deployment's environment can do this — which is the point.
+  ADMIN_OTP_RESET_ALLOWED: z.string().optional(),
 
   // Scheduled jobs. CRON_SECRET gates the /api/cron/* endpoints (Vercel Cron
   // sends it automatically as `Authorization: Bearer <secret>`).

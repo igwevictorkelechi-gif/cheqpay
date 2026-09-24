@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/auth";
+import { recordAdminAction, requireAdminActor, requireAdminOtp } from "@/lib/adminGuard";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { platformSettingsUpdateSchema } from "@/lib/validation";
 import {
@@ -93,8 +94,12 @@ export async function GET(req: Request) {
 /** Admin: set the spread, USDT->NGN rate, and/or business fees. */
 export async function PUT(req: Request) {
   try {
-    await requireAdmin(req);
-    const updatedBy = req.headers.get("x-admin-actor") ?? "admin";
+    // Rates, margins, fees and minimums decide how much money every customer
+    // transaction moves. A bad USDT/NGN rate drains the platform through swaps
+    // as surely as a fake credit, so this is guarded the same way.
+    const actorInfo = await requireAdminActor(req, { superOnly: true });
+    await requireAdminOtp(req);
+    const updatedBy = actorInfo.email;
     const body = platformSettingsUpdateSchema.parse(await req.json());
 
     if (body.spreadBps !== undefined) await setSwapSpreadBps(body.spreadBps, updatedBy);
@@ -136,6 +141,16 @@ export async function PUT(req: Request) {
       },
       updatedBy
     );
+
+    const changed = Object.entries(body)
+      .filter(([, v]) => v !== undefined)
+      .map(([k]) => k);
+    await recordAdminAction(req, actorInfo, {
+      action: "admin.settings.updated",
+      summary: `Pricing/limits settings changed: ${changed.join(", ") || "(none)"}`,
+      resourceType: "PlatformSetting",
+      details: { changed: body as Record<string, unknown> },
+    });
 
     return jsonOk(await snapshot());
   } catch (err) {

@@ -3,9 +3,12 @@ import {
   Network,
   TransactionStatus,
   TransactionType,
+  UserStatus,
   prisma,
 } from "@cheqpay/db";
 import { requireAdmin } from "@/lib/auth";
+import { recordAdminAction, requireAdminActor, requireAdminOtp } from "@/lib/adminGuard";
+import { isPlausibleTxHash } from "@/lib/txHashFormat";
 import { getCustodyProvider } from "@/custody";
 import { getPaymentProvider } from "@/payments";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
@@ -44,10 +47,28 @@ export async function GET(req: Request) {
   }
 }
 
-/** Admin: approve (release/broadcast) or reject (refund) a held withdrawal. */
+/**
+ * How long money an admin created stays unwithdrawable. The 22 Sep payout was
+ * of funds credited from nothing twenty minutes earlier.
+ */
+const ADMIN_CREDIT_HOLD_DAYS = 7;
+
+/**
+ * Admin: approve (release/broadcast) or reject (refund) a held withdrawal.
+ *
+ * Rejecting only ever returns money to the user, so it needs nothing extra.
+ * Approving releases money for good, so it needs:
+ *  - a named admin and a fresh authenticator code;
+ *  - an ACTIVE, identity-verified account;
+ *  - for a manually-paid asset, the real on-chain hash of the payout — the
+ *    approval records that someone paid it, so it must say which transfer;
+ *  - no admin-created balance of that asset in the last 7 days. Money an admin
+ *    conjured cannot leave the platform on the same admin's say-so. That is the
+ *    exact sequence of 22 Sep: credit 10,000 USDT, then approve its withdrawal.
+ */
 export async function POST(req: Request) {
   try {
-    await requireAdmin(req);
+    const actor = await requireAdminActor(req);
     const { transactionId, action, txHash } = reviewActionSchema.parse(await req.json());
 
     const tx = await prisma.transaction.findUnique({ where: { id: transactionId } });
@@ -85,10 +106,61 @@ export async function POST(req: Request) {
           },
         }),
       ]);
+      const owner = await prisma.user.findUnique({ where: { id: tx.userId }, select: { email: true } });
+      await recordAdminAction(req, actor, {
+        action: "admin.withdrawal.rejected",
+        summary: `Rejected ${fromMinorUnits(tx.amount, tx.asset)} ${tx.asset} withdrawal for ${owner?.email ?? tx.userId} (refunded)`,
+        userId: tx.userId,
+        resourceType: "Transaction",
+        resourceId: tx.id,
+      });
       return jsonOk({ transactionId: tx.id, status: "reversed" });
     }
 
-    // approve — release the reserved funds to the destination.
+    // approve — guarded.
+    await requireAdminOtp(req);
+
+    const owner = await prisma.user.findUnique({
+      where: { id: tx.userId },
+      select: { email: true, status: true, kycTier: true },
+    });
+    if (!owner || owner.status !== UserStatus.ACTIVE) {
+      throw new ApiError(422, `This account is ${owner?.status.toLowerCase() ?? "missing"} — reject the withdrawal instead.`, "account_not_active");
+    }
+    if (owner.kycTier < 1) {
+      throw new ApiError(422, "This account hasn't verified its identity — reject the withdrawal instead.", "account_unverified");
+    }
+
+    const since = new Date(Date.now() - ADMIN_CREDIT_HOLD_DAYS * 24 * 60 * 60 * 1000);
+    const adminCredited = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*)::bigint AS n FROM ledger_transactions
+        WHERE user_id = $1::uuid AND asset::text = $2 AND created_at > $3
+          AND status::text <> 'REVERSED'
+          AND metadata->>'kind' = 'admin_adjustment' AND metadata->>'direction' = 'credit'`,
+      tx.userId,
+      tx.asset,
+      since,
+    );
+    if ((adminCredited[0]?.n ?? 0n) > 0n) {
+      throw new ApiError(
+        422,
+        `This account received an admin credit of ${tx.asset} in the last ${ADMIN_CREDIT_HOLD_DAYS} days, ` +
+          "so its withdrawal can't be approved yet. If the credit was a mistake, reverse it and reject this withdrawal.",
+        "admin_credit_hold",
+      );
+    }
+
+    if (await isManualAsset(tx.asset)) {
+      if (!txHash || !isPlausibleTxHash(tx.network, txHash)) {
+        throw new ApiError(
+          422,
+          "Pay this withdrawal from the business wallet first, then paste the real transaction hash to approve it.",
+          "tx_hash_required",
+        );
+      }
+    }
+
+    // Release the reserved funds to the destination.
     const amount = fromMinorUnits(tx.amount, tx.asset);
     try {
       if (tx.asset === Asset.NGN) {
@@ -137,14 +209,13 @@ export async function POST(req: Request) {
           },
         });
       }
-      await prisma.auditLog.create({
-        data: {
-          userId: tx.userId,
-          action: "withdrawal.review.approved",
-          resourceType: "Transaction",
-          resourceId: tx.id,
-          details: { asset: tx.asset, amount: tx.amount.toString() },
-        },
+      await recordAdminAction(req, actor, {
+        action: "withdrawal.review.approved",
+        summary: `Approved ${amount} ${tx.asset} withdrawal for ${owner.email}`,
+        userId: tx.userId,
+        resourceType: "Transaction",
+        resourceId: tx.id,
+        details: { asset: tx.asset, amount: tx.amount.toString(), txHash: txHash ?? null },
       });
       return jsonOk({ transactionId: tx.id, status: "processing" });
     } catch {

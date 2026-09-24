@@ -31,6 +31,14 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
+    // A blocked account is refused on every call. Rather than let each screen
+    // fail on its own, end the session once and say why on the login page.
+    if (res.status === 403 && data?.code === "account_blocked") {
+      await supabase.auth.signOut().catch(() => undefined);
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login/?blocked=1";
+      }
+    }
     throw new ApiError(res.status, data?.error || res.statusText, data);
   }
   return data as T;

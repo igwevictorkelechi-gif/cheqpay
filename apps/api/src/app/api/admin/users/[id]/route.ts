@@ -1,5 +1,13 @@
 import { Asset, Network, prisma, UserStatus } from "@cheqpay/db";
-import { requireAdmin } from "@/lib/auth";
+import { recordAdminAction, requireAdminActor, requireAdminOtp } from "@/lib/adminGuard";
+import {
+  blockIps,
+  ensureBlockedIpsSchema,
+  invalidateAccessCache,
+  knownIpsForUser,
+  liftAuthBan,
+  revokeAuthSessions,
+} from "@/lib/accessControl";
 import { jsonOk, toErrorResponse, ApiError } from "@/lib/http";
 import { fromMinorUnits } from "@/lib/money";
 import { requestContext } from "@/lib/requestContext";
@@ -40,9 +48,10 @@ function metadataIp(metadata: unknown): string | null {
  */
 export async function GET(req: Request, { params }: Ctx) {
   try {
-    await requireAdmin(req);
+    // Named, even for a read: who looked at a customer's record is a question an
+    // auditor asks, and "admin" is not an answer.
+    const actor = (await requireAdminActor(req)).email;
     const { id } = await params;
-    const actor = req.headers.get("x-admin-actor") ?? "admin";
     const { ip: adminIp } = requestContext(req);
 
     // Columns these reads touch are created lazily (migrations are not applied
@@ -266,17 +275,51 @@ export async function GET(req: Request, { params }: Ctx) {
 }
 
 /**
- * Admin: update a user's account status (ACTIVE/SUSPENDED/BLOCKED) and/or
- * KYC tier. Writes an audit-log entry for the change (best effort).
+ * Admin: update a user's account status and/or KYC tier.
+ *
+ * Asymmetric on purpose. Taking trust AWAY is one click for any admin: blocking
+ * or suspending an account, or lowering its tier, needs no second factor,
+ * because the cost of a slow block is money leaving. GIVING trust is guarded,
+ * because that is the direction the 22 Sep incident ran in:
+ *
+ *  - Blocking also ends the user's sessions, bans them at the login layer and,
+ *    for BLOCKED, blocklists every address they have used. A block now actually
+ *    stops the account — it did not before.
+ *  - Unblocking needs a Super Admin, a fresh authenticator code and a reason.
+ *  - Raising a tier needs a fresh authenticator code and the identity on file
+ *    to back it: a name plus BVN or ID for tier 1, a government ID for tier 2.
+ *    Tier 3 additionally needs a Super Admin and a reason. The account raised
+ *    to tier 3 in the incident had no name, no BVN and no ID on file at all.
  */
 export async function PATCH(req: Request, { params }: Ctx) {
   try {
-    await requireAdmin(req);
+    const actor = await requireAdminActor(req);
     const { id } = await params;
-    const actor = req.headers.get("x-admin-actor") ?? "admin";
-    const body = (await req.json()) as { status?: unknown; kycTier?: unknown };
+    const body = (await req.json().catch(() => ({}))) as {
+      status?: unknown;
+      kycTier?: unknown;
+      reason?: unknown;
+      otp?: unknown;
+      blockIps?: unknown;
+    };
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
 
-    const data: { status?: UserStatus; kycTier?: number } = {};
+    const existing = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        kycTier: true,
+        legalName: true,
+        bvnFingerprint: true,
+        idDocType: true,
+        idDocNumberLast4: true,
+      },
+    });
+    if (!existing) throw new ApiError(404, "User not found", "not_found");
+
+    const data: { status?: UserStatus; kycTier?: number; instantWithdrawal?: boolean } = {};
 
     if (body.status !== undefined) {
       const s = String(body.status).toUpperCase();
@@ -290,45 +333,102 @@ export async function PATCH(req: Request, { params }: Ctx) {
     if (body.kycTier !== undefined) {
       const tier = Number(body.kycTier);
       if (!Number.isInteger(tier) || tier < 0 || tier > 3) {
-        throw new ApiError(
-          422,
-          "kycTier must be an integer between 0 and 3",
-          "validation_error",
-        );
+        throw new ApiError(422, "kycTier must be an integer between 0 and 3", "validation_error");
       }
       data.kycTier = tier;
     }
 
-    if (Object.keys(data).length === 0) {
+    if (data.status === undefined && data.kycTier === undefined) {
       throw new ApiError(422, "No valid fields to update", "validation_error");
     }
 
-    const existing = await prisma.user.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-    if (!existing) throw new ApiError(404, "User not found", "not_found");
+    const restoring =
+      data.status === UserStatus.ACTIVE && existing.status !== UserStatus.ACTIVE;
+    const denying =
+      data.status !== undefined &&
+      data.status !== UserStatus.ACTIVE &&
+      data.status !== existing.status;
+    const raisingTier = data.kycTier !== undefined && data.kycTier > existing.kycTier;
+
+    // --- Guards on granting trust -------------------------------------------
+    if (restoring || (raisingTier && data.kycTier === 3)) {
+      if (actor.role !== "super") {
+        throw new ApiError(403, "Only a Super Admin can do this.", "super_only");
+      }
+      if (reason.length < 10) {
+        throw new ApiError(422, "Give a reason (at least 10 characters) — it goes on the audit record.", "reason_required");
+      }
+    }
+    if (raisingTier) {
+      const hasIdentity = !!existing.legalName && (!!existing.bvnFingerprint || !!existing.idDocNumberLast4);
+      const hasGovId = !!existing.idDocType && !!existing.idDocNumberLast4;
+      if (!hasIdentity) {
+        throw new ApiError(
+          422,
+          "This account has no verified identity on file (legal name plus BVN or ID). A tier can't be raised until they complete KYC.",
+          "no_identity_on_file",
+        );
+      }
+      if (data.kycTier! >= 2 && !hasGovId) {
+        throw new ApiError(
+          422,
+          "Tier 2 and above need a government ID on file. Ask the user to upload one in KYC first.",
+          "no_government_id",
+        );
+      }
+    }
+    if (restoring || raisingTier) {
+      await requireAdminOtp(req, body.otp);
+    }
+
+    // A blocked or suspended account keeps no instant-withdrawal privilege.
+    if (denying) data.instantWithdrawal = false;
 
     const user = await prisma.user.update({ where: { id }, data });
 
-    // Best-effort audit trail; never fail the request on logging errors.
-    try {
-      await prisma.auditLog.create({
-        data: {
-          userId: id,
-          action: "admin.user.update",
-          resourceType: "user",
-          resourceId: id,
-          details: {
-            actor,
-            status: data.status ?? null,
-            kycTier: data.kycTier ?? null,
-          },
-        },
-      });
-    } catch (logErr) {
-      console.error("audit log failed:", logErr);
+    // --- Side effects that make a status change real ------------------------
+    let ipsBlocked: string[] = [];
+    let sessionsRevoked = false;
+    if (denying) {
+      sessionsRevoked = await revokeAuthSessions(id);
+      if (data.status === UserStatus.BLOCKED && body.blockIps !== false) {
+        ipsBlocked = await blockIps(await knownIpsForUser(id), {
+          reason: reason || `Blocked with account ${existing.email}`,
+          actor: actor.email,
+          sourceUserId: id,
+        }).catch((err) => {
+          console.error("[admin] could not blocklist IPs", err);
+          return [] as string[];
+        });
+      }
     }
+    if (restoring) {
+      await liftAuthBan(id);
+      // Addresses blocked BECAUSE of this account go with it; addresses blocked
+      // for other reasons stay.
+      await ensureBlockedIpsSchema();
+      await prisma.$executeRawUnsafe(`DELETE FROM blocked_ips WHERE source_user_id = $1::uuid`, id);
+    }
+    invalidateAccessCache(id);
+
+    const parts: string[] = [];
+    if (data.status !== undefined) parts.push(`status ${existing.status} → ${data.status}`);
+    if (data.kycTier !== undefined) parts.push(`KYC tier ${existing.kycTier} → ${data.kycTier}`);
+    await recordAdminAction(req, actor, {
+      action: "admin.user.update",
+      summary: `${existing.email}: ${parts.join(", ")}`,
+      userId: id,
+      resourceType: "user",
+      details: {
+        status: data.status ?? null,
+        previousStatus: existing.status,
+        kycTier: data.kycTier ?? null,
+        previousKycTier: existing.kycTier,
+        reason: reason || null,
+        sessionsRevoked,
+        ipsBlocked,
+      },
+    });
 
     return jsonOk({
       user: {
@@ -337,6 +437,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
         status: user.status,
         kycTier: user.kycTier,
       },
+      ipsBlocked,
+      sessionsRevoked,
     });
   } catch (err) {
     return toErrorResponse(err);

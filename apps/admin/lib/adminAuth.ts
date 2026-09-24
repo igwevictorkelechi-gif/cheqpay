@@ -12,7 +12,19 @@ export type AdminRole = "admin" | "super";
 export interface SessionInfo {
   email: string;
   role: AdminRole;
+  /** Unix seconds the session was minted. */
+  iat: number;
+  /** Backend session epoch at sign-in; rotating it revokes this session. */
+  epoch: string;
 }
+
+/**
+ * Hard lifetime of an admin session, enforced on the SIGNED issue time — not
+ * just the cookie's maxAge, which is only a hint to the browser. A copied
+ * cookie value used to be valid forever; now it dies after this long however it
+ * is replayed, and sooner if the epoch is rotated.
+ */
+export const SESSION_MAX_AGE_S = 60 * 60 * 8;
 
 // Areas only Super Admins may reach. Enforced in middleware for both the page
 // and the API proxy behind it (the backend is only reachable through these
@@ -89,39 +101,58 @@ export function timingSafeEqual(a: string, b: string): boolean {
 /**
  * Build the signed session cookie value for an authenticated admin.
  *
- * Format: b64url(email).b64url(role).hmac(`session:${email}:${role}`). The role
- * is signed alongside the email so it can be trusted in Edge middleware without
- * a database round-trip; a demotion takes effect on the admin's next sign-in.
+ * Format (v2):
+ *   b64url(email).b64url(role).iat.b64url(epoch).hmac(`session:v2:${email}:${role}:${iat}:${epoch}`)
+ *
+ * Everything that decides what the session may do — who, which role, when it
+ * was issued, which epoch — is under the signature, so none of it can be edited
+ * client-side. The role is still trusted in Edge middleware without a database
+ * round-trip; the epoch is checked by the backend on every call.
  */
-export async function sessionCookieValue(email: string, role: AdminRole): Promise<string> {
+export async function sessionCookieValue(
+  email: string,
+  role: AdminRole,
+  epoch: string,
+  iat: number = Math.floor(Date.now() / 1000),
+): Promise<string> {
   const e = email.trim().toLowerCase();
-  const sig = await hmacHex(adminSecret(), `session:${e}:${role}`);
-  return `${b64urlEncode(e)}.${b64urlEncode(role)}.${sig}`;
+  const sig = await hmacHex(adminSecret(), `session:v2:${e}:${role}:${iat}:${epoch}`);
+  return `${b64urlEncode(e)}.${b64urlEncode(role)}.${iat}.${b64urlEncode(epoch)}.${sig}`;
 }
 
 /**
- * Validate a session cookie and return its { email, role }, or null.
+ * Validate a session cookie and return its contents, or null.
  *
- * Only the current three-segment format is accepted; older role-less cookies
- * fail verification and the admin is asked to sign in again (which mints a
- * cookie carrying their role).
+ * Only the v2 format is accepted. Every session minted before it — including
+ * any copied out of a browser during the 22 Sep incident — fails here, which
+ * signs everyone out once when this ships.
  */
 export async function sessionInfo(cookie: string | undefined): Promise<SessionInfo | null> {
   const secret = adminSecret();
   if (!cookie || !secret) return null;
   const parts = cookie.split(".");
-  if (parts.length !== 3) return null;
+  if (parts.length !== 5) return null;
   let email: string;
   let role: string;
+  let epoch: string;
   try {
     email = b64urlDecode(parts[0]);
     role = b64urlDecode(parts[1]);
+    epoch = b64urlDecode(parts[3]);
   } catch {
     return null;
   }
-  const expected = await hmacHex(secret, `session:${email}:${role}`);
-  if (!timingSafeEqual(parts[2], expected)) return null;
-  return { email, role: role === "super" ? "super" : "admin" };
+  if (!/^\d{9,11}$/.test(parts[2])) return null;
+  const iat = Number(parts[2]);
+
+  const expected = await hmacHex(secret, `session:v2:${email}:${role}:${iat}:${epoch}`);
+  if (!timingSafeEqual(parts[4], expected)) return null;
+
+  const now = Math.floor(Date.now() / 1000);
+  if (iat > now + 60) return null; // issued in the future: not ours
+  if (now - iat > SESSION_MAX_AGE_S) return null; // expired, however it is replayed
+
+  return { email, role: role === "super" ? "super" : "admin", iat, epoch };
 }
 
 /** The signed-in admin's email, or null. */

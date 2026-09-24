@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/auth";
+import { recordAdminAction, requireAdminActor, requireAdminOtp } from "@/lib/adminGuard";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import {
   getManualWallets,
@@ -8,7 +9,6 @@ import {
   type ManualWallets,
   type ManualAsset,
 } from "@/lib/manualCrypto";
-import { prisma } from "@cheqpay/db";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,12 @@ export async function GET(req: Request) {
  */
 export async function PUT(req: Request) {
   try {
-    await requireAdmin(req);
+    // These are the addresses every customer deposits to. Changing one could
+    // point all incoming crypto at someone else's wallet, so: Super Admin, a
+    // fresh authenticator code, and an alert showing old and new addresses.
+    const actorInfo = await requireAdminActor(req, { superOnly: true });
+    await requireAdminOtp(req);
+    const before = await getManualWallets();
     const body = manualWalletsSchema.parse(await req.json());
 
     const wallets: ManualWallets = {};
@@ -37,14 +42,24 @@ export async function PUT(req: Request) {
       const e = body[a as ManualAsset];
       if (e) wallets[a as ManualAsset] = e;
     }
-    await setManualWallets(wallets, "admin");
+    await setManualWallets(wallets, actorInfo.email);
 
-    await prisma.auditLog.create({
-      data: {
-        action: "admin.crypto_wallets.updated",
-        resourceType: "PlatformSetting",
-        details: { assets: Object.keys(wallets) },
-      },
+    const changes = MANUAL_ASSETS.map((a) => {
+      const from = before[a as ManualAsset]?.address ?? null;
+      const to = wallets[a as ManualAsset]?.address ?? null;
+      return from === to ? null : { asset: a, from, to };
+    }).filter(Boolean);
+    await recordAdminAction(req, actorInfo, {
+      action: "admin.crypto_wallets.updated",
+      summary:
+        changes.length === 0
+          ? "Business crypto deposit addresses saved (no change)"
+          : `Business crypto deposit ADDRESSES CHANGED: ${changes
+              .map((c) => `${c!.asset} ${c!.from ?? "(none)"} → ${c!.to ?? "(disabled)"}`)
+              .join("; ")}`,
+      resourceType: "PlatformSetting",
+      resourceId: "manual_crypto_wallets",
+      details: { changes },
     });
 
     return jsonOk({ wallets });

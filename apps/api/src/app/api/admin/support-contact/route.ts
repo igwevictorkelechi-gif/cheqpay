@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/auth";
+import { requireAdminActor } from "@/lib/adminGuard";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { supportContactUpdateSchema } from "@/lib/validation";
 import { getSupportContact, setSupportContact } from "@/lib/settings";
@@ -18,8 +19,7 @@ export async function GET(req: Request) {
 /** Admin: update the support contact details (email, phone, WhatsApp). */
 export async function PUT(req: Request) {
   try {
-    await requireAdmin(req);
-    const updatedBy = req.headers.get("x-admin-actor") ?? "admin";
+    const updatedBy = (await requireAdminActor(req)).email;
     const patch = supportContactUpdateSchema.parse(await req.json());
     await setSupportContact(patch, updatedBy);
     return jsonOk(await getSupportContact());

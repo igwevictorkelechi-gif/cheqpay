@@ -50,6 +50,22 @@ vi.mock("@cheqpay/db", () => ({
   },
 }));
 vi.mock("@/lib/auth", () => ({ requireAdmin }));
+vi.mock("@/lib/adminGuard", () => ({
+  requireAdminActor: vi.fn(async () => {
+    await requireAdmin();
+    return { email: "ops@cheqpay.com", role: "super" };
+  }),
+  requireAdminOtp: vi.fn(),
+  recordAdminAction: vi.fn(),
+}));
+vi.mock("@/lib/accessControl", () => ({
+  blockIps: vi.fn(),
+  ensureBlockedIpsSchema: vi.fn(),
+  invalidateAccessCache: vi.fn(),
+  knownIpsForUser: vi.fn(),
+  liftAuthBan: vi.fn(),
+  revokeAuthSessions: vi.fn(),
+}));
 vi.mock("@/lib/kycDocuments", () => ({ signKycDocumentUrl, resolveApiOrigin }));
 vi.mock("@/lib/activity", () => ({ ensureActivitySchema }));
 vi.mock("@/lib/mapleradCustomer", () => ({ ensureMapleradSchema, ensureKycDocSchema }));
@@ -251,7 +267,12 @@ describe("GET /api/admin/users/[id]", () => {
     await call();
     expect(auditCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ action: "admin.user.viewed", resourceId: "u1" }),
+        data: expect.objectContaining({
+          action: "admin.user.viewed",
+          resourceId: "u1",
+          // Named — the old code recorded the literal "admin".
+          details: expect.objectContaining({ actor: "ops@cheqpay.com" }),
+        }),
       })
     );
   });

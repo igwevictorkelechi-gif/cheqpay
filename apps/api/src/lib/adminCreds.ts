@@ -2,16 +2,26 @@ import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
 import { prisma } from "@cheqpay/db";
 
 // Dashboard login credential for the admin app. Stored in platform_settings so
-// it can be changed at runtime from the admin profile page. Until it's changed,
-// a default (overridable via env) is used as a first-run bootstrap.
+// it can be changed at runtime from the admin profile page.
+//
+// There is NO built-in default password. There used to be one, written right
+// here in a public repository, and it stayed valid until someone changed it —
+// which is how the 22 Sep 2026 incident began. A fresh deployment now signs in
+// only with ADMIN_DEFAULT_PASSWORD from the environment (set it, sign in, change
+// it), and with no stored password and no env value, nobody can sign in at all.
 const EMAIL_KEY = "admin_login_email";
 const HASH_KEY = "admin_login_pass";
+
+/** Passwords that have ever been published in this codebase. Never accepted. */
+const PUBLISHED_PASSWORDS = new Set(["CheqPayAdmin!2026"]);
 
 export function defaultAdminEmail(): string {
   return (process.env.ADMIN_DEFAULT_EMAIL || "admin@cheqpay.com").toLowerCase();
 }
-function defaultAdminPassword(): string {
-  return process.env.ADMIN_DEFAULT_PASSWORD || "CheqPayAdmin!2026";
+function bootstrapPassword(): string | null {
+  const p = process.env.ADMIN_DEFAULT_PASSWORD ?? "";
+  if (p.length < 12 || PUBLISHED_PASSWORDS.has(p)) return null;
+  return p;
 }
 
 function hashPassword(password: string): string {
@@ -49,7 +59,14 @@ export async function verifyAdminLogin(email: string, password: string): Promise
   const storedHash = await getSetting(HASH_KEY);
   const expectedEmail = (await getSetting(EMAIL_KEY))?.toLowerCase() || defaultAdminEmail();
   if (e !== expectedEmail) return false;
-  if (!storedHash) return password === defaultAdminPassword();
+  if (PUBLISHED_PASSWORDS.has(password)) return false;
+  if (!storedHash) {
+    const boot = bootstrapPassword();
+    if (!boot) return false;
+    const a = Buffer.from(password);
+    const b = Buffer.from(boot);
+    return a.length === b.length && timingSafeEqual(a, b);
+  }
   return verifyPassword(password, storedHash);
 }
 
