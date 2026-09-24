@@ -10,14 +10,19 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
+import { Linking } from 'react-native';
 import { router } from 'expo-router';
 import { authService } from '@/services/auth';
 import { Logo } from '@/components/brand';
+
+const TERMS_URL = 'https://mycheqpay.com/terms';
+const PRIVACY_URL = 'https://mycheqpay.com/privacy';
 
 export default function SignupScreen() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSendOTP = async () => {
@@ -27,6 +32,13 @@ export default function SignupScreen() {
     }
     if (!fullName || fullName.length < 2) {
       Alert.alert('Error', 'Please enter your full name');
+      return;
+    }
+    if (!agreed) {
+      Alert.alert(
+        'One more thing',
+        'Please agree to the Terms of Service and Privacy Policy to create your account.'
+      );
       return;
     }
 
@@ -103,10 +115,43 @@ export default function SignupScreen() {
           />
         </View>
 
+        {/* Terms + Privacy consent */}
+        <TouchableOpacity
+          className="flex-row items-start mb-6"
+          activeOpacity={0.7}
+          onPress={() => setAgreed((v) => !v)}
+          disabled={loading}
+        >
+          <View
+            className={`w-5 h-5 rounded border items-center justify-center mt-0.5 ${
+              agreed ? 'bg-green-600 border-green-600' : 'border-gray-400'
+            }`}
+          >
+            {agreed && <Text className="text-white text-xs font-bold">✓</Text>}
+          </View>
+          <Text className="text-gray-600 text-sm ml-3 flex-1">
+            I agree to CheqPay&apos;s{' '}
+            <Text
+              className="text-green-600 font-semibold"
+              onPress={() => Linking.openURL(TERMS_URL).catch(() => undefined)}
+            >
+              Terms of Service
+            </Text>{' '}
+            and{' '}
+            <Text
+              className="text-green-600 font-semibold"
+              onPress={() => Linking.openURL(PRIVACY_URL).catch(() => undefined)}
+            >
+              Privacy Policy
+            </Text>
+            , including the collection of my identity information for verification.
+          </Text>
+        </TouchableOpacity>
+
         {/* Create Account Button */}
         <TouchableOpacity
           className={`${
-            loading ? 'bg-green-400' : 'bg-green-600'
+            loading || !agreed ? 'bg-green-400' : 'bg-green-600'
           } rounded-lg py-4 items-center mb-4`}
           onPress={handleSendOTP}
           disabled={loading}
