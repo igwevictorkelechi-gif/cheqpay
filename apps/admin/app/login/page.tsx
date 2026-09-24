@@ -10,6 +10,10 @@ function LoginForm() {
   const next = params.get("next") || "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Second step: shown once the password is accepted and an authenticator is
+  // enrolled. The password alone no longer opens the dashboard.
+  const [needsOtp, setNeedsOtp] = useState(false);
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -21,10 +25,16 @@ function LoginForm() {
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, ...(needsOtp ? { otp } : {}) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        if (body.code === "otp_required" || body.code === "bad_otp") {
+          setNeedsOtp(true);
+          setOtp("");
+          setError(body.code === "bad_otp" ? body.error : null);
+          return;
+        }
         setError(body.error || "Login failed");
         return;
       }
@@ -66,6 +76,22 @@ function LoginForm() {
             autoComplete="current-password"
             className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
           />
+          {needsOtp && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">
+                Code from your authenticator app
+              </label>
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="123456"
+                autoFocus
+                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+          )}
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               {error}
@@ -73,10 +99,10 @@ function LoginForm() {
           )}
           <button
             type="submit"
-            disabled={loading || !email || !password}
+            disabled={loading || !email || !password || (needsOtp && otp.length !== 6)}
             className="flex w-full items-center justify-center rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : needsOtp ? "Verify & sign in" : "Sign in"}
           </button>
         </form>
       </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   SESSION_COOKIE,
+  SESSION_MAX_AGE_S,
   adminSecret,
   sessionCookieValue,
   sessionInfo,
@@ -9,8 +10,6 @@ import {
 import { API_URL } from "@/lib/apiUrl";
 
 export const dynamic = "force-dynamic";
-
-const TWELVE_HOURS = 60 * 60 * 12;
 
 /**
  * Resolve an admin's role from the backend roles list. Env admins
@@ -52,6 +51,14 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const email = String(body?.email ?? "").trim().toLowerCase();
   const password = String(body?.password ?? "");
+  const otp = String(body?.otp ?? "").replace(/\D/g, "").slice(0, 6);
+
+  // The person's real address, for the backend's rate limit, blocklist and
+  // audit — the backend itself only sees this server.
+  const clientIp =
+    req.headers.get("x-real-ip") ??
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "";
 
   if (!adminSecret()) {
     return NextResponse.json(
@@ -65,29 +72,55 @@ export async function POST(req: Request) {
 
   const verify = await fetch(`${API_URL}/api/admin/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    headers: {
+      "Content-Type": "application/json",
+      ...(clientIp ? { "x-admin-client-ip": clientIp } : {}),
+    },
+    body: JSON.stringify({ email, password, ...(otp ? { otp } : {}) }),
     cache: "no-store",
   }).catch(() => null);
 
   if (!verify || !verify.ok) {
-    const status = verify?.status === 401 ? 401 : verify?.status ?? 502;
+    const detail = verify
+      ? ((await verify.json().catch(() => ({}))) as { error?: string; code?: string })
+      : {};
+    const status = verify?.status ?? 502;
+    // The second step: password was right, now the authenticator code. Passed
+    // through so the login page can ask for it.
+    if (detail.code === "otp_required" || detail.code === "bad_otp") {
+      return NextResponse.json({ error: detail.error, code: detail.code }, { status: 401 });
+    }
+    if (status === 429 || status === 403) {
+      return NextResponse.json({ error: detail.error ?? "Sign-in blocked", code: detail.code }, { status });
+    }
     return NextResponse.json(
       { error: status === 401 ? "Invalid email or password" : "Login is temporarily unavailable" },
-      { status }
+      { status: status === 401 ? 401 : 502 }
     );
   }
-  const data = (await verify.json().catch(() => ({}))) as { email?: string };
+  const data = (await verify.json().catch(() => ({}))) as {
+    email?: string;
+    epoch?: string;
+    otpConfigured?: boolean;
+  };
+  if (!data.epoch) {
+    // A backend too old to hand out an epoch cannot revoke sessions; refuse
+    // rather than mint one that could never be signed out.
+    return NextResponse.json({ error: "Login is temporarily unavailable" }, { status: 502 });
+  }
   const authedEmail = (data.email ?? email).toLowerCase();
   const role = await resolveRole(authedEmail);
 
-  const res = NextResponse.json({ ok: true, email: authedEmail, role });
-  res.cookies.set(SESSION_COOKIE, await sessionCookieValue(authedEmail, role), {
+  const res = NextResponse.json({ ok: true, email: authedEmail, role, otpConfigured: !!data.otpConfigured });
+  res.cookies.set(SESSION_COOKIE, await sessionCookieValue(authedEmail, role, data.epoch), {
     httpOnly: true,
     secure: true,
-    sameSite: "lax",
+    // Strict: the session cookie is never sent on a request started from
+    // another site, which closes cross-site request forgery on every admin
+    // action, including the ones that move money.
+    sameSite: "strict",
     path: "/",
-    maxAge: TWELVE_HOURS,
+    maxAge: SESSION_MAX_AGE_S,
   });
   return res;
 }

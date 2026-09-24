@@ -3,6 +3,8 @@ import { prisma } from "@cheqpay/db";
 import { getEnv } from "./env";
 import { AuthError, ForbiddenError } from "./http";
 import { touchActivity } from "./activity";
+import { assertAccessAllowed } from "./accessControl";
+import { assertSessionCurrent } from "./adminSession";
 
 export interface AuthUser {
   id: string;
@@ -108,8 +110,15 @@ export async function requireUser(req: Request): Promise<AuthUser> {
   // Record the IP, device and route for the security history. Placed here so
   // every authenticated route is covered without each one remembering.
   // Fire-and-forget and internally throttled: a security log must never be able
-  // to slow down or fail the request it is observing.
+  // to slow down or fail the request it is observing. Recorded BEFORE the block
+  // check below, so a blocked account's attempts still show up in its history.
   touchActivity(req, user.id);
+
+  // A valid token is not permission to use the API. Blocked, suspended and
+  // closed accounts, and blocklisted addresses, are refused here — for every
+  // authenticated route at once. Without this, blocking an account in the admin
+  // dashboard changed a label and nothing else.
+  await assertAccessAllowed(req, user.id);
 
   return user;
 }
@@ -142,6 +151,10 @@ export async function requireAdmin(req: Request): Promise<void> {
   const expected = getEnv().ADMIN_API_SECRET;
   const provided = req.headers.get("x-admin-secret");
   if (expected && provided && constantTimeEqual(provided, expected)) {
+    // The dashboard forwards the epoch its session was minted under. A session
+    // from before the last password change / OTP reset / "sign out everywhere"
+    // is refused here, on every admin route, not just the sensitive ones.
+    await assertSessionCurrent(req);
     return;
   }
   // Path 2: admin user JWT (role/env allowlist, then DB allowlist).

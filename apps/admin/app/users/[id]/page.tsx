@@ -460,7 +460,16 @@ export default function UserDetailPage() {
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d?.error || `Update failed (${r.status})`);
-        setNotice('Changes saved.');
+        if (payload.status === 'BLOCKED' || payload.status === 'SUSPENDED') {
+          // Say what the block actually did — before 22 Sep it only changed a label.
+          const n = Array.isArray(d?.ipsBlocked) ? d.ipsBlocked.length : 0;
+          setNotice(
+            `Account ${payload.status.toLowerCase()}. Their sessions were ended` +
+              (n ? ` and ${n} address${n === 1 ? '' : 'es'} they used ${n === 1 ? 'is' : 'are'} now blocked.` : '.'),
+          );
+        } else {
+          setNotice('Changes saved.');
+        }
         load();
       } catch (e) {
         setError((e as Error).message);

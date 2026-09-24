@@ -8,6 +8,7 @@ import { createVirtualAccount } from "@/lib/virtualAccounts";
 import { ensureMapleradCustomer } from "@/lib/mapleradCustomer";
 import { pregenerateCryptoWallets } from "@/lib/pregenerateWallets";
 import { persistKycIdentity } from "@/lib/kycIdentity";
+import { AccountBlockedError, blockIfLinkedToBlocked } from "@/lib/accessControl";
 import { grantTierFromEnrolment } from "@/lib/kycAutoTier";
 import { upgradeToTier2 } from "@/lib/mapleradTier2";
 import {
@@ -123,6 +124,23 @@ export async function POST(req: Request) {
       address: body.address,
       idDoc: { type: body.identity.type, number: body.identity.number },
     });
+
+    // A blocked person coming back under a fresh email still has the same BVN.
+    // Checked right after the identity is stored — so the fingerprint exists —
+    // and before any provider call, so a blocked identity never reaches
+    // verification, enrolment or a deposit account.
+    const stored = await prisma.user.findUnique({
+      where: { id: auth.id },
+      select: { bvnFingerprint: true, phone: true },
+    });
+    if (
+      await blockIfLinkedToBlocked(auth.id, {
+        bvnFingerprint: stored?.bvnFingerprint,
+        phone: stored?.phone,
+      })
+    ) {
+      throw new AccountBlockedError();
+    }
 
     // Automated identity check (BVN/ID). Passing auto-approves; otherwise the
     // submission stays PENDING for manual admin review.

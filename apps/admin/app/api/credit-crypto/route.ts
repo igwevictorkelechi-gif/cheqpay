@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { API_URL } from "@/lib/apiUrl";
+import { adminHeaders } from "@/lib/backend";
 
 // Server-side proxy to the backend admin manual-credit endpoint.
-const ADMIN_SECRET = process.env.ADMIN_API_SECRET ?? "";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const body = await req.text();
   const res = await fetch(`${API_URL}/api/admin/credit-crypto`, {
     method: "POST",
-    headers: { "x-admin-secret": ADMIN_SECRET, "content-type": "application/json" },
+    headers: await adminHeaders({ "content-type": "application/json" }),
     body,
     cache: "no-store",
   });

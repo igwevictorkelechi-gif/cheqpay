@@ -1,5 +1,6 @@
 import { prisma } from "@cheqpay/db";
 import { requireAdmin } from "@/lib/auth";
+import { recordAdminAction, requireAdminActor, requireAdminOtp } from "@/lib/adminGuard";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -74,8 +75,10 @@ export async function GET(req: Request) {
  */
 export async function PUT(req: Request) {
   try {
-    await requireAdmin(req);
-    const updatedBy = req.headers.get("x-admin-actor") ?? "admin";
+    // Granting admin or Super Admin is granting everything else on this list.
+    const actorInfo = await requireAdminActor(req, { superOnly: true });
+    await requireAdminOtp(req);
+    const updatedBy = actorInfo.email;
     const body = (await req.json()) as { admins?: unknown; emails?: unknown };
 
     const env = new Set(envAdmins());
@@ -109,6 +112,13 @@ export async function PUT(req: Request) {
       where: { key: KEY },
       update: { value: JSON.stringify(admins), updatedBy },
       create: { key: KEY, value: JSON.stringify(admins), updatedBy },
+    });
+    await recordAdminAction(req, actorInfo, {
+      action: "admin.roles.updated",
+      summary: `Admin roles changed: ${admins.map((a) => `${a.email} (${a.role})`).join(", ") || "(no managed admins)"}`,
+      resourceType: "PlatformSetting",
+      resourceId: KEY,
+      details: { admins },
     });
     return jsonOk({ admins, envAdmins: envAdmins() });
   } catch (err) {

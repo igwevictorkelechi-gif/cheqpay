@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { API_URL } from "@/lib/apiUrl";
+import { adminHeaders } from "@/lib/backend";
 
-const ADMIN_SECRET = process.env.ADMIN_API_SECRET ?? "";
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const res = await fetch(`${API_URL}/api/admin/gadgets/${params.id}`, {
-    headers: { "x-admin-secret": ADMIN_SECRET },
+    headers: await adminHeaders(),
     cache: "no-store",
   });
   const data = await res.json().catch(() => ({ error: "Bad response from API" }));
@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const res = await fetch(`${API_URL}/api/admin/gadgets/${params.id}`, {
     method: "PATCH",
-    headers: { "x-admin-secret": ADMIN_SECRET, "content-type": "application/json" },
+    headers: await adminHeaders({ "content-type": "application/json" }),
     body: await req.text(),
     cache: "no-store",
   });
@@ -27,7 +27,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const res = await fetch(`${API_URL}/api/admin/gadgets/${params.id}`, {
     method: "DELETE",
-    headers: { "x-admin-secret": ADMIN_SECRET },
+    headers: await adminHeaders(),
     cache: "no-store",
   });
   const data = await res.json().catch(() => ({ error: "Bad response from API" }));

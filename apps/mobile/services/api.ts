@@ -31,6 +31,12 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
+    // A blocked account is refused on every call. End the session once — the
+    // auth listener then returns the app to sign-in — and let the server's
+    // message ("This account has been blocked…") explain why.
+    if (res.status === 403 && data?.code === 'account_blocked') {
+      await supabase.auth.signOut().catch(() => undefined);
+    }
     throw new ApiError(res.status, data?.error || res.statusText, data);
   }
   return data as T;
