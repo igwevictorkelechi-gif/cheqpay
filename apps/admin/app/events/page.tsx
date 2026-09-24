@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Plus, Loader2, CalendarDays, Ticket } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import ImageUploadField from '@/components/ImageUploadField';
 
 interface Tier { id: string; name: string; priceFormatted: string; sold: number; capacity: number | null; active: boolean }
 interface Event {
@@ -114,8 +115,15 @@ export default function EventsPage() {
               <input className={INPUT} type="datetime-local" value={draft.startsAt}
                 onChange={(e) => setDraft({ ...draft, startsAt: e.target.value })} />
             </div>
-            <input className={INPUT} placeholder="Image URL (optional)" value={draft.imageUrl}
-              onChange={(e) => setDraft({ ...draft, imageUrl: e.target.value })} />
+            <div className="sm:col-span-2">
+              <ImageUploadField
+                label="Event image (optional)"
+                shape="wide"
+                value={draft.imageUrl}
+                onChange={(imageUrl) => setDraft((d) => ({ ...d, imageUrl }))}
+                onError={(text) => setMessage({ kind: 'err', text })}
+              />
+            </div>
             <textarea className={INPUT + ' sm:col-span-2'} rows={2} placeholder="Description (optional)" value={draft.description}
               onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
           </div>

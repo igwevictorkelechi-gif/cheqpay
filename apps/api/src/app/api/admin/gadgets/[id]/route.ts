@@ -2,7 +2,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { deactivateProduct, getProductById, updateProduct } from "@/lib/gadgetsAdmin";
-import { imageValue } from "@/lib/gadgetImage";
+import { imageValue } from "@/lib/uploadedImage";
 
 export const dynamic = "force-dynamic";
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, Loader2, Plus, Trash2, Ticket } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import ImageUploadField from '@/components/ImageUploadField';
 
 interface Tier {
   id: string; name: string; priceMinor: string; priceFormatted: string;
@@ -12,6 +13,7 @@ interface Tier {
 }
 interface EventDetail {
   id: string; title: string; venue: string; city: string; startsAt: string | null;
+  imageUrl: string | null;
   active: boolean; tiers: Tier[]; soldCount: number; revenueFormatted: string;
 }
 interface Attendee {
@@ -28,6 +30,9 @@ export default function EventDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [tierDraft, setTierDraft] = useState({ name: '', price: '', capacity: '' });
+  // Image is edited locally and saved explicitly, so picking a file by mistake
+  // doesn't immediately change what customers see.
+  const [imageDraft, setImageDraft] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -37,6 +42,7 @@ export default function EventDetailPage() {
       ]);
       if (e.error) throw new Error(e.error);
       setEv(e.event);
+      setImageDraft(null);
       setAttendees(Array.isArray(t.tickets) ? t.tickets : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
@@ -119,6 +125,40 @@ export default function EventDetailPage() {
               {ev.active ? 'Hide from store' : 'Publish to store'}
             </button>
           </div>
+
+          {/* Event image */}
+          <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
+            <h2 className="mb-4 font-semibold text-gray-900">Event image</h2>
+            <ImageUploadField
+              shape="wide"
+              disabled={busy === 'event'}
+              value={imageDraft ?? ev.imageUrl ?? ''}
+              onChange={setImageDraft}
+              onError={setError}
+            />
+            {imageDraft !== null && imageDraft !== (ev.imageUrl ?? '') ? (
+              <div className="mt-4 flex gap-3">
+                <button
+                  disabled={busy === 'event'}
+                  onClick={() => void patchEvent({ imageUrl: imageDraft || null })}
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+                >
+                  {busy === 'event' && <Loader2 size={16} className="animate-spin" />} Save image
+                </button>
+                <button
+                  disabled={busy === 'event'}
+                  onClick={() => setImageDraft(null)}
+                  className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-gray-500">
+                Shown on the event card and its page in the app. Wide images (16:9) look best.
+              </p>
+            )}
+          </section>
 
           {/* Tiers */}
           <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
