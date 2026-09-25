@@ -7,12 +7,12 @@ import { canonical } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "How CheqPay collects, uses, stores and protects your personal data, and the rights you have over it.",
+    "How CheqPay collects, uses, shares and protects your personal data under the Nigeria Data Protection Act 2023, and the rights you have over it.",
   alternates: { canonical: canonical("/privacy") },
   openGraph: {
     title: "Privacy Policy | CheqPay",
     description:
-      "How CheqPay collects, uses, stores and protects your personal data, and the rights you have over it.",
+      "How CheqPay collects, uses, shares and protects your personal data under the Nigeria Data Protection Act 2023, and the rights you have over it.",
     url: canonical("/privacy"),
   },
 };

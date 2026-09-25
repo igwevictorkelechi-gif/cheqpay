@@ -1,47 +1,51 @@
 "use client";
 
 import InfoPage, { Section } from "@/components/InfoPage";
+import { DocLink, Mail, Table } from "@/components/LegalBits";
+import { COMPANY, LEGAL_EFFECTIVE_DATE } from "@/lib/legal";
 
 export default function CookiesPage() {
   return (
-    <InfoPage title="Cookie Policy" subtitle="Last updated: 30 June 2026">
+    <InfoPage title="Cookie Policy" subtitle={`Effective ${LEGAL_EFFECTIVE_DATE}`}>
       <Section>
         <p>
-          This Cookie Policy explains how CheqPay uses cookies and similar technologies to
-          recognise you when you use our app and website.
+          This policy explains what CheqPay stores on your device when you use our website and app. We keep it to
+          what the service needs. <strong>We do not use advertising cookies, and we do not track you across
+          other websites or apps.</strong>
         </p>
       </Section>
 
-      <Section heading="1. What are cookies?">
+      <Section heading="1. What we store">
+        <Table
+          head={["What", "Why", "Type"]}
+          rows={[
+            ["Your sign-in session", "Keeps you signed in securely between visits", "Strictly necessary"],
+            ["App-lock and security settings", "Locks the app after inactivity and remembers your security choices", "Strictly necessary"],
+            ["Display and app preferences", "Remembers settings such as theme and dismissed tips", "Functional"],
+            ["Cached account data", "Makes screens load faster on your device", "Functional"],
+            ["Error reports (Sentry)", "Tells us when something breaks so we can fix it", "Performance"],
+          ]}
+        />
         <p>
-          Cookies are small data files stored on your device. They help apps remember your
-          preferences and keep you securely signed in.
+          Most of these are kept in your browser&apos;s local storage or your phone&apos;s secure storage rather than
+          as cookies, but they serve the same purpose and we treat them the same way.
         </p>
       </Section>
 
-      <Section heading="2. How we use cookies">
-        <ul className="list-disc space-y-1 pl-5">
-          <li>Essential: to authenticate you and keep your session secure.</li>
-          <li>Preferences: to remember settings such as display options.</li>
-          <li>Analytics: to understand how the app is used so we can improve it.</li>
-        </ul>
-      </Section>
-
-      <Section heading="3. Managing cookies">
+      <Section heading="2. Your choices">
         <p>
-          You can control or delete cookies through your browser or device settings.
-          Disabling essential cookies may affect your ability to sign in and transact.
+          Strictly necessary storage is needed for CheqPay to work: without it you cannot stay signed in or
+          transact safely. You can clear everything at any time by signing out and clearing your browser&apos;s
+          site data, or by uninstalling the app.
         </p>
       </Section>
 
-      <Section heading="4. Contact">
-        <p>Questions about cookies? Email support@cheqpay.com.</p>
+      <Section heading="3. More information">
+        <p>
+          See our <DocLink href="/privacy">Privacy Policy</DocLink> for how we handle personal data, or contact{" "}
+          <Mail to={COMPANY.privacyEmail} />.
+        </p>
       </Section>
-
-      <p className="mt-8 text-xs text-muted">
-        This document is a general template and should be reviewed by qualified legal
-        counsel before relying on it in production.
-      </p>
     </InfoPage>
   );
 }

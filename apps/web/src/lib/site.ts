@@ -40,5 +40,6 @@ export const PUBLIC_ROUTES = [
   "/terms",
   "/legal",
   "/legal/aml",
+  "/legal/acceptable-use",
   "/legal/cookies",
 ] as const;
