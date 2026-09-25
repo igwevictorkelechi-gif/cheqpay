@@ -23,14 +23,19 @@ import {
   TransactionType,
   prisma,
 } from "@cheqpay/db";
+import { randomUUID } from "node:crypto";
 import { ApiError } from "./http";
 import { ensureUsdAsset } from "./ensureUsdAsset";
 import { ensureCardTxnTypes } from "./ensureCardTxnTypes";
 import { fundCard, withdrawFromCard } from "./maplerad/issuing";
+import { getPricing } from "./settings";
+import { cardFundFee, cardIssueFee, cardWithdrawFee } from "./fees";
 
 export interface CardMovementResult {
   transactionId: string;
   status: TransactionStatus;
+  /** Our fee on this movement, in cents. */
+  feeCents?: bigint;
   /** The card's new balance is not returned here — the caller re-reads it. */
 }
 
@@ -75,6 +80,10 @@ export async function fundUserCard(input: {
   idempotencyKey: string;
 }): Promise<CardMovementResult> {
   const cents = toUsdCents(input.amount);
+  // The top-up lands on the card in full; our fee is added on top (and refuses
+  // anything under the minimum top-up).
+  const feeCents = cardFundFee(cents, await getPricing());
+  const totalCents = cents + feeCents;
   const card = await loadSpendableCard(input.userId, input.cardId);
 
   await Promise.all([ensureUsdAsset(), ensureCardTxnTypes()]);
@@ -87,11 +96,15 @@ export async function fundUserCard(input: {
 
   const tx = await prisma.$transaction(async (db) => {
     const debit = await db.balance.updateMany({
-      where: { userId: input.userId, asset: Asset.USD, available: { gte: cents } },
-      data: { available: { decrement: cents } },
+      where: { userId: input.userId, asset: Asset.USD, available: { gte: totalCents } },
+      data: { available: { decrement: totalCents } },
     });
     if (debit.count !== 1) {
-      throw new ApiError(422, "Insufficient USD balance", "insufficient_funds");
+      throw new ApiError(
+        422,
+        feeCents > 0n ? "Insufficient USD balance (top-up + fee)" : "Insufficient USD balance",
+        "insufficient_funds"
+      );
     }
     return db.transaction.create({
       data: {
@@ -99,6 +112,7 @@ export async function fundUserCard(input: {
         type: TransactionType.CARD_FUND,
         asset: Asset.USD,
         amount: cents,
+        fee: feeCents,
         status: TransactionStatus.PROCESSING,
         idempotencyKey: input.idempotencyKey,
         metadata: { cardId: card.id, providerCardId: card.providerCardId, direction: "fund" },
@@ -113,7 +127,7 @@ export async function fundUserCard(input: {
     await prisma.$transaction(async (db) => {
       await db.balance.update({
         where: { userId_asset: { userId: input.userId, asset: Asset.USD } },
-        data: { available: { increment: cents } },
+        data: { available: { increment: totalCents } },
       });
       await db.transaction.update({
         where: { id: tx.id },
@@ -127,7 +141,7 @@ export async function fundUserCard(input: {
     where: { id: tx.id },
     data: { status: TransactionStatus.COMPLETED },
   });
-  return { transactionId: tx.id, status: TransactionStatus.COMPLETED };
+  return { transactionId: tx.id, status: TransactionStatus.COMPLETED, feeCents };
 }
 
 /**
@@ -146,6 +160,17 @@ export async function withdrawUserCard(input: {
   idempotencyKey: string;
 }): Promise<CardMovementResult> {
   const cents = toUsdCents(input.amount);
+  // The whole amount comes off the card; our fee comes out of it, and the
+  // rest lands in the wallet.
+  const feeCents = cardWithdrawFee(await getPricing());
+  if (cents <= feeCents) {
+    throw new ApiError(
+      422,
+      `That amount doesn't cover the $${(Number(feeCents) / 100).toFixed(2)} withdrawal fee`,
+      "below_fee"
+    );
+  }
+  const creditCents = cents - feeCents;
   const card = await loadSpendableCard(input.userId, input.cardId);
 
   await Promise.all([ensureUsdAsset(), ensureCardTxnTypes()]);
@@ -163,7 +188,9 @@ export async function withdrawUserCard(input: {
       userId: input.userId,
       type: TransactionType.CARD_WITHDRAW,
       asset: Asset.USD,
-      amount: cents,
+      // amount = what reaches the wallet, fee = ours; together, what left the card.
+      amount: creditCents,
+      fee: feeCents,
       status: TransactionStatus.PROCESSING,
       idempotencyKey: input.idempotencyKey,
       metadata: { cardId: card.id, providerCardId: card.providerCardId, direction: "withdraw" },
@@ -190,8 +217,8 @@ export async function withdrawUserCard(input: {
     await prisma.$transaction(async (db) => {
       await db.balance.upsert({
         where: { userId_asset: { userId: input.userId, asset: Asset.USD } },
-        update: { available: { increment: cents } },
-        create: { userId: input.userId, asset: Asset.USD, available: cents },
+        update: { available: { increment: creditCents } },
+        create: { userId: input.userId, asset: Asset.USD, available: creditCents },
       });
       await db.transaction.update({
         where: { id: tx.id },
@@ -205,7 +232,7 @@ export async function withdrawUserCard(input: {
         userId: input.userId,
         cardId: card.id,
         transactionId: tx.id,
-        cents: cents.toString(),
+        cents: creditCents.toString(),
       },
       err,
     );
@@ -216,5 +243,78 @@ export async function withdrawUserCard(input: {
     );
   }
 
-  return { transactionId: tx.id, status: TransactionStatus.COMPLETED };
+  return { transactionId: tx.id, status: TransactionStatus.COMPLETED, feeCents };
+}
+
+// --- The price of a card -------------------------------------------------------
+
+/**
+ * Charge the card price from the user's USD balance, before the card is
+ * requested. Recorded as a CARD_ISSUE row whose `fee` is the price (amount 0:
+ * nothing is moved anywhere, the whole charge is ours). Returns null when
+ * cards are free.
+ */
+export async function chargeCardIssueFee(userId: string): Promise<{ transactionId: string; feeCents: bigint } | null> {
+  const feeCents = cardIssueFee(await getPricing());
+  if (feeCents <= 0n) return null;
+  await Promise.all([ensureUsdAsset(), ensureCardTxnTypes()]);
+
+  const tx = await prisma.$transaction(async (db) => {
+    const debit = await db.balance.updateMany({
+      where: { userId, asset: Asset.USD, available: { gte: feeCents } },
+      data: { available: { decrement: feeCents } },
+    });
+    if (debit.count !== 1) {
+      throw new ApiError(
+        422,
+        `A card costs $${(Number(feeCents) / 100).toFixed(2)}. Add USD to your wallet first.`,
+        "insufficient_funds"
+      );
+    }
+    return db.transaction.create({
+      data: {
+        userId,
+        type: TransactionType.CARD_ISSUE,
+        asset: Asset.USD,
+        amount: 0n,
+        fee: feeCents,
+        status: TransactionStatus.COMPLETED,
+        idempotencyKey: `card-issue:${userId}:${randomUUID()}`,
+        metadata: { direction: "issue" },
+      },
+      select: { id: true },
+    });
+  });
+  return { transactionId: tx.id, feeCents };
+}
+
+/** Note which card request a card-price charge paid for, so a failure can refund it. */
+export async function linkCardIssueFee(transactionId: string, reference: string): Promise<void> {
+  await prisma.transaction.update({ where: { id: transactionId }, data: { externalRef: reference } });
+}
+
+/**
+ * Give the card price back: the card was never created. Idempotent — only a
+ * COMPLETED charge is refunded, and it becomes REVERSED in the same step.
+ */
+export async function refundCardIssueFee(where: { transactionId?: string; reference?: string }): Promise<void> {
+  await prisma.$transaction(async (db) => {
+    const tx = await db.transaction.findFirst({
+      where: {
+        type: TransactionType.CARD_ISSUE,
+        status: TransactionStatus.COMPLETED,
+        ...(where.transactionId ? { id: where.transactionId } : { externalRef: where.reference }),
+      },
+    });
+    if (!tx) return;
+    const flipped = await db.transaction.updateMany({
+      where: { id: tx.id, status: TransactionStatus.COMPLETED },
+      data: { status: TransactionStatus.REVERSED },
+    });
+    if (flipped.count !== 1) return;
+    await db.balance.update({
+      where: { userId_asset: { userId: tx.userId, asset: Asset.USD } },
+      data: { available: { increment: tx.fee } },
+    });
+  });
 }

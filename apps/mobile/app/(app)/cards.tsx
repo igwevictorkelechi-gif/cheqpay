@@ -24,6 +24,7 @@ import {
 } from '@/services/api';
 import { useFeatures } from '@/lib/useFeatures';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
+import { cardFundBreakdown, cardFundFeeText, dollars, useFees } from '@/lib/fees';
 
 /**
  * Virtual USD cards (Maplerad). Two gates cover the screen: the admin
@@ -53,6 +54,7 @@ export default function CardsScreen() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fees = useFees();
 
   const activeCard = useMemo(
     () => cards.find((c) => c.id === activeId) ?? cards[0] ?? null,
@@ -101,7 +103,25 @@ export default function CardsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCard?.id]);
 
-  async function createCard() {
+  /** A card costs money, so asking for one confirms the price first. */
+  function createCard() {
+    setError(null);
+    const price = fees ? dollars(fees.cardIssueFeeUsd) : null;
+    Alert.alert(
+      'Create a virtual card',
+      price
+        ? `The card costs ${price}, paid from your USD balance${
+            usdBalance ? ` ($${usdBalance.availableFormatted} available)` : ''
+          }. If it can't be issued, the price is refunded automatically.`
+        : 'The card price is paid from your USD balance.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: price ? `Pay ${price} & create` : 'Create', onPress: () => void doCreateCard() },
+      ],
+    );
+  }
+
+  async function doCreateCard() {
     setError(null);
     setCreating(true);
     try {
@@ -136,8 +156,13 @@ export default function CardsScreen() {
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 32 }}
           showsVerticalScrollIndicator={false}
         >
-          <Text className="text-muted dark:text-muted-dark text-sm mt-1 mb-4">
+          <Text className="text-muted dark:text-muted-dark text-sm mt-1">
             Dollar cards for online payments and subscriptions.
+          </Text>
+          <Text className="text-muted dark:text-muted-dark text-xs mt-1 mb-4">
+            {fees
+              ? `Card ${dollars(fees.cardIssueFeeUsd)} · top-up ${cardFundFeeText(fees)} · withdrawal ${dollars(fees.cardWithdrawFeeUsd)}`
+              : ' '}
           </Text>
 
           {comingSoon ? (
@@ -652,6 +677,13 @@ function AmountSheet({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const isFund = mode === 'fund';
+  const fees = useFees();
+  const value = Number(amount || 0);
+  // Top-up: the card gets the amount, the fee is added on top.
+  // Withdrawal: the fee comes out, the wallet gets the rest.
+  const fund = fees && value > 0 ? cardFundBreakdown(value, fees) : null;
+  const wdFee = fees ? fees.cardWithdrawFeeUsd : null;
+  const wdReceive = wdFee !== null ? Math.round((value - wdFee) * 100) / 100 : null;
 
   useEffect(() => {
     if (visible) {
@@ -666,6 +698,14 @@ function AmountSheet({
       setErr('Enter an amount like 10 or 10.50');
       return;
     }
+    if (isFund && fund?.belowMin) {
+      setErr(`The smallest top-up is ${dollars(fees!.cardFundMinUsd)}.`);
+      return;
+    }
+    if (!isFund && wdReceive !== null && wdReceive <= 0) {
+      setErr(`That doesn't cover the ${dollars(wdFee!)} withdrawal fee.`);
+      return;
+    }
     setBusy(true);
     try {
       await authorize(
@@ -676,8 +716,12 @@ function AmountSheet({
         {
           title: isFund ? 'Confirm this card load' : 'Confirm this card withdrawal',
           detail: isFund
-            ? `Moving $${amount} from your balance onto the card.`
-            : `Moving $${amount} from the card back to your balance.`,
+            ? fund
+              ? `Loading ${dollars(fund.amount)} onto the card. ${dollars(fund.total)} leaves your balance (${dollars(fund.fee)} fee).`
+              : `Moving $${amount} from your balance onto the card.`
+            : wdReceive !== null
+              ? `Moving $${amount} off the card. ${dollars(wdReceive)} reaches your balance (${dollars(wdFee!)} fee).`
+              : `Moving $${amount} from the card back to your balance.`,
         },
       );
       await onDone();
@@ -749,6 +793,44 @@ function AmountSheet({
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* The fee and what actually moves, before the PIN. */}
+          {fees && value > 0 ? (
+            <View style={{ marginTop: 16, borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 14, gap: 8 }}>
+              {isFund && fund ? (
+                <>
+                  <View className="flex-row justify-between">
+                    <Text style={{ color: colors.muted }}>Card receives</Text>
+                    <Text style={{ color: colors.muted }}>{dollars(fund.amount)}</Text>
+                  </View>
+                  <View className="flex-row justify-between">
+                    <Text style={{ color: colors.muted }}>Fee</Text>
+                    <Text style={{ color: colors.muted }}>+{dollars(fund.fee)}</Text>
+                  </View>
+                  <View className="flex-row justify-between">
+                    <Text style={{ color: colors.ink, fontWeight: '700' }}>Total from your balance</Text>
+                    <Text style={{ color: colors.ink, fontWeight: '700' }}>{dollars(fund.total)}</Text>
+                  </View>
+                  {fund.belowMin ? (
+                    <Text style={{ color: '#F87171', fontSize: 12 }}>
+                      The smallest top-up is {dollars(fees.cardFundMinUsd)}.
+                    </Text>
+                  ) : null}
+                </>
+              ) : wdFee !== null && wdReceive !== null ? (
+                <>
+                  <View className="flex-row justify-between">
+                    <Text style={{ color: colors.muted }}>Fee</Text>
+                    <Text style={{ color: colors.muted }}>−{dollars(wdFee)}</Text>
+                  </View>
+                  <View className="flex-row justify-between">
+                    <Text style={{ color: colors.ink, fontWeight: '700' }}>You'll receive</Text>
+                    <Text style={{ color: colors.ink, fontWeight: '700' }}>{wdReceive > 0 ? dollars(wdReceive) : '—'}</Text>
+                  </View>
+                </>
+              ) : null}
+            </View>
+          ) : null}
 
           {err && <Text style={{ color: '#F87171', marginTop: 12 }}>{err}</Text>}
 

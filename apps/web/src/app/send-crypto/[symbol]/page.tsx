@@ -16,6 +16,7 @@ import { invalidateMoneyCaches } from "@/lib/cache";
 import { getAssetMeta } from "@/lib/cryptoAssets";
 import { isAddressForNetwork, shortAddress } from "@/lib/address";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import { cryptoFeeInCoin, dollars, useFees } from "@/lib/fees";
 import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
@@ -43,6 +44,9 @@ export default function SendCryptoDetailPage() {
   const [availableExact, setAvailableExact] = useState("0");
   const [toAddress, setToAddress] = useState("");
   const [amount, setAmount] = useState("");
+  const fees = useFees();
+  // The coin's dollar price, to express the dollar network fee in the coin.
+  const [usdPrice, setUsdPrice] = useState<number | null>(null);
   const [stage, setStage] = useState<Stage>("form");
   const [error, setError] = useState<string | null>(null);
   const [checkStep, setCheckStep] = useState(0);
@@ -74,11 +78,13 @@ export default function SendCryptoDetailPage() {
     (async () => {
       try {
         await api.ensureProvisioned();
-        const [{ balances }, { addresses }] = await Promise.all([
+        const [{ balances }, { addresses }, price] = await Promise.all([
           api.getBalances(),
           api.getCryptoDepositAddresses().catch(() => ({ addresses: [] })),
+          api.getPrice(meta.symbol).catch(() => null),
         ]);
         if (!active) return;
+        if (price) setUsdPrice(Number(price.priceUsd));
         const b = balances.find((x) => x.asset === meta.symbol);
         if (b) {
           setAvailable(Number(b.availableFormatted));
@@ -163,8 +169,18 @@ export default function SendCryptoDetailPage() {
   const amountNum = Number(amount || 0);
   const min = Number(meta.minSend);
   const validAddress = toAddress.trim().length >= 20;
+  // The network fee comes out of the amount: the balance drops by `amount`,
+  // the recipient gets amount − fee. Null until the price has loaded.
+  const feeCoin = fees ? cryptoFeeInCoin(fees.cryptoWithdrawalFeeUsd, usdPrice, meta.decimals) : null;
+  const receiveCoin =
+    feeCoin === null ? null : Math.max(0, Number((amountNum - feeCoin).toFixed(meta.decimals)));
+  const coversFee = feeCoin === null || amountNum > feeCoin;
   const validAmount =
-    amountNum >= min && amountNum <= available && Number.isFinite(amountNum) && amountNum > 0;
+    amountNum >= min &&
+    amountNum <= available &&
+    Number.isFinite(amountNum) &&
+    amountNum > 0 &&
+    coversFee;
   const canReview = validAddress && validAmount;
 
   function goReview() {
@@ -179,6 +195,10 @@ export default function SendCryptoDetailPage() {
     }
     if (amountNum > available) {
       setError("Amount exceeds your available balance.");
+      return;
+    }
+    if (!coversFee) {
+      setError(`That amount doesn't cover the ${feeCoin} ${meta!.symbol} network fee.`);
       return;
     }
     setStage("review");
@@ -206,7 +226,13 @@ export default function SendCryptoDetailPage() {
             },
             pin,
           ),
-        { title: "Confirm this withdrawal", detail: `Sending ${amount.trim()} ${meta!.symbol} off-platform. This cannot be reversed.` },
+        {
+          title: "Confirm this withdrawal",
+          detail:
+            receiveCoin !== null && feeCoin
+              ? `Sending ${amount.trim()} ${meta!.symbol}: the recipient gets ${receiveCoin} after the ${feeCoin} network fee. This cannot be reversed.`
+              : `Sending ${amount.trim()} ${meta!.symbol} off-platform. This cannot be reversed.`,
+        },
       );
       invalidateMoneyCaches();
       setTxHash(res.txHash);
@@ -321,6 +347,24 @@ export default function SendCryptoDetailPage() {
               Minimum {meta.minSend} {meta.symbol} · Network {liveNetLabel ?? meta.networkLabel}
             </p>
 
+            {/* The network fee, as they type. */}
+            {fees && fees.cryptoWithdrawalFeeUsd > 0 ? (
+              <div className="mt-4 space-y-2 rounded-2xl border border-border p-4 text-sm">
+                <div className="flex justify-between text-muted">
+                  <span>Network fee ({dollars(fees.cryptoWithdrawalFeeUsd)})</span>
+                  <span>{feeCoin === null ? "…" : `−${feeCoin} ${meta.symbol}`}</span>
+                </div>
+                {amountNum > 0 && receiveCoin !== null ? (
+                  <div className="flex justify-between font-bold text-ink">
+                    <span>Recipient gets</span>
+                    <span>
+                      {receiveCoin} {meta.symbol}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
 
             <div className="mt-6 flex gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
@@ -349,6 +393,12 @@ export default function SendCryptoDetailPage() {
               <Row label="Asset" value={`${meta.name} (${meta.symbol})`} />
               <Row label="Network" value={liveNetLabel ?? meta.networkLabel} bordered />
               <Row label="Amount" value={`${amount} ${meta.symbol}`} bordered />
+              {feeCoin ? (
+                <Row label="Network fee" value={`−${feeCoin} ${meta.symbol}`} bordered />
+              ) : null}
+              {feeCoin && receiveCoin !== null ? (
+                <Row label="Recipient gets" value={`${receiveCoin} ${meta.symbol}`} bordered />
+              ) : null}
               <div className="border-t border-border px-4 py-4">
                 <p className="text-sm text-muted">To address</p>
                 <p className="mt-1 break-all text-sm font-semibold text-ink">{toAddress.trim()}</p>
@@ -399,7 +449,8 @@ export default function SendCryptoDetailPage() {
             <SuccessAnimation />
             <p className="mt-6 text-2xl font-extrabold text-ink">Transfer submitted</p>
             <p className="mt-2 text-sm text-muted">
-              {amount} {meta.symbol} is on its way to your destination address.
+              {receiveCoin !== null && feeCoin ? receiveCoin : amount} {meta.symbol} is on its way to
+              your destination address.
             </p>
             {txHash && (
               <p className="mt-3 break-all rounded-xl bg-card px-3 py-2 text-xs text-muted">

@@ -178,6 +178,13 @@ export default function SettingsPage() {
               <p className="text-sm text-muted">Answers to common questions</p>
             </a>
             <a
+              href="/pricing"
+              className="block p-3 rounded-lg hover:bg-circle transition-colors border border-border"
+            >
+              <p className="font-medium text-ink">Pricing &amp; fees</p>
+              <p className="text-sm text-muted">Every fee we charge</p>
+            </a>
+            <a
               href="/privacy"
               className="block p-3 rounded-lg hover:bg-circle transition-colors border border-border"
             >

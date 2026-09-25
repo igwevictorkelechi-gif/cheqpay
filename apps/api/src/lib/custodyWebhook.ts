@@ -154,10 +154,10 @@ async function finalizeCryptoWithdrawal(
       return { status: "completed" as const, transactionId: wd.id };
     }
 
-    // Chain failure — refund the reserved funds and reverse.
+    // Chain failure — refund the reserved funds (amount + network fee) and reverse.
     await db.balance.update({
       where: { userId_asset: { userId: wd.userId, asset: wd.asset } },
-      data: { available: { increment: wd.amount } },
+      data: { available: { increment: wd.amount + wd.fee } },
     });
     await db.transaction.update({
       where: { id: wd.id },

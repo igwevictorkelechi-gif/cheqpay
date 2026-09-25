@@ -52,6 +52,14 @@ const rows: Row[] = [
     route: '/(app)/statement',
   },
   {
+    icon: 'pricetag',
+    iconColor: '#34C759',
+    iconBg: 'rgba(52,199,89,0.15)',
+    title: 'Pricing & fees',
+    subtitle: 'Every fee we charge',
+    route: '/(app)/pricing',
+  },
+  {
     icon: 'shield-checkmark',
     iconColor: '#6B5B95',
     iconBg: 'rgba(107,91,149,0.15)',

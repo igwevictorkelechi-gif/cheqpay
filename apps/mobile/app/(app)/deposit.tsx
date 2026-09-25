@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors, NairaFlag } from '@/components/brand';
 import { api, type UsdAccount } from '@/services/api';
-import { percent, useFees } from '@/lib/fees';
+import { depositBreakdown, dollars, naira, ngnDepositFeeText, usdDepositFeeText, useFees } from '@/lib/fees';
 
 /** A USD account can exist but still be in review — only an approved one can receive. */
 function isUsable(account: UsdAccount | null): boolean {
@@ -163,6 +163,28 @@ export default function AddMoneyScreen() {
             Available: {balance.toLocaleString(locale, { maximumFractionDigits: 2 })} {currency}
           </Text>
 
+          {/* The fee on this deposit, before they send anything. */}
+          {fees && Number(amount) > 0
+            ? (() => {
+                const b = depositBreakdown(Number(amount), currency, fees);
+                const money = (n: number) => (isUsd ? dollars(n) : naira(n));
+                return (
+                  <View className="rounded-2xl p-4 mt-4" style={{ borderWidth: 1, borderColor: 'rgba(128,128,128,0.25)', gap: 8 }}>
+                    <View className="flex-row justify-between">
+                      <Text className="text-muted dark:text-muted-dark text-sm">Fee</Text>
+                      <Text className="text-muted dark:text-muted-dark text-sm">
+                        {b.fee > 0 ? `−${money(b.fee)}` : 'Free'}
+                      </Text>
+                    </View>
+                    <View className="flex-row justify-between">
+                      <Text className="text-ink dark:text-ink-dark text-sm font-bold">You'll receive</Text>
+                      <Text className="text-ink dark:text-ink-dark text-sm font-bold">{money(b.receive)}</Text>
+                    </View>
+                  </View>
+                );
+              })()
+            : null}
+
           {/* Pay with */}
           <Text className="text-ink dark:text-ink-dark text-base font-bold mt-8">Pay with</Text>
           <View className="flex-row items-center bg-card dark:bg-card-dark rounded-3xl p-5 mt-3" style={{ gap: 16 }}>
@@ -175,14 +197,8 @@ export default function AddMoneyScreen() {
               </Text>
               <Text className="text-muted dark:text-muted-dark text-sm mt-0.5">
                 {isUsd
-                  ? 'Send dollars to your account details from anywhere.'
-                  : `${
-                      fees === null
-                        ? ''
-                        : fees.depositFeeBps > 0
-                          ? `${percent(fees.depositFeeBps)} fee. `
-                          : 'No fee. '
-                    }Usually arrives in seconds`}
+                  ? `Send dollars to your account details from anywhere.${fees ? ` Fee: ${usdDepositFeeText(fees)}.` : ''}`
+                  : `${fees ? `Fee: ${ngnDepositFeeText(fees)}. ` : ''}Usually arrives in seconds`}
               </Text>
             </View>
           </View>

@@ -548,11 +548,17 @@ async function executeFxSwap(params: {
   // back — the quote would promise a margin the execution then gives away.
   // When the provider settles exactly what it quoted, this lands on
   // quote.amountOut, so the normal case is unchanged.
+  const marginBps = await getFxSideMarginBps(fxSideFor(quote.fromAsset));
   const creditMinor =
-    settledGross === null
-      ? quote.amountOut
-      : settledGross -
-        feeFromBps(settledGross, await getFxSideMarginBps(fxSideFor(quote.fromAsset)));
+    settledGross === null ? quote.amountOut : settledGross - feeFromBps(settledGross, marginBps);
+  // Our spread on this exchange, in the to-asset, kept on the row for revenue
+  // reporting. Without a settled figure it is backed out of the quoted net.
+  const spreadMinor =
+    settledGross !== null
+      ? settledGross - creditMinor
+      : marginBps > 0 && marginBps < 10_000
+      ? (quote.amountOut * BigInt(Math.trunc(marginBps))) / BigInt(10_000 - Math.trunc(marginBps))
+      : 0n;
 
   if (creditMinor !== quote.amountOut) {
     console.warn("[fx] settled amount differs from the quote — crediting what settled", {
@@ -593,6 +599,10 @@ async function executeFxSwap(params: {
             amountOut: creditMinor.toString(),
             quotedAmountOut: quote.amountOut.toString(),
             rate: quote.rate.toString(),
+            // Revenue: our spread, in minor units of toAsset.
+            spreadMinor: spreadMinor.toString(),
+            spreadAsset: quote.toAsset,
+            spreadBps: marginBps,
           },
         },
       });

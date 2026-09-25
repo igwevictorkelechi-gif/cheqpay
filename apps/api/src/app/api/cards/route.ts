@@ -1,4 +1,4 @@
-import { prisma } from "@cheqpay/db";
+import { Asset, prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { assertFeatureEnabled } from "@/lib/features";
@@ -6,6 +6,8 @@ import { ensureCardsTable } from "@/lib/ensureCards";
 import { cardsAvailable } from "@/lib/cards";
 import { createCard } from "@/lib/maplerad/issuing";
 import { describeProviderError } from "@/lib/mapleradCustomer";
+import { chargeCardIssueFee, linkCardIssueFee, refundCardIssueFee } from "@/lib/cardFunding";
+import { fromMinorUnits } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -65,10 +67,16 @@ export async function POST(req: Request) {
     // the user nothing and hides that the call never reached Maplerad — the
     // live failure was the egress proxy answering 502 "upstream unreachable"
     // for POST /issuing while proxying every other Maplerad call fine.
+    // The card's price comes out of the USD balance first, so no card is
+    // requested that hasn't been paid for. Refunded below if the request fails,
+    // and by the issuing webhook if Maplerad later reports the card failed.
+    const charge = await chargeCardIssueFee(auth.id);
+
     let ack: Awaited<ReturnType<typeof createCard>>;
     try {
       ack = await createCard({ customerId: user.mapleradCustomerId, currency: "USD" });
     } catch (err) {
+      if (charge) await refundCardIssueFee({ transactionId: charge.transactionId });
       console.error("[cards] issuing failed", {
         userId: auth.id,
         customerId: user.mapleradCustomerId,
@@ -76,7 +84,7 @@ export async function POST(req: Request) {
       });
       throw new ApiError(
         502,
-        "Our card provider could not be reached just now, so no card was created. Please try again shortly.",
+        "Our card provider could not be reached just now, so no card was created and you were not charged. Please try again shortly.",
         "card_issuing_unavailable",
       );
     }
@@ -91,7 +99,11 @@ export async function POST(req: Request) {
       },
       select: CARD_SELECT,
     });
-    return jsonOk({ card }, 202);
+    if (charge) await linkCardIssueFee(charge.transactionId, ack.reference);
+    return jsonOk(
+      { card, fee: charge ? fromMinorUnits(charge.feeCents, Asset.USD) : "0.00" },
+      202,
+    );
   } catch (err) {
     return toErrorResponse(err);
   }

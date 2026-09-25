@@ -149,6 +149,11 @@ export default function TermsPage() {
           the amounts shown. Quoted rates are valid only for the short time displayed; after that we show a new
           quote. Your bank, mobile network or the blockchain network may charge their own fees.
         </p>
+        <p>
+          Every fee we charge is listed on our <DocLink href="/pricing">Pricing page</DocLink>. We charge no
+          fee that is not listed there. If a fee changes, the Pricing page and every confirmation screen change
+          at the same time, and the change never applies to a transaction you have already confirmed.
+        </p>
       </Section>
 
       <Section heading="7. Errors, reversals and disputes">

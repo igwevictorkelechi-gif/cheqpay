@@ -8,6 +8,7 @@ import { api, ApiError } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
 import { getAssetMeta, confusableNetworks } from "@/lib/cryptoAssets";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import { percent, useFees } from "@/lib/fees";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -405,8 +406,22 @@ export default function ReceiveDetailPage() {
             Your balance is credited after the deposit is confirmed on-chain — usually within
             30 minutes. Contact support with your transaction hash if it takes longer.
           </p>
+          <DepositFeeNote />
         </div>
       </div>
     </div>
+  );
+}
+
+/** The deposit fee, stated where the user gets the address. */
+function DepositFeeNote() {
+  const fees = useFees();
+  if (!fees) return null;
+  return (
+    <p className="mt-2 text-xs leading-relaxed text-muted">
+      Fees: a deposit credited as the coin is free. A stablecoin deposit credited as US dollars
+      has a {percent(fees.cryptoDepositFeeBps)} conversion fee, taken from the amount received.{" "}
+      <a href="/pricing" className="font-semibold text-brand-light">All fees</a>
+    </p>
   );
 }

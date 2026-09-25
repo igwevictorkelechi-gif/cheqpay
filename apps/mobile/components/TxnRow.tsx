@@ -51,6 +51,12 @@ export function txnTitle(t: LedgerTransaction): string {
       return t.counterparty ? `From @${t.counterparty}` : 'Received from user';
     case 'TRANSFER_OUT':
       return t.counterparty ? `To @${t.counterparty}` : 'Sent to user';
+    case 'CARD_FUND':
+      return 'Card top-up';
+    case 'CARD_WITHDRAW':
+      return 'Card withdrawal';
+    case 'CARD_ISSUE':
+      return 'Virtual card';
     default:
       return t.type;
   }
@@ -61,9 +67,20 @@ export function fmt(v: string): string {
   return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 8 }) : v;
 }
 
+/** amount ± fee as a display string. Fees: in on a deposit, out on a payout. */
+function withFee(t: LedgerTransaction, sign: 1 | -1): string {
+  const fee = Number(t.feeFormatted || '0');
+  return fee ? String(Number(t.amountFormatted) + sign * fee) : t.amountFormatted;
+}
+
 export function txnAmount(t: LedgerTransaction): { text: string; positive: boolean } {
-  if (t.type === 'DEPOSIT') return { text: `+${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
-  if (t.type === 'WITHDRAWAL') return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
+  // What actually moved on the balance: a deposit lands net of its fee, a
+  // payout or card top-up takes its fee with it, a card's price is all fee.
+  if (t.type === 'DEPOSIT') return { text: `+${fmt(withFee(t, -1))} ${t.asset}`, positive: true };
+  if (t.type === 'WITHDRAWAL') return { text: `-${fmt(withFee(t, 1))} ${t.asset}`, positive: false };
+  if (t.type === 'CARD_FUND') return { text: `-${fmt(withFee(t, 1))} ${t.asset}`, positive: false };
+  if (t.type === 'CARD_WITHDRAW') return { text: `+${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
+  if (t.type === 'CARD_ISSUE') return { text: `-${fmt(t.feeFormatted)} ${t.asset}`, positive: false };
   if (t.type === 'BILL') return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
   if (t.type === 'CASHBACK') return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   if (t.type === 'TRANSFER_IN')

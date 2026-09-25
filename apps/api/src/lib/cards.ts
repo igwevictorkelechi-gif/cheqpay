@@ -1,5 +1,6 @@
 import { prisma } from "@cheqpay/db";
 import type { CardStorePort, IssuingEventData } from "./maplerad/issuing";
+import { refundCardIssueFee } from "./cardFunding";
 
 /**
  * Card issuing is gated on Maplerad being configured (the same secret key the
@@ -40,5 +41,16 @@ export const cardStore: CardStorePort = {
         // retry forever. Log loudly so a stuck pending card is visible.
         console.error("[cards] finalizeCard failed", { reference, error: String(err) });
       });
+
+    // Maplerad said no: the card will never exist, so its price goes back.
+    // Only on an explicit failure — an unknown or pending status keeps the charge.
+    if (/^(FAILED|FAILURE|DECLINED|REJECTED|ERROR)$/i.test(status)) {
+      await refundCardIssueFee({ reference }).catch((err) => {
+        console.error("[cards] refunding the card price failed — refund by hand", {
+          reference,
+          error: String(err),
+        });
+      });
+    }
   },
 };

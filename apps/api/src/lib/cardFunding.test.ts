@@ -10,6 +10,8 @@ const h = vi.hoisted(() => ({
   balanceUpsert: vi.fn(),
   fundCard: vi.fn(),
   withdrawFromCard: vi.fn(),
+  txFindFirst: vi.fn(),
+  txUpdateMany: vi.fn(),
 }));
 
 const db = {
@@ -18,13 +20,18 @@ const db = {
     update: h.balanceUpdate,
     upsert: h.balanceUpsert,
   },
-  transaction: { create: h.txCreate, update: h.txUpdate },
+  transaction: {
+    create: h.txCreate,
+    update: h.txUpdate,
+    findFirst: h.txFindFirst,
+    updateMany: h.txUpdateMany,
+  },
 };
 
 vi.mock("@cheqpay/db", () => ({
   Asset: { NGN: "NGN", USD: "USD" },
-  TransactionStatus: { PROCESSING: "PROCESSING", COMPLETED: "COMPLETED", FAILED: "FAILED" },
-  TransactionType: { CARD_FUND: "CARD_FUND", CARD_WITHDRAW: "CARD_WITHDRAW" },
+  TransactionStatus: { PROCESSING: "PROCESSING", COMPLETED: "COMPLETED", FAILED: "FAILED", REVERSED: "REVERSED" },
+  TransactionType: { CARD_FUND: "CARD_FUND", CARD_WITHDRAW: "CARD_WITHDRAW", CARD_ISSUE: "CARD_ISSUE" },
   prisma: {
     card: { findFirst: h.cardFindFirst },
     transaction: { findUnique: h.txFindUnique, create: h.txCreate, update: h.txUpdate },
@@ -34,12 +41,23 @@ vi.mock("@cheqpay/db", () => ({
 }));
 vi.mock("./ensureUsdAsset", () => ({ ensureUsdAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./ensureCardTxnTypes", () => ({ ensureCardTxnTypes: vi.fn().mockResolvedValue(undefined) }));
+// The real price sheet: $5 minimum top-up, $1.50 fee below $100, 2.5% from it,
+// $1.50 to withdraw, $3 per card.
+vi.mock("./settings", async () => {
+  const real = await vi.importActual<typeof import("./settings")>("./settings");
+  return { getPricing: async () => real.PRICING_DEFAULTS };
+});
 vi.mock("./maplerad/issuing", () => ({
   fundCard: h.fundCard,
   withdrawFromCard: h.withdrawFromCard,
 }));
 
-import { fundUserCard, withdrawUserCard } from "./cardFunding";
+import {
+  chargeCardIssueFee,
+  fundUserCard,
+  refundCardIssueFee,
+  withdrawUserCard,
+} from "./cardFunding";
 
 const activeCard = {
   id: "card-1",
@@ -69,13 +87,15 @@ const withdraw = (over = {}) =>
 describe("fundUserCard", () => {
   it("debits USD, then funds the card, in that order, and completes", async () => {
     const res = await fund();
-    // Debit for exactly the cents, guarded on sufficient funds.
+    // Debit for the top-up plus the $1.50 fee, guarded on sufficient funds.
     expect(h.balanceUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ asset: "USD", available: { gte: 1000n } }),
-        data: { available: { decrement: 1000n } },
+        where: expect.objectContaining({ asset: "USD", available: { gte: 1150n } }),
+        data: { available: { decrement: 1150n } },
       }),
     );
+    // The card gets the whole top-up; the fee is recorded on the row.
+    expect(h.txCreate.mock.calls[0][0].data).toMatchObject({ amount: 1000n, fee: 150n });
     expect(h.fundCard).toHaveBeenCalledWith("mp-card-1", 1000);
     expect(h.txUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: "COMPLETED" } }),
@@ -93,11 +113,22 @@ describe("fundUserCard", () => {
     h.fundCard.mockRejectedValue(new Error("provider down"));
     await expect(fund()).rejects.toMatchObject({ code: "card_fund_failed" });
     expect(h.balanceUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { available: { increment: 1000n } } }),
+      expect.objectContaining({ data: { available: { increment: 1150n } } }),
     );
     expect(h.txUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: "FAILED" } }),
     );
+  });
+
+  it("refuses a top-up under the $5 minimum before touching the balance", async () => {
+    await expect(fund({ amount: "4.99" })).rejects.toMatchObject({ code: "below_minimum" });
+    expect(h.balanceUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("charges a percentage from $100", async () => {
+    await fund({ amount: "100" });
+    // 2.5% of $100 = $2.50.
+    expect(h.txCreate.mock.calls[0][0].data).toMatchObject({ amount: 10_000n, fee: 250n });
   });
 
   it("returns the existing transaction on an idempotent replay", async () => {
@@ -132,11 +163,18 @@ describe("fundUserCard", () => {
 describe("withdrawUserCard", () => {
   it("debits the card first, then credits the user, and completes", async () => {
     const res = await withdraw();
+    // $10 comes off the card; $1.50 is ours; $8.50 reaches the wallet.
     expect(h.withdrawFromCard).toHaveBeenCalledWith("mp-card-1", 1000);
     expect(h.balanceUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({ update: { available: { increment: 1000n } } }),
+      expect.objectContaining({ update: { available: { increment: 850n } } }),
     );
+    expect(h.txCreate.mock.calls[0][0].data).toMatchObject({ amount: 850n, fee: 150n });
     expect(res).toMatchObject({ transactionId: "tx-1", status: "COMPLETED" });
+  });
+
+  it("refuses an amount the fee would swallow, without touching the card", async () => {
+    await expect(withdraw({ amount: "1.50" })).rejects.toMatchObject({ code: "below_fee" });
+    expect(h.withdrawFromCard).not.toHaveBeenCalled();
   });
 
   it("credits nothing and fails the row when the provider errors", async () => {
@@ -162,5 +200,32 @@ describe("withdrawUserCard", () => {
     const res = await withdraw();
     expect(res).toEqual({ transactionId: "tx-old", status: "COMPLETED" });
     expect(h.withdrawFromCard).not.toHaveBeenCalled();
+  });
+});
+
+describe("card price", () => {
+  it("charges $3 from the USD balance and records it as our fee", async () => {
+    const r = await chargeCardIssueFee("u1");
+    expect(r).toMatchObject({ feeCents: 300n });
+    expect(h.balanceUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { available: { decrement: 300n } } }),
+    );
+    expect(h.txCreate.mock.calls[0][0].data).toMatchObject({ type: "CARD_ISSUE", amount: 0n, fee: 300n });
+  });
+
+  it("refuses when the wallet can't pay for the card", async () => {
+    h.balanceUpdateMany.mockResolvedValue({ count: 0 });
+    await expect(chargeCardIssueFee("u1")).rejects.toMatchObject({ code: "insufficient_funds" });
+  });
+
+  it("refunds the price once, and only once", async () => {
+    h.txFindFirst.mockResolvedValue({ id: "fee-1", userId: "u1", fee: 300n });
+    h.txUpdateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+    await refundCardIssueFee({ reference: "ref-1" });
+    await refundCardIssueFee({ reference: "ref-1" });
+    expect(h.balanceUpdate).toHaveBeenCalledTimes(1);
+    expect(h.balanceUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { available: { increment: 300n } } }),
+    );
   });
 });

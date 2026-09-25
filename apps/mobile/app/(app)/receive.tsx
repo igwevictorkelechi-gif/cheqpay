@@ -9,6 +9,7 @@ import { colors } from '@/components/brand';
 import { api, ApiError } from '@/services/api';
 import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
 import { readCache, writeCache } from '@/lib/cache';
+import { percent, useFees } from '@/lib/fees';
 
 type Sym = 'BTC' | 'USDT' | 'USDC';
 const ASSETS: Sym[] = ['BTC', 'USDT', 'USDC'];
@@ -327,6 +328,7 @@ export default function ReceiveScreen() {
               coin or network will result in permanent loss of funds.
             </Text>
           </View>
+          <DepositFeeNote />
         </ScrollView>
       </View>
     );
@@ -385,5 +387,17 @@ function DetailRow({ label, value, bordered }: { label: string; value: string; b
       <Text className="text-muted dark:text-muted-dark text-sm">{label}</Text>
       <Text className="text-ink dark:text-ink-dark text-sm font-semibold">{value}</Text>
     </View>
+  );
+}
+
+/** The deposit fee, stated where the user gets the address. */
+function DepositFeeNote() {
+  const fees = useFees();
+  if (!fees) return null;
+  return (
+    <Text className="text-muted dark:text-muted-dark text-xs mt-4" style={{ lineHeight: 18 }}>
+      Fees: a deposit credited as the coin is free. A stablecoin deposit credited as US dollars has a{' '}
+      {percent(fees.cryptoDepositFeeBps)} conversion fee, taken from the amount received.
+    </Text>
   );
 }

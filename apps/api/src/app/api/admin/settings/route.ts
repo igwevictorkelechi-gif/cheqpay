@@ -9,6 +9,7 @@ import {
   getDepositMinUsd,
   getFxMarginBps,
   getFxMargins,
+  getPricing,
   getSwapSpreadBps,
   getUsdtNgnRate,
   getWithdrawalFeeNgn,
@@ -21,6 +22,7 @@ import {
   setDepositMinUsd,
   setFxMarginBps,
   setFxSideMarginBps,
+  setPricing,
   setSwapSpreadBps,
   setUsdtNgnRate,
   setWithdrawalFeeNgn,
@@ -45,6 +47,7 @@ async function snapshot() {
     withdrawalMinUsd,
     depositMinUsd,
     cashback,
+    pricing,
   ] = await Promise.all([
     getSwapSpreadBps(),
     getUsdtNgnRate(),
@@ -57,6 +60,7 @@ async function snapshot() {
     getWithdrawalMinUsd(),
     getDepositMinUsd(),
     getCashbackConfig(),
+    getPricing(),
   ]);
   return {
     spreadBps,
@@ -78,6 +82,7 @@ async function snapshot() {
     cashbackBillBps: cashback.billBps,
     cashbackTradeBps: cashback.tradeBps,
     cashbackMaxNgn: cashback.maxNgn,
+    pricing,
   };
 }
 
@@ -129,6 +134,8 @@ export async function PUT(req: Request) {
         await setBillMarginForService(service as BillMarginService, bps, updatedBy);
       }
     }
+
+    if (body.pricing) await setPricing(body.pricing, updatedBy);
 
     await setCashbackConfig(
       {

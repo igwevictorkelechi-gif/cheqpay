@@ -22,6 +22,9 @@ export function ensureCardTxnTypes(): Promise<void> {
       await prisma.$executeRawUnsafe(
         `ALTER TYPE "TransactionType" ADD VALUE IF NOT EXISTS 'CARD_WITHDRAW'`,
       );
+      await prisma.$executeRawUnsafe(
+        `ALTER TYPE "TransactionType" ADD VALUE IF NOT EXISTS 'CARD_ISSUE'`,
+      );
     })().catch((err) => {
       ensured = null; // allow retry on the next card movement
       throw err;

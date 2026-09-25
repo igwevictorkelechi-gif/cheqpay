@@ -329,6 +329,7 @@ export default function Landing() {
                   <li><Link href="/contact" className="text-muted hover:text-ink">Contact</Link></li>
                   <li><Link href="/support" className="text-muted hover:text-ink">Support</Link></li>
                   <li><Link href="/faq" className="text-muted hover:text-ink">FAQ</Link></li>
+                  <li><Link href="/pricing" className="text-muted hover:text-ink">Pricing</Link></li>
                 </ul>
               </div>
               <div>

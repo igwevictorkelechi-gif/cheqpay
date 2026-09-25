@@ -36,10 +36,10 @@ vi.mock("@cheqpay/db", () => ({
 vi.mock("./ledger", () => ({ creditBalance }));
 vi.mock("./cashback", () => ({ awardCashback }));
 vi.mock("./alerts", () => ({ notifyUser }));
-vi.mock("./settings", () => ({
-  getDepositFeeBps,
-  feeFromBps: (amount: bigint, bps: number) => (amount * BigInt(bps)) / 10000n,
-}));
+vi.mock("./settings", async () => {
+  const real = await vi.importActual<typeof import("./settings")>("./settings");
+  return { getDepositFeeBps, getPricing: async () => real.PRICING_DEFAULTS };
+});
 vi.mock("./ensureUsdAsset", () => ({ ensureUsdAsset }));
 
 import { prismaLedgerPort } from "./mapleradCollections";
@@ -109,6 +109,34 @@ describe("prismaLedgerPort — currency-aware crediting", () => {
     expect(awardCashback).toHaveBeenCalled();
     expect(ensureUsdAsset).not.toHaveBeenCalled();
     expect(notifyUser).toHaveBeenCalledWith("u1", expect.objectContaining({ body: expect.stringContaining("₦") }));
+  });
+
+  it("caps the NGN deposit fee", async () => {
+    getDepositFeeBps.mockResolvedValue(75);
+    // ₦1,000,000 at 0.75% would be ₦7,500 — capped at ₦800.
+    await prismaLedgerPort.creditUser({
+      userId: "u1",
+      amountMinor: 100_000_000,
+      currency: "NGN",
+      providerTxId: "tx-big",
+      raw: {} as never,
+    });
+    expect(creditBalance).toHaveBeenCalledWith(expect.objectContaining({ feeMinor: 80_000n }));
+    expect(notifyUser).toHaveBeenCalledWith("u1", expect.objectContaining({ body: expect.stringContaining("fee") }));
+  });
+
+  it("prices USD deposits on their own tiers, not the NGN rate", async () => {
+    getDepositFeeBps.mockResolvedValue(75);
+    // $100 → 3.5%.
+    await prismaLedgerPort.creditUser({
+      userId: "u1", amountMinor: 10_000, currency: "USD", providerTxId: "a", raw: {} as never,
+    });
+    expect(creditBalance).toHaveBeenLastCalledWith(expect.objectContaining({ feeMinor: 350n }));
+    // $25,000 → 2%.
+    await prismaLedgerPort.creditUser({
+      userId: "u1", amountMinor: 2_500_000, currency: "USD", providerTxId: "b", raw: {} as never,
+    });
+    expect(creditBalance).toHaveBeenLastCalledWith(expect.objectContaining({ feeMinor: 50_000n }));
   });
 
   it("does not re-notify or pay cashback on a webhook retry (credit already existed)", async () => {

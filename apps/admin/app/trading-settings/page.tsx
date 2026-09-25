@@ -10,6 +10,8 @@ import {
   ArrowDownToLine,
   Gift,
   ArrowLeftRight,
+  CreditCard,
+  Scale,
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
@@ -23,6 +25,82 @@ const BILL_SERVICES = [
 ] as const;
 
 type BillService = (typeof BILL_SERVICES)[number]['key'];
+
+/** The price sheet (mirrors Pricing in apps/api/src/lib/settings.ts). */
+interface Pricing {
+  depositFeeCapNgn: number;
+  usdDepositFeeBps: number;
+  usdDepositLargeFeeBps: number;
+  usdDepositLargeThresholdUsd: number;
+  cryptoDepositFeeBps: number;
+  cryptoWithdrawalFeeUsd: number;
+  cardIssueFeeUsd: number;
+  cardFundMinUsd: number;
+  cardFundFeeSmallUsd: number;
+  cardFundFeeLargeBps: number;
+  cardFundThresholdUsd: number;
+  cardWithdrawFeeUsd: number;
+}
+type PricingKey = keyof Pricing;
+
+/** Inputs for the price sheet, grouped as they appear on the page. */
+const PRICING_FIELDS: { group: string; fields: { key: PricingKey; label: string; unit: 'bps' | '₦' | '$'; hint: string }[] }[] = [
+  {
+    group: 'Deposits',
+    fields: [
+      { key: 'depositFeeCapNgn', label: 'Naira deposit fee cap', unit: '₦', hint: 'Most a Naira deposit fee can be. Maplerad caps theirs at ₦500. 0 = no cap.' },
+      { key: 'usdDepositFeeBps', label: 'USD bank deposit fee', unit: 'bps', hint: 'Below the threshold. Maplerad charges us 3%.' },
+      { key: 'usdDepositLargeFeeBps', label: 'USD bank deposit fee (large)', unit: 'bps', hint: 'At or above the threshold. Maplerad charges us 1.5%.' },
+      { key: 'usdDepositLargeThresholdUsd', label: 'Large USD deposit threshold', unit: '$', hint: 'Maplerad’s lower rate starts at $25,000.' },
+      { key: 'cryptoDepositFeeBps', label: 'Stablecoin → USD deposit fee', unit: 'bps', hint: 'Coins that land as dollars. Maplerad’s ramp costs 0.5%.' },
+    ],
+  },
+  {
+    group: 'Crypto withdrawals',
+    fields: [
+      { key: 'cryptoWithdrawalFeeUsd', label: 'Network fee per withdrawal', unit: '$', hint: 'Charged in the coin at the live price, out of the amount sent. Costs us $1.50–$2 plus gas.' },
+    ],
+  },
+  {
+    group: 'USD virtual cards',
+    fields: [
+      { key: 'cardIssueFeeUsd', label: 'Card price', unit: '$', hint: 'Paid from the USD wallet when the card is requested. Maplerad charges us $2.' },
+      { key: 'cardFundMinUsd', label: 'Smallest top-up', unit: '$', hint: 'Top-ups below this are refused.' },
+      { key: 'cardFundFeeSmallUsd', label: 'Top-up fee (below threshold)', unit: '$', hint: 'Flat, added on top. Maplerad charges us $1 under $100.' },
+      { key: 'cardFundFeeLargeBps', label: 'Top-up fee (from threshold)', unit: 'bps', hint: 'Added on top. Maplerad charges us 2% from $100.' },
+      { key: 'cardFundThresholdUsd', label: 'Top-up fee threshold', unit: '$', hint: 'Where the fee switches from flat to percentage. Maplerad’s is $100.' },
+      { key: 'cardWithdrawFeeUsd', label: 'Card withdrawal fee', unit: '$', hint: 'Out of the amount moved back to the wallet. Maplerad charges us $1.' },
+    ],
+  },
+];
+
+/**
+ * What Maplerad charges us for each thing we price (SLA Schedule 2), so the
+ * page can show the margin and flag anything sold below cost.
+ */
+function costRows(s: {
+  depositFeeBps: number;
+  withdrawalFeeNgn: number;
+  spreadBps: number;
+  fxBuyBps: number;
+  fxSellBps: number;
+  p: Pricing;
+}) {
+  const pct = (bps: number) => `${(bps / 100).toFixed(2)}%`;
+  const usd = (n: number) => `$${n.toFixed(2)}`;
+  return [
+    { what: 'Naira deposit', cost: '0.5% (max ₦500)', price: `${pct(s.depositFeeBps)} (max ₦${s.p.depositFeeCapNgn.toLocaleString()})`, below: s.depositFeeBps < 50 || (s.p.depositFeeCapNgn > 0 && s.p.depositFeeCapNgn < 500) },
+    { what: 'Naira withdrawal', cost: '₦20', price: `₦${s.withdrawalFeeNgn.toLocaleString()}`, below: s.withdrawalFeeNgn < 20 },
+    { what: 'USD bank deposit', cost: '3% / 1.5% from $25k', price: `${pct(s.p.usdDepositFeeBps)} / ${pct(s.p.usdDepositLargeFeeBps)}`, below: s.p.usdDepositFeeBps < 300 || s.p.usdDepositLargeFeeBps < 150 },
+    { what: 'Stablecoin → USD', cost: '0.5%', price: pct(s.p.cryptoDepositFeeBps), below: s.p.cryptoDepositFeeBps < 50 },
+    { what: 'Crypto buy / sell / convert', cost: '0.5% ramp', price: pct(s.spreadBps), below: s.spreadBps < 50 },
+    { what: 'Naira ⇄ Dollar', cost: 'inside Maplerad’s rate', price: `${pct(s.fxBuyBps)} / ${pct(s.fxSellBps)}`, below: s.fxBuyBps <= 0 || s.fxSellBps <= 0 },
+    { what: 'Crypto withdrawal', cost: '$1.50–$2 + gas', price: usd(s.p.cryptoWithdrawalFeeUsd), below: s.p.cryptoWithdrawalFeeUsd < 2 },
+    { what: 'Card', cost: '$2', price: usd(s.p.cardIssueFeeUsd), below: s.p.cardIssueFeeUsd < 2 },
+    { what: 'Card top-up', cost: '$1 / 2% from $100', price: `${usd(s.p.cardFundFeeSmallUsd)} / ${pct(s.p.cardFundFeeLargeBps)}`, below: s.p.cardFundFeeSmallUsd < 1 || s.p.cardFundFeeLargeBps < 200 },
+    { what: 'Card withdrawal', cost: '$1', price: usd(s.p.cardWithdrawFeeUsd), below: s.p.cardWithdrawFeeUsd < 1 },
+  ];
+}
 
 /** Per service: a number is its own rate; null means it uses the default. */
 type BillMargins = Record<BillService, number | null>;
@@ -45,6 +123,7 @@ interface Settings {
   cashbackBillBps: number;
   cashbackTradeBps: number;
   cashbackMaxNgn: number;
+  pricing: Pricing;
 }
 
 export default function TradingSettingsPage() {
@@ -67,6 +146,7 @@ export default function TradingSettingsPage() {
   const [cashbackBillBps, setCashbackBillBps] = useState('');
   const [cashbackTradeBps, setCashbackTradeBps] = useState('');
   const [cashbackMaxNgn, setCashbackMaxNgn] = useState('');
+  const [pricing, setPricing] = useState<Record<PricingKey, string>>({} as Record<PricingKey, string>);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
@@ -97,6 +177,13 @@ export default function TradingSettingsPage() {
     setCashbackBillBps(String(data.cashbackBillBps ?? 0));
     setCashbackTradeBps(String(data.cashbackTradeBps ?? 0));
     setCashbackMaxNgn(String(data.cashbackMaxNgn ?? 0));
+    if (data.pricing) {
+      setPricing(
+        Object.fromEntries(
+          Object.entries(data.pricing).map(([k, v]) => [k, String(v)]),
+        ) as Record<PricingKey, string>,
+      );
+    }
   }
 
   async function load() {
@@ -152,6 +239,11 @@ export default function TradingSettingsPage() {
       if (cashbackBillBps !== '') payload.cashbackBillBps = Number(cashbackBillBps);
       if (cashbackTradeBps !== '') payload.cashbackTradeBps = Number(cashbackTradeBps);
       if (cashbackMaxNgn !== '') payload.cashbackMaxNgn = Number(cashbackMaxNgn);
+      payload.pricing = Object.fromEntries(
+        Object.entries(pricing)
+          .filter(([, v]) => v !== '')
+          .map(([k, v]) => [k, Number(v)]),
+      );
 
       const res = await fetch('/api/platform-settings', {
         method: 'PUT',
@@ -258,8 +350,8 @@ export default function TradingSettingsPage() {
             placeholder="0"
           />
           <p className="text-sm text-gray-500 mt-2">
-            Taken from each Naira deposit before crediting ({pct(depositFeeBps)}%). Max 500 bps
-            (5%). Set 0 for free deposits.
+            Taken from each Naira deposit before crediting ({pct(depositFeeBps)}%), up to the cap
+            below. Maplerad charges us 0.5% (max ₦500). Max 500 bps (5%). Set 0 for free deposits.
           </p>
         </div>
 
@@ -280,8 +372,8 @@ export default function TradingSettingsPage() {
             placeholder="0"
           />
           <p className="text-sm text-gray-500 mt-2">
-            Added on top of each bank payout — the user is debited amount + fee. Set 0 for free
-            withdrawals.
+            Taken out of each bank payout: the user withdraws ₦100,000, the bank receives ₦100,000
+            minus this fee. Maplerad charges us ₦20 per payout. Set 0 for free withdrawals.
           </p>
         </div>
 
@@ -428,6 +520,90 @@ export default function TradingSettingsPage() {
             </div>
           </div>
         </div>
+
+        <h2 className="text-lg font-bold text-gray-900 pt-2">Maplerad costs, passed on</h2>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-6">
+          <p className="text-sm text-gray-500">
+            Each of these is Maplerad&apos;s charge to us plus our margin. Users see every one of them
+            on the Pricing page and before they confirm.
+          </p>
+          {PRICING_FIELDS.map(({ group, fields }) => (
+            <div key={group}>
+              <p className="flex items-center gap-2 text-gray-700 font-semibold mb-3">
+                <CreditCard size={18} className="text-brand-600" />
+                {group}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {fields.map(({ key, label, unit, hint }) => (
+                  <div key={key}>
+                    <label htmlFor={`p-${key}`} className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      {label} ({unit === 'bps' ? 'basis points' : unit})
+                    </label>
+                    <input
+                      id={`p-${key}`}
+                      type="number"
+                      min={0}
+                      step={unit === 'bps' ? 1 : 0.01}
+                      value={pricing[key] ?? ''}
+                      onChange={(e) => setPricing((p) => ({ ...p, [key]: e.target.value }))}
+                      disabled={loading || saving}
+                      className={inputCls}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {unit === 'bps' && pricing[key] ? `${pct(pricing[key])}% · ` : ''}
+                      {hint}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Cost vs price: every fee next to what it costs us. */}
+        {!loading && pricing.cardIssueFeeUsd !== undefined && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <p className="flex items-center gap-2 text-gray-700 font-semibold mb-3">
+              <Scale size={18} className="text-brand-600" />
+              Cost vs price
+            </p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500">
+                  <th className="py-1 font-medium">Service</th>
+                  <th className="py-1 font-medium">Maplerad charges us</th>
+                  <th className="py-1 font-medium">User pays</th>
+                </tr>
+              </thead>
+              <tbody>
+                {costRows({
+                  depositFeeBps: Number(depositFeeBps || 0),
+                  withdrawalFeeNgn: Number(withdrawalFeeNgn || 0),
+                  spreadBps: Number(spreadBps || 0),
+                  fxBuyBps: Number(fxBuyUsd === '' ? fxMarginBps || 0 : fxBuyUsd),
+                  fxSellBps: Number(fxSellUsd === '' ? fxMarginBps || 0 : fxSellUsd),
+                  p: Object.fromEntries(
+                    Object.entries(pricing).map(([k, v]) => [k, Number(v || 0)]),
+                  ) as unknown as Pricing,
+                }).map((r) => (
+                  <tr key={r.what} className="border-t border-gray-100">
+                    <td className="py-2 text-gray-700">{r.what}</td>
+                    <td className="py-2 text-gray-500">{r.cost}</td>
+                    <td className={`py-2 font-semibold ${r.below ? 'text-red-600' : 'text-green-700'}`}>
+                      {r.price}
+                      {r.below ? ' · below cost' : ''}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-xs text-gray-500 mt-3">
+              Card cross-border spend (2.5% + $0.50), chargebacks ($45) and declines ($0.50) are
+              charged by the card network and shown to users at cost.
+            </p>
+          </div>
+        )}
 
         <h2 className="text-lg font-bold text-gray-900 pt-2">Minimums</h2>
 

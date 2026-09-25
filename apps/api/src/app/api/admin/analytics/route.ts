@@ -52,10 +52,16 @@ export async function GET(req: Request) {
       prisma.balance.groupBy({ by: ["asset"], _sum: { available: true } }),
       prisma.transaction.groupBy({ by: ["type"], _count: { _all: true }, where: { createdAt: { gte: since } } }),
       prisma.transaction.groupBy({ by: ["status"], _count: { _all: true }, where: { createdAt: { gte: since } } }),
-      prisma.transaction.aggregate({ _sum: { fee: true }, where: { asset: "NGN", createdAt: { gte: since } } }),
+      // Fees are revenue only once the money actually moved: a failed or
+      // refunded withdrawal gave its fee back.
+      prisma.transaction.groupBy({
+        by: ["asset"],
+        _sum: { fee: true },
+        where: { status: "COMPLETED", createdAt: { gte: since } },
+      }),
       prisma.transaction.findMany({
         where: { createdAt: { gte: since } },
-        select: { createdAt: true, type: true, asset: true, amount: true },
+        select: { createdAt: true, type: true, asset: true, amount: true, fee: true, status: true, metadata: true },
         orderBy: { createdAt: "asc" },
         take: 5000,
       }),
@@ -89,18 +95,41 @@ export async function GET(req: Request) {
     const windowCount = TX_STATUSES.reduce((a, s) => a + statusCounts[s], 0);
     const successRate = windowCount > 0 ? Number(((statusCounts.COMPLETED / windowCount) * 100).toFixed(1)) : 0;
 
+    // Revenue: every fee on a completed transaction, plus the FX spread that a
+    // conversion keeps (recorded on the row's metadata, in the to-asset).
+    const revenue = { NGN: 0n, USD: 0n } as Record<string, bigint>;
+    for (const g of feeAgg) revenue[g.asset] = (revenue[g.asset] ?? 0n) + (g._sum.fee ?? 0n);
+    const spreadOf = (t: { status: string; metadata: unknown }) => {
+      const m = (t.metadata ?? {}) as { spreadMinor?: string; spreadAsset?: string };
+      if (t.status !== "COMPLETED" || !m.spreadMinor || !m.spreadAsset) return null;
+      return { asset: m.spreadAsset, minor: BigInt(m.spreadMinor) };
+    };
+    for (const t of windowTxns) {
+      const sp = spreadOf(t);
+      if (sp) revenue[sp.asset] = (revenue[sp.asset] ?? 0n) + sp.minor;
+    }
+
     // NGN volume by type + daily series (seed every day so the chart is continuous).
     const ngnVolumeByType: Record<string, number> = {};
     for (const t of TX_TYPES) ngnVolumeByType[t] = 0;
-    const dayMap: Record<string, { count: number; ngnVolume: number }> = {};
+    type Day = { count: number; ngnVolume: number; feesNgn: number; feesUsd: number };
+    const dayMap: Record<string, Day> = {};
+    const blankDay = (): Day => ({ count: 0, ngnVolume: 0, feesNgn: 0, feesUsd: 0 });
     for (let i = days - 1; i >= 0; i--) {
       const key = new Date(Date.now() - i * DAY).toISOString().slice(0, 10);
-      dayMap[key] = { count: 0, ngnVolume: 0 };
+      dayMap[key] = blankDay();
     }
     for (const t of windowTxns) {
       const key = t.createdAt.toISOString().slice(0, 10);
-      if (!dayMap[key]) dayMap[key] = { count: 0, ngnVolume: 0 };
+      if (!dayMap[key]) dayMap[key] = blankDay();
       dayMap[key].count += 1;
+      if (t.status === "COMPLETED" && t.fee > 0n) {
+        if (t.asset === "NGN") dayMap[key].feesNgn += ngn(t.fee);
+        if (t.asset === "USD") dayMap[key].feesUsd += Number(fromMinorUnits(t.fee, "USD"));
+      }
+      const sp = spreadOf(t);
+      if (sp?.asset === "NGN") dayMap[key].feesNgn += ngn(sp.minor);
+      if (sp?.asset === "USD") dayMap[key].feesUsd += Number(fromMinorUnits(sp.minor, "USD"));
       if (t.asset === "NGN") {
         const v = ngn(t.amount);
         dayMap[key].ngnVolume += v;
@@ -108,7 +137,13 @@ export async function GET(req: Request) {
       }
     }
     const daily = Object.entries(dayMap)
-      .map(([date, v]) => ({ date, count: v.count, ngnVolume: Math.round(v.ngnVolume) }))
+      .map(([date, v]) => ({
+        date,
+        count: v.count,
+        ngnVolume: Math.round(v.ngnVolume),
+        feesNgn: Math.round(v.feesNgn),
+        feesUsd: Math.round(v.feesUsd * 100) / 100,
+      }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // Bill payments breakdown.
@@ -187,7 +222,8 @@ export async function GET(req: Request) {
         fundedWallets,
         totalTransactions,
         ngnVolumeWindow: daily.reduce((a, d) => a + d.ngnVolume, 0),
-        feesNgnWindow: Math.round(ngn(feeAgg._sum.fee ?? 0n)),
+        feesNgnWindow: Math.round(ngn(revenue.NGN ?? 0n)),
+        feesUsdWindow: Number(fromMinorUnits(revenue.USD ?? 0n, "USD")),
         successRate,
       },
       balancesByAsset,
