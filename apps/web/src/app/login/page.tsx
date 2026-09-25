@@ -35,7 +35,10 @@ export default function LoginPage() {
     setLocalLoading(true);
     try {
       await authService.sendEmailOtp(email.trim().toLowerCase(), { create: false });
-      router.push(`/verify-otp?type=login&email=${encodeURIComponent(email.trim().toLowerCase())}`);
+      // Handed over in sessionStorage, not the URL: a query string ends up in
+      // browser history, server logs and error reports.
+      sessionStorage.setItem("cheqpay-otp", JSON.stringify({ email: email.trim().toLowerCase() }));
+      router.push("/verify-otp?type=login");
     } catch (err) {
       setError("Could not send the code. Please try again.");
       console.error(err);

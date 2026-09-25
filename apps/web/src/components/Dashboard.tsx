@@ -1,5 +1,6 @@
 "use client";
 
+import PushPrompt from "@/components/PushPrompt";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -181,6 +182,10 @@ export default function Dashboard() {
       />
 
       <KycBanner />
+
+      <div className="px-5">
+        <PushPrompt />
+      </div>
 
       {/* First-run nudge: no money and no history yet, in this currency. */}
       {features.ngn_deposits && value === 0 && txns.length === 0 && (

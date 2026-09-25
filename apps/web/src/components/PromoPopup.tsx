@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHttpsUrl, safeInternalPath } from "@/lib/safeUrl";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
@@ -50,8 +51,10 @@ export default function PromoPopup() {
     const url = popup.buttonUrl?.trim();
     dismiss();
     if (!url) return;
-    if (url.startsWith("/")) router.push(url);
-    else if (url.startsWith("https://")) window.open(url, "_blank", "noopener");
+    const internal = safeInternalPath(url);
+    const external = internal ? null : safeHttpsUrl(url);
+    if (internal) router.push(internal);
+    else if (external) window.open(external, "_blank", "noopener,noreferrer");
   };
 
   return (

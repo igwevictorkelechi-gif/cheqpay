@@ -125,8 +125,20 @@ export async function consumeAdminOtp(code: string): Promise<boolean> {
   if (!secret) return false;
   const counter = verifyTotpCode(code, secret);
   if (counter === null) return false;
-  const last = Number((await getSetting(KEY_LAST)) ?? 0);
-  if (counter <= last) return false; // already used (or older window)
-  await putSetting(KEY_LAST, String(counter));
-  return true;
+  // Claim this timestep in ONE conditional write, so two requests carrying
+  // the same code can't both read "unused" and both pass. Exactly one UPDATE
+  // (or, the very first time, one INSERT) succeeds; everyone else gets 0 rows.
+  const claimed = await prisma.$executeRawUnsafe(
+    `UPDATE platform_settings SET value = $1, updated_at = now()
+      WHERE key = $2 AND value ~ '^[0-9]+$' AND value::bigint < $1::bigint`,
+    String(counter),
+    KEY_LAST
+  );
+  if (claimed === 1) return true;
+  const inserted = await prisma.$executeRawUnsafe(
+    `INSERT INTO platform_settings (key, value, updated_at) VALUES ($2, $1, now()) ON CONFLICT (key) DO NOTHING`,
+    String(counter),
+    KEY_LAST
+  );
+  return inserted === 1; // 0: the row exists and this timestep was already used
 }

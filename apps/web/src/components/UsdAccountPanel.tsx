@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHttpsUrl } from "@/lib/safeUrl";
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, DollarSign, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import {
@@ -263,9 +264,9 @@ export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?:
               {account.accountName && (
                 <p className="mt-2 text-sm text-muted">Account name: {account.accountName}</p>
               )}
-              {account.consentRequired && account.consentUrl && (
+              {account.consentRequired && safeHttpsUrl(account.consentUrl) && (
                 <a
-                  href={account.consentUrl}
+                  href={safeHttpsUrl(account.consentUrl)!}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-4 flex items-center justify-center gap-2 rounded-full bg-amber-500/15 px-4 py-3 text-sm font-bold text-amber-600"
@@ -356,9 +357,9 @@ export default function UsdAccountPanel({ defaultOpen = false }: { defaultOpen?:
                         ))}
                       </ul>
                     )}
-                    {status.kycLink && (
+                    {safeHttpsUrl(status.kycLink) && (
                       <a
-                        href={status.kycLink}
+                        href={safeHttpsUrl(status.kycLink)!}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="min-h-[44px] mt-3 inline-flex items-center gap-2 rounded-full bg-brand/10 px-4 py-2 text-sm font-bold text-brand"

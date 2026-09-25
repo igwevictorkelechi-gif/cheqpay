@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   try {
     const auth = await requireUser(req);
     await assertFeatureEnabled("p2p_transfers");
-    enforceRateLimit(`user:lookup:${auth.id}`, 30, 60_000);
+    await enforceRateLimit(`user:lookup:${auth.id}`, 30, 60_000);
 
     const raw = new URL(req.url).searchParams.get("username") ?? "";
     const username = raw.trim().replace(/^@+/, "");

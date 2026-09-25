@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { api, ApiError } from "@/services/api";
-import { setUserPin } from "@/lib/applock";
 
 const STEPS = ["Account", "Email", "Identity", "PIN"];
 
@@ -97,9 +96,9 @@ export default function OnboardingPage() {
 
   const savePin = () => {
     if (pin.length < 4 || pin !== confirm) return;
-    // Store the user's security PIN. This does NOT enable App Lock — that's an
-    // opt-in from Settings → App Lock.
-    setUserPin(pin);
+    // Nothing is stored: a PIN kept in browser storage is readable by any
+    // script on the page. App Lock (Settings) keeps only a hash, and money is
+    // authorised by the server-side transaction PIN.
     finish();
   };
 

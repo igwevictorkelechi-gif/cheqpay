@@ -30,6 +30,7 @@ import { ensureCardTxnTypes } from "./ensureCardTxnTypes";
 import { fundCard, withdrawFromCard } from "./maplerad/issuing";
 import { getPricing } from "./settings";
 import { cardFundFee, cardIssueFee, cardWithdrawFee } from "./fees";
+import { isDefiniteRejection } from "./providerErrors";
 
 export interface CardMovementResult {
   transactionId: string;
@@ -90,9 +91,15 @@ export async function fundUserCard(input: {
 
   const existing = await prisma.transaction.findUnique({
     where: { idempotencyKey: input.idempotencyKey },
-    select: { id: true, status: true },
+    select: { id: true, status: true, userId: true },
   });
-  if (existing) return { transactionId: existing.id, status: existing.status };
+  if (existing) {
+    // Only ever replay the caller's own request.
+    if (existing.userId !== input.userId) {
+      throw new ApiError(409, "Idempotency-Key already used", "idempotency_conflict");
+    }
+    return { transactionId: existing.id, status: existing.status };
+  }
 
   const tx = await prisma.$transaction(async (db) => {
     const debit = await db.balance.updateMany({
@@ -123,15 +130,31 @@ export async function fundUserCard(input: {
   try {
     await fundCard(card.providerCardId!, Number(cents));
   } catch (err) {
-    // The card was not funded — return the money and fail the row.
+    if (!isDefiniteRejection(err)) {
+      // No clear answer — the card may have been loaded. Refunding now could
+      // pay twice, so the row stays in flight for reconciliation.
+      console.error("[cards] funding outcome unknown — reconcile before refunding", {
+        userId: input.userId,
+        transactionId: tx.id,
+        error: String(err),
+      });
+      throw new ApiError(
+        504,
+        "Your top-up is being confirmed. Please check the card balance shortly before trying again.",
+        "card_fund_pending",
+      );
+    }
+    // Refused outright — the card was not funded. Return the money and fail
+    // the row, claiming it first so this can only ever happen once.
     await prisma.$transaction(async (db) => {
+      const claimed = await db.transaction.updateMany({
+        where: { id: tx.id, status: TransactionStatus.PROCESSING },
+        data: { status: TransactionStatus.FAILED },
+      });
+      if (claimed.count !== 1) return;
       await db.balance.update({
         where: { userId_asset: { userId: input.userId, asset: Asset.USD } },
         data: { available: { increment: totalCents } },
-      });
-      await db.transaction.update({
-        where: { id: tx.id },
-        data: { status: TransactionStatus.FAILED },
       });
     });
     throw new ApiError(502, "Could not load the card; you were not charged", "card_fund_failed");
@@ -177,9 +200,15 @@ export async function withdrawUserCard(input: {
 
   const existing = await prisma.transaction.findUnique({
     where: { idempotencyKey: input.idempotencyKey },
-    select: { id: true, status: true },
+    select: { id: true, status: true, userId: true },
   });
-  if (existing) return { transactionId: existing.id, status: existing.status };
+  if (existing) {
+    // Only ever replay the caller's own request.
+    if (existing.userId !== input.userId) {
+      throw new ApiError(409, "Idempotency-Key already used", "idempotency_conflict");
+    }
+    return { transactionId: existing.id, status: existing.status };
+  }
 
   // Recorded before the provider call so a replay of the same key cannot debit
   // the card twice; carries no balance change until the money actually arrives.
@@ -254,7 +283,10 @@ export async function withdrawUserCard(input: {
  * nothing is moved anywhere, the whole charge is ours). Returns null when
  * cards are free.
  */
-export async function chargeCardIssueFee(userId: string): Promise<{ transactionId: string; feeCents: bigint } | null> {
+export async function chargeCardIssueFee(
+  userId: string,
+  requestKey: string = randomUUID(),
+): Promise<{ transactionId: string; feeCents: bigint } | null> {
   const feeCents = cardIssueFee(await getPricing());
   if (feeCents <= 0n) return null;
   await Promise.all([ensureUsdAsset(), ensureCardTxnTypes()]);
@@ -279,13 +311,18 @@ export async function chargeCardIssueFee(userId: string): Promise<{ transactionI
         amount: 0n,
         fee: feeCents,
         status: TransactionStatus.COMPLETED,
-        idempotencyKey: `card-issue:${userId}:${randomUUID()}`,
+        idempotencyKey: cardIssueKey(userId, requestKey),
         metadata: { direction: "issue" },
       },
       select: { id: true },
     });
   });
   return { transactionId: tx.id, feeCents };
+}
+
+/** The ledger key of a card-price charge for one create request. */
+export function cardIssueKey(userId: string, requestKey: string): string {
+  return `card-issue:${userId}:${requestKey}`;
 }
 
 /** Note which card request a card-price charge paid for, so a failure can refund it. */

@@ -10,25 +10,25 @@
  * The caller's IP.
  *
  * Every request reaches the API through a proxy — Vercel's edge today, Caddy on
- * a VPS tomorrow — so the socket address is the proxy, not the user. The real
- * address is the FIRST entry in `x-forwarded-for`; later entries are the
- * intermediate hops.
+ * a VPS tomorrow — so the socket address is the proxy, not the user. The
+ * platform's own header (set by Vercel, Cloudflare or the proxy, which the
+ * client cannot forge) is preferred; `x-forwarded-for` is the fallback.
  *
- * A client can forge `x-forwarded-for`, and our proxies append rather than
- * replace, so treat this as evidence, not proof. It is good enough to answer
+ * A client can forge `x-forwarded-for` where a proxy appends rather than
+ * replaces, so treat the fallback as evidence, not proof. It is good enough to answer
  * "did this account suddenly start logging in from somewhere else?" — which is
  * the fraud question it exists for.
  */
 export function clientIp(req: Request): string | null {
+  // Set by the platform itself and not forgeable by the client, so these win.
+  for (const header of ["x-vercel-forwarded-for", "cf-connecting-ip", "x-real-ip"]) {
+    const v = req.headers.get(header)?.split(",")[0]?.trim();
+    if (v) return normalizeIp(v);
+  }
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) {
     const first = forwarded.split(",")[0]?.trim();
     if (first) return normalizeIp(first);
-  }
-  // Platform-specific fallbacks, in decreasing order of trustworthiness.
-  for (const header of ["cf-connecting-ip", "x-real-ip", "x-vercel-forwarded-for"]) {
-    const v = req.headers.get(header);
-    if (v) return normalizeIp(v.trim());
   }
   return null;
 }

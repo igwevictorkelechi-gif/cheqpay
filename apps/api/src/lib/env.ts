@@ -209,6 +209,13 @@ const envSchema = z.object({
   // change the deployment's environment can do this — which is the point.
   ADMIN_OTP_RESET_ALLOWED: z.string().optional(),
 
+  // Browser (Web Push) notifications. Generate one pair with
+  // `npx web-push generate-vapid-keys`; the public key is handed to browsers,
+  // the private key signs every push and must stay secret. Unset = web push off.
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().optional(), // e.g. mailto:support@cheqpay.com
+
   // Scheduled jobs. CRON_SECRET gates the /api/cron/* endpoints (Vercel Cron
   // sends it automatically as `Authorization: Bearer <secret>`).
   CRON_SECRET: z.string().min(16).optional(),

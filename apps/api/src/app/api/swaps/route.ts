@@ -3,6 +3,7 @@ import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { executeSwap } from "@/lib/swap";
 import { swapExecuteSchema } from "@/lib/validation";
 import { readPin, requireTransactionPin } from "@/lib/transactionPin";
+import { enforceRateLimit } from "@/lib/ratelimit";
 
 import { assertFeatureEnabled } from "@/lib/features";
 
@@ -13,6 +14,7 @@ export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
     await assertFeatureEnabled("crypto_trading");
+    await enforceRateLimit(`swap:${auth.id}`, 20, 60_000);
     const idempotencyKey = req.headers.get("idempotency-key");
     if (!idempotencyKey) {
       throw new ApiError(400, "Missing Idempotency-Key header", "no_idempotency_key");

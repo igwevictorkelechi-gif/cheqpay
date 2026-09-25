@@ -327,11 +327,60 @@ export const notificationPrefsSchema = z
     bills: z.boolean().optional(),
     price: z.boolean().optional(),
     security: z.boolean().optional(),
+    updates: z.boolean().optional(),
     promos: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, {
     message: "Provide at least one preference to update",
   });
+
+/**
+ * A browser's push subscription, as PushSubscription.toJSON() gives it. The
+ * endpoint must be https on a real browser push service — otherwise the API
+ * would be asked to POST to any URL the caller chose.
+ */
+const PUSH_SERVICE_HOSTS = [
+  /(^|\.)fcm\.googleapis\.com$/, // Chrome, Edge, Opera, Samsung
+  /(^|\.)push\.services\.mozilla\.com$/, // Firefox
+  /(^|\.)push\.apple\.com$/, // Safari
+  /(^|\.)notify\.windows\.com$/, // legacy Edge
+];
+export const webPushSubscriptionSchema = z.object({
+  endpoint: z
+    .string()
+    .url()
+    .max(1000)
+    .refine((u) => {
+      try {
+        const { protocol, hostname } = new URL(u);
+        return protocol === "https:" && PUSH_SERVICE_HOSTS.some((re) => re.test(hostname));
+      } catch {
+        return false;
+      }
+    }, "Not a browser push service"),
+  keys: z.object({
+    p256dh: z.string().min(10).max(200),
+    auth: z.string().min(8).max(100),
+  }),
+});
+export type WebPushSubscriptionInput = z.infer<typeof webPushSubscriptionSchema>;
+
+export const webPushUnsubscribeSchema = z.object({ endpoint: z.string().url().max(1000) });
+
+/** Admin: a notification to everyone who opted into the category. */
+export const broadcastSchema = z.object({
+  title: z.string().trim().min(3).max(60),
+  body: z.string().trim().min(3).max(180),
+  /** Where tapping it goes — a path on the site, never another host. */
+  url: z
+    .string()
+    .trim()
+    .max(200)
+    .regex(/^\/(?!\/|\\)[^\s]*$/, "Use a path on the site, like /pricing")
+    .optional(),
+  category: z.enum(["updates", "promos"]),
+});
+export type BroadcastInput = z.infer<typeof broadcastSchema>;
 export type NotificationPrefsInput = z.infer<typeof notificationPrefsSchema>;
 
 /** Register (or remove) an Expo push token for the current device. */

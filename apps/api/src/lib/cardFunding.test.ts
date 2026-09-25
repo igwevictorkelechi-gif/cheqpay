@@ -109,15 +109,22 @@ describe("fundUserCard", () => {
     expect(h.fundCard).not.toHaveBeenCalled();
   });
 
-  it("refunds the debit and fails the row when the provider errors", async () => {
-    h.fundCard.mockRejectedValue(new Error("provider down"));
+  it("refunds the debit and fails the row when the provider refuses", async () => {
+    h.txUpdateMany.mockResolvedValue({ count: 1 });
+    h.fundCard.mockRejectedValue(Object.assign(new Error("declined"), { status: 400 }));
     await expect(fund()).rejects.toMatchObject({ code: "card_fund_failed" });
     expect(h.balanceUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: { available: { increment: 1150n } } }),
     );
-    expect(h.txUpdate).toHaveBeenCalledWith(
+    expect(h.txUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: "FAILED" } }),
     );
+  });
+
+  it("does NOT refund when the provider's answer is unknown — the card may be loaded", async () => {
+    h.fundCard.mockRejectedValue(new TypeError("fetch failed"));
+    await expect(fund()).rejects.toMatchObject({ code: "card_fund_pending" });
+    expect(h.balanceUpdate).not.toHaveBeenCalled();
   });
 
   it("refuses a top-up under the $5 minimum before touching the balance", async () => {
@@ -132,7 +139,7 @@ describe("fundUserCard", () => {
   });
 
   it("returns the existing transaction on an idempotent replay", async () => {
-    h.txFindUnique.mockResolvedValue({ id: "tx-old", status: "COMPLETED" });
+    h.txFindUnique.mockResolvedValue({ id: "tx-old", status: "COMPLETED", userId: "u1" });
     const res = await fund();
     expect(res).toEqual({ transactionId: "tx-old", status: "COMPLETED" });
     expect(h.balanceUpdateMany).not.toHaveBeenCalled();
@@ -196,7 +203,7 @@ describe("withdrawUserCard", () => {
   });
 
   it("returns the existing transaction on an idempotent replay", async () => {
-    h.txFindUnique.mockResolvedValue({ id: "tx-old", status: "COMPLETED" });
+    h.txFindUnique.mockResolvedValue({ id: "tx-old", status: "COMPLETED", userId: "u1" });
     const res = await withdraw();
     expect(res).toEqual({ transactionId: "tx-old", status: "COMPLETED" });
     expect(h.withdrawFromCard).not.toHaveBeenCalled();

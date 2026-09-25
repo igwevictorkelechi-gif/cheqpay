@@ -74,6 +74,8 @@ export async function POST(req: Request) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      // The service secret is what lets the API trust the forwarded address.
+      ...(process.env.ADMIN_API_SECRET ? { "x-admin-secret": process.env.ADMIN_API_SECRET } : {}),
       ...(clientIp ? { "x-admin-client-ip": clientIp } : {}),
     },
     body: JSON.stringify({ email, password, ...(otp ? { otp } : {}) }),

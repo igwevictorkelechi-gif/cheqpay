@@ -1,3 +1,4 @@
+import { matchesSignature } from "@/lib/fileSignature";
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
     // Tight: a handful of ID images per user per window, not a firehose.
-    enforceRateLimit(`kyc-doc:${auth.id}`, 20, 60_000);
+    await enforceRateLimit(`kyc-doc:${auth.id}`, 20, 60_000);
 
     const body = kycDocumentUploadSchema.parse(await req.json());
 
@@ -46,6 +47,17 @@ export async function POST(req: Request) {
         "image_too_large"
       );
     }
+
+    if (!matchesSignature(bytes, body.contentType)) {
+      throw new ApiError(
+        415,
+        "That file isn't a real JPEG or PNG image — please upload a photo of your ID",
+        "bad_image"
+      );
+    }
+    // A daily ceiling on top of the per-minute one, so the document store
+    // can't be filled up by one account.
+    await enforceRateLimit(`kyc-doc-day:${auth.id}`, 10, 24 * 60 * 60_000);
 
     const ref = await storeKycDocument(auth.id, bytes, body.contentType);
     return jsonOk({ ref, side: body.side }, 201);

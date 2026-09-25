@@ -1,3 +1,4 @@
+import { enforceRateLimit } from "@/lib/ratelimit";
 import { prisma, KycStatus } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
@@ -73,6 +74,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
+    // Each submission makes paid provider calls (BVN, enrolment, accounts).
+    await enforceRateLimit(`kyc:${auth.id}`, 5, 60 * 60_000);
     const user = await prisma.user.findUnique({ where: { id: auth.id } });
     if (!user) {
       throw new ApiError(404, "Profile not provisioned; POST /api/me first", "no_profile");
@@ -108,6 +111,36 @@ export async function POST(req: Request) {
         bvn = decryptPii(user.bvnCiphertext);
       } catch (err) {
         console.error("[kyc] could not decrypt the retained BVN for enrollment", err);
+      }
+    }
+
+    // Once verified, who you are is fixed. A returning user may complete their
+    // address or upgrade their tier, but the name, date of birth and BVN must
+    // match what was verified — otherwise a stolen session could rewrite the
+    // identity that payouts are checked against. Genuine corrections go
+    // through support and an admin.
+    if (user.kycTier >= 1) {
+      const norm = (v: string | null | undefined) =>
+        (v ?? "").toLowerCase().replace(/[^a-z]/g, "");
+      const submittedName = `${body.firstName} ${body.lastName}`;
+      const nameChanged = !!user.legalName && norm(user.legalName) !== norm(submittedName);
+      const storedDob = user.dateOfBirth ? user.dateOfBirth.toISOString().slice(0, 10) : null;
+      const dobChanged = !!storedDob && !!body.dateOfBirth && storedDob !== body.dateOfBirth;
+      let storedBvn: string | null = null;
+      if (user.bvnCiphertext && isPiiEncryptionConfigured()) {
+        try {
+          storedBvn = decryptPii(user.bvnCiphertext);
+        } catch {
+          /* can't compare — the name and DOB checks still apply */
+        }
+      }
+      const bvnChanged = !!storedBvn && !!body.bvn && storedBvn !== body.bvn;
+      if (nameChanged || dobChanged || bvnChanged) {
+        throw new ApiError(
+          409,
+          "Your verified identity can't be changed here. Contact support if something is wrong.",
+          "identity_locked"
+        );
       }
     }
 

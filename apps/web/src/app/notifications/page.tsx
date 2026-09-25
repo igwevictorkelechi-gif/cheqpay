@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { api, getAccessToken } from "@/services/api";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import BrowserNotificationsCard from "@/components/BrowserNotificationsCard";
 
 const rows: { key: string; title: string; subtitle: string }[] = [
   { key: "deposits", title: "Deposits", subtitle: "When money lands in your wallet" },
@@ -13,7 +14,8 @@ const rows: { key: string; title: string; subtitle: string }[] = [
   { key: "bills", title: "Bill payments", subtitle: "Airtime, data, electricity & more" },
   { key: "price", title: "Price alerts", subtitle: "Big moves on BTC and USDT" },
   { key: "security", title: "Security alerts", subtitle: "New logins and sensitive changes" },
-  { key: "promos", title: "Product & promotions", subtitle: "News, tips and special offers" },
+  { key: "updates", title: "News & announcements", subtitle: "New features and important changes" },
+  { key: "promos", title: "Promotions", subtitle: "Special offers and rewards" },
 ];
 
 export default function NotificationsPage() {
@@ -59,6 +61,8 @@ export default function NotificationsPage() {
         <p className="mb-4 mt-2 text-sm text-muted">
           Choose what CheqPay lets you know about.
         </p>
+
+        <BrowserNotificationsCard />
 
         {!prefs ? (
           <div className="flex justify-center py-12">

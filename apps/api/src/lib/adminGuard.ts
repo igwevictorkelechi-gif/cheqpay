@@ -23,6 +23,7 @@
 //    to the security contact as it happens, so an abuse is seen in minutes, not
 //    the next morning.
 
+import { enforceRateLimit } from "./ratelimit";
 import { after } from "next/server";
 import { prisma } from "@cheqpay/db";
 import { requireAdmin, requireUser, isAdminUser } from "./auth";
@@ -123,6 +124,9 @@ export async function requireAdminOtp(req: Request, bodyOtp?: unknown): Promise<
   if (code.length !== 6) {
     throw new ApiError(403, "Enter the 6-digit code from your authenticator app.", "otp_required");
   }
+  // One shared authenticator, so one shared budget of guesses: 1,000,000 codes
+  // can't be walked 10 at a time.
+  await enforceRateLimit("admin-otp-attempts", 10, 15 * 60_000);
   if (!(await consumeAdminOtp(code))) {
     throw new ApiError(
       403,

@@ -41,9 +41,13 @@ export default function SignupPage() {
         fullName: form.fullName.trim(),
         phone: form.phone.trim(),
       });
-      router.push(
-        `/verify-otp?type=signup&email=${encodeURIComponent(email)}&fullName=${encodeURIComponent(form.fullName.trim())}`
+      // Handed over in sessionStorage, not the URL: a query string ends up in
+      // browser history, server logs and error reports.
+      sessionStorage.setItem(
+        "cheqpay-otp",
+        JSON.stringify({ email, fullName: form.fullName.trim() }),
       );
+      router.push("/verify-otp?type=signup");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sign up failed";
       setError(message);

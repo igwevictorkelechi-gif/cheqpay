@@ -18,10 +18,10 @@ export default function AppLockPage() {
     setEnabled(isAppLockEnabled());
   }, []);
 
-  const save = () => {
+  const save = async () => {
     if (pin.length < 4) return setError("Use at least 4 digits.");
     if (pin !== confirm) return setError("PINs don’t match.");
-    enableAppLock(pin);
+    await enableAppLock(pin);
     setPinValue("");
     setConfirm("");
     setSettingPin(false);

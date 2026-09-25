@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { recordAdminAction, requireAdminActor, requireAdminOtp } from "@/lib/adminGuard";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { refundOrder, setOrderStatus } from "@/lib/gadgetsAdmin";
 import { GadgetOrderStatus } from "@cheqpay/db";
@@ -17,11 +17,21 @@ const patchSchema = z.object({
  */
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
-    await requireAdmin(req);
+    const actor = await requireAdminActor(req);
     const { status } = patchSchema.parse(await req.json());
 
     if (status === GadgetOrderStatus.CANCELLED || status === GadgetOrderStatus.REFUNDED) {
+      // A refund credits a user's balance — the same bar as any other admin
+      // action that creates money in an account.
+      await requireAdminOtp(req);
       const order = await refundOrder(params.id, status);
+      await recordAdminAction(req, actor, {
+        action: "admin.gadget_order.refunded",
+        summary: `Marked gadget order ${params.id} ${status.toLowerCase()} (refunded)`,
+        resourceType: "GadgetOrder",
+        resourceId: params.id,
+        details: { status },
+      });
       return jsonOk({ order });
     }
     if (status === GadgetOrderStatus.PAID) {

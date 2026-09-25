@@ -141,27 +141,38 @@ async function finalizeCryptoWithdrawal(
     if (!wd) return { status: "unmatched" as const };
     if (
       wd.status === TransactionStatus.COMPLETED ||
-      wd.status === TransactionStatus.REVERSED
+      wd.status === TransactionStatus.REVERSED ||
+      wd.status === TransactionStatus.FAILED
     ) {
       return { status: "already_final" as const, transactionId: wd.id };
     }
 
+    // Claim the row so two events for the same hash can't both settle it.
+    const claim = async (to: TransactionStatus) =>
+      (
+        await db.transaction.updateMany({
+          where: {
+            id: wd.id,
+            status: { in: [TransactionStatus.PROCESSING, TransactionStatus.PENDING] },
+          },
+          data: { status: to },
+        })
+      ).count === 1;
+
     if (status === "completed") {
-      await db.transaction.update({
-        where: { id: wd.id },
-        data: { status: TransactionStatus.COMPLETED },
-      });
+      if (!(await claim(TransactionStatus.COMPLETED))) {
+        return { status: "already_final" as const, transactionId: wd.id };
+      }
       return { status: "completed" as const, transactionId: wd.id };
     }
 
     // Chain failure — refund the reserved funds (amount + network fee) and reverse.
+    if (!(await claim(TransactionStatus.REVERSED))) {
+      return { status: "already_final" as const, transactionId: wd.id };
+    }
     await db.balance.update({
       where: { userId_asset: { userId: wd.userId, asset: wd.asset } },
       data: { available: { increment: wd.amount + wd.fee } },
-    });
-    await db.transaction.update({
-      where: { id: wd.id },
-      data: { status: TransactionStatus.REVERSED },
     });
     await db.auditLog.create({
       data: {

@@ -6,7 +6,13 @@ import { ensureCardsTable } from "@/lib/ensureCards";
 import { cardsAvailable } from "@/lib/cards";
 import { createCard } from "@/lib/maplerad/issuing";
 import { describeProviderError } from "@/lib/mapleradCustomer";
-import { chargeCardIssueFee, linkCardIssueFee, refundCardIssueFee } from "@/lib/cardFunding";
+import {
+  cardIssueKey,
+  chargeCardIssueFee,
+  linkCardIssueFee,
+  refundCardIssueFee,
+} from "@/lib/cardFunding";
+import { enforceRateLimit } from "@/lib/ratelimit";
 import { fromMinorUnits } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +51,31 @@ export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
     await assertFeatureEnabled("virtual_cards");
+    await enforceRateLimit(`card-create:${auth.id}`, 3, 60 * 60_000);
     await ensureCardsTable();
+
+    // A card costs money, so a double tap or a retried request must not buy
+    // two. The key names this create request; a repeat returns the first card.
+    const requestKey = req.headers.get("idempotency-key");
+    if (!requestKey) {
+      throw new ApiError(400, "Missing Idempotency-Key header", "no_idempotency_key");
+    }
+    const prior = await prisma.transaction.findUnique({
+      where: { idempotencyKey: cardIssueKey(auth.id, requestKey) },
+      select: { externalRef: true },
+    });
+    if (prior) {
+      const existingCard = prior.externalRef
+        ? await prisma.card.findFirst({
+            where: { userId: auth.id, reference: prior.externalRef },
+            select: CARD_SELECT,
+          })
+        : null;
+      if (!existingCard) {
+        throw new ApiError(409, "This card request is already being processed.", "card_in_progress");
+      }
+      return jsonOk({ card: existingCard }, 202);
+    }
 
     // Card issuing hangs off an enrolled Maplerad customer, which is created at
     // KYC approval (needs the BVN). No customer id ⇒ the user hasn't completed
@@ -70,7 +100,7 @@ export async function POST(req: Request) {
     // The card's price comes out of the USD balance first, so no card is
     // requested that hasn't been paid for. Refunded below if the request fails,
     // and by the issuing webhook if Maplerad later reports the card failed.
-    const charge = await chargeCardIssueFee(auth.id);
+    const charge = await chargeCardIssueFee(auth.id, requestKey);
 
     let ack: Awaited<ReturnType<typeof createCard>>;
     try {

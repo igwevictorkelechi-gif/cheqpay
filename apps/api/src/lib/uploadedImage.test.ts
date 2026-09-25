@@ -17,8 +17,12 @@ describe("imageValue", () => {
     }
   });
 
-  it("accepts an https URL, for images already stored that way", () => {
-    expect(ok("https://cdn.example.com/event.jpg")).toBe(true);
+  it("accepts an https URL only from our own storage", () => {
+    expect(ok("https://xttgnswgeffyybjfjlkp.supabase.co/storage/v1/object/public/events/a.jpg")).toBe(true);
+    // A third-party host would see every viewer's IP, and would force the
+    // website's content security policy open.
+    expect(ok("https://cdn.example.com/event.jpg")).toBe(false);
+    expect(ok("https://evil.supabase.co.attacker.com/storage/x.jpg")).toBe(false);
   });
 
   it("accepts empty, meaning no image", () => {

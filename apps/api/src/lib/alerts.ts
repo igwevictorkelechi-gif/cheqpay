@@ -1,3 +1,4 @@
+import { sendWebPush } from "./webPush";
 import { prisma } from "@cheqpay/db";
 import { sendPush } from "./push";
 import { isEmailConfigured, sendEmail } from "./email";
@@ -88,15 +89,12 @@ async function sendEmailAlert(userId: string, msg: AlertMessage): Promise<boolea
 export async function notifyUser(
   userId: string,
   msg: AlertMessage
-): Promise<{ devices: number; email: boolean }> {
-  const [devices, email] = await Promise.all([
-    sendPush(userId, {
-      title: msg.title,
-      body: msg.body,
-      category: msg.category,
-      data: msg.data,
-    }).catch(() => 0),
+): Promise<{ devices: number; browsers: number; email: boolean }> {
+  const push = { title: msg.title, body: msg.body, category: msg.category, data: msg.data };
+  const [devices, browsers, email] = await Promise.all([
+    sendPush(userId, push).catch(() => 0),
+    sendWebPush(userId, push).catch(() => 0),
     sendEmailAlert(userId, msg),
   ]);
-  return { devices, email };
+  return { devices, browsers, email };
 }

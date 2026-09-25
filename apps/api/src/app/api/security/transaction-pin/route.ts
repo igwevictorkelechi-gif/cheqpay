@@ -52,7 +52,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
-    enforceRateLimit(`pin-set:${auth.id}`, 5, 60_000);
+    await enforceRateLimit(`pin-set:${auth.id}`, 5, 60_000);
 
     const { pin } = createSchema.parse(await req.json());
 
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const auth = await requireUser(req);
-    enforceRateLimit(`pin-change:${auth.id}`, 5, 60_000);
+    await enforceRateLimit(`pin-change:${auth.id}`, 5, 60_000);
 
     const { currentPin, pin } = changeSchema.parse(await req.json());
 

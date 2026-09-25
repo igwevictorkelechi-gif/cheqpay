@@ -1,3 +1,5 @@
+import { enforceRateLimit } from "@/lib/ratelimit";
+import { readPin, requireTransactionPin } from "@/lib/transactionPin";
 import { Prisma, prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
@@ -147,6 +149,11 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const auth = await requireUser(req);
+    await enforceRateLimit(`account-delete:${auth.id}`, 3, 60 * 60_000);
+    // Closing the account can't move money (it requires a zero balance), but
+    // it locks the owner out — so a stolen session must not be able to do it
+    // without the PIN of an account that has one.
+    await requireTransactionPin(auth.id, readPin(req));
     const user = await prisma.user.findUnique({ where: { id: auth.id } });
     if (!user) {
       // Already gone — treat as success so the client can finish signing out.

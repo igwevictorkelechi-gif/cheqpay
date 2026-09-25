@@ -59,7 +59,9 @@ export function clearUserCaches(): void {
     const keys: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith("cheqpay:")) keys.push(k);
+      // `cheqpay:` = cached screens; `cheqpay.` = this user's App Lock and
+      // any legacy PIN, which must not carry over to whoever signs in next.
+      if (k && (k.startsWith("cheqpay:") || k.startsWith("cheqpay."))) keys.push(k);
     }
     keys.forEach((k) => localStorage.removeItem(k));
   } catch {

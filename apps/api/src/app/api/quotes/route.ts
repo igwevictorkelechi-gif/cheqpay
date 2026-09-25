@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
     await assertFeatureEnabled("crypto_trading");
-    enforceRateLimit(`quote:${auth.id}`, 30, 60_000);
+    await enforceRateLimit(`quote:${auth.id}`, 30, 60_000);
     const user = await prisma.user.findUnique({ where: { id: auth.id } });
     if (!user) {
       throw new ApiError(404, "Profile not provisioned; POST /api/me first", "no_profile");
