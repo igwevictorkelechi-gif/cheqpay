@@ -15,13 +15,22 @@ import { NIGERIAN_BANKS } from "@cheqpay/shared";
 import { api, ApiError, type Bank, type Beneficiary } from "@/services/api";
 import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import { naira, useLimits, withdrawalBreakdown } from "@/lib/fees";
 
 type Mode = "list" | "add";
 
 export default function WithdrawBeneficiaryPage() {
   const router = useRouter();
 
-  const [amount, setAmount] = useState(0);
+  // The exact amount string from the previous screen ("123456.78"). Sent as-is,
+  // so a Max withdrawal carries every kobo of the balance.
+  const [amountStr, setAmountStr] = useState("0");
+  const amount = Number(amountStr);
+  const limits = useLimits();
+  const feeNgn = limits?.fees.withdrawalFeeNgn ?? 0;
+  const breakdown = withdrawalBreakdown(amount, feeNgn);
+  // The summary sheet shown before the PIN: amount, fee, what arrives.
+  const [confirming, setConfirming] = useState(false);
   const [mode, setMode] = useState<Mode>("list");
   const [loading, setLoading] = useState(true);
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
@@ -39,8 +48,10 @@ export default function WithdrawBeneficiaryPage() {
   const [addError, setAddError] = useState<string | null>(null);
 
   useEffect(() => {
-    const raw = new URLSearchParams(window.location.search).get("amount");
-    setAmount(raw ? Number(raw.replace(/\D/g, "")) : 0);
+    // Decimal, not digits-only: stripping the "." would turn ₦123,456.78 into
+    // ₦12,345,678.
+    const raw = new URLSearchParams(window.location.search).get("amount") ?? "";
+    setAmountStr(/^\d+(\.\d{1,2})?$/.test(raw) ? raw : "0");
   }, []);
 
   useEffect(() => {
@@ -120,6 +131,7 @@ export default function WithdrawBeneficiaryPage() {
 
   async function payout() {
     if (!selected) return;
+    setConfirming(false);
     setPayError(null);
     setSubmitting(true);
     try {
@@ -127,15 +139,20 @@ export default function WithdrawBeneficiaryPage() {
         (pin) =>
           api.createNgnWithdrawal(
             {
-              amount: String(amount),
+              amount: amountStr,
               bankCode: selected.bankCode,
               accountNumber: selected.accountNumber,
             },
             pin,
           ),
-        { title: "Confirm this withdrawal", detail: `Sending ₦${amount} to ${selected.accountNumber}.` },
+        {
+          title: "Confirm this withdrawal",
+          detail: `${naira(breakdown.receive)} to ${selected.accountName} · ${selected.bankName}${
+            breakdown.fee > 0 ? ` (${naira(breakdown.fee)} fee)` : ""
+          }.`,
+        },
       );
-      router.replace(`/withdraw/done?amount=${amount}`);
+      router.replace(`/withdraw/done?amount=${breakdown.receive}`);
     } catch (e) {
       // A dismissed PIN prompt means "not now", not a failed payout.
       if (e instanceof Error && e.message === PIN_CANCELLED) {
@@ -163,7 +180,10 @@ export default function WithdrawBeneficiaryPage() {
           {mode === "add" ? "Add account" : "Choose account"}
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Withdrawing <span className="font-bold text-ink">₦{amount.toLocaleString("en-NG")}</span>
+          Withdrawing <span className="font-bold text-ink">{naira(amount)}</span>
+          {limits !== null && breakdown.ok ? (
+            <> · you&apos;ll receive <span className="font-bold text-ink">{naira(breakdown.receive)}</span></>
+          ) : null}
         </p>
 
         {loading ? (
@@ -216,12 +236,12 @@ export default function WithdrawBeneficiaryPage() {
 
             <div className="mt-auto pt-6">
               <button
-                onClick={payout}
-                disabled={!selected || submitting}
+                onClick={() => setConfirming(true)}
+                disabled={!selected || submitting || limits === null || !breakdown.ok}
                 className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white active:scale-[0.98] disabled:opacity-50"
               >
                 {submitting && <Loader2 className="h-5 w-5 animate-spin" />}
-                {submitting ? "Processing…" : `Withdraw ₦${amount.toLocaleString("en-NG")}`}
+                {submitting ? "Processing…" : `Withdraw ${naira(amount)}`}
               </button>
             </div>
           </>
@@ -303,6 +323,70 @@ export default function WithdrawBeneficiaryPage() {
             )}
           </>
         )}
+
+        {confirming && selected ? (
+          <div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 lg:items-center"
+            onClick={() => setConfirming(false)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Confirm withdrawal"
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-[480px] rounded-t-3xl bg-surface p-5 pb-8 lg:rounded-3xl"
+            >
+              <h2 className="text-xl font-extrabold text-ink">Confirm withdrawal</h2>
+              <div className="mt-5 space-y-3 rounded-2xl bg-card p-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted">Withdrawing</span>
+                  <span className="font-semibold text-ink">{naira(breakdown.amount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted">Fee</span>
+                  <span className="font-semibold text-ink">
+                    {breakdown.fee > 0 ? `−${naira(breakdown.fee)}` : "Free"}
+                  </span>
+                </div>
+                <div className="border-t border-border pt-3">
+                  <div className="flex justify-between text-base">
+                    <span className="font-bold text-ink">You&apos;ll receive</span>
+                    <span className="font-extrabold text-ink">{naira(breakdown.receive)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-3 rounded-2xl bg-card p-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-circle">
+                  <Landmark className="h-5 w-5 text-ink" />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-ink">{selected.accountName}</p>
+                  <p className="text-sm text-muted">
+                    {selected.bankName} · {selected.accountNumber}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-muted">
+                Your balance goes down by {naira(breakdown.amount)}. Check the account — a payout can&apos;t
+                always be recovered once sent.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => setConfirming(false)}
+                  className="flex-1 rounded-full bg-card py-3.5 font-bold text-ink active:scale-[0.98]"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={payout}
+                  className="flex-1 rounded-full bg-gradient-to-r from-brand to-brand-light py-3.5 font-bold text-white active:scale-[0.98]"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

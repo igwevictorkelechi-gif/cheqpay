@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors, NairaFlag } from '@/components/brand';
 import { api, type UsdAccount } from '@/services/api';
+import { percent, useFees } from '@/lib/fees';
 
 /** A USD account can exist but still be in review — only an approved one can receive. */
 function isUsable(account: UsdAccount | null): boolean {
@@ -18,6 +19,8 @@ function isUsable(account: UsdAccount | null): boolean {
 
 export default function AddMoneyScreen() {
   const insets = useSafeAreaInsets();
+  // The NGN deposit fee set in the admin — shown instead of a hard-coded number.
+  const fees = useFees();
   const { currency: currencyParam } = useLocalSearchParams<{ currency?: string }>();
   const isUsd = String(currencyParam ?? '').toUpperCase() === 'USD';
   const currency = isUsd ? 'USD' : 'NGN';
@@ -173,7 +176,13 @@ export default function AddMoneyScreen() {
               <Text className="text-muted dark:text-muted-dark text-sm mt-0.5">
                 {isUsd
                   ? 'Send dollars to your account details from anywhere.'
-                  : '150 NGN Fees. Usually arrives in seconds'}
+                  : `${
+                      fees === null
+                        ? ''
+                        : fees.depositFeeBps > 0
+                          ? `${percent(fees.depositFeeBps)} fee. `
+                          : 'No fee. '
+                    }Usually arrives in seconds`}
               </Text>
             </View>
           </View>

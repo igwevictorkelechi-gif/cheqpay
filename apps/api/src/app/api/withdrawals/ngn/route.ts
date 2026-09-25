@@ -2,7 +2,7 @@ import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { getPaymentProvider } from "@/payments";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
-import { toMinorUnits } from "@/lib/money";
+import { fromMinorUnits, toMinorUnits } from "@/lib/money";
 import { assertWithdrawalAllowed, sumTodayWithdrawalsNgnKobo } from "@/lib/limits";
 import { MAX_TIER } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
@@ -11,6 +11,7 @@ import { ngnWithdrawalSchema } from "@/lib/validation";
 import { getWithdrawalFeeNgn, getWithdrawalMinNgn } from "@/lib/settings";
 import { requestContext } from "@/lib/requestContext";
 import { readPin, requireTransactionPin } from "@/lib/transactionPin";
+import { withdrawalBreakdown } from "@/lib/fees";
 
 import { assertFeatureEnabled } from "@/lib/features";
 
@@ -44,13 +45,15 @@ export async function POST(req: Request) {
     }
 
     const body = ngnWithdrawalSchema.parse(await req.json());
-    const amountMinor = toMinorUnits(body.amount, Asset.NGN);
+    // What the user typed. With feeInclusive this is what leaves their balance;
+    // without it, it is what the bank receives. See ngnWithdrawalSchema.
+    const requestedMinor = toMinorUnits(body.amount, Asset.NGN);
 
     // Floor on the payout, checked before anything is reserved. Every payout
     // costs the same provider fee whatever its size, so a tiny one can cost
     // more to send than it moves.
     const minNgn = await getWithdrawalMinNgn();
-    if (minNgn > 0 && amountMinor < toMinorUnits(String(minNgn), Asset.NGN)) {
+    if (minNgn > 0 && requestedMinor < toMinorUnits(String(minNgn), Asset.NGN)) {
       throw new ApiError(
         422,
         `The smallest withdrawal is ₦${minNgn.toLocaleString("en-NG")}`,
@@ -72,14 +75,22 @@ export async function POST(req: Request) {
     // does not burn the caller's idempotency key.
     await requireTransactionPin(auth.id, readPin(req));
 
+    // Business withdrawal fee (admin-set flat NGN, default 0).
+    //  - feeInclusive: the fee comes out of the typed amount. The balance drops by
+    //    exactly what the user typed and the bank receives the rest, so "Max"
+    //    (the whole balance) always works. See lib/fees.ts.
+    //  - otherwise (older clients): the bank receives the typed amount and the fee
+    //    is debited on top.
+    // Either way the row records amount = what the bank receives and fee = fee,
+    // so the refund and reversal paths (amount + fee) stay correct.
+    const feeMinor = BigInt(Math.round((await getWithdrawalFeeNgn()) * 100));
+    const { payoutMinor: amountMinor, grossMinor: totalMinor } = body.feeInclusive
+      ? withdrawalBreakdown(requestedMinor, feeMinor)
+      : { payoutMinor: requestedMinor, grossMinor: requestedMinor + feeMinor };
+
     const usedToday = await sumTodayWithdrawalsNgnKobo(auth.id);
     const effectiveTier = getEnv().RELAX_WITHDRAWAL_GUARDS ? MAX_TIER : user.kycTier;
     assertWithdrawalAllowed(effectiveTier, amountMinor, usedToday);
-
-    // Business withdrawal fee (admin-set flat NGN, default 0). The user is
-    // debited amount + fee; the bank receives the requested amount.
-    const feeMinor = BigInt(Math.round((await getWithdrawalFeeNgn()) * 100));
-    const totalMinor = amountMinor + feeMinor;
 
     // Atomic debit + record. Throws (rolls back) on insufficient funds.
     const tx = await prisma.$transaction(async (db) => {
@@ -90,7 +101,7 @@ export async function POST(req: Request) {
       if (debit.count !== 1) {
         throw new ApiError(
           422,
-          feeMinor > 0n
+          feeMinor > 0n && !body.feeInclusive
             ? "Insufficient NGN balance (amount + withdrawal fee)"
             : "Insufficient NGN balance",
           "insufficient_funds"
@@ -119,7 +130,8 @@ export async function POST(req: Request) {
     try {
       const psp = getPaymentProvider();
       const transfer = await psp.initiateTransfer({
-        amount: body.amount,
+        // What the bank receives — the typed amount minus the fee when fee-inclusive.
+        amount: fromMinorUnits(amountMinor, Asset.NGN),
         bankCode: body.bankCode,
         accountNumber: body.accountNumber,
         reference: tx.id,
@@ -139,7 +151,13 @@ export async function POST(req: Request) {
           details: { amountMinor: amountMinor.toString(), providerRef: transfer.providerRef },
         },
       });
-      return jsonOk({ transactionId: tx.id, status: "processing" });
+      return jsonOk({
+        transactionId: tx.id,
+        status: "processing",
+        amount: fromMinorUnits(totalMinor, Asset.NGN),
+        fee: fromMinorUnits(feeMinor, Asset.NGN),
+        youReceive: fromMinorUnits(amountMinor, Asset.NGN),
+      });
     } catch {
       // PSP rejected the transfer — refund (amount + fee) and fail.
       await prisma.$transaction([

@@ -141,7 +141,26 @@ export interface Quote {
   amountIn: string;
   amountOut: string;
   rate: string;
+  /** Convert quotes only: what the spread costs, minor units of toAsset. */
+  feeOut?: string;
+  /** Convert quotes only: the spread, in basis points (100 = 1%). */
+  feeBps?: number;
   expiresAt: string;
+}
+
+/** Fees set in the admin dashboard, as the server charges them. */
+export interface PublicFees {
+  /** Flat, taken out of the amount withdrawn. */
+  withdrawalFeeNgn: number;
+  depositFeeBps: number;
+  swapSpreadBps: number;
+  fx: { buyUsdBps: number; sellUsdBps: number };
+}
+
+export interface PublicLimits {
+  deposit: { minUsd: number; enforced: boolean };
+  withdrawal: { minNgn: number; minUsd: number; enforced: boolean };
+  fees: PublicFees;
 }
 export interface BillBiller {
   id: string;
@@ -360,6 +379,11 @@ export const api = {
     return apiFetch('/api/balances');
   },
 
+  /** Public: withdrawal minimums and the fees set in the admin dashboard. */
+  getLimits(): Promise<PublicLimits> {
+    return apiFetch('/api/limits');
+  },
+
   getWallets(): Promise<{ wallets: { asset: string; network: string; address: string }[] }> {
     return apiFetch('/api/wallets');
   },
@@ -540,11 +564,19 @@ export const api = {
     bankCode: string;
     accountNumber: string;
     narration?: string;
-  }, pin?: string): Promise<{ transactionId: string; status: string }> {
+  }, pin?: string): Promise<{
+    transactionId: string;
+    status: string;
+    amount?: string;
+    fee?: string;
+    youReceive?: string;
+  }> {
     return apiFetch('/api/withdrawals/ngn', {
       method: 'POST',
       headers: { 'idempotency-key': idemKey(), ...pinHeader(pin) },
-      body: JSON.stringify(input),
+      // The fee comes out of `amount`: the balance drops by exactly this much
+      // and the bank receives amount − fee. See apps/api/src/lib/fees.ts.
+      body: JSON.stringify({ ...input, feeInclusive: true }),
     });
   },
 

@@ -123,6 +123,13 @@ export const ngnWithdrawalSchema = z.object({
   bankCode: z.string().min(3).max(10),
   accountNumber: z.string().regex(/^\d{10}$/, "Expected a 10-digit NUBAN"),
   narration: z.string().max(100).optional(),
+  /**
+   * true: `amount` is what leaves the balance and the fee comes out of it (the
+   * bank receives amount − fee). Both apps always send this. Absent: the old
+   * behaviour — the bank receives `amount` and the fee is debited on top — kept
+   * so a cached older client doesn't change meaning under a user.
+   */
+  feeInclusive: z.boolean().optional(),
 });
 export type NgnWithdrawalInput = z.infer<typeof ngnWithdrawalSchema>;
 

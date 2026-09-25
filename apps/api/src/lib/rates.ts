@@ -139,7 +139,10 @@ export function computeCryptoConvert(params: {
   fromUsdtPrice: Decimal; // USDT per 1 from-asset (USDT itself = 1)
   toUsdtPrice: Decimal; // USDT per 1 to-asset (USDT itself = 1)
   spreadBps: number;
-}): SwapComputation {
+}): SwapComputation & {
+  /** What the spread cost, in minor units of the TO asset: gross out − net out. */
+  feeOutMinor: bigint;
+} {
   if (params.amountInMinor <= 0n) {
     throw new ApiError(422, "Amount must be positive", "bad_amount");
   }
@@ -159,13 +162,19 @@ export function computeCryptoConvert(params: {
   const valueUsdt = fromWhole.mul(params.fromUsdtPrice).mul(new D(1).sub(s));
   const toWhole = valueUsdt.div(params.toUsdtPrice);
   const amountOutMinor = floorToBigInt(toWhole.mul(new D(10).pow(toDecimals)));
+  // The same conversion with no spread, so the app can show what the spread
+  // cost as an amount rather than leaving it hidden inside the rate.
+  const grossOutMinor = floorToBigInt(
+    fromWhole.mul(params.fromUsdtPrice).div(params.toUsdtPrice).mul(new D(10).pow(toDecimals)),
+  );
+  const feeOutMinor = grossOutMinor > amountOutMinor ? grossOutMinor - amountOutMinor : 0n;
 
   if (amountOutMinor <= 0n) {
     throw new ApiError(422, "Amount too small to convert", "dust_amount");
   }
   // Effective TO per 1 FROM (after spread).
   const rate = params.fromUsdtPrice.div(params.toUsdtPrice).mul(new D(1).sub(s));
-  return { amountOutMinor, rate };
+  return { amountOutMinor, rate, feeOutMinor };
 }
 
 function floorToBigInt(d: Decimal): bigint {

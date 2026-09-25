@@ -11,7 +11,8 @@ export default function WithdrawDonePage() {
 
   useEffect(() => {
     const raw = new URLSearchParams(window.location.search).get("amount");
-    setAmount(raw ? Number(raw.replace(/\D/g, "")) : 0);
+    // Decimal, not digits-only: the payout can carry kobo.
+    setAmount(raw && /^\d+(\.\d+)?$/.test(raw) ? Number(raw) : 0);
   }, []);
 
   return (
@@ -25,7 +26,9 @@ export default function WithdrawDonePage() {
             {amount > 0 ? (
               <>
                 Your payout of{" "}
-                <span className="font-bold text-ink">₦{amount.toLocaleString("en-NG")}</span> is
+                <span className="font-bold text-ink">
+                  ₦{amount.toLocaleString("en-NG", { maximumFractionDigits: 2 })}
+                </span> is
                 processing. It usually lands in seconds.
               </>
             ) : (

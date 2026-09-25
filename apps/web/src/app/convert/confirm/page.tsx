@@ -7,6 +7,7 @@ import AppShell from "@/components/AppShell";
 import { CoinBadge } from "@/components/MobileUI";
 import { api } from "@/services/api";
 import { invalidateMoneyCaches } from "@/lib/cache";
+import { percent, useFees } from "@/lib/fees";
 import {
   formatConvertRate,
   formatMinor,
@@ -51,6 +52,10 @@ function ConfirmInner() {
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [out, setOut] = useState("0");
   const [rate, setRate] = useState<string | null>(null);
+  // What the spread costs, when the quote states it (convert quotes do).
+  const [feeOut, setFeeOut] = useState<string | null>(null);
+  const [feeBps, setFeeBps] = useState<number | null>(null);
+  const fees = useFees();
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +79,11 @@ function ConfirmInner() {
       setQuoteId(q.quoteId);
       setOut(formatMinor(q.amountOut, toSym));
       setRate(q.rate);
+      // "" = the quote says there is no fee; null = the quote doesn't say.
+      setFeeOut(
+        q.feeOut === undefined ? null : BigInt(q.feeOut) === 0n ? "" : formatMinor(q.feeOut, toSym),
+      );
+      setFeeBps(q.feeBps ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not get a quote");
     } finally {
@@ -160,6 +170,22 @@ function ConfirmInner() {
                 : `1 ${mode.crypto} = ₦${Number(rate).toLocaleString("en-NG", {
                     maximumFractionDigits: 2,
                   })}`
+            }
+          />
+          <Row
+            label={feeBps !== null && feeBps > 0 ? `Fee (${percent(feeBps)})` : "Fee"}
+            value={
+              loading
+                ? "…"
+                : feeOut !== null
+                  ? feeOut === ""
+                    ? "Free"
+                    : `${feeOut} ${toSym}`
+                  : fees
+                    ? fees.swapSpreadBps > 0
+                      ? `${percent(fees.swapSpreadBps)} · included in rate`
+                      : "Free"
+                    : "Included in rate"
             }
           />
           <Row label="Estimated time" value="~ instant" />

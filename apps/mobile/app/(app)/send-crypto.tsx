@@ -254,7 +254,8 @@ export default function SendCryptoScreen() {
                 className="flex-1 text-ink dark:text-ink-dark text-lg font-bold"
               />
               <Text className="text-muted dark:text-muted-dark font-bold mr-2">{sym}</Text>
-              <TouchableOpacity onPress={() => setAmount(String(available))} className="rounded-full px-3 py-1" style={{ backgroundColor: 'rgba(107,91,149,0.25)' }}>
+              {/* The exact balance string — String(Number(x)) turns tiny balances into "1.2e-7". */}
+              <TouchableOpacity onPress={() => setAmount(sym ? (bal[sym] ?? '0') : '0')} className="rounded-full px-3 py-1" style={{ backgroundColor: 'rgba(107,91,149,0.25)' }}>
                 <Text style={{ color: colors.brandLight, fontWeight: '700', fontSize: 12 }}>MAX</Text>
               </TouchableOpacity>
             </View>

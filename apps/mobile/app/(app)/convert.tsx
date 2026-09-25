@@ -35,6 +35,7 @@ function AssetCard({
   balance,
   emphasize,
   onPick,
+  onMax,
 }: {
   role: string;
   symbol: ConvertSymbol;
@@ -42,6 +43,8 @@ function AssetCard({
   balance: string;
   emphasize?: boolean;
   onPick: () => void;
+  /** Fill the whole balance. Only the FROM side offers it. */
+  onMax?: () => void;
 }) {
   return (
     <View className="bg-card dark:bg-card-dark rounded-3xl p-5">
@@ -56,9 +59,16 @@ function AssetCard({
       <Text className="text-ink dark:text-ink-dark font-extrabold text-center mt-3" style={{ fontSize: emphasize ? 40 : 34 }} numberOfLines={1}>
         {amount}
       </Text>
-      <Text className="text-muted dark:text-muted-dark text-sm text-center mt-2">
-        Balance: <Text className="text-ink dark:text-ink-dark font-semibold">{balance}</Text>
-      </Text>
+      <View className="flex-row items-center justify-center mt-2" style={{ gap: 8 }}>
+        <Text className="text-muted dark:text-muted-dark text-sm">
+          Balance: <Text className="text-ink dark:text-ink-dark font-semibold">{balance}</Text>
+        </Text>
+        {onMax ? (
+          <TouchableOpacity onPress={onMax} className="rounded-full px-2.5 py-0.5" style={{ backgroundColor: 'rgba(107,91,149,0.25)' }}>
+            <Text style={{ color: colors.brandLight, fontWeight: '700', fontSize: 12 }}>MAX</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -185,7 +195,21 @@ export default function ConvertScreen() {
         </View>
 
         <View className="px-5">
-          <AssetCard role="FROM" symbol={fromSym} amount={amount} balance={`${bal[fromSym] ?? '0'} ${fromSym}`} emphasize onPick={() => setPicker('from')} />
+          <AssetCard
+            role="FROM"
+            symbol={fromSym}
+            amount={amount}
+            balance={`${bal[fromSym] ?? '0'} ${fromSym}`}
+            emphasize
+            onPick={() => setPicker('from')}
+            onMax={() => {
+              // The exact balance string from the server, trailing zeros dropped
+              // ("12.500000" → "12.5") — the same number, no float rounding.
+              const exact = bal[fromSym] ?? '0';
+              const trimmed = exact.includes('.') ? exact.replace(/\.?0+$/, '') : exact;
+              setAmount(trimmed || '0');
+            }}
+          />
           <View className="items-center z-10" style={{ marginVertical: -16 }}>
             <TouchableOpacity onPress={flip} className="w-12 h-12 rounded-full items-center justify-center" style={{ backgroundColor: colors.brand }} activeOpacity={0.8}>
               <Ionicons name="swap-vertical" size={20} color="#FFFFFF" />

@@ -13,6 +13,7 @@ import {
   type ConvertSymbol,
 } from '@/lib/assets';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
+import { percent, useFees } from '@/lib/fees';
 
 function CoinBadge({ symbol, size = 44 }: { symbol: string; size?: number }) {
   const m = ASSET_META[symbol as ConvertSymbol] ?? { bg: colors.brand, glyph: symbol.charAt(0) };
@@ -59,6 +60,10 @@ export default function SwapConfirmScreen() {
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [out, setOut] = useState('0');
   const [rate, setRate] = useState<string | null>(null);
+  // "" = the quote says there is no fee; null = the quote doesn't say.
+  const [feeOut, setFeeOut] = useState<string | null>(null);
+  const [feeBps, setFeeBps] = useState<number | null>(null);
+  const fees = useFees();
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +87,14 @@ export default function SwapConfirmScreen() {
       setQuoteId(q.quoteId);
       setOut(formatMinor(q.amountOut, toSym as ConvertSymbol));
       setRate(q.rate);
+      setFeeOut(
+        q.feeOut === undefined
+          ? null
+          : BigInt(q.feeOut) === 0n
+            ? ''
+            : formatMinor(q.feeOut, toSym as ConvertSymbol),
+      );
+      setFeeBps(q.feeBps ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not get a quote');
     } finally {
@@ -152,6 +165,22 @@ export default function SwapConfirmScreen() {
         <View className="px-5 mt-4">
           <View className="bg-card dark:bg-card-dark rounded-3xl p-5">
             <Row label="Rate" value={rateValue} />
+            <Row
+              label={feeBps !== null && feeBps > 0 ? `Fee (${percent(feeBps)})` : 'Fee'}
+              value={
+                loading
+                  ? '…'
+                  : feeOut !== null
+                    ? feeOut === ''
+                      ? 'Free'
+                      : `${feeOut} ${toSym}`
+                    : fees
+                      ? fees.swapSpreadBps > 0
+                        ? `${percent(fees.swapSpreadBps)} · included in rate`
+                        : 'Free'
+                      : 'Included in rate'
+              }
+            />
             <Row label="Estimated time" value="~ instant" />
             <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 4 }} />
             <Row label="You receive" value={loading ? '…' : `${out} ${toSym}`} />

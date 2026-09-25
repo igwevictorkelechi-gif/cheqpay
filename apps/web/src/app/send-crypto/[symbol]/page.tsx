@@ -39,6 +39,8 @@ export default function SendCryptoDetailPage() {
   const meta = getAssetMeta(symbol);
 
   const [available, setAvailable] = useState<number>(0);
+  // The exact balance string, for MAX: String(Number(x)) turns tiny balances into "1.2e-7".
+  const [availableExact, setAvailableExact] = useState("0");
   const [toAddress, setToAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [stage, setStage] = useState<Stage>("form");
@@ -78,7 +80,10 @@ export default function SendCryptoDetailPage() {
         ]);
         if (!active) return;
         const b = balances.find((x) => x.asset === meta.symbol);
-        if (b) setAvailable(Number(b.availableFormatted));
+        if (b) {
+          setAvailable(Number(b.availableFormatted));
+          setAvailableExact(b.availableFormatted);
+        }
         const entry = addresses.find((x) => x.asset === meta.symbol);
         if (entry) {
           setAvail("live");
@@ -306,7 +311,7 @@ export default function SendCryptoDetailPage() {
               />
               <span className="text-sm font-bold text-muted">{meta.symbol}</span>
               <button
-                onClick={() => setAmount(String(available))}
+                onClick={() => setAmount(availableExact)}
                 className="min-h-[44px] rounded-full bg-brand/20 px-3 py-1 text-xs font-bold text-brand-light active:scale-95"
               >
                 MAX
