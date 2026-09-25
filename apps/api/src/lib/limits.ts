@@ -28,10 +28,26 @@ export function assertWithdrawalAllowed(
  * NGN withdrawals use their amount directly; crypto withdrawals use the NGN
  * value recorded at request time (metadata.ngnValueKobo).
  */
-export async function sumTodayWithdrawalsNgnKobo(userId: string): Promise<bigint> {
+/** A Prisma client or an interactive-transaction client — both can read rows. */
+type Db = Pick<typeof prisma, "transaction" | "$queryRaw">;
+
+/**
+ * Serialise one user's money-out requests for the rest of the transaction.
+ *
+ * The daily limit is "sum today's withdrawals, then debit". Two requests at
+ * once would both sum the same total, both pass, and together exceed the
+ * limit. Holding this per-user lock across the sum and the debit makes them
+ * take turns, while other users are unaffected. Released automatically at
+ * commit or rollback.
+ */
+export async function lockUserMoney(db: Pick<typeof prisma, "$queryRaw">, userId: string): Promise<void> {
+  await db.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+}
+
+export async function sumTodayWithdrawalsNgnKobo(userId: string, db: Db = prisma): Promise<bigint> {
   const start = new Date();
   start.setUTCHours(0, 0, 0, 0);
-  const rows = await prisma.transaction.findMany({
+  const rows = await db.transaction.findMany({
     where: {
       userId,
       type: TransactionType.WITHDRAWAL,

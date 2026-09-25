@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
     await assertFeatureEnabled("gadgets");
-    enforceRateLimit(`gadget:discount:${auth.id}`, 20, 60_000);
+    await enforceRateLimit(`gadget:discount:${auth.id}`, 20, 60_000);
 
     const body = quoteSchema.parse(await req.json());
     const quote = await quoteDiscount(body);

@@ -13,8 +13,14 @@ function VerifyOTPForm() {
   const { setUser } = useAuthStore();
 
   const type = searchParams.get("type") || "login";
-  const fullName = searchParams.get("fullName") || "";
-  const email = searchParams.get("email") || "";
+  // From the login/signup screen via sessionStorage (older links may still
+  // carry them in the URL).
+  // Read after mount: the page is pre-rendered, and reading storage during
+  // render would make the server and browser HTML disagree.
+  const [handoff, setHandoff] = useState<{ email?: string; fullName?: string }>({});
+  useEffect(() => setHandoff(readOtpHandoff()), []);
+  const fullName = handoff.fullName || searchParams.get("fullName") || "";
+  const email = handoff.email || searchParams.get("email") || "";
 
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
@@ -147,4 +153,13 @@ export default function VerifyOTPPage() {
       <VerifyOTPForm />
     </Suspense>
   );
+}
+
+function readOtpHandoff(): { email?: string; fullName?: string } {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(sessionStorage.getItem("cheqpay-otp") ?? "{}") ?? {};
+  } catch {
+    return {};
+  }
 }

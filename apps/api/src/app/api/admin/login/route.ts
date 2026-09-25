@@ -1,3 +1,4 @@
+import { hasAdminServiceSecret } from "@/lib/auth";
 import { prisma } from "@cheqpay/db";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
@@ -27,11 +28,16 @@ export async function POST(req: Request) {
   // caller could forge that header, but a direct call only gets a yes/no — it
   // cannot mint a session, which only the dashboard (holding the signing
   // secret) can do — so the forwarded address is safe to use here.
-  const forwarded = (req.headers.get("x-admin-client-ip") ?? "").trim();
+  // Only the dashboard (which holds the service secret) may name the client
+  // address; from anyone else the header is ignored, or rotating it would
+  // walk straight past the per-address limit below.
+  const forwarded = hasAdminServiceSecret(req)
+    ? (req.headers.get("x-admin-client-ip") ?? "").trim()
+    : "";
   const ip = /^[0-9a-f:.]{3,45}$/i.test(forwarded) ? forwarded : clientIp(req);
   try {
-    enforceRateLimit("admin:login", 20, 60_000);
-    enforceRateLimit(`admin:login:${ip ?? "unknown"}`, 5, 60_000);
+    await enforceRateLimit("admin:login", 20, 60_000);
+    await enforceRateLimit(`admin:login:${ip ?? "unknown"}`, 5, 60_000);
     if (ip && (await isIpBlocked(ip))) {
       throw new ApiError(403, "Access from this network has been blocked.", "ip_blocked");
     }

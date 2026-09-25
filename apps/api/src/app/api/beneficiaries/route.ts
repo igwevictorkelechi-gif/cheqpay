@@ -5,6 +5,7 @@ import { getPaymentProvider } from "@/payments";
 import { accountNameMatchesUser } from "@/lib/nameMatch";
 import { addBeneficiarySchema } from "@/lib/validation";
 import { ensureBeneficiariesTable } from "@/lib/ensureBeneficiaries";
+import { enforceRateLimit } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
 
@@ -40,12 +41,19 @@ export async function POST(req: Request) {
     await ensureBeneficiariesTable();
     const body = addBeneficiarySchema.parse(await req.json());
 
-    const legalName = (auth.fullName ?? "").trim();
+    await enforceRateLimit(`beneficiary:add:${auth.id}`, 10, 60_000);
+    // The KYC-verified legal name — never the profile name, which the user can
+    // edit (via Supabase user metadata) to match any account they like.
+    const profile = await prisma.user.findUnique({
+      where: { id: auth.id },
+      select: { legalName: true },
+    });
+    const legalName = (profile?.legalName ?? "").trim();
     if (!legalName) {
       throw new ApiError(
         403,
-        "Add your name to your profile before adding a payout account",
-        "name_required"
+        "Complete identity verification before adding a payout account",
+        "kyc_name_required"
       );
     }
 

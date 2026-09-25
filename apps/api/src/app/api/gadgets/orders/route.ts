@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
     await assertFeatureEnabled("gadgets");
-    enforceRateLimit(`gadget:buy:${auth.id}`, 10, 60_000);
+    await enforceRateLimit(`gadget:buy:${auth.id}`, 10, 60_000);
 
     const idempotencyKey = req.headers.get("idempotency-key");
     if (!idempotencyKey) {

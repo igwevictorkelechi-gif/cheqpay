@@ -5,6 +5,7 @@ import { ensureCardsTable } from "@/lib/ensureCards";
 import { withdrawUserCard } from "@/lib/cardFunding";
 import { cardFundSchema } from "@/lib/validation";
 import { readPin, requireTransactionPin } from "@/lib/transactionPin";
+import { enforceRateLimit } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   try {
     const auth = await requireUser(req);
     await assertFeatureEnabled("virtual_cards");
+    await enforceRateLimit(`card-move:${auth.id}`, 10, 60_000);
     await ensureCardsTable();
 
     const idempotencyKey = req.headers.get("idempotency-key");

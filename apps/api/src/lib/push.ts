@@ -3,6 +3,7 @@ import {
   type NotificationCategory,
   resolvePrefs,
 } from "./notifications";
+import { broadcastWebPush } from "./webPush";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
@@ -84,7 +85,13 @@ async function postExpo(messages: unknown[]): Promise<void> {
  * least one registered device. Batched to Expo's 100-message limit. Returns the
  * number of devices targeted. Best-effort — never throws.
  */
-export async function broadcastPush(msg: PushMessage): Promise<number> {
+export async function broadcastPush(msg: PushMessage & { url?: string }): Promise<number> {
+  // Browsers get it too; counted together with the app devices below.
+  const browsers = await broadcastWebPush(msg);
+  return browsers + (await broadcastExpo(msg));
+}
+
+async function broadcastExpo(msg: PushMessage): Promise<number> {
   try {
     const users = await prisma.user.findMany({
       where: { NOT: { pushTokens: { isEmpty: true } } },

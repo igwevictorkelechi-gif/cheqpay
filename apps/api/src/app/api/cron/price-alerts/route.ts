@@ -1,4 +1,5 @@
 import { Asset, prisma } from "@cheqpay/db";
+import { timingSafeEqual } from "node:crypto";
 import { getEnv } from "@/lib/env";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { getPriceFeed } from "@/market";
@@ -26,13 +27,14 @@ type AlertState = Record<string, { ref: string; at: string }>;
 export async function GET(req: Request) {
   try {
     const { CRON_SECRET, PRICE_ALERT_THRESHOLD_PCT } = getEnv();
-    if (CRON_SECRET) {
-      const auth = req.headers.get("authorization");
-      const url = new URL(req.url);
-      const key = url.searchParams.get("key");
-      if (auth !== `Bearer ${CRON_SECRET}` && key !== CRON_SECRET) {
-        return jsonOk({ error: "Unauthorized", code: "unauthorized" }, 401);
+    // This job pushes to every opted-in user, so it never runs unauthenticated
+    // in production. Header only — a secret in the query string ends up in logs.
+    if (!CRON_SECRET) {
+      if (process.env.NODE_ENV === "production") {
+        return jsonOk({ error: "Cron is not configured", code: "cron_disabled" }, 503);
       }
+    } else if (!bearerMatches(req.headers.get("authorization"), CRON_SECRET)) {
+      return jsonOk({ error: "Unauthorized", code: "unauthorized" }, 401);
     }
 
     const stateRow = await prisma.platformSetting.findUnique({ where: { key: STATE_KEY } });
@@ -89,4 +91,11 @@ function safeParse(raw: string): AlertState {
   } catch {
     return {};
   }
+}
+
+/** Constant-time "Authorization: Bearer <secret>" check. */
+function bearerMatches(header: string | null, secret: string): boolean {
+  const a = Buffer.from(header ?? "");
+  const b = Buffer.from(`Bearer ${secret}`);
+  return a.length === b.length && timingSafeEqual(a, b);
 }

@@ -34,14 +34,15 @@ vi.mock("@cheqpay/db", () => ({
   TransactionType: { WITHDRAWAL: "WITHDRAWAL" },
   prisma: {
     user: { findUnique: h.userFindUnique },
-    transaction: { findUnique: h.txFindUnique, update: vi.fn() },
-    auditLog: { create: vi.fn() },
+    transaction: { findUnique: h.txFindUnique, update: vi.fn().mockResolvedValue({}) },
+    auditLog: { create: vi.fn().mockResolvedValue({}) },
     balance: { update: vi.fn() },
     $transaction: (arg: unknown) =>
       typeof arg === "function"
         ? (arg as (db: unknown) => unknown)({
             balance: { updateMany: h.balanceUpdateMany },
             transaction: { create: h.txCreate },
+            $queryRaw: vi.fn().mockResolvedValue([]),
           })
         : Promise.resolve([]),
   },
@@ -71,14 +72,15 @@ vi.mock("@/lib/rates", () => ({
 vi.mock("@/lib/limits", () => ({
   assertWithdrawalAllowed: vi.fn(),
   sumTodayWithdrawalsNgnKobo: vi.fn().mockResolvedValue(0n),
+  lockUserMoney: vi.fn().mockResolvedValue(undefined),
   todayWithdrawalStats: vi.fn().mockResolvedValue({ count: 0, sumKobo: 0n }),
 }));
 vi.mock("@/lib/aml", () => ({
   amlConfigFromEnv: () => ({}),
   assessWithdrawal: () => ({ blocked: false, holdForReview: false, reasons: [] }),
 }));
-vi.mock("@/lib/alerts", () => ({ notifyUser: vi.fn() }));
-vi.mock("@/lib/adminAlert", () => ({ notifyAdminAlert: vi.fn() }));
+vi.mock("@/lib/alerts", () => ({ notifyUser: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/adminAlert", () => ({ notifyAdminAlert: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/lib/ratelimit", () => ({ enforceRateLimit: vi.fn() }));
 // The PIN gate has its own tests (lib/transactionPin.test.ts) and its presence
 // on every money route is asserted statically in moneyRoutesPinned.test.ts.

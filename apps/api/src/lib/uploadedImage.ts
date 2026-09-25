@@ -20,6 +20,9 @@ export const imageValue = z
     (s) =>
       s === "" ||
       /^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,/.test(s) ||
-      /^https:\/\/\S+$/.test(s),
-    "Image must be an uploaded image or an https URL under 300KB",
+      // Our own storage only: an arbitrary https image would let a third party
+      // see every visitor's IP and when they looked, and would force the
+      // website's content security policy open to the whole internet.
+      /^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/\S+$/.test(s),
+    "Image must be an uploaded image under 300KB",
   );

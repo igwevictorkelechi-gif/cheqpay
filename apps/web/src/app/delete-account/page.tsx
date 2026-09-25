@@ -7,6 +7,7 @@ import { useAuthStore } from "@/store";
 import { authService } from "@/services/auth";
 import { api, ApiError } from "@/services/api";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 
 const consequences = [
   "Your wallets, balances and transaction history are erased",
@@ -20,6 +21,7 @@ export default function DeleteAccountPage() {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { authorize } = useTransactionPin();
 
   const canDelete = confirm.trim().toUpperCase() === "DELETE" && !busy;
 
@@ -31,7 +33,10 @@ export default function DeleteAccountPage() {
     setBusy(true);
     setError(null);
     try {
-      await api.deleteAccount();
+      await authorize((pin) => api.deleteAccount(pin), {
+        title: "Delete your account",
+        detail: "Enter your transaction PIN to permanently close your account.",
+      });
       try {
         await authService.logout();
       } catch {
@@ -41,6 +46,7 @@ export default function DeleteAccountPage() {
       router.push("/login");
     } catch (e) {
       setBusy(false);
+      if (e instanceof Error && e.message === PIN_CANCELLED) return;
       if (e instanceof ApiError && e.status === 409) {
         setError("You still have funds in your wallet. Withdraw everything before deleting your account.");
       } else {

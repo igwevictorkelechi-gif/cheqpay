@@ -17,13 +17,9 @@ export async function GET() {
       time: new Date().toISOString(),
     });
   } catch (e) {
-    // Temporary diagnostic detail (Prisma error code + short message) so DB
-    // connection problems are visible in the browser. Tighten/remove later.
-    const err = e as { code?: string; message?: string; name?: string };
-    const detail = `${err.code ?? err.name ?? "error"}: ${(err.message ?? String(e)).slice(0, 200)}`;
-    return NextResponse.json(
-      { status: "degraded", db: "down", detail },
-      { status: 503 }
-    );
+    // The detail goes to the server log only: a public probe must not hand out
+    // database hostnames or usernames in its error text.
+    console.error("[ready] database check failed", e);
+    return NextResponse.json({ status: "degraded", db: "down" }, { status: 503 });
   }
 }

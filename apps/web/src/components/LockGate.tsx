@@ -2,8 +2,27 @@
 
 import { useEffect, useState } from "react";
 import { Lock, Fingerprint, Loader2 } from "lucide-react";
-import { enableAppLock, isAppLockEnabled, verifyPin } from "@/lib/applock";
+import {
+  disableAppLock,
+  enableAppLock,
+  isAppLockEnabled,
+  lockoutRemainingMs,
+  verifyAppLockPin,
+} from "@/lib/applock";
+import { clearUserCaches } from "@/lib/cache";
 import { supabase } from "@/services/supabase";
+
+/** Whether this browser holds a Supabase session — checked synchronously. */
+function hasStoredSession(): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      if (/^sb-.*-auth-token$/.test(localStorage.key(i) ?? "")) return true;
+    }
+  } catch {
+    /* storage unavailable */
+  }
+  return false;
+}
 
 /**
  * Lock screen steps. "otp"/"newPin" make up the forgot-PIN recovery: the PIN
@@ -24,7 +43,13 @@ const RELOCK_AFTER_MS = 60_000;
  * every window focus.
  */
 export default function LockGate() {
-  const [locked, setLocked] = useState(false);
+  // Start locked on the very first render when a lock is due, so the app
+  // underneath is never painted before the PIN screen covers it. The async
+  // check in lockNow() then confirms (or releases) it.
+  const [locked, setLocked] = useState(
+    () => typeof window !== "undefined" && isAppLockEnabled() && hasStoredSession(),
+  );
+  const [waitMsg, setWaitMsg] = useState<string | null>(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
 
@@ -38,11 +63,16 @@ export default function LockGate() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const lockNow = async () => {
-    if (!isAppLockEnabled()) return;
+    if (!isAppLockEnabled()) {
+      setLocked(false);
+      return;
+    }
     const { data } = await supabase.auth.getSession();
     if (data.session) {
       setEmail(data.session.user.email ?? null);
       setLocked(true);
+    } else {
+      setLocked(false);
     }
   };
 
@@ -95,10 +125,10 @@ export default function LockGate() {
   };
 
   /** Replace the device PIN and let the user straight back in. */
-  const saveNewPin = () => {
+  const saveNewPin = async () => {
     if (newPin.length < 4) return setMsg("Use at least 4 digits.");
     if (newPin !== confirmPin) return setMsg("PINs don’t match.");
-    enableAppLock(newPin);
+    await enableAppLock(newPin);
     setLocked(false);
     setPin("");
     resetRecovery();
@@ -125,15 +155,27 @@ export default function LockGate() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
-  const submit = (value: string) => {
-    if (verifyPin(value)) {
+  const submit = async (value: string) => {
+    const result = await verifyAppLockPin(value);
+    setPin("");
+    if (result === "ok") {
       setLocked(false);
-      setPin("");
       setError(false);
-    } else {
-      setError(true);
-      setPin("");
+      setWaitMsg(null);
+      return;
     }
+    if (result === "sign_out") {
+      // Ten wrong PINs: whoever is holding this device isn't getting in by
+      // guessing. End the session; the owner signs back in with their password.
+      disableAppLock();
+      clearUserCaches();
+      await supabase.auth.signOut().catch(() => undefined);
+      window.location.href = "/login/";
+      return;
+    }
+    setError(true);
+    const wait = lockoutRemainingMs();
+    setWaitMsg(wait > 0 ? `Too many tries. Wait ${Math.ceil(wait / 1000)} seconds.` : null);
   };
 
   if (!locked) return null;
@@ -239,7 +281,9 @@ export default function LockGate() {
           error ? "border-red-500" : "border-border"
         }`}
       />
-      {error && <p className="mt-2.5 text-sm text-red-400">Wrong PIN. Try again.</p>}
+      {error && (
+        <p className="mt-2.5 text-sm text-red-400">{waitMsg ?? "Wrong PIN. Try again."}</p>
+      )}
 
       <button
         onClick={() => submit(pin)}

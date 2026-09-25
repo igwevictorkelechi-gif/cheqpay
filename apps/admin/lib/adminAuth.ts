@@ -47,6 +47,7 @@ export const SUPER_ONLY_API_PREFIXES = [
   "/api/admin-otp",
   "/api/features",
   "/api/popup",
+  "/api/broadcast",
 ];
 
 export function isSuperOnlyPage(pathname: string): boolean {

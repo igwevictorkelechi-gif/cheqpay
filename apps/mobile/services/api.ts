@@ -391,8 +391,8 @@ export const api = {
   },
 
   /** Permanently delete the account. Refuses if the wallet holds a balance. */
-  deleteAccount(): Promise<{ deleted: boolean }> {
-    return apiFetch('/api/me', { method: 'DELETE' });
+  deleteAccount(pin?: string): Promise<{ deleted: boolean }> {
+    return apiFetch('/api/me', { method: 'DELETE', headers: pinHeader(pin) });
   },
 
   getBalances(): Promise<{ balances: Balance[] }> {
@@ -844,7 +844,8 @@ export const api = {
 
   /** Charges the card price (fees.cardIssueFeeUsd) from the USD wallet. */
   createCard(): Promise<{ card: VirtualCard; fee?: string }> {
-    return apiFetch('/api/cards', { method: 'POST' });
+    // Idempotent, so a double tap can't buy two cards.
+    return apiFetch('/api/cards', { method: 'POST', headers: { 'idempotency-key': idemKey() } });
   },
 
   getCard(id: string): Promise<{ card: VirtualCard }> {
@@ -852,7 +853,7 @@ export const api = {
   },
 
   /** Full PAN, CVV and expiry — requires step-up 2FA. Never cache these. */
-  revealCard(id: string): Promise<{
+  revealCard(id: string, pin?: string): Promise<{
     card: {
       name: string | null;
       number: string | null;
@@ -862,7 +863,7 @@ export const api = {
       brand: string | null;
     };
   }> {
-    return apiFetch(`/api/cards/${id}/reveal`);
+    return apiFetch(`/api/cards/${id}/reveal`, { headers: pinHeader(pin) });
   },
 
   fundCard(id: string, amount: string, pin?: string): Promise<{ transactionId: string; status: string }> {

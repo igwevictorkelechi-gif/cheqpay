@@ -6,6 +6,7 @@ import {
   UserStatus,
   prisma,
 } from "@cheqpay/db";
+import { isDefiniteRejection } from "@/lib/providerErrors";
 import { requireAdmin } from "@/lib/auth";
 import { recordAdminAction, requireAdminActor, requireAdminOtp } from "@/lib/adminGuard";
 import { isPlausibleTxHash } from "@/lib/txHashFormat";
@@ -86,17 +87,22 @@ export async function POST(req: Request) {
     };
 
     if (action === "reject") {
-      await prisma.$transaction([
-        prisma.balance.update({
+      // Claim the row first: two admins (or two tabs) acting at once must not
+      // both refund, or refund one that the other just approved.
+      await prisma.$transaction(async (db) => {
+        const claimed = await db.transaction.updateMany({
+          where: { id: tx.id, status: TransactionStatus.PENDING },
+          data: { status: TransactionStatus.REVERSED },
+        });
+        if (claimed.count !== 1) {
+          throw new ApiError(409, "Someone else already handled this withdrawal", "not_pending");
+        }
+        await db.balance.update({
           where: { userId_asset: { userId: tx.userId, asset: tx.asset } },
           // Refund the full debit, including any withheld fee.
           data: { available: { increment: tx.amount + tx.fee } },
-        }),
-        prisma.transaction.update({
-          where: { id: tx.id },
-          data: { status: TransactionStatus.REVERSED },
-        }),
-        prisma.auditLog.create({
+        });
+        await db.auditLog.create({
           data: {
             userId: tx.userId,
             action: "withdrawal.review.rejected",
@@ -104,8 +110,8 @@ export async function POST(req: Request) {
             resourceId: tx.id,
             details: { asset: tx.asset, amount: tx.amount.toString() },
           },
-        }),
-      ]);
+        });
+      });
       const owner = await prisma.user.findUnique({ where: { id: tx.userId }, select: { email: true } });
       await recordAdminAction(req, actor, {
         action: "admin.withdrawal.rejected",
@@ -158,6 +164,17 @@ export async function POST(req: Request) {
           "tx_hash_required",
         );
       }
+    }
+
+    // Claim the row before any money moves: only one approval can win, and
+    // an approval can't race a rejection. From here the row is PROCESSING, so
+    // a failure below can never leave it approvable a second time.
+    const claimed = await prisma.transaction.updateMany({
+      where: { id: tx.id, status: TransactionStatus.PENDING },
+      data: { status: TransactionStatus.PROCESSING },
+    });
+    if (claimed.count !== 1) {
+      throw new ApiError(409, "Someone else already handled this withdrawal", "not_pending");
     }
 
     // Release the reserved funds to the destination.
@@ -218,8 +235,23 @@ export async function POST(req: Request) {
         details: { asset: tx.asset, amount: tx.amount.toString(), txHash: txHash ?? null },
       });
       return jsonOk({ transactionId: tx.id, status: "processing" });
-    } catch {
-      throw new ApiError(502, "Approved but the provider could not send; left pending", "provider_failed");
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      if (isDefiniteRejection(err)) {
+        // Refused outright — nothing was sent. Put it back for review.
+        await prisma.transaction.updateMany({
+          where: { id: tx.id, status: TransactionStatus.PROCESSING },
+          data: { status: TransactionStatus.PENDING },
+        });
+        throw new ApiError(502, "The provider refused the payout; it's back in the review queue", "provider_failed");
+      }
+      // No clear answer — it may have been sent. Leave it PROCESSING so it
+      // can't be approved again; the webhook or reconcile job settles it.
+      throw new ApiError(
+        502,
+        "No clear answer from the provider. The withdrawal is held as processing — check it before acting again.",
+        "provider_unknown",
+      );
     }
   } catch (err) {
     return toErrorResponse(err);

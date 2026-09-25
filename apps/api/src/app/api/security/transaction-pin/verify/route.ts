@@ -35,7 +35,7 @@ const schema = z.object({
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
-    enforceRateLimit(`pin-verify:${auth.id}`, 10, 60_000);
+    await enforceRateLimit(`pin-verify:${auth.id}`, 10, 60_000);
 
     const { pin } = schema.parse(await req.json());
     // Throws on wrong, locked or missing — so reaching the next line means yes.

@@ -195,18 +195,42 @@ export async function finalizeWithdrawal(
       where: { id: reference, type: TransactionType.WITHDRAWAL, asset: Asset.NGN },
     });
     if (!wd) return { status: "unmatched" as const };
+    // FAILED is final too: the route already refunded a payout the provider
+    // rejected outright, so a late webhook must not refund it a second time.
     if (
       wd.status === TransactionStatus.COMPLETED ||
-      wd.status === TransactionStatus.REVERSED
+      wd.status === TransactionStatus.REVERSED ||
+      wd.status === TransactionStatus.FAILED
     ) {
+      if (wd.status === TransactionStatus.FAILED && status === "successful") {
+        // Refunded AND paid out: the provider contradicted its own rejection.
+        // Nothing automatic is safe here — flag it loudly for a human.
+        console.error("[ngn withdrawal] provider paid a payout we refunded — recover by hand", {
+          transactionId: wd.id,
+          userId: wd.userId,
+        });
+      }
       return { status: "already_final" as const, transactionId: wd.id };
     }
 
+    // Claim the row: only one webhook (or retry) may move it out of flight.
+    // Two events racing for the same reference both reach here, but only one
+    // of them flips the status, and only that one may touch the balance.
+    const claim = async (to: TransactionStatus) =>
+      (
+        await tx.transaction.updateMany({
+          where: {
+            id: wd.id,
+            status: { in: [TransactionStatus.PROCESSING, TransactionStatus.PENDING] },
+          },
+          data: { status: to },
+        })
+      ).count === 1;
+
     if (status === "successful") {
-      await tx.transaction.update({
-        where: { id: wd.id },
-        data: { status: TransactionStatus.COMPLETED },
-      });
+      if (!(await claim(TransactionStatus.COMPLETED))) {
+        return { status: "already_final" as const, transactionId: wd.id };
+      }
       return {
         status: "completed" as const,
         transactionId: wd.id,
@@ -216,14 +240,13 @@ export async function finalizeWithdrawal(
     }
 
     if (status === "failed") {
-      // Refund the debited funds (amount + any fee) and reverse.
+      if (!(await claim(TransactionStatus.REVERSED))) {
+        return { status: "already_final" as const, transactionId: wd.id };
+      }
+      // Refund the debited funds (amount + any fee).
       await tx.balance.update({
         where: { userId_asset: { userId: wd.userId, asset: Asset.NGN } },
         data: { available: { increment: wd.amount + wd.fee } },
-      });
-      await tx.transaction.update({
-        where: { id: wd.id },
-        data: { status: TransactionStatus.REVERSED },
       });
       await tx.auditLog.create({
         data: {

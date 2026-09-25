@@ -42,6 +42,10 @@ export async function GET(req: Request, { params }: Ctx) {
         // Private and uncacheable: a KYC document must not sit in a shared cache,
         // and the URL is single-purpose and short-lived anyway.
         "Cache-Control": "private, no-store, max-age=0",
+        // Serve it as exactly the stored type, never sniffed into something
+        // a browser would run.
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
         "Content-Length": String(doc.data.byteLength),
       },
     });

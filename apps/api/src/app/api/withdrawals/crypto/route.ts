@@ -23,9 +23,11 @@ import { getPricing, getUsdtNgnRate, getWithdrawalMinUsd } from "@/lib/settings"
 import { feeInclusiveSplit, usdFeeInCoin } from "@/lib/fees";
 import {
   assertWithdrawalAllowed,
+  lockUserMoney,
   sumTodayWithdrawalsNgnKobo,
   todayWithdrawalStats,
 } from "@/lib/limits";
+import { isDefiniteRejection } from "@/lib/providerErrors";
 import { amlConfigFromEnv, assessWithdrawal } from "@/lib/aml";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { cryptoWithdrawalSchema } from "@/lib/validation";
@@ -51,7 +53,7 @@ export async function POST(req: Request) {
     const auth = await requireUser(req);
     await assertFeatureEnabled("crypto_withdrawals");
     const relaxGuards = getEnv().RELAX_WITHDRAWAL_GUARDS;
-    enforceRateLimit(`wd:crypto:${auth.id}`, 5, 60_000);
+    await enforceRateLimit(`wd:crypto:${auth.id}`, 5, 60_000);
 
     const idempotencyKey = req.headers.get("idempotency-key");
     if (!idempotencyKey) {
@@ -130,9 +132,10 @@ export async function POST(req: Request) {
 
     const ngnValueKobo = cryptoToNgnKobo(amountMinor, asset, price, new Prisma.Decimal(rate));
 
-    const usedToday = await sumTodayWithdrawalsNgnKobo(auth.id);
     const effectiveTier = relaxGuards ? MAX_TIER : user.kycTier;
-    assertWithdrawalAllowed(effectiveTier, ngnValueKobo, usedToday);
+    // A cheap early answer; the binding check runs again under the per-user
+    // lock, right before the debit.
+    assertWithdrawalAllowed(effectiveTier, ngnValueKobo, await sumTodayWithdrawalsNgnKobo(auth.id));
 
     // AML screening.
     const stats = await todayWithdrawalStats(auth.id);
@@ -162,6 +165,10 @@ export async function POST(req: Request) {
     // Idempotent replay.
     const existing = await prisma.transaction.findUnique({ where: { idempotencyKey } });
     if (existing) {
+      // Only ever replay the caller's own request.
+      if (existing.userId !== auth.id) {
+        throw new ApiError(409, "Idempotency-Key already used", "idempotency_conflict");
+      }
       return jsonOk({ transactionId: existing.id, status: existing.status });
     }
 
@@ -180,6 +187,14 @@ export async function POST(req: Request) {
       ? TransactionStatus.PENDING
       : TransactionStatus.PROCESSING;
     const tx = await prisma.$transaction(async (db) => {
+      // Parallel requests take turns here, so they can't each pass the daily
+      // limit on the same starting total.
+      await lockUserMoney(db, auth.id);
+      assertWithdrawalAllowed(
+        effectiveTier,
+        ngnValueKobo,
+        await sumTodayWithdrawalsNgnKobo(auth.id, db)
+      );
       const debit = await db.balance.updateMany({
         where: { userId: auth.id, asset, available: { gte: totalMinor } },
         data: { available: { decrement: totalMinor } },
@@ -272,21 +287,57 @@ export async function POST(req: Request) {
       return jsonOk({ transactionId: tx.id, status: "processing" });
     }
 
-    // Provider signs + broadcasts; refund on failure.
+    // Provider signs + broadcasts. Only that call sits inside the try: once
+    // coins are on-chain, a failing audit write or notification must never
+    // trigger a refund.
+    let result: { txHash: string };
     try {
-      const custody = getCustodyProvider();
-      const result = await custody.createWithdrawal({
+      result = await getCustodyProvider().createWithdrawal({
         userId: auth.id,
         asset,
         network,
         toAddress: body.toAddress,
         amount: fromMinorUnits(amountMinor, asset),
       });
-      await prisma.transaction.update({
-        where: { id: tx.id },
-        data: { txHash: result.txHash, externalRef: result.txHash },
-      });
-      await prisma.auditLog.create({
+    } catch (err) {
+      if (isDefiniteRejection(err)) {
+        // Refused outright — nothing was broadcast. Refund (claiming the row
+        // so a late webhook can't refund it again) and fail.
+        await prisma.$transaction(async (db) => {
+          const claimed = await db.transaction.updateMany({
+            where: { id: tx.id, status: TransactionStatus.PROCESSING },
+            data: { status: TransactionStatus.FAILED },
+          });
+          if (claimed.count !== 1) return;
+          await db.balance.update({
+            where: { userId_asset: { userId: auth.id, asset } },
+            data: { available: { increment: totalMinor } },
+          });
+        });
+        throw new ApiError(502, "Withdrawal could not be broadcast; funds refunded", "broadcast_failed");
+      }
+      // Unknown outcome — it may be on-chain. Hold it for a human.
+      await notifyAdminAlert(
+        `⚠️ ${asset} withdrawal ${tx.id} got no clear answer from custody (${String(err).slice(0, 120)}). Held as processing — check the chain before refunding.`,
+        { asset, transactionId: tx.id }
+      ).catch(() => undefined);
+      return jsonOk(
+        {
+          transactionId: tx.id,
+          status: "processing",
+          amount: fromMinorUnits(totalMinor, asset),
+          fee: fromMinorUnits(feeMinor, asset),
+          youReceive: fromMinorUnits(amountMinor, asset),
+        },
+        202
+      );
+    }
+
+    // Broadcast. Bookkeeping from here is best-effort.
+    await prisma.transaction
+      .update({ where: { id: tx.id }, data: { txHash: result.txHash, externalRef: result.txHash } })
+      .catch((err) => console.error("[crypto withdrawal] could not record txHash", tx.id, err));
+    await prisma.auditLog.create({
         data: {
           userId: auth.id,
           ipAddress: initiatorIp,
@@ -295,34 +346,22 @@ export async function POST(req: Request) {
           resourceId: tx.id,
           details: { asset, network, amountMinor: amountMinor.toString(), txHash: result.txHash },
         },
-      });
-      await notifyUser(auth.id, {
-        category: "withdrawals",
-        title: "Crypto withdrawal sent",
-        body: `${fromMinorUnits(amountMinor, asset)} ${asset} is on its way to ${body.toAddress.slice(0, 8)}…`,
-        data: { transactionId: tx.id, txHash: result.txHash },
-      });
-      return jsonOk({
-        transactionId: tx.id,
-        status: "processing",
-        txHash: result.txHash,
-        amount: fromMinorUnits(totalMinor, asset),
-        fee: fromMinorUnits(feeMinor, asset),
-        youReceive: fromMinorUnits(amountMinor, asset),
-      });
-    } catch {
-      await prisma.$transaction([
-        prisma.balance.update({
-          where: { userId_asset: { userId: auth.id, asset } },
-          data: { available: { increment: totalMinor } },
-        }),
-        prisma.transaction.update({
-          where: { id: tx.id },
-          data: { status: TransactionStatus.FAILED },
-        }),
-      ]);
-      throw new ApiError(502, "Withdrawal could not be broadcast; funds refunded", "broadcast_failed");
-    }
+      })
+      .catch(() => undefined);
+    await notifyUser(auth.id, {
+      category: "withdrawals",
+      title: "Crypto withdrawal sent",
+      body: `${fromMinorUnits(amountMinor, asset)} ${asset} is on its way to ${body.toAddress.slice(0, 8)}…`,
+      data: { transactionId: tx.id, txHash: result.txHash },
+    }).catch(() => undefined);
+    return jsonOk({
+      transactionId: tx.id,
+      status: "processing",
+      txHash: result.txHash,
+      amount: fromMinorUnits(totalMinor, asset),
+      fee: fromMinorUnits(feeMinor, asset),
+      youReceive: fromMinorUnits(amountMinor, asset),
+    });
   } catch (err) {
     return toErrorResponse(err);
   }

@@ -3,6 +3,8 @@ import { requireUser, requireMfa } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { ensureCardsTable } from "@/lib/ensureCards";
 import { getCard } from "@/lib/maplerad/issuing";
+import { enforceRateLimit } from "@/lib/ratelimit";
+import { readPin, requireTransactionPin } from "@/lib/transactionPin";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   try {
     const auth = await requireUser(req);
     requireMfa(auth);
+    await enforceRateLimit(`card-reveal:${auth.id}`, 10, 60 * 60_000);
+    // 2FA proves the session; the PIN proves the person holding the phone.
+    await requireTransactionPin(auth.id, readPin(req));
     await ensureCardsTable();
 
     const card = await prisma.card.findFirst({

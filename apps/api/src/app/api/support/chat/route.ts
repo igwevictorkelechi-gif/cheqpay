@@ -32,7 +32,7 @@ const HUMAN_FALLBACK =
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
-    enforceRateLimit(`support:chat:${auth.id}`, 15, 60_000);
+    await enforceRateLimit(`support:chat:${auth.id}`, 15, 60_000);
 
     const body = chatSchema.parse(await req.json());
     if (body.messages[body.messages.length - 1].role !== "user") {

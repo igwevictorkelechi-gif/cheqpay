@@ -15,14 +15,17 @@ const h = vi.hoisted(() => ({
   balanceUpdate: vi.fn(),
   auditCreate: vi.fn(),
   initiateTransfer: vi.fn(),
+  resolveBankAccount: vi.fn(),
+  txUpdateMany: vi.fn(),
   fee: vi.fn(),
   min: vi.fn(),
   assertWithdrawalAllowed: vi.fn(),
 }));
 
 const db = {
-  balance: { updateMany: h.balanceUpdateMany },
-  transaction: { create: h.txCreate },
+  balance: { updateMany: h.balanceUpdateMany, update: h.balanceUpdate },
+  transaction: { create: h.txCreate, findMany: vi.fn().mockResolvedValue([]), updateMany: h.txUpdateMany },
+  $queryRaw: vi.fn().mockResolvedValue([]),
 };
 
 vi.mock("@cheqpay/db", () => ({
@@ -47,9 +50,16 @@ vi.mock("@/lib/env", () => ({ getEnv: () => ({}) }));
 vi.mock("@/lib/limits", () => ({
   assertWithdrawalAllowed: h.assertWithdrawalAllowed,
   sumTodayWithdrawalsNgnKobo: vi.fn().mockResolvedValue(0n),
+  lockUserMoney: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/adminAlert", () => ({ notifyAdminAlert: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/lib/settings", () => ({ getWithdrawalFeeNgn: h.fee, getWithdrawalMinNgn: h.min }));
-vi.mock("@/payments", () => ({ getPaymentProvider: () => ({ initiateTransfer: h.initiateTransfer }) }));
+vi.mock("@/payments", () => ({
+  getPaymentProvider: () => ({
+    initiateTransfer: h.initiateTransfer,
+    resolveBankAccount: h.resolveBankAccount,
+  }),
+}));
 
 import { POST } from "./route";
 
@@ -65,7 +75,11 @@ function withdraw(body: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  h.userFindUnique.mockResolvedValue({ id: "u1", kycTier: 2 });
+  h.userFindUnique.mockResolvedValue({ id: "u1", kycTier: 2, legalName: "Ada Obi" });
+  h.resolveBankAccount.mockResolvedValue({ accountName: "OBI ADA" });
+  h.txUpdateMany.mockResolvedValue({ count: 1 });
+  h.txUpdate.mockResolvedValue({});
+  h.auditCreate.mockResolvedValue({});
   h.txFindUnique.mockResolvedValue(null);
   h.balanceUpdateMany.mockResolvedValue({ count: 1 });
   h.txCreate.mockResolvedValue({ id: "tx1" });
@@ -109,8 +123,8 @@ describe("feeInclusive (what the apps send)", () => {
     expect(h.balanceUpdateMany.mock.calls[0][0].data.available.decrement).toBe(500_000n);
   });
 
-  it("refunds the whole typed amount if the payout can't be sent", async () => {
-    h.initiateTransfer.mockRejectedValue(new Error("provider down"));
+  it("refunds the whole typed amount when the provider refuses the payout", async () => {
+    h.initiateTransfer.mockRejectedValue(Object.assign(new Error("bad account"), { providerStatus: 400 }));
     const res = await withdraw({ amount: "100000", feeInclusive: true });
     expect(res.status).toBe(502);
     expect(h.balanceUpdate.mock.calls[0][0].data.available.increment).toBe(10_000_000n);
@@ -122,5 +136,43 @@ describe("without feeInclusive (older clients)", () => {
     await withdraw({ amount: "100000" });
     expect(h.initiateTransfer.mock.calls[0][0].amount).toBe("100000.00");
     expect(h.balanceUpdateMany.mock.calls[0][0].data.available.decrement).toBe(10_020_000n);
+  });
+});
+
+describe("security", () => {
+  it("refuses a bank account that isn't in the user's verified name, before any debit", async () => {
+    h.resolveBankAccount.mockResolvedValue({ accountName: "JOHN STRANGER" });
+    const res = await withdraw({ amount: "5000", feeInclusive: true });
+    expect(res.status).toBe(422);
+    expect((await res.json()).code).toBe("name_mismatch");
+    expect(h.balanceUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the user has no verified legal name", async () => {
+    h.userFindUnique.mockResolvedValue({ id: "u1", kycTier: 2, legalName: null });
+    const res = await withdraw({ amount: "5000", feeInclusive: true });
+    expect(res.status).toBe(403);
+    expect(h.balanceUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("does NOT refund when the provider's answer is unknown (timeout) — it may have paid", async () => {
+    h.initiateTransfer.mockRejectedValue(new TypeError("fetch failed"));
+    const res = await withdraw({ amount: "5000", feeInclusive: true });
+    expect(res.status).toBe(202);
+    expect(h.balanceUpdate).not.toHaveBeenCalled();
+    expect(h.txUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not refund when bookkeeping fails after the transfer went out", async () => {
+    h.txUpdate.mockRejectedValue(new Error("db blip"));
+    const res = await withdraw({ amount: "5000", feeInclusive: true });
+    expect(res.status).toBe(200);
+    expect(h.balanceUpdate).not.toHaveBeenCalled();
+  });
+
+  it("won't replay another user's transaction for a colliding idempotency key", async () => {
+    h.txFindUnique.mockResolvedValue({ id: "other", userId: "someone-else", status: "COMPLETED" });
+    const res = await withdraw({ amount: "5000", feeInclusive: true });
+    expect(res.status).toBe(409);
   });
 });

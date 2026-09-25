@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
     await assertFeatureEnabled("p2p_transfers");
-    enforceRateLimit(`transfer:${auth.id}`, 20, 60_000);
+    await enforceRateLimit(`transfer:${auth.id}`, 20, 60_000);
 
     const idempotencyKey = req.headers.get("idempotency-key");
     if (!idempotencyKey) {
@@ -65,6 +65,9 @@ export async function POST(req: Request) {
       where: { idempotencyKey: `${idempotencyKey}:out` },
     });
     if (existing) {
+      if (existing.userId !== auth.id) {
+        throw new ApiError(409, "Idempotency-Key already used", "idempotency_conflict");
+      }
       return jsonOk({
         transactionId: existing.id,
         status: existing.status,

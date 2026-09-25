@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     const { ip: initiatorIp } = requestContext(req);
     const auth = await requireUser(req);
     await assertFeatureEnabled("bill_payments");
-    enforceRateLimit(`bill:pay:${auth.id}`, 10, 60_000);
+    await enforceRateLimit(`bill:pay:${auth.id}`, 10, 60_000);
 
     const idempotencyKey = req.headers.get("idempotency-key");
     if (!idempotencyKey) {

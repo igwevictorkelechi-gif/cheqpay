@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
-    enforceRateLimit(`bill:validate:${auth.id}`, 20, 60_000);
+    await enforceRateLimit(`bill:validate:${auth.id}`, 20, 60_000);
 
     const body = billValidateSchema.parse(await req.json());
     const config = getServiceConfig(body.service);

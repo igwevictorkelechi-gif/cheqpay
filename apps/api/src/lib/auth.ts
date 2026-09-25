@@ -17,6 +17,8 @@ export interface AuthUser {
   aal?: string;
   /** True when app_metadata.role === "admin". */
   isAdmin?: boolean;
+  /** True once Supabase has confirmed the email address. */
+  emailConfirmed?: boolean;
 }
 
 // Public project identifiers (the anon key ships in the client bundle), used to
@@ -52,6 +54,7 @@ export async function verifySupabaseJwt(token: string): Promise<AuthUser> {
     id?: string;
     email?: string;
     phone?: string;
+    email_confirmed_at?: string | null;
     app_metadata?: { role?: unknown };
     user_metadata?: { full_name?: unknown };
   };
@@ -74,6 +77,7 @@ export async function verifySupabaseJwt(token: string): Promise<AuthUser> {
     phone: u.phone,
     fullName,
     aal,
+    emailConfirmed: Boolean(u.email_confirmed_at),
     isAdmin: u.app_metadata?.role === "admin",
   };
 }
@@ -81,6 +85,9 @@ export async function verifySupabaseJwt(token: string): Promise<AuthUser> {
 /** True if the authenticated user is an admin (role claim or email allowlist). */
 export function isAdminUser(user: AuthUser): boolean {
   if (user.isAdmin) return true;
+  // An email only proves identity once it has been confirmed. Otherwise anyone
+  // could sign up with an allowlisted address that isn't registered yet.
+  if (!user.emailConfirmed) return false;
   const allow = (getEnv().ADMIN_EMAILS ?? "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
@@ -162,10 +169,17 @@ export async function requireAdmin(req: Request): Promise<void> {
   if (isAdminUser(auth)) {
     return;
   }
-  if (await isSettingsAdmin(auth.email)) {
+  if (auth.emailConfirmed && (await isSettingsAdmin(auth.email))) {
     return;
   }
   throw new ForbiddenError("Admin privileges required");
+}
+
+/** True when the request carries the dashboard's service secret. */
+export function hasAdminServiceSecret(req: Request): boolean {
+  const expected = getEnv().ADMIN_API_SECRET;
+  const provided = req.headers.get("x-admin-secret");
+  return Boolean(expected && provided && constantTimeEqual(provided, expected));
 }
 
 function constantTimeEqual(a: string, b: string): boolean {

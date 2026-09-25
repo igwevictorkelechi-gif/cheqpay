@@ -374,6 +374,7 @@ function CardPocket({
     expiry: string | null;
   } | null>(null);
   const [revealing, setRevealing] = useState(false);
+  const { authorize } = useTransactionPin();
   const [freezing, setFreezing] = useState(false);
 
   async function reveal() {
@@ -384,9 +385,13 @@ function CardPocket({
     }
     setRevealing(true);
     try {
-      const { card: c } = await api.revealCard(card.id);
+      const { card: c } = await authorize((pin) => api.revealCard(card.id, pin), {
+        title: "Show card details",
+        detail: "Enter your transaction PIN to see the full card number and CVV.",
+      });
       setRevealed({ number: c.number, cvv: c.cvv, expiry: c.expiry });
     } catch (e) {
+      if (e instanceof Error && e.message === PIN_CANCELLED) return;
       toast.show(
         e instanceof ApiError && e.status === 403
           ? "Turn on two-factor authentication to reveal card details."

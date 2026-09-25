@@ -290,70 +290,87 @@ export async function requireTransactionPin(
 ): Promise<void> {
   await ensureTransactionPinColumns();
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      transactionPinHash: true,
-      transactionPinFailures: true,
-      transactionPinLockedUntil: true,
-    },
-  });
-
-  if (!user?.transactionPinHash) {
-    // No PIN on the account. Whether that blocks the payment is a rollout
-    // decision, not a security one — there is nothing to verify either way.
-    if (opts.enforce || (await isTransactionPinRequired())) {
-      throw new ApiError(
-        428,
-        "Set up your transaction PIN before sending money.",
-        "pin_not_set",
-      );
-    }
-    return;
-  }
-
-  const now = new Date();
-  if (user.transactionPinLockedUntil && user.transactionPinLockedUntil > now) {
-    throw lockedError(user.transactionPinLockedUntil);
-  }
-
-  if (!pin) {
-    throw new ApiError(401, "Enter your transaction PIN to continue.", "pin_required");
-  }
-
-  if (await verifyPinHash(pin, user.transactionPinHash)) {
-    // Only write when there is something to clear — the common path stays a
-    // single read.
-    if (user.transactionPinFailures > 0 || user.transactionPinLockedUntil) {
-      await prisma.user.update({
+  // The whole check runs holding a row lock on the user, so attempts on one
+  // account are strictly one at a time. Without it, a batch of guesses sent in
+  // parallel would all read "not locked" before any of them recorded a
+  // failure — the lockout would count one miss while a hundred were tried.
+  // scrypt is ~100ms, so this serialises only this user's own PIN checks.
+  const outcome = await prisma.$transaction(
+    async (db) => {
+      await db.$queryRaw`SELECT 1 FROM app_users WHERE id = ${userId}::uuid FOR UPDATE`;
+      const user = await db.user.findUnique({
         where: { id: userId },
-        data: { transactionPinFailures: 0, transactionPinLockedUntil: null },
+        select: {
+          transactionPinHash: true,
+          transactionPinFailures: true,
+          transactionPinLockedUntil: true,
+        },
       });
-    }
-    return;
-  }
 
-  // Wrong PIN. Count it, and lock once the run is long enough.
-  const failures = user.transactionPinFailures + 1;
-  const shouldLock = failures >= FAILURES_BEFORE_LOCK;
-  const until = shouldLock ? new Date(now.getTime() + lockDurationMs(failures)) : null;
+      if (!user?.transactionPinHash) return { kind: "no_pin" as const };
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      transactionPinFailures: failures,
-      ...(until ? { transactionPinLockedUntil: until } : {}),
+      const now = new Date();
+      if (user.transactionPinLockedUntil && user.transactionPinLockedUntil > now) {
+        return { kind: "locked" as const, until: user.transactionPinLockedUntil };
+      }
+
+      if (!pin) return { kind: "missing" as const };
+
+      if (await verifyPinHash(pin, user.transactionPinHash)) {
+        // Only write when there is something to clear — the common path stays
+        // a single read.
+        if (user.transactionPinFailures > 0 || user.transactionPinLockedUntil) {
+          await db.user.update({
+            where: { id: userId },
+            data: { transactionPinFailures: 0, transactionPinLockedUntil: null },
+          });
+        }
+        return { kind: "ok" as const };
+      }
+
+      // Wrong PIN. Count it, and lock once the run is long enough.
+      const failures = user.transactionPinFailures + 1;
+      const until =
+        failures >= FAILURES_BEFORE_LOCK ? new Date(now.getTime() + lockDurationMs(failures)) : null;
+      await db.user.update({
+        where: { id: userId },
+        data: {
+          transactionPinFailures: failures,
+          ...(until ? { transactionPinLockedUntil: until } : {}),
+        },
+      });
+      return until
+        ? { kind: "locked" as const, until }
+        : { kind: "wrong" as const, left: FAILURES_BEFORE_LOCK - failures };
     },
-  });
-
-  if (until) throw lockedError(until);
-
-  const left = FAILURES_BEFORE_LOCK - failures;
-  throw new ApiError(
-    401,
-    `Incorrect PIN. ${left} attempt${left === 1 ? "" : "s"} left before your PIN is locked.`,
-    "pin_incorrect",
+    { timeout: 15_000 },
   );
+
+  switch (outcome.kind) {
+    case "ok":
+      return;
+    case "no_pin":
+      // No PIN on the account. Whether that blocks the payment is a rollout
+      // decision, not a security one — there is nothing to verify either way.
+      if (opts.enforce || (await isTransactionPinRequired())) {
+        throw new ApiError(
+          428,
+          "Set up your transaction PIN before sending money.",
+          "pin_not_set",
+        );
+      }
+      return;
+    case "locked":
+      throw lockedError(outcome.until);
+    case "missing":
+      throw new ApiError(401, "Enter your transaction PIN to continue.", "pin_required");
+    case "wrong":
+      throw new ApiError(
+        401,
+        `Incorrect PIN. ${outcome.left} attempt${outcome.left === 1 ? "" : "s"} left before your PIN is locked.`,
+        "pin_incorrect",
+      );
+  }
 }
 
 /** Set a PIN for the first time, or replace one after a verified change. */

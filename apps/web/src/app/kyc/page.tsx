@@ -1,5 +1,6 @@
 "use client";
 
+import { safeInternalPath } from "@/lib/safeUrl";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ShieldCheck, Clock, CheckCircle2, Loader2 } from "lucide-react";
@@ -60,8 +61,8 @@ export default function KYCPage() {
   const [nextUrl, setNextUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    const n = new URLSearchParams(window.location.search).get("next");
-    if (n && n.startsWith("/")) setNextUrl(n);
+    // Only ever a path on this site — see safeInternalPath.
+    setNextUrl(safeInternalPath(new URLSearchParams(window.location.search).get("next")));
   }, []);
 
   const goNext = () => router.push(nextUrl || "/");

@@ -1,7 +1,9 @@
 import { prisma } from "@cheqpay/db";
 import { z } from "zod";
-import { requireUser } from "@/lib/auth";
+import { requireMfa, requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
+import { enforceRateLimit } from "@/lib/ratelimit";
+import { readPin, requireTransactionPin } from "@/lib/transactionPin";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +16,17 @@ const schema = z.object({ enabled: z.boolean() });
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
+    await enforceRateLimit(`instant-wd:${auth.id}`, 5, 60_000);
     const { enabled } = schema.parse(await req.json());
+
+    // Turning this ON removes the 2FA step from crypto withdrawals, so it must
+    // itself be proven with 2FA and the transaction PIN — otherwise a stolen
+    // session could switch the protection off and withdraw. Turning it off
+    // only adds protection, so it needs neither.
+    if (enabled) {
+      requireMfa(auth);
+      await requireTransactionPin(auth.id, readPin(req), { enforce: true });
+    }
 
     const user = await prisma.user.findUnique({ where: { id: auth.id } });
     if (!user) {

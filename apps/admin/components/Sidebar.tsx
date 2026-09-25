@@ -90,6 +90,7 @@ const categories: Category[] = [
     items: [
       { label: 'Feature Toggles', href: '/features', icon: ToggleLeft },
       { label: 'In-App Popup', href: '/features/popup', icon: Megaphone },
+      { label: 'Broadcast', href: '/features/broadcast', icon: Megaphone },
       { label: 'Payment Settings', href: '/payment-settings', icon: CreditCard },
       { label: 'Provider Settings', href: '/provider-settings', icon: Server },
       { label: 'Provider Check', href: '/provider-check', icon: Activity },

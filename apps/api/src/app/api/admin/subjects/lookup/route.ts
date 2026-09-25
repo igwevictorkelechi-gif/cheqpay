@@ -1,5 +1,5 @@
 import { prisma } from "@cheqpay/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminActor, requireAdminOtp } from "@/lib/adminGuard";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { decryptPii, fingerprintPii, isPiiEncryptionConfigured } from "@/lib/pii";
 import { ensureRetentionSchema } from "@/lib/retention";
@@ -30,15 +30,17 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   try {
-    await requireAdmin(req);
-    // requireAdmin returns void; the dashboard identifies the operator with
-    // this header, the same convention the other admin routes use.
-    const actor = req.headers.get("x-admin-actor") ?? "admin";
-    await ensureRetentionSchema();
-
     const url = new URL(req.url);
     const q = (url.searchParams.get("q") ?? "").trim();
     const reveal = url.searchParams.get("reveal") === "true";
+
+    // A named, verified admin — never a header anyone could set. Revealing
+    // full BVNs is the heaviest read in the product, so it also needs a super
+    // admin and a fresh authenticator code, and is audited as its own action.
+    const actorInfo = await requireAdminActor(req, reveal ? { superOnly: true } : {});
+    if (reveal) await requireAdminOtp(req);
+    const actor = actorInfo.email;
+    await ensureRetentionSchema();
     if (q.length < 3) {
       throw new ApiError(422, "Enter at least 3 characters to search", "query_too_short");
     }

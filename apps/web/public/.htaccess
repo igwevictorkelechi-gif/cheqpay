@@ -104,13 +104,21 @@ ErrorDocument 404 /404.html
 
 # ---- Security headers -----------------------------------------------------
 <IfModule mod_headers.c>
+  # Keep these identical to the "headers" block in /vercel.json — the site is
+  # served from both hosts, and a test (apps/api/src/lib/webSecurityHeaders.test.ts)
+  # fails if they drift apart.
+  # Scripts, styles, data and frames only from where CheqPay actually loads them,
+  # so an injected script can't run or send data anywhere else.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://xttgnswgeffyybjfjlkp.supabase.co wss://xttgnswgeffyybjfjlkp.supabase.co https://cheqpay-admin453.vercel.app https://api.mycheqpay.com https://*.ingest.sentry.io; worker-src 'self'; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
+  # HTTPS only, remembered by the browser for a year. includeSubDomains/preload
+  # are left off until every subdomain (mail, cpanel, …) is confirmed on HTTPS.
+  Header always set Strict-Transport-Security "max-age=31536000"
   Header always set X-Content-Type-Options "nosniff"
-  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set X-Frame-Options "DENY"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
-  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
-  # Only send HSTS once you are certain every subdomain you use is on HTTPS —
-  # browsers remember it, and a mistake here is hard to undo.
-  # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+  Header always set Cross-Origin-Opener-Policy "same-origin"
+  Header always set Cross-Origin-Resource-Policy "same-site"
 
   # Do not advertise the server version.
   Header unset X-Powered-By

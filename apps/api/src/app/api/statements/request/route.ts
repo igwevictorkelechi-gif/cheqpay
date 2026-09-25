@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
     // Generating a PDF and sending mail is expensive; keep it to a trickle.
-    enforceRateLimit(`statement:${auth.id}`, 5, 10 * 60_000);
+    await enforceRateLimit(`statement:${auth.id}`, 5, 10 * 60_000);
 
     const body = requestSchema.parse(await req.json());
     const from = new Date(`${body.from}T00:00:00.000Z`);
