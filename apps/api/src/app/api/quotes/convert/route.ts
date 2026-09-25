@@ -43,6 +43,9 @@ export async function POST(req: Request) {
         amountIn: quote.amountIn.toString(),
         amountOut: quote.amountOut.toString(),
         rate: quote.rate.toString(),
+        // What the spread costs, in the asset received — shown before confirming.
+        feeOut: quote.feeOutMinor.toString(),
+        feeBps: quote.feeBps,
         expiresAt: quote.expiresAt.toISOString(),
       },
       201

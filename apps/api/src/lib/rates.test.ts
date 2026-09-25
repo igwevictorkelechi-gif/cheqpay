@@ -215,3 +215,35 @@ describe("computeCryptoConvert with fiat legs", () => {
     expect(r.amountOutMinor).toBe(19_800_000n); // ₦198,000
   });
 });
+
+describe("computeCryptoConvert fee", () => {
+  const ngn = fiatUsdtPrice(Asset.NGN, D("2000"))!;
+  const usd = fiatUsdtPrice(Asset.USD, D("2000"))!;
+
+  it("reports what the spread cost, in the asset received", () => {
+    // $100 → NGN at ₦2,000/$ is ₦200,000 gross; a 1% spread keeps ₦2,000.
+    const r = computeCryptoConvert({
+      fromAsset: Asset.USD,
+      toAsset: Asset.NGN,
+      amountInMinor: 10_000n,
+      fromUsdtPrice: usd,
+      toUsdtPrice: ngn,
+      spreadBps: 100,
+    });
+    expect(r.amountOutMinor).toBe(19_800_000n);
+    expect(r.feeOutMinor).toBe(200_000n);
+    expect(r.amountOutMinor + r.feeOutMinor).toBe(20_000_000n);
+  });
+
+  it("is zero with no spread", () => {
+    const r = computeCryptoConvert({
+      fromAsset: Asset.USD,
+      toAsset: Asset.NGN,
+      amountInMinor: 10_000n,
+      fromUsdtPrice: usd,
+      toUsdtPrice: ngn,
+      spreadBps: 0,
+    });
+    expect(r.feeOutMinor).toBe(0n);
+  });
+});

@@ -24,6 +24,7 @@ function AssetCard({
   balance,
   emphasize,
   onPick,
+  onMax,
 }: {
   role: string;
   symbol: ConvertSymbol;
@@ -31,6 +32,8 @@ function AssetCard({
   balance: string;
   emphasize?: boolean;
   onPick: () => void;
+  /** Fill the whole balance. Only the FROM side offers it. */
+  onMax?: () => void;
 }) {
   return (
     <div className="rounded-3xl bg-card p-5">
@@ -49,9 +52,20 @@ function AssetCard({
       >
         {amount}
       </p>
-      <p className="mt-2 text-center text-sm text-muted">
-        Balance: <span className="font-semibold text-ink">{balance}</span>
-      </p>
+      <div className="mt-2 flex items-center justify-center gap-2 text-sm text-muted">
+        <span>
+          Balance: <span className="font-semibold text-ink">{balance}</span>
+        </span>
+        {onMax ? (
+          <button
+            type="button"
+            onClick={onMax}
+            className="rounded-full bg-brand/20 px-2.5 py-0.5 text-xs font-bold text-brand-light active:scale-95"
+          >
+            MAX
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -201,6 +215,13 @@ export default function ConvertPage() {
           balance={`${balances[fromSym] ?? "0"} ${fromSym}`}
           emphasize
           onPick={() => setPicker("from")}
+          onMax={() => {
+            // The exact balance string from the server, trailing zeros dropped
+            // ("12.500000" → "12.5") — the same number, no float rounding.
+            const exact = balances[fromSym] ?? "0";
+            const trimmed = exact.includes(".") ? exact.replace(/\.?0+$/, "") : exact;
+            setAmount(trimmed || "0");
+          }}
         />
 
         <div className="relative z-10 -my-4 flex justify-center">

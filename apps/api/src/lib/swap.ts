@@ -171,7 +171,7 @@ export async function createConvertQuote(params: {
     usdtPriceForAsset(params.toAsset, feed, usdtNgnDecimal),
   ]);
 
-  const { amountOutMinor, rate } = computeCryptoConvert({
+  const { amountOutMinor, rate, feeOutMinor } = computeCryptoConvert({
     fromAsset: params.fromAsset,
     toAsset: params.toAsset,
     amountInMinor: params.amountInMinor,
@@ -196,7 +196,7 @@ export async function createConvertQuote(params: {
     await ensureUsdAsset();
   }
 
-  return prisma.quote.create({
+  const quote = await prisma.quote.create({
     data: {
       userId: params.userId,
       fromAsset: params.fromAsset,
@@ -207,6 +207,8 @@ export async function createConvertQuote(params: {
       expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
     },
   });
+  // The fee is for display only: execution settles the stored amountOut.
+  return { ...quote, feeOutMinor, feeBps: spreadBps };
 }
 
 /**
@@ -257,7 +259,8 @@ async function createFxConvertQuote(params: {
   // difference stays in treasury.
   const grossOutMinor = BigInt(fx.target.amount);
   const marginBps = await getFxSideMarginBps(fxSideFor(params.fromAsset));
-  const amountOutMinor = grossOutMinor - feeFromBps(grossOutMinor, marginBps);
+  const feeOutMinor = feeFromBps(grossOutMinor, marginBps);
+  const amountOutMinor = grossOutMinor - feeOutMinor;
   if (amountOutMinor <= 0n) {
     throw new ApiError(
       422,
@@ -273,7 +276,7 @@ async function createFxConvertQuote(params: {
   // The USD enum value and the provider_ref column must exist for the typed write.
   await Promise.all([ensureUsdAsset(), ensureQuoteProviderRef()]);
 
-  return prisma.quote.create({
+  const quote = await prisma.quote.create({
     data: {
       userId: params.userId,
       fromAsset: params.fromAsset,
@@ -291,6 +294,8 @@ async function createFxConvertQuote(params: {
       expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
     },
   });
+  // The fee is for display only: execution settles the stored amountOut.
+  return { ...quote, feeOutMinor, feeBps: marginBps };
 }
 
 /**
