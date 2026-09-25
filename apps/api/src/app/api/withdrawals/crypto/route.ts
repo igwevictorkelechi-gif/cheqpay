@@ -19,7 +19,8 @@ import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { notifyUser } from "@/lib/alerts";
 import { notifyAdminAlert } from "@/lib/adminAlert";
 import { cryptoToNgnKobo, cryptoToUsdCents } from "@/lib/rates";
-import { getUsdtNgnRate, getWithdrawalMinUsd } from "@/lib/settings";
+import { getPricing, getUsdtNgnRate, getWithdrawalMinUsd } from "@/lib/settings";
+import { feeInclusiveSplit, usdFeeInCoin } from "@/lib/fees";
 import {
   assertWithdrawalAllowed,
   sumTodayWithdrawalsNgnKobo,
@@ -93,7 +94,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const amountMinor = toMinorUnits(body.amount, asset);
+    const requestedMinor = toMinorUnits(body.amount, asset);
 
     const rate = await getUsdtNgnRate();
     if (rate === null) {
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
     // does not move with the admin-set USDT→NGN rate.
     const minUsd = await getWithdrawalMinUsd();
     if (minUsd > 0) {
-      const valueUsdCents = cryptoToUsdCents(amountMinor, asset, price);
+      const valueUsdCents = cryptoToUsdCents(requestedMinor, asset, price);
       const minCents = BigInt(Math.round(minUsd * 100));
       if (valueUsdCents < minCents) {
         throw new ApiError(
@@ -116,6 +117,16 @@ export async function POST(req: Request) {
         );
       }
     }
+
+    // The network fee, priced in dollars and paid in the coin. With
+    // feeInclusive it comes out of the typed amount (what the apps send), so
+    // the recipient gets amount − fee and Max always works; otherwise it is
+    // added on top. `amountMinor` is what reaches the recipient, `totalMinor`
+    // what leaves the balance.
+    const feeMinor = usdFeeInCoin((await getPricing()).cryptoWithdrawalFeeUsd, asset, price);
+    const { netMinor: amountMinor, grossMinor: totalMinor } = body.feeInclusive
+      ? feeInclusiveSplit(requestedMinor, feeMinor, "network")
+      : { netMinor: requestedMinor, grossMinor: requestedMinor + feeMinor };
 
     const ngnValueKobo = cryptoToNgnKobo(amountMinor, asset, price, new Prisma.Decimal(rate));
 
@@ -170,11 +181,17 @@ export async function POST(req: Request) {
       : TransactionStatus.PROCESSING;
     const tx = await prisma.$transaction(async (db) => {
       const debit = await db.balance.updateMany({
-        where: { userId: auth.id, asset, available: { gte: amountMinor } },
-        data: { available: { decrement: amountMinor } },
+        where: { userId: auth.id, asset, available: { gte: totalMinor } },
+        data: { available: { decrement: totalMinor } },
       });
       if (debit.count !== 1) {
-        throw new ApiError(422, `Insufficient ${asset} balance`, "insufficient_funds");
+        throw new ApiError(
+          422,
+          body.feeInclusive || feeMinor === 0n
+            ? `Insufficient ${asset} balance`
+            : `Insufficient ${asset} balance (amount + network fee)`,
+          "insufficient_funds"
+        );
       }
       return db.transaction.create({
         data: {
@@ -182,7 +199,9 @@ export async function POST(req: Request) {
           type: TransactionType.WITHDRAWAL,
           asset,
           network,
+          // amount = what the recipient gets, fee = ours; refunds return both.
           amount: amountMinor,
+          fee: feeMinor,
           status: initialStatus,
           idempotencyKey,
           metadata: {
@@ -261,7 +280,7 @@ export async function POST(req: Request) {
         asset,
         network,
         toAddress: body.toAddress,
-        amount: body.amount,
+        amount: fromMinorUnits(amountMinor, asset),
       });
       await prisma.transaction.update({
         where: { id: tx.id },
@@ -283,12 +302,19 @@ export async function POST(req: Request) {
         body: `${fromMinorUnits(amountMinor, asset)} ${asset} is on its way to ${body.toAddress.slice(0, 8)}…`,
         data: { transactionId: tx.id, txHash: result.txHash },
       });
-      return jsonOk({ transactionId: tx.id, status: "processing", txHash: result.txHash });
+      return jsonOk({
+        transactionId: tx.id,
+        status: "processing",
+        txHash: result.txHash,
+        amount: fromMinorUnits(totalMinor, asset),
+        fee: fromMinorUnits(feeMinor, asset),
+        youReceive: fromMinorUnits(amountMinor, asset),
+      });
     } catch {
       await prisma.$transaction([
         prisma.balance.update({
           where: { userId_asset: { userId: auth.id, asset } },
-          data: { available: { increment: amountMinor } },
+          data: { available: { increment: totalMinor } },
         }),
         prisma.transaction.update({
           where: { id: tx.id },

@@ -66,6 +66,7 @@ enum TransactionType {
   TRANSFER_IN // received from another CheqPay user (internal)
   CARD_FUND // USD moved from the in-app balance onto a virtual card
   CARD_WITHDRAW // USD moved off a virtual card back to the in-app balance
+  CARD_ISSUE // USD paid for a new virtual card (the price is the row's fee)
   GADGET_PURCHASE // NGN spent buying a gadget from the in-app store
   TICKET_PURCHASE // NGN spent buying event tickets
 }

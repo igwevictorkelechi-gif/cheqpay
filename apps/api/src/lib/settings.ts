@@ -5,7 +5,8 @@ import { ApiError } from "./http";
 export const SETTING_KEYS = {
   SWAP_SPREAD_BPS: "swap_spread_bps",
   USDT_NGN_RATE: "usdt_ngn_rate",
-  // Business fees, admin-set from the dashboard. All default to 0 (off).
+  // Business fees, admin-set from the dashboard. Defaults are the price sheet
+  // in PRICING_DEFAULTS: Maplerad's cost to us plus a CheqPay margin.
   DEPOSIT_FEE_BPS: "deposit_fee_bps", // % of each NGN deposit, in basis points
   WITHDRAWAL_FEE_NGN: "withdrawal_fee_ngn", // flat NGN fee per bank payout
   BILL_MARGIN_BPS: "bill_margin_bps", // default markup on bill payments, in bps
@@ -129,14 +130,20 @@ async function getNumberSetting(key: string, fallback: number): Promise<number> 
   return row ? parseNonNegNumber(row.value, key) : fallback;
 }
 
-/** Percentage fee (basis points) taken from each NGN deposit. 0 = free. */
+/**
+ * Percentage fee (basis points) taken from each NGN deposit. 0 = free.
+ * Default 0.75%: Maplerad charges us 0.5% (capped at ₦500) per collection.
+ */
 export function getDepositFeeBps(): Promise<number> {
-  return getNumberSetting(SETTING_KEYS.DEPOSIT_FEE_BPS, 0);
+  return getNumberSetting(SETTING_KEYS.DEPOSIT_FEE_BPS, 75);
 }
 
-/** Flat NGN fee added to each bank withdrawal. 0 = free. */
+/**
+ * Flat NGN fee per bank withdrawal. 0 = free.
+ * Default ₦50: Maplerad charges us ₦20 per NIP payout.
+ */
 export function getWithdrawalFeeNgn(): Promise<number> {
-  return getNumberSetting(SETTING_KEYS.WITHDRAWAL_FEE_NGN, 0);
+  return getNumberSetting(SETTING_KEYS.WITHDRAWAL_FEE_NGN, 50);
 }
 
 /** The bill services that can carry their own margin. */
@@ -219,8 +226,11 @@ export async function setBillMarginForService(
  * from an amount Maplerad's FX rail returns.
  */
 export function getFxMarginBps(): Promise<number> {
-  return getNumberSetting(SETTING_KEYS.FX_MARGIN_BPS, 0);
+  return getNumberSetting(SETTING_KEYS.FX_MARGIN_BPS, DEFAULT_FX_MARGIN_BPS);
 }
+
+/** 1% on top of Maplerad's FX rate, whose own cost is already inside that rate. */
+const DEFAULT_FX_MARGIN_BPS = 100;
 
 export async function setFxMarginBps(bps: number, updatedBy?: string) {
   await upsertSetting(SETTING_KEYS.FX_MARGIN_BPS, String(bps), updatedBy);
@@ -256,7 +266,7 @@ export async function getFxSideMarginBps(side: FxSide): Promise<number> {
     where: { key: FX_SIDE_KEYS[side] },
   });
   if (row) return parseNonNegNumber(row.value, FX_SIDE_KEYS[side]);
-  return getNumberSetting(SETTING_KEYS.FX_MARGIN_BPS, 0);
+  return getNumberSetting(SETTING_KEYS.FX_MARGIN_BPS, DEFAULT_FX_MARGIN_BPS);
 }
 
 /** Both sides plus the shared fallback, for the admin dashboard. */
@@ -266,7 +276,7 @@ export async function getFxMargins(): Promise<{
   sellUsdBps: number | null;
 }> {
   const [defaultBps, rows] = await Promise.all([
-    getNumberSetting(SETTING_KEYS.FX_MARGIN_BPS, 0),
+    getNumberSetting(SETTING_KEYS.FX_MARGIN_BPS, DEFAULT_FX_MARGIN_BPS),
     prisma.platformSetting.findMany({
       where: { key: { in: [FX_SIDE_KEYS.buy_usd, FX_SIDE_KEYS.sell_usd] } },
     }),
@@ -338,6 +348,92 @@ export async function setWithdrawalFeeNgn(ngn: number, updatedBy?: string) {
 }
 export async function setBillMarginBps(bps: number, updatedBy?: string) {
   await upsertSetting(SETTING_KEYS.BILL_MARGIN_BPS, String(bps), updatedBy);
+}
+
+// --- Pricing: the fees Maplerad charges us, passed on with a margin ----------
+//
+// Each default is Maplerad's price to Boli Labs (SLA Schedule 2) plus CheqPay's
+// cut. An admin-set value always wins, so these only apply until someone
+// decides otherwise — but they mean a fresh install never sells below cost.
+
+export interface Pricing {
+  /** Most an NGN deposit fee can be, in whole naira (0 = no cap). Cost: ₦500 cap. */
+  depositFeeCapNgn: number;
+  /** Fee on a USD bank deposit below the large threshold. Cost: 3%. */
+  usdDepositFeeBps: number;
+  /** Fee on a USD bank deposit at or above the threshold. Cost: 1.5%. */
+  usdDepositLargeFeeBps: number;
+  /** Where the lower USD deposit rate starts, in USD. */
+  usdDepositLargeThresholdUsd: number;
+  /** Fee on a stablecoin deposit that lands as USD. Cost: 0.5% ramp. */
+  cryptoDepositFeeBps: number;
+  /** Flat fee per crypto withdrawal, in USD, paid in the coin. Cost: $1.5–$2 + gas. */
+  cryptoWithdrawalFeeUsd: number;
+  /** Price of a USD virtual card. Cost: $2. */
+  cardIssueFeeUsd: number;
+  /** Smallest card top-up, in USD. */
+  cardFundMinUsd: number;
+  /** Flat fee on a card top-up below the threshold. Cost: $1. */
+  cardFundFeeSmallUsd: number;
+  /** Fee on a card top-up at or above the threshold. Cost: 2%. */
+  cardFundFeeLargeBps: number;
+  /** Where card funding switches from flat to percentage, in USD. */
+  cardFundThresholdUsd: number;
+  /** Fee to move money from a card back to the USD wallet. Cost: $1. */
+  cardWithdrawFeeUsd: number;
+}
+
+export const PRICING_DEFAULTS: Pricing = {
+  depositFeeCapNgn: 800,
+  usdDepositFeeBps: 350,
+  usdDepositLargeFeeBps: 200,
+  usdDepositLargeThresholdUsd: 25_000,
+  cryptoDepositFeeBps: 100,
+  cryptoWithdrawalFeeUsd: 2.5,
+  cardIssueFeeUsd: 3,
+  cardFundMinUsd: 5,
+  cardFundFeeSmallUsd: 1.5,
+  cardFundFeeLargeBps: 250,
+  cardFundThresholdUsd: 100,
+  cardWithdrawFeeUsd: 1.5,
+};
+
+/** Storage key per pricing field: snake_case of the field name. */
+export const PRICING_KEYS: Record<keyof Pricing, string> = {
+  depositFeeCapNgn: "deposit_fee_cap_ngn",
+  usdDepositFeeBps: "usd_deposit_fee_bps",
+  usdDepositLargeFeeBps: "usd_deposit_large_fee_bps",
+  usdDepositLargeThresholdUsd: "usd_deposit_large_threshold_usd",
+  cryptoDepositFeeBps: "crypto_deposit_fee_bps",
+  cryptoWithdrawalFeeUsd: "crypto_withdrawal_fee_usd",
+  cardIssueFeeUsd: "card_issue_fee_usd",
+  cardFundMinUsd: "card_fund_min_usd",
+  cardFundFeeSmallUsd: "card_fund_fee_small_usd",
+  cardFundFeeLargeBps: "card_fund_fee_large_bps",
+  cardFundThresholdUsd: "card_fund_threshold_usd",
+  cardWithdrawFeeUsd: "card_withdraw_fee_usd",
+};
+
+/** The whole price sheet in one read: stored values over the defaults. */
+export async function getPricing(): Promise<Pricing> {
+  const fields = Object.keys(PRICING_KEYS) as (keyof Pricing)[];
+  const rows = await prisma.platformSetting.findMany({
+    where: { key: { in: fields.map((f) => PRICING_KEYS[f]) } },
+  });
+  const byKey = new Map(rows.map((r) => [r.key, r.value]));
+  const out = { ...PRICING_DEFAULTS };
+  for (const f of fields) {
+    const raw = byKey.get(PRICING_KEYS[f]);
+    if (raw !== undefined) out[f] = parseNonNegNumber(raw, PRICING_KEYS[f]);
+  }
+  return out;
+}
+
+export async function setPricing(patch: Partial<Pricing>, updatedBy?: string): Promise<void> {
+  for (const [field, value] of Object.entries(patch) as [keyof Pricing, number | undefined][]) {
+    if (value === undefined) continue;
+    await upsertSetting(PRICING_KEYS[field], String(value), updatedBy);
+  }
 }
 
 // --- Cashback ---------------------------------------------------------------

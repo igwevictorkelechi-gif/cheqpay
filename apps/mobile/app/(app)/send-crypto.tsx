@@ -10,10 +10,12 @@ import { api, ApiError } from '@/services/api';
 import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
 import { isAddressForNetwork, shortAddress } from '@/lib/address';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
+import { cryptoFeeInCoin, dollars, useFees } from '@/lib/fees';
 
 type Sym = 'BTC' | 'USDT' | 'USDC';
 const ASSETS: Sym[] = ['BTC', 'USDT', 'USDC'];
 type Stage = 'pick' | 'form' | 'review' | 'checking' | 'done';
+const DECIMALS: Record<Sym, number> = { BTC: 8, USDT: 6, USDC: 6 };
 
 export default function SendCryptoScreen() {
   const insets = useSafeAreaInsets();
@@ -24,6 +26,9 @@ export default function SendCryptoScreen() {
   const [stage, setStage] = useState<Stage>('pick');
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | undefined>();
+  const fees = useFees();
+  // The coin's dollar price, to express the dollar network fee in the coin.
+  const [usdPrice, setUsdPrice] = useState<number | null>(null);
   // A wallet address detected on the clipboard, offered as a one-tap paste.
   const [clipSuggest, setClipSuggest] = useState<string | null>(null);
 
@@ -73,19 +78,43 @@ export default function SendCryptoScreen() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!sym) return;
+    setUsdPrice(null);
+    let active = true;
+    api
+      .getPrice(sym)
+      .then((p) => active && setUsdPrice(Number(p.priceUsd)))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [sym]);
+
   const meta = sym ? ASSET_META[sym] : null;
   const info = sym ? CRYPTO_SEND[sym] : null;
   const available = sym ? Number(bal[sym] ?? 0) : 0;
   const amountNum = Number(amount || 0);
   const min = info ? Number(info.minSend) : 0;
+  // The network fee comes out of the amount: the balance drops by `amount`,
+  // the recipient gets amount − fee. Null until the price has loaded.
+  const feeCoin = fees && sym ? cryptoFeeInCoin(fees.cryptoWithdrawalFeeUsd, usdPrice, DECIMALS[sym]) : null;
+  const receiveCoin =
+    feeCoin === null || !sym ? null : Math.max(0, Number((amountNum - feeCoin).toFixed(DECIMALS[sym])));
+  const coversFee = feeCoin === null || amountNum > feeCoin;
   const valid =
-    toAddress.trim().length >= 20 && amountNum >= min && amountNum <= available && amountNum > 0;
+    toAddress.trim().length >= 20 &&
+    amountNum >= min &&
+    amountNum <= available &&
+    amountNum > 0 &&
+    coversFee;
 
   function goReview() {
     setError(null);
     if (toAddress.trim().length < 20) return setError('Enter a valid destination address.');
     if (amountNum < min) return setError(`Minimum send is ${info!.minSend} ${sym}.`);
     if (amountNum > available) return setError('Amount exceeds your available balance.');
+    if (!coversFee) return setError(`That amount doesn't cover the ${feeCoin} ${sym} network fee.`);
     setStage('review');
   }
 
@@ -107,7 +136,13 @@ export default function SendCryptoScreen() {
             },
             pin,
           ),
-        { title: 'Confirm this withdrawal', detail: `Sending ${amount.trim()} ${sym} off-platform. This cannot be reversed.` },
+        {
+          title: 'Confirm this withdrawal',
+          detail:
+            receiveCoin !== null && feeCoin
+              ? `Sending ${amount.trim()} ${sym}: the recipient gets ${receiveCoin} after the ${feeCoin} network fee. This cannot be reversed.`
+              : `Sending ${amount.trim()} ${sym} off-platform. This cannot be reversed.`,
+        },
       );
       setTxHash(res.txHash);
       setStage('done');
@@ -261,6 +296,22 @@ export default function SendCryptoScreen() {
             </View>
             <Text className="text-muted dark:text-muted-dark text-xs mt-2">Minimum {info.minSend} {sym} · Network {info.networkLabel}</Text>
 
+            {/* The network fee, as they type. */}
+            {fees && fees.cryptoWithdrawalFeeUsd > 0 ? (
+              <View className="rounded-2xl p-4 mt-4" style={{ borderWidth: 1, borderColor: colors.border, gap: 8 }}>
+                <View className="flex-row justify-between">
+                  <Text className="text-muted dark:text-muted-dark text-sm">Network fee ({dollars(fees.cryptoWithdrawalFeeUsd)})</Text>
+                  <Text className="text-muted dark:text-muted-dark text-sm">{feeCoin === null ? '…' : `−${feeCoin} ${sym}`}</Text>
+                </View>
+                {amountNum > 0 && receiveCoin !== null ? (
+                  <View className="flex-row justify-between">
+                    <Text className="text-ink dark:text-ink-dark text-sm font-bold">Recipient gets</Text>
+                    <Text className="text-ink dark:text-ink-dark text-sm font-bold">{receiveCoin} {sym}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
             {error && <Text style={{ color: '#FF6B6B' }} className="text-sm mt-4">{error}</Text>}
 
             <View className="rounded-2xl p-4 mt-6 flex-row" style={{ backgroundColor: 'rgba(245,166,35,0.1)', borderWidth: 1, borderColor: 'rgba(245,166,35,0.3)' }}>
@@ -284,6 +335,10 @@ export default function SendCryptoScreen() {
               <ReviewRow label="Asset" value={`${meta?.name} (${sym})`} />
               <ReviewRow label="Network" value={info!.networkLabel} bordered />
               <ReviewRow label="Amount" value={`${amount} ${sym}`} bordered />
+              {feeCoin ? <ReviewRow label="Network fee" value={`−${feeCoin} ${sym}`} bordered /> : null}
+              {feeCoin && receiveCoin !== null ? (
+                <ReviewRow label="Recipient gets" value={`${receiveCoin} ${sym}`} bordered />
+              ) : null}
               <View className="px-4 py-4" style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
                 <Text className="text-muted dark:text-muted-dark text-sm">To address</Text>
                 <Text className="text-ink dark:text-ink-dark text-sm font-semibold mt-1">{toAddress.trim()}</Text>
@@ -314,7 +369,7 @@ export default function SendCryptoScreen() {
             <SuccessAnimation />
             <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold mt-6">Transfer submitted</Text>
             <Text className="text-muted dark:text-muted-dark text-sm mt-2 text-center">
-              {amount} {sym} is on its way to your destination address.
+              {receiveCoin !== null && feeCoin ? receiveCoin : amount} {sym} is on its way to your destination address.
             </Text>
             {txHash ? <Text className="text-muted dark:text-muted-dark text-xs mt-3">Tx: {txHash}</Text> : null}
             <TouchableOpacity onPress={() => router.replace('/(app)/crypto')} className="rounded-full py-4 items-center mt-8 w-full" style={{ backgroundColor: colors.brand }}>

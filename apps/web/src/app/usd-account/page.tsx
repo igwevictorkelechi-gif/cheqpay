@@ -6,6 +6,7 @@ import { ChevronLeft, Loader2 } from "lucide-react";
 import { api, ApiError } from "@/services/api";
 import UsdAccountPanel from "@/components/UsdAccountPanel";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import { usdDepositFeeText, useFees } from "@/lib/fees";
 
 /**
  * The dollar account on its own page.
@@ -73,6 +74,7 @@ export default function UsdAccountPage() {
           Receive US dollars from anywhere. Your dollars sit in their own balance and can be
           converted to Naira or crypto at any time.
         </p>
+        <UsdFeeLine />
 
         {checking ? (
           <div className="mt-10 flex justify-center">
@@ -87,5 +89,16 @@ export default function UsdAccountPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/** The incoming-dollar fee, before anyone sends. */
+function UsdFeeLine() {
+  const fees = useFees();
+  return (
+    <p className="mt-2 text-sm text-muted">
+      Deposit fee: {fees ? usdDepositFeeText(fees) : "…"}, taken from the amount received.{" "}
+      <a href="/pricing" className="font-semibold text-brand-light">All fees</a>
+    </p>
   );
 }

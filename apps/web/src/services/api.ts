@@ -122,6 +122,23 @@ export interface PublicFees {
   depositFeeBps: number;
   swapSpreadBps: number;
   fx: { buyUsdBps: number; sellUsdBps: number };
+  /** Most an NGN deposit fee can be, in naira (0 = no cap). */
+  depositFeeCapNgn: number;
+  usdDepositFeeBps: number;
+  usdDepositLargeFeeBps: number;
+  usdDepositLargeThresholdUsd: number;
+  /** Stablecoins that land as USD. */
+  cryptoDepositFeeBps: number;
+  /** Per crypto withdrawal, in USD, paid in the coin. */
+  cryptoWithdrawalFeeUsd: number;
+  cardIssueFeeUsd: number;
+  cardFundMinUsd: number;
+  cardFundFeeSmallUsd: number;
+  cardFundFeeLargeBps: number;
+  cardFundThresholdUsd: number;
+  cardWithdrawFeeUsd: number;
+  /** Markup on bill payments, per service. */
+  bills: Record<"airtime" | "data" | "electricity" | "cabletv" | "betting" | "food", number>;
 }
 
 export interface PublicLimits {
@@ -138,7 +155,10 @@ export type LedgerTxType =
   | "BILL"
   | "CASHBACK"
   | "TRANSFER_OUT"
-  | "TRANSFER_IN";
+  | "TRANSFER_IN"
+  | "CARD_FUND"
+  | "CARD_WITHDRAW"
+  | "CARD_ISSUE";
 export type LedgerTxStatus =
   | "PENDING"
   | "PROCESSING"
@@ -628,11 +648,19 @@ export const api = {
     network: "BITCOIN" | "TRON" | "ETHEREUM" | "BSC";
     toAddress: string;
     amount: string;
-  }, pin?: string): Promise<{ transactionId: string; status: string; txHash?: string }> {
+  }, pin?: string): Promise<{
+    transactionId: string;
+    status: string;
+    txHash?: string;
+    amount?: string;
+    fee?: string;
+    youReceive?: string;
+  }> {
+    // The network fee comes out of the amount, so Max always works.
     return apiFetch("/api/withdrawals/crypto", {
       method: "POST",
       headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, feeInclusive: true }),
     });
   },
 
@@ -755,7 +783,8 @@ export const api = {
     return apiFetch("/api/cards");
   },
 
-  createCard(): Promise<{ card: VirtualCard }> {
+  /** Charges the card price (fees.cardIssueFeeUsd) from the USD wallet. */
+  createCard(): Promise<{ card: VirtualCard; fee?: string }> {
     return apiFetch("/api/cards", { method: "POST" });
   },
 

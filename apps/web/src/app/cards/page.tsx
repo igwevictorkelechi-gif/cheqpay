@@ -28,6 +28,7 @@ import {
   type VirtualCard,
 } from "@/services/api";
 import { useFeatures } from "@/lib/useFeatures";
+import { cardFundBreakdown, cardFundFeeText, dollars, useFees } from "@/lib/fees";
 import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 
 /**
@@ -63,6 +64,9 @@ export default function CardsPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A card costs money, so asking for one opens a confirmation first.
+  const [confirmCreate, setConfirmCreate] = useState(false);
+  const fees = useFees();
 
   const activeCard = useMemo(
     () => cards.find((c) => c.id === activeId) ?? cards[0] ?? null,
@@ -110,7 +114,13 @@ export default function CardsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCard?.id]);
 
-  const createCard = useCallback(async () => {
+  const createCard = useCallback(() => {
+    setError(null);
+    setConfirmCreate(true);
+  }, []);
+
+  const doCreateCard = useCallback(async () => {
+    setConfirmCreate(false);
     setError(null);
     setCreating(true);
     try {
@@ -147,6 +157,15 @@ export default function CardsPage() {
             <p className="mt-1 text-sm text-muted">
               Dollar cards for online payments and subscriptions.
             </p>
+            {fees ? (
+              <p className="mt-1 text-xs text-muted">
+                Card {dollars(fees.cardIssueFeeUsd)} · top-up {cardFundFeeText(fees)} · withdrawal{" "}
+                {dollars(fees.cardWithdrawFeeUsd)} ·{" "}
+                <a href="/pricing" className="font-semibold text-brand-light">
+                  all fees
+                </a>
+              </p>
+            ) : null}
           </div>
           {!comingSoon && cards.length > 0 && (
             <button
@@ -220,6 +239,50 @@ export default function CardsPage() {
 
         {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
       </div>
+
+      {confirmCreate && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          onClick={() => setConfirmCreate(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-3xl bg-surface p-5 pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-ink">Create a virtual card</h2>
+            <div className="mt-4 space-y-2 rounded-2xl bg-card p-4 text-sm">
+              <div className="flex justify-between font-bold text-ink">
+                <span>Card price</span>
+                <span>{fees ? dollars(fees.cardIssueFeeUsd) : "…"}</span>
+              </div>
+              <div className="flex justify-between text-muted">
+                <span>Paid from</span>
+                <span>
+                  Your USD balance
+                  {usdBalance ? ` · $${usdBalance.availableFormatted} available` : ""}
+                </span>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-muted">
+              If the card can&apos;t be issued, the price is refunded automatically.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setConfirmCreate(false)}
+                className="flex-1 rounded-2xl bg-card py-4 font-bold text-ink active:scale-[0.99]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doCreateCard}
+                className="flex-1 rounded-2xl bg-brand py-4 font-bold text-white active:scale-[0.99]"
+              >
+                Pay {fees ? dollars(fees.cardIssueFeeUsd) : ""} &amp; create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
@@ -599,11 +662,26 @@ function AmountSheet({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const isFund = mode === "fund";
+  const fees = useFees();
+  const value = Number(amount || 0);
+  // Top-up: the card gets the amount, the fee is added on top.
+  // Withdrawal: the fee comes out, the wallet gets the rest.
+  const fund = fees && value > 0 ? cardFundBreakdown(value, fees) : null;
+  const wdFee = fees ? fees.cardWithdrawFeeUsd : null;
+  const wdReceive = wdFee !== null ? Math.round((value - wdFee) * 100) / 100 : null;
 
   async function submit() {
     setErr(null);
     if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
       setErr("Enter an amount like 10 or 10.50");
+      return;
+    }
+    if (isFund && fund?.belowMin) {
+      setErr(`The smallest top-up is ${dollars(fees!.cardFundMinUsd)}.`);
+      return;
+    }
+    if (!isFund && wdReceive !== null && wdReceive <= 0) {
+      setErr(`That doesn't cover the ${dollars(wdFee!)} withdrawal fee.`);
       return;
     }
     setBusy(true);
@@ -616,8 +694,12 @@ function AmountSheet({
         {
           title: isFund ? "Confirm this card load" : "Confirm this card withdrawal",
           detail: isFund
-            ? `Moving $${amount} from your balance onto the card.`
-            : `Moving $${amount} from the card back to your balance.`,
+            ? fund
+              ? `Loading ${dollars(fund.amount)} onto the card. ${dollars(fund.total)} leaves your balance (${dollars(fund.fee)} fee).`
+              : `Moving $${amount} from your balance onto the card.`
+            : wdReceive !== null
+              ? `Moving $${amount} off the card. ${dollars(wdReceive)} reaches your balance (${dollars(wdFee!)} fee).`
+              : `Moving $${amount} from the card back to your balance.`,
         },
       );
       toast.show(
@@ -676,6 +758,44 @@ function AmountSheet({
             </button>
           ))}
         </div>
+
+        {/* The fee and what actually moves, before the PIN. */}
+        {fees && value > 0 ? (
+          <div className="mt-4 space-y-2 rounded-2xl border border-border p-4 text-sm">
+            {isFund && fund ? (
+              <>
+                <div className="flex justify-between text-muted">
+                  <span>Card receives</span>
+                  <span>{dollars(fund.amount)}</span>
+                </div>
+                <div className="flex justify-between text-muted">
+                  <span>Fee</span>
+                  <span>+{dollars(fund.fee)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-ink">
+                  <span>Total from your balance</span>
+                  <span>{dollars(fund.total)}</span>
+                </div>
+                {fund.belowMin ? (
+                  <p className="text-xs text-red-400">
+                    The smallest top-up is {dollars(fees.cardFundMinUsd)}.
+                  </p>
+                ) : null}
+              </>
+            ) : wdFee !== null && wdReceive !== null ? (
+              <>
+                <div className="flex justify-between text-muted">
+                  <span>Fee</span>
+                  <span>−{dollars(wdFee)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-ink">
+                  <span>You&apos;ll receive</span>
+                  <span>{wdReceive > 0 ? dollars(wdReceive) : "—"}</span>
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
 
         {err && <p className="mt-3 text-sm text-red-400">{err}</p>}
 

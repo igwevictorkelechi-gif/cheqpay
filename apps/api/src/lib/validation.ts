@@ -161,6 +161,11 @@ export const cryptoWithdrawalSchema = z.object({
   network: z.enum(["BITCOIN", "TRON", "ETHEREUM", "BSC", "SOLANA", "BASE", "POLYGON"]),
   toAddress: z.string().min(20).max(120),
   amount: z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal amount"),
+  /**
+   * True: the network fee comes out of `amount` (the recipient gets amount −
+   * fee), so Max works. Both apps send it. Absent: the fee is added on top.
+   */
+  feeInclusive: z.boolean().optional(),
 });
 export type CryptoWithdrawalInput = z.infer<typeof cryptoWithdrawalSchema>;
 
@@ -273,6 +278,27 @@ export const platformSettingsUpdateSchema = z
     cashbackTradeBps: z.number().int().min(0).max(1_000).optional(),
     /** Per-transaction cashback ceiling in NGN (max ₦100,000). 0 = uncapped. */
     cashbackMaxNgn: z.number().min(0).max(100_000).optional(),
+    /**
+     * The price sheet (Maplerad's cost + our margin). Bounds are loose enough
+     * for any sane price and tight enough to catch a slipped decimal point.
+     */
+    pricing: z
+      .object({
+        depositFeeCapNgn: z.number().min(0).max(100_000),
+        usdDepositFeeBps: z.number().int().min(0).max(1_000),
+        usdDepositLargeFeeBps: z.number().int().min(0).max(1_000),
+        usdDepositLargeThresholdUsd: z.number().min(0).max(10_000_000),
+        cryptoDepositFeeBps: z.number().int().min(0).max(1_000),
+        cryptoWithdrawalFeeUsd: z.number().min(0).max(100),
+        cardIssueFeeUsd: z.number().min(0).max(100),
+        cardFundMinUsd: z.number().min(0).max(10_000),
+        cardFundFeeSmallUsd: z.number().min(0).max(100),
+        cardFundFeeLargeBps: z.number().int().min(0).max(1_000),
+        cardFundThresholdUsd: z.number().min(0).max(100_000),
+        cardWithdrawFeeUsd: z.number().min(0).max(100),
+      })
+      .partial()
+      .optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: "Provide at least one setting to update",

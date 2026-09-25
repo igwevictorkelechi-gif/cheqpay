@@ -110,8 +110,8 @@ describe("per-service bill margins", () => {
 });
 
 describe("the NGN<->USD spread", () => {
-  it("is 0 until an admin sets it", async () => {
-    await expect(getFxMarginBps()).resolves.toBe(0);
+  it("defaults to 1% on top of Maplerad's rate until an admin sets it", async () => {
+    await expect(getFxMarginBps()).resolves.toBe(100);
   });
 
   it("is read from its own key, not from the crypto swap spread", async () => {

@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   getWithdrawalMinUsd: vi.fn(),
   usdCents: vi.fn(),
   assertFeatureEnabled: vi.fn(),
+  feeInCoin: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -55,7 +56,14 @@ vi.mock("@/market", () => ({ getPriceFeed: () => ({ getSpotUsdt: h.getSpotUsdt }
 vi.mock("@/lib/settings", () => ({
   getUsdtNgnRate: h.getUsdtNgnRate,
   getWithdrawalMinUsd: h.getWithdrawalMinUsd,
+  getPricing: async () => ({ cryptoWithdrawalFeeUsd: 2.5 }),
 }));
+// The coin conversion is tested in lib/fees.test.ts; here the fee is a fixed
+// number of minor units so the split is easy to read.
+vi.mock("@/lib/fees", async () => {
+  const real = await vi.importActual<typeof import("@/lib/fees")>("@/lib/fees");
+  return { ...real, usdFeeInCoin: () => h.feeInCoin() };
+});
 vi.mock("@/lib/rates", () => ({
   cryptoToNgnKobo: () => 1_000_000n,
   cryptoToUsdCents: () => h.usdCents(),
@@ -123,6 +131,7 @@ describe("POST /api/withdrawals/crypto — receive-only chains are refused up fr
     h.getUsdtNgnRate.mockResolvedValue(1500);
     h.getSpotUsdt.mockResolvedValue({ toString: () => "1" });
     h.createWithdrawal.mockResolvedValue({ txHash: "0xhash" });
+    h.feeInCoin.mockReturnValue(0n);
   });
 
   it("refuses each receive-only chain without debiting anything", async () => {
@@ -165,6 +174,7 @@ describe("POST /api/withdrawals/crypto — the dollar floor", () => {
     h.getSpotUsdt.mockResolvedValue({ mul: () => ({}) });
     h.createWithdrawal.mockResolvedValue({ txHash: "0xabc" });
     h.getWithdrawalMinUsd.mockResolvedValue(5);
+    h.feeInCoin.mockReturnValue(0n);
   });
 
   it("refuses a withdrawal worth less than the floor, before any money is reserved", async () => {
@@ -186,5 +196,47 @@ describe("POST /api/withdrawals/crypto — the dollar floor", () => {
     h.usdCents.mockReturnValue(1n); // one cent
     const res = await call({ ...base, network: "SOLANA", toAddress: "B".repeat(32) });
     expect(res.status).toBe(200);
+  });
+});
+
+describe("POST /api/withdrawals/crypto — network fee", () => {
+  const sol = { ...base, network: "SOLANA", toAddress: "BvH5kAbCdEfGhIjKlMnOpQrStUvWxYz1234567890" };
+
+  beforeEach(() => {
+    Object.values(h).forEach((fn) => fn.mockReset());
+    h.requireUser.mockResolvedValue({ id: "u1" });
+    h.userFindUnique.mockResolvedValue({ id: "u1", kycTier: 3, instantWithdrawal: true });
+    h.isManualAsset.mockResolvedValue(false);
+    h.getWithdrawalMinUsd.mockResolvedValue(0);
+    h.txFindUnique.mockResolvedValue(null);
+    h.balanceUpdateMany.mockResolvedValue({ count: 1 });
+    h.txCreate.mockResolvedValue({ id: "tx1", status: "PROCESSING" });
+    h.getUsdtNgnRate.mockResolvedValue(1500);
+    h.getSpotUsdt.mockResolvedValue({ toString: () => "1" });
+    h.createWithdrawal.mockResolvedValue({ txHash: "0xhash" });
+    h.feeInCoin.mockReturnValue(2_500_000n); // $2.50 of USDT (6dp)
+  });
+
+  it("takes the fee out of the amount when feeInclusive (what the apps send)", async () => {
+    const res = await call({ ...sol, amount: "10", feeInclusive: true });
+    expect(res.status).toBe(200);
+    // Balance drops by exactly 10 USDT; the recipient is sent 7.5.
+    expect(h.balanceUpdateMany.mock.calls[0][0].data.available.decrement).toBe(10_000_000n);
+    expect(h.createWithdrawal.mock.calls[0][0].amount).toBe("7.500000");
+    expect(h.txCreate.mock.calls[0][0].data).toMatchObject({ amount: 7_500_000n, fee: 2_500_000n });
+    expect(await res.json()).toMatchObject({ amount: "10.000000", fee: "2.500000", youReceive: "7.500000" });
+  });
+
+  it("refuses an amount the fee would swallow, before touching the balance", async () => {
+    const res = await call({ ...sol, amount: "2", feeInclusive: true });
+    expect(res.status).toBe(422);
+    expect((await res.json()).code).toBe("below_fee");
+    expect(h.balanceUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("adds the fee on top for older clients", async () => {
+    await call({ ...sol, amount: "10" });
+    expect(h.balanceUpdateMany.mock.calls[0][0].data.available.decrement).toBe(12_500_000n);
+    expect(h.createWithdrawal.mock.calls[0][0].amount).toBe("10.000000");
   });
 });

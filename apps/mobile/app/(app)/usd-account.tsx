@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { colors } from '@/components/brand';
 import { api, ApiError } from '@/services/api';
 import UsdAccountPanel from '@/components/UsdAccountPanel';
+import { usdDepositFeeText, useFees } from '@/lib/fees';
 
 /**
  * The dollar account on its own screen.
@@ -63,6 +64,7 @@ export default function UsdAccountScreen() {
           Receive US dollars from anywhere. Your dollars sit in their own balance and can be
           converted to Naira or crypto at any time.
         </Text>
+        <UsdFeeLine />
 
         {checking ? (
           <View className="mt-10 items-center">
@@ -77,5 +79,15 @@ export default function UsdAccountScreen() {
         )}
       </ScrollView>
     </View>
+  );
+}
+
+/** The incoming-dollar fee, before anyone sends. */
+function UsdFeeLine() {
+  const fees = useFees();
+  return (
+    <Text className="text-muted dark:text-muted-dark text-sm mt-2">
+      Deposit fee: {fees ? usdDepositFeeText(fees) : '…'}, taken from the amount received.
+    </Text>
   );
 }

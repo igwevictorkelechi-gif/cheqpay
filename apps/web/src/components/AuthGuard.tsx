@@ -10,7 +10,7 @@ import { supabase } from "@/services/supabase";
 // Listing it here is what stops this guard blanking the homepage, which is
 // what left out/index.html with nothing for search engines to index.
 const PUBLIC_EXACT = new Set(["/", "/login", "/signup", "/verify-otp", "/welcome"]);
-const PUBLIC_PREFIX = ["/legal", "/privacy", "/terms", "/about", "/support", "/faq", "/contact"];
+const PUBLIC_PREFIX = ["/legal", "/privacy", "/terms", "/about", "/support", "/faq", "/contact", "/pricing"];
 
 /** Where a signed-out visitor to the app root is sent. */
 const LANDING = "/welcome";

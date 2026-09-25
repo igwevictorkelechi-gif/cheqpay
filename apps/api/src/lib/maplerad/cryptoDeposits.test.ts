@@ -25,6 +25,10 @@ vi.mock("@cheqpay/db", () => ({
 vi.mock("../ledger", () => ({ creditBalance: h.creditBalance }));
 vi.mock("../alerts", () => ({ notifyUser: h.notifyUser }));
 vi.mock("../ensureUsdAsset", () => ({ ensureUsdAsset: h.ensureUsdAsset }));
+vi.mock("../settings", async () => {
+  const real = await vi.importActual<typeof import("../settings")>("../settings");
+  return { getPricing: async () => real.PRICING_DEFAULTS };
+});
 
 import {
   assetForCoin,
@@ -140,7 +144,7 @@ describe("creditCryptoDeposit", () => {
   it("credits USD when the provider offramped the arrival", async () => {
     await creditCryptoDeposit({ ...deposit, offramp: true, rawAmount: "2500" });
     expect(h.creditBalance).toHaveBeenCalledWith(
-      expect.objectContaining({ asset: "USD", amountMinor: 2500n }),
+      expect.objectContaining({ asset: "USD", amountMinor: 2500n, feeMinor: 25n }),
     );
   });
 

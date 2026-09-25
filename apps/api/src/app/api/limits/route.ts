@@ -1,8 +1,10 @@
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import {
   getDepositFeeBps,
+  getBillMargins,
   getDepositMinUsd,
   getFxSideMarginBps,
+  getPricing,
   getSwapSpreadBps,
   getWithdrawalFeeNgn,
   getWithdrawalMinNgn,
@@ -29,6 +31,9 @@ export const dynamic = "force-dynamic";
  *  - depositFeeBps:    share of each NGN deposit
  *  - swapSpreadBps:    crypto conversions
  *  - fx.*Bps:          NGN⇄USD, per direction (sellUsd = paying naira for dollars)
+ *  - pricing:         the rest of the price sheet (deposit cap, USD deposit
+ *                      tiers, crypto and card fees) — see Pricing in settings.ts
+ *  - bills:           markup on bill payments, default + per service
  * Basis points: 100 = 1%.
  */
 export async function GET() {
@@ -42,6 +47,8 @@ export async function GET() {
       swapSpreadBps,
       buyUsdBps,
       sellUsdBps,
+      pricing,
+      billMargins,
     ] = await Promise.all([
       getDepositMinUsd(),
       getWithdrawalMinNgn(),
@@ -51,7 +58,11 @@ export async function GET() {
       getSwapSpreadBps(),
       getFxSideMarginBps("buy_usd"),
       getFxSideMarginBps("sell_usd"),
+      getPricing(),
+      getBillMargins(),
     ]);
+    const billBps = (s: keyof typeof billMargins.perService) =>
+      billMargins.perService[s] ?? billMargins.defaultBps;
     return jsonOk({
       deposit: { minUsd: depositMinUsd, enforced: false },
       withdrawal: {
@@ -64,6 +75,15 @@ export async function GET() {
         depositFeeBps,
         swapSpreadBps,
         fx: { buyUsdBps, sellUsdBps },
+        ...pricing,
+        bills: {
+          airtime: billBps("airtime"),
+          data: billBps("data"),
+          electricity: billBps("electricity"),
+          cabletv: billBps("cabletv"),
+          betting: billBps("betting"),
+          food: billBps("food"),
+        },
       },
     });
   } catch (err) {

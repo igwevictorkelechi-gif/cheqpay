@@ -19,7 +19,8 @@ import { creditBalance } from "./ledger";
 import { fromMinorUnits } from "./money";
 import { notifyUser } from "./alerts";
 import { awardCashback } from "./cashback";
-import { feeFromBps, getDepositFeeBps } from "./settings";
+import { getDepositFeeBps, getPricing } from "./settings";
+import { ngnDepositFee, usdDepositFee } from "./fees";
 import { ensureUsdAsset } from "./ensureUsdAsset";
 
 /** One idempotency key per Maplerad transaction id, shared by both halves. */
@@ -136,7 +137,12 @@ export const prismaLedgerPort: LedgerPort = {
     // Maplerad sends minor units (kobo for NGN, cents for USD) — already our
     // storage unit, so no conversion and no float ever touches this path.
     const amountMinor = BigInt(input.amountMinor);
-    const feeMinor = feeFromBps(amountMinor, await getDepositFeeBps());
+    // NGN and USD cost us differently (0.5% capped vs 3%/1.5% tiered), so each
+    // has its own price.
+    const pricing = await getPricing();
+    const feeMinor = isNgn
+      ? ngnDepositFee(amountMinor, await getDepositFeeBps(), pricing.depositFeeCapNgn)
+      : usdDepositFee(amountMinor, pricing);
 
     const credit = await creditBalance({
       userId: input.userId,
@@ -188,13 +194,15 @@ export const prismaLedgerPort: LedgerPort = {
     }
 
     const net = amountMinor - feeMinor;
-    const pretty = isNgn
-      ? `₦${fromMinorUnits(net, Asset.NGN)}`
-      : `$${fromMinorUnits(net, Asset.USD)}`;
+    const money = (m: bigint) =>
+      isNgn ? `₦${fromMinorUnits(m, Asset.NGN)}` : `$${fromMinorUnits(m, Asset.USD)}`;
     await notifyUser(input.userId, {
       category: "deposits",
       title: "Money received",
-      body: `${pretty} has landed in your CheqPay wallet.`,
+      body:
+        feeMinor > 0n
+          ? `${money(net)} has landed in your CheqPay wallet (${money(amountMinor)} received, ${money(feeMinor)} fee).`
+          : `${money(net)} has landed in your CheqPay wallet.`,
     }).catch((err) => {
       console.error("[maplerad collection] notification failed", err);
     });

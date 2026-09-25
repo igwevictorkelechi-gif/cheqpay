@@ -6,6 +6,14 @@ import { ChevronLeft, Landmark, Loader2, ShieldAlert } from "lucide-react";
 import { NairaFlag } from "@/components/MobileUI";
 import { api, type UsdAccount } from "@/services/api";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import {
+  depositBreakdown,
+  dollars,
+  naira,
+  ngnDepositFeeText,
+  usdDepositFeeText,
+  useFees,
+} from "@/lib/fees";
 
 /** `?currency=USD` puts the screen in dollar mode; anything else is Naira. */
 function currencyFromQuery(): "NGN" | "USD" {
@@ -28,6 +36,7 @@ export default function AddMoneyPage() {
   const router = useRouter();
   const [currency, setCurrency] = useState<"NGN" | "USD">("NGN");
   const [amount, setAmount] = useState("1000");
+  const fees = useFees();
   const [available, setAvailable] = useState<number | null>(null);
   // USD only: null while we are still checking whether the account exists.
   const [usdAccount, setUsdAccount] = useState<UsdAccount | null>(null);
@@ -152,6 +161,24 @@ export default function AddMoneyPage() {
               Available: {available === null ? "…" : available.toLocaleString(locale)} {currency}
             </p>
 
+            {/* The fee on this deposit, before they send anything. */}
+            {fees && Number(amount) > 0 ? (() => {
+              const b = depositBreakdown(Number(amount), currency, fees);
+              const money = (n: number) => (isUsd ? dollars(n) : naira(n));
+              return (
+                <div className="mt-4 space-y-2 rounded-2xl border border-border p-4 text-sm">
+                  <div className="flex justify-between text-muted">
+                    <span>Fee ({isUsd ? usdDepositFeeText(fees) : ngnDepositFeeText(fees)})</span>
+                    <span>{b.fee > 0 ? `−${money(b.fee)}` : "Free"}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-ink">
+                    <span>You&apos;ll receive</span>
+                    <span>{money(b.receive)}</span>
+                  </div>
+                </div>
+              );
+            })() : null}
+
             {/* Pay with */}
             <p className="mt-8 text-base font-bold text-ink">Pay with</p>
             <div className="mt-3 flex items-center gap-4 rounded-3xl bg-card p-5">
@@ -164,8 +191,8 @@ export default function AddMoneyPage() {
                 </p>
                 <p className="mt-0.5 text-sm text-muted">
                   {isUsd
-                    ? "Send dollars to your account details from anywhere."
-                    : "Transfer to your CheqPay account. Arrives in seconds."}
+                    ? `Send dollars to your account details from anywhere. Fee: ${fees ? usdDepositFeeText(fees) : "…"}.`
+                    : `Transfer to your CheqPay account. Arrives in seconds. Fee: ${fees ? ngnDepositFeeText(fees) : "…"}.`}
                 </p>
               </div>
             </div>

@@ -16,6 +16,8 @@ import { fromMinorUnits } from "../money";
 import { ASSET_DECIMALS } from "../money";
 import { CRYPTO_COINS, isWithdrawableNetwork } from "../assets";
 import { ensureUsdAsset } from "../ensureUsdAsset";
+import { getPricing } from "../settings";
+import { cryptoDepositFee } from "../fees";
 
 /** A crypto deposit reduced to the few things crediting actually needs. */
 export interface ParsedCryptoDeposit {
@@ -189,10 +191,15 @@ export async function creditCryptoDeposit(
     return { outcome: "unmatched", reason: `unreadable amount ${deposit.rawAmount}` };
   }
 
+  // A coin that lands as dollars went through Maplerad's 0.5% ramp, so it
+  // carries our conversion fee. A coin credited as itself costs us nothing.
+  const feeMinor = asset === Asset.USD ? cryptoDepositFee(amountMinor, await getPricing()) : 0n;
+
   const { created, transactionId } = await creditBalance({
     userId: wallet.userId,
     asset,
     amountMinor,
+    feeMinor,
     type: TransactionType.DEPOSIT,
     // The provider's own id for this deposit: a webhook retry, or the same
     // deposit arriving under a second event name, cannot double-credit.
@@ -217,7 +224,9 @@ export async function creditCryptoDeposit(
     title: "Deposit received",
     body:
       asset === Asset.USD
-        ? `Your crypto deposit was converted and $${fromMinorUnits(amountMinor, asset)} added to your balance.`
+        ? feeMinor > 0n
+          ? `Your crypto deposit was converted and $${fromMinorUnits(amountMinor - feeMinor, asset)} added to your balance ($${fromMinorUnits(feeMinor, asset)} conversion fee).`
+          : `Your crypto deposit was converted and $${fromMinorUnits(amountMinor, asset)} added to your balance.`
         : `${fromMinorUnits(amountMinor, asset)} ${asset} has landed in your wallet.`,
     data: { transactionId },
   }).catch(() => undefined);

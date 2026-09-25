@@ -12,9 +12,11 @@ type Analytics = {
   windowDays: number;
   kpis: {
     totalUsers: number; activeUsers: number; totalWallets: number; fundedWallets: number;
-    totalTransactions: number; ngnVolumeWindow: number; feesNgnWindow: number; successRate: number;
+    totalTransactions: number; ngnVolumeWindow: number; feesNgnWindow: number; feesUsdWindow?: number; successRate: number;
   };
-  transactions: { daily: { date: string; count: number; ngnVolume: number }[] };
+  transactions: {
+    daily: { date: string; count: number; ngnVolume: number; feesNgn?: number; feesUsd?: number }[];
+  };
   bills: { topBillers: { name: string; count: number; ngnVolume: number }[] };
 };
 
@@ -152,7 +154,9 @@ export default function Dashboard() {
       label: 'Fees earned',
       value: k ? fmtNgn(k.feesNgnWindow) : '—',
       delta: null,
-      sub: `last ${days} days`,
+      sub: k
+        ? `+ $${(k.feesUsdWindow ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · completed only · last ${days} days`
+        : `last ${days} days`,
     },
   ];
 
@@ -211,13 +215,23 @@ export default function Dashboard() {
             <h2 className="text-lg font-bold text-gray-900">Revenue</h2>
             <div className="mt-1 flex items-center gap-2">
               <p className="text-3xl font-bold text-gray-900">
+                {loading ? '…' : k ? fmtNgn(k.feesNgnWindow) : '—'}
+              </p>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Naira fees and FX spread earned · last {days} days · plus $
+              {k ? (k.feesUsdWindow ?? 0).toFixed(2) : '—'} in USD fees
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-400">Processed volume</p>
+            <div className="flex items-center justify-end gap-2">
+              <p className="text-lg font-semibold text-gray-700">
                 {loading ? '…' : k ? fmtNgn(k.ngnVolumeWindow) : '—'}
               </p>
               {!loading && <DeltaChip pct={volDelta} />}
             </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Processed NGN volume · last {days} days · success rate {k ? k.successRate : '—'}%
-            </p>
+            <p className="text-xs text-gray-400">success rate {k ? k.successRate : '—'}%</p>
           </div>
         </div>
         <div className="mt-4" style={{ width: '100%', height: 280 }}>
@@ -256,7 +270,8 @@ export default function Dashboard() {
               />
               <Area
                 type="monotone"
-                dataKey="ngnVolume"
+                dataKey="feesNgn"
+                name="Fees (₦)"
                 stroke="#8b5cf6"
                 strokeWidth={2}
                 fill="url(#rev)"
