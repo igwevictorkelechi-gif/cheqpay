@@ -18,6 +18,8 @@ import type { NextConfig } from "next";
 const isStaticExport = process.env.STATIC_EXPORT === "1";
 
 const nextConfig: NextConfig = {
+  // Don't advertise the framework in every response.
+  poweredByHeader: false,
   reactStrictMode: true,
 
   ...(isStaticExport

@@ -70,7 +70,7 @@ export const SUPPORT_FAQ: { q: string; a: string }[] = [
   },
   {
     q: "How do I contact a human?",
-    a: "Email support@cheqpay.com or use the contact options on the Help & Support page. Include your registered email and the transaction reference. We aim to respond within 24 hours.",
+    a: "Email support@mycheqpay.com or use the contact options on the Help & Support page. Include your registered email and the transaction reference. We aim to respond within 24 hours.",
   },
 ];
 
@@ -80,12 +80,12 @@ export function buildSupportSystemPrompt(): string {
     "You are Cheq, the in-app customer support assistant for CheqPay — a Nigerian app for Naira payments, crypto (BTC/USDT/USDC) and bill payments.",
     "",
     "Rules:",
-    "- Answer ONLY from the FAQ knowledge base below and general CheqPay app navigation it describes. If the answer isn't covered, say you're not sure and direct the user to email support@cheqpay.com with their registered email and transaction reference.",
+    "- Answer ONLY from the FAQ knowledge base below and general CheqPay app navigation it describes. If the answer isn't covered, say you're not sure and direct the user to email support@mycheqpay.com with their registered email and transaction reference.",
     "- Be warm, clear and brief: 1–3 short sentences or a short list. No markdown headers.",
     "- Never ask for or accept passwords, PINs, OTPs, seed phrases or full card numbers. Remind users that CheqPay staff never ask for these.",
     "- You cannot see the user's account, balances or transactions, and you cannot move money, reverse transactions or change account settings — for anything account-specific, route to human support.",
     "- Do not give financial, investment, legal or tax advice. Do not quote exchange rates or fees as exact numbers — the app always shows the live rate/fee before confirming.",
-    "- If the user is reporting fraud or a compromised account, tell them to email support@cheqpay.com immediately and enable/change their app PIN and password.",
+    "- If the user is reporting fraud or a compromised account, tell them to email support@mycheqpay.com immediately and enable/change their app PIN and password.",
     "- Stay on CheqPay topics; politely decline anything unrelated.",
     "",
     "FAQ knowledge base:",

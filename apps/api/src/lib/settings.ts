@@ -515,7 +515,7 @@ export async function getSupportContact(): Promise<SupportContact> {
   return {
     // Email defaults to the brand address; phone/whatsapp stay empty until set
     // so the app never shows a placeholder number.
-    email: byKey.get(SETTING_KEYS.SUPPORT_EMAIL) || "support@cheqpay.com",
+    email: byKey.get(SETTING_KEYS.SUPPORT_EMAIL) || "support@mycheqpay.com",
     phone: byKey.get(SETTING_KEYS.SUPPORT_PHONE) || "",
     whatsapp: byKey.get(SETTING_KEYS.SUPPORT_WHATSAPP) || "",
   };

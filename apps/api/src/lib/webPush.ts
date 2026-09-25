@@ -70,7 +70,7 @@ function configure(): boolean {
   const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = getEnv();
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return false;
   if (!configured) {
-    webpush.setVapidDetails(VAPID_SUBJECT || "mailto:support@cheqpay.com", VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    webpush.setVapidDetails(VAPID_SUBJECT || "mailto:support@mycheqpay.com", VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
     configured = true;
   }
   return true;

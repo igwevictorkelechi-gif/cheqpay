@@ -15,7 +15,7 @@ export default function ContactPage() {
     if (!canSend) return;
     const subject = encodeURIComponent(`CheqPay enquiry from ${name.trim()}`);
     const body = encodeURIComponent(`Name: ${name}\nEmail: ${email}\n\n${message}`);
-    window.location.href = `mailto:support@cheqpay.com?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:support@mycheqpay.com?subject=${subject}&body=${body}`;
   }
 
   return (
@@ -62,13 +62,13 @@ export default function ContactPage() {
       <Section heading="Other ways to reach us">
         <div className="space-y-3">
           <a
-            href="mailto:support@cheqpay.com"
+            href="mailto:support@mycheqpay.com"
             className="flex items-center gap-3 text-sm text-ink"
           >
-            <Mail className="h-5 w-5 text-brand-light" /> support@cheqpay.com
+            <Mail className="h-5 w-5 text-brand-light" /> support@mycheqpay.com
           </a>
           <div className="flex items-center gap-3 text-sm text-ink">
-            <Globe className="h-5 w-5 text-brand-light" /> www.cheqpay.com
+            <Globe className="h-5 w-5 text-brand-light" /> www.mycheqpay.com
           </div>
           <div className="flex items-start gap-3 text-sm text-ink">
             <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-brand-light" /> Lagos, Nigeria

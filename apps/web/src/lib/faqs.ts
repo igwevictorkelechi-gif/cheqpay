@@ -42,6 +42,6 @@ export const FAQS = [
   },
   {
     q: "How do I contact support?",
-    a: "Visit Help & Support in the app, email support@cheqpay.com, or use the Contact us page. We aim to respond within 24 hours.",
+    a: "Visit Help & Support in the app, email support@mycheqpay.com, or use the Contact us page. We aim to respond within 24 hours.",
   },
 ] as const;

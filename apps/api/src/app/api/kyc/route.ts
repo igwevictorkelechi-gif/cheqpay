@@ -1,3 +1,4 @@
+import { scrubProviderNames } from "@/lib/publicMessage";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { prisma, KycStatus } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
@@ -389,7 +390,9 @@ export async function POST(req: Request) {
         status: record.status,
         tier: verdict.verified ? Math.max(user.kycTier, verdict.tier) : user.kycTier,
         autoVerified: verdict.verified,
-        message: verdict.reason,
+        // The provider's full reason is in the log and audit row above; the
+        // user sees it without the provider's name.
+        message: verdict.reason ? scrubProviderNames(verdict.reason) : verdict.reason,
       },
       201
     );

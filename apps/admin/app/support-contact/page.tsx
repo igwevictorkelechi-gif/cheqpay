@@ -92,9 +92,9 @@ export default function SupportContactPage() {
             onChange={(e) => setEmail(e.target.value)}
             disabled={loading || saving}
             className={inputCls}
-            placeholder="support@cheqpay.com"
+            placeholder="support@mycheqpay.com"
           />
-          <p className="text-sm text-gray-500 mt-2">Always shown. Defaults to support@cheqpay.com.</p>
+          <p className="text-sm text-gray-500 mt-2">Always shown. Defaults to support@mycheqpay.com.</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

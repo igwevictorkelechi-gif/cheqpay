@@ -12,7 +12,7 @@ export const SITE_URL = "https://mycheqpay.com";
 
 export const SITE_NAME = "CheqPay";
 
-export const SUPPORT_EMAIL = "support@cheqpay.com";
+export const SUPPORT_EMAIL = "support@mycheqpay.com";
 
 /**
  * Build an absolute canonical URL for a route.

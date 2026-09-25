@@ -95,7 +95,11 @@ export default function PrivacyPage() {
           <strong>We never sell your personal data.</strong> We share it only with the service providers who help
           us run CheqPay, under contracts that require them to protect it and use it only on our instructions:
         </p>
-        <Table head={["Provider", "What for", "Data involved"]} rows={SUB_PROCESSORS.map((p) => [p.name, p.purpose, p.data])} />
+        <Table head={["Type of provider", "What for", "Data involved"]} rows={SUB_PROCESSORS.map((p) => [p.name, p.purpose, p.data])} />
+        <p>
+          You can ask us for the names of the providers we currently use by emailing{" "}
+          <Mail to={COMPANY.privacyEmail} />.
+        </p>
         <p>We also share data:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>With the person you pay: your name or username appears on transfers you send.</li>
@@ -109,7 +113,7 @@ export default function PrivacyPage() {
 
       <Section heading="5. Transfers outside Nigeria">
         <p>Some of our providers store or process data outside Nigeria:</p>
-        <Table head={["Data", "Location", "Provider"]} rows={DATA_LOCATIONS.map((d) => [d.what, d.where, d.provider])} />
+        <Table head={["Data", "Location", "Type of provider"]} rows={DATA_LOCATIONS.map((d) => [d.what, d.where, d.provider])} />
         <p>
           We transfer data abroad only where it is needed to provide the Services to you, and under safeguards the
           NDPA recognises, including the providers&apos; data-protection agreements. You can ask us for details of

@@ -53,54 +53,60 @@ export function operatorName(): string {
  * pays out, and provides custody. CheqPay is the technology platform in front
  * of it. This is the structure the documents describe; if CheqPay obtains its
  * own licences, update this and the "Who provides your services" sections.
+ *
+ * Providers are described by what they do, never by name: the business has
+ * chosen not to publish which companies it uses. The NDPA requires telling
+ * people the recipients OR categories of recipients of their data, so
+ * categories are enough — and the Privacy Policy offers the names on request.
  */
 export const PRIMARY_PARTNER = {
-  name: "Maplerad",
+  name: "our licensed payment partner",
   role:
-    "our licensed payment and financial-infrastructure partner, which holds customer funds, issues virtual accounts and cards, processes bank payouts and bill payments, and provides custody for supported digital assets",
+    "a licensed payment and financial-infrastructure provider that holds customer funds, issues virtual accounts and cards, processes bank payouts and bill payments, and provides custody for supported digital assets",
 } as const;
 
 /** Where personal data is stored or processed, for the cross-border disclosure. */
 export const DATA_LOCATIONS = [
-  { what: "Account database, authentication and ID-document storage", where: "European Union (Ireland)", provider: "Supabase" },
-  { what: "Application servers", where: "United States", provider: "Vercel" },
-  { what: "Payments, accounts, cards, bill payments and custody", where: "Nigeria", provider: PRIMARY_PARTNER.name },
+  { what: "Account database, authentication and ID-document storage", where: "European Union (Ireland)", provider: "Cloud database provider" },
+  { what: "Application servers", where: "United States", provider: "Cloud hosting provider" },
+  { what: "Payments, accounts, cards, bill payments and custody", where: "Nigeria", provider: "Licensed payment partner" },
 ] as const;
 
 /**
- * Service providers that process personal data on our behalf. Keep this list
- * true: add a provider here BEFORE sending it personal data.
+ * Service providers that process personal data on our behalf, by category.
+ * Keep this list true: add a category here BEFORE sending a new kind of
+ * provider personal data.
  */
 export const SUB_PROCESSORS = [
   {
-    name: PRIMARY_PARTNER.name,
+    name: "Licensed payment partner",
     purpose: "Identity verification (BVN and ID checks), accounts, payouts, cards, bill payments and digital-asset custody",
     data: "Identity and KYC data, contact details, transaction details",
   },
   {
-    name: "Supabase",
+    name: "Cloud database provider",
     purpose: "Database, sign-in and secure storage of ID-document images",
     data: "All account data",
   },
   {
-    name: "Vercel",
+    name: "Cloud hosting provider",
     purpose: "Hosting and running the CheqPay website and servers",
     data: "Request data, including IP address",
   },
   {
-    name: "Sentry",
-    purpose: "Error monitoring, so we can find and fix faults",
+    name: "Error-monitoring service",
+    purpose: "Finding and fixing faults",
     data: "Technical error reports, which may include device and request details",
   },
   {
-    name: "Resend",
+    name: "Email delivery service",
     purpose: "Sending account and security emails",
     data: "Email address and email content",
   },
   {
-    name: "Expo, Apple and Google",
-    purpose: "Delivering push notifications to your device",
-    data: "Push token and notification content",
+    name: "Push-notification services",
+    purpose: "Delivering notifications to your phone or browser",
+    data: "Device or browser push token and notification content",
   },
 ] as const;
 

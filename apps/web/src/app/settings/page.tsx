@@ -164,11 +164,11 @@ export default function SettingsPage() {
           <h2 className="text-lg font-bold mb-4 text-ink">Help & Support</h2>
           <div className="space-y-3">
             <a
-              href="mailto:support@cheqpay.com"
+              href="mailto:support@mycheqpay.com"
               className="block p-3 rounded-lg hover:bg-circle transition-colors border border-border"
             >
               <p className="font-medium text-ink">Contact Support</p>
-              <p className="text-sm text-muted">support@cheqpay.com</p>
+              <p className="text-sm text-muted">support@mycheqpay.com</p>
             </a>
             <a
               href="/faq"
