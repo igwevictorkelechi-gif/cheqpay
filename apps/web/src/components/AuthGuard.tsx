@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSelectedLayoutSegments } from "next/navigation";
 import { supabase } from "@/services/supabase";
 
 // Routes reachable without a session.
@@ -52,6 +52,12 @@ function isPublic(rawPath: string): boolean {
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  // An unknown URL renders the 404 page. It must show to everyone — sending a
+  // signed-out visitor to /login for a page that doesn't exist is confusing.
+  // The router tree names it "/_not-found" even though the address bar keeps
+  // the URL that was typed.
+  const segments = useSelectedLayoutSegments();
+  const notFound = segments.some((s) => s.includes("_not-found"));
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
 
@@ -63,7 +69,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       setAuthed(ok);
       setReady(true);
       const path = normalize(pathname);
-      if (!ok && !isPublic(pathname)) {
+      if (!ok && !isPublic(pathname) && !notFound) {
         // A deep link into the app does want a sign-in form — somebody asking
         // for /withdraw knows what they came for. The bare root no longer needs
         // handling here: it is public and renders the landing page itself.
@@ -82,11 +88,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       sub.subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+  }, [pathname, notFound]);
 
   // On a protected route, render nothing until a session is confirmed — so
   // protected content never flashes for a signed-out visitor.
-  if (!isPublic(pathname) && (!ready || !authed)) {
+  if (!notFound && !isPublic(pathname) && (!ready || !authed)) {
     return <div className="min-h-screen bg-surface" />;
   }
   return <>{children}</>;
