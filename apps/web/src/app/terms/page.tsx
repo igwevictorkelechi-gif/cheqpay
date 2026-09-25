@@ -33,8 +33,7 @@ export default function TermsPage() {
         <p>
           CheqPay is a technology platform. We are <strong>not a bank</strong>. The regulated parts of the
           Services — holding your money, issuing your virtual account and cards, sending bank payouts, paying
-          bills and holding supported digital assets — are provided by {PRIMARY_PARTNER.name}, {PRIMARY_PARTNER.role}
-          , and by the banks and billers it works with. When you use those features you also deal with that
+          bills and holding supported digital assets — are provided by {PRIMARY_PARTNER.role}, and by the banks and billers it works with. When you use those features you also deal with that
           partner, and its terms may apply alongside these.
         </p>
         <p>

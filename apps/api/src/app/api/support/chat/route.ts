@@ -22,7 +22,7 @@ const chatSchema = z.object({
 });
 
 const HUMAN_FALLBACK =
-  "I can’t answer that right now. Please email support@cheqpay.com with your registered email and transaction reference — the team replies within 24 hours.";
+  "I can’t answer that right now. Please email support@mycheqpay.com with your registered email and transaction reference — the team replies within 24 hours.";
 
 /**
  * AI support agent. Answers user questions from the CheqPay FAQ knowledge
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
       if (err instanceof Anthropic.RateLimitError) {
         return jsonOk({
           reply:
-            "Our assistant is handling a lot of chats right now — please try again in a minute, or email support@cheqpay.com.",
+            "Our assistant is handling a lot of chats right now — please try again in a minute, or email support@mycheqpay.com.",
           agent: false,
         });
       }

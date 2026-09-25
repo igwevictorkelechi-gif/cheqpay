@@ -214,7 +214,7 @@ const envSchema = z.object({
   // the private key signs every push and must stay secret. Unset = web push off.
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
-  VAPID_SUBJECT: z.string().optional(), // e.g. mailto:support@cheqpay.com
+  VAPID_SUBJECT: z.string().optional(), // e.g. mailto:support@mycheqpay.com
 
   // Scheduled jobs. CRON_SECRET gates the /api/cron/* endpoints (Vercel Cron
   // sends it automatically as `Authorization: Bearer <secret>`).

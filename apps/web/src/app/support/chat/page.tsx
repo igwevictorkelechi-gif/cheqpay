@@ -51,7 +51,7 @@ export default function SupportChatPage() {
       const msg =
         e instanceof ApiError && e.status === 401
           ? "Your session has expired — please sign in again to chat."
-          : "I couldn’t send that. Check your connection and try again, or email support@cheqpay.com.";
+          : "I couldn’t send that. Check your connection and try again, or email support@mycheqpay.com.";
       setMessages([...next, { role: "assistant", content: msg }]);
     } finally {
       setSending(false);

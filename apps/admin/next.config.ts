@@ -9,6 +9,8 @@ const require = createRequire(import.meta.url);
 const victoryVendorDir = dirname(require.resolve('victory-vendor/package.json'));
 
 const nextConfig: NextConfig = {
+  // Don't advertise the framework in every response.
+  poweredByHeader: false,
   reactStrictMode: true,
   // recharts pulls d3 through victory-vendor's CJS wrappers; transpiling them
   // lets webpack read their named exports (fixes the d3-shape/d3-scale errors).

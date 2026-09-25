@@ -11,7 +11,7 @@ type Channel = { icon: typeof Mail; title: string; subtitle: string; href: strin
 export default function SupportPage() {
   const router = useRouter();
   const [contact, setContact] = useState<{ email: string; phone: string; whatsapp: string }>({
-    email: "support@cheqpay.com",
+    email: "support@mycheqpay.com",
     phone: "",
     whatsapp: "",
   });

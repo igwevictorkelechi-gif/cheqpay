@@ -1,3 +1,4 @@
+import { scrubProviderNames } from "@/lib/publicMessage";
 import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { getBillsProvider } from "@/payments";
@@ -248,7 +249,7 @@ export async function POST(req: Request) {
       // their money was returned.
       const reason =
         err instanceof BillPaymentError && err.providerMessage
-          ? `Bill payment failed: ${err.providerMessage}. Your funds were refunded.`
+          ? `Bill payment failed: ${scrubProviderNames(err.providerMessage)}. Your funds were refunded.`
           : "Bill payment could not be processed; funds refunded";
       throw new ApiError(502, reason, "bill_error");
     }

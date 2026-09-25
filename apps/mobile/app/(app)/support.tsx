@@ -15,7 +15,7 @@ type Channel = {
 
 export default function SupportScreen() {
   const insets = useSafeAreaInsets();
-  const [contact, setContact] = useState({ email: 'support@cheqpay.com', phone: '', whatsapp: '' });
+  const [contact, setContact] = useState({ email: 'support@mycheqpay.com', phone: '', whatsapp: '' });
 
   useEffect(() => {
     api.getSupportContact().then(setContact).catch(() => undefined);

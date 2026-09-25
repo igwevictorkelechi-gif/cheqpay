@@ -11,8 +11,7 @@ export default function AmlPage() {
         <p>
           CheqPay is committed to preventing money laundering, terrorist financing and fraud. This policy
           summarises the controls we apply under the Money Laundering (Prevention and Prohibition) Act 2022, the
-          Terrorism (Prevention and Prohibition) Act 2022 and the related regulations, together with our licensed
-          partner, {PRIMARY_PARTNER.name}.
+          Terrorism (Prevention and Prohibition) Act 2022 and the related regulations, together with {PRIMARY_PARTNER.name}.
         </p>
       </Section>
 

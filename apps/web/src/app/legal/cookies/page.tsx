@@ -23,7 +23,7 @@ export default function CookiesPage() {
             ["App-lock and security settings", "Locks the app after inactivity and remembers your security choices", "Strictly necessary"],
             ["Display and app preferences", "Remembers settings such as theme and dismissed tips", "Functional"],
             ["Cached account data", "Makes screens load faster on your device", "Functional"],
-            ["Error reports (Sentry)", "Tells us when something breaks so we can fix it", "Performance"],
+            ["Error reports", "Tells us when something breaks so we can fix it", "Performance"],
           ]}
         />
         <p>
