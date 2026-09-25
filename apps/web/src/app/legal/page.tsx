@@ -21,6 +21,12 @@ export default function LegalHubPage() {
           onClick={() => router.push("/terms")}
         />
         <LinkRow
+          emoji="✅"
+          title="Acceptable Use Policy"
+          subtitle="What you may and may not do with CheqPay"
+          onClick={() => router.push("/legal/acceptable-use")}
+        />
+        <LinkRow
           emoji="🛡️"
           title="AML & KYC Policy"
           subtitle="Anti-money-laundering commitments"
@@ -29,7 +35,7 @@ export default function LegalHubPage() {
         <LinkRow
           emoji="🍪"
           title="Cookie Policy"
-          subtitle="How we use cookies"
+          subtitle="What we store on your device"
           onClick={() => router.push("/legal/cookies")}
         />
       </div>

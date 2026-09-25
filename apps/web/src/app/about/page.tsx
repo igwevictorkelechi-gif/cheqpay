@@ -14,8 +14,8 @@ export default function AboutHubPage() {
         <p>
           CheqPay is a Nigerian fintech that brings the money jobs most people juggle
           across several apps into one verified account: a Naira account number of your
-          own, transfers to any Nigerian bank, everyday bill payments, and a
-          straightforward way to buy and sell Bitcoin and USDT.
+          own, transfers to any Nigerian bank, everyday bill payments, a US dollar
+          balance, and supported stablecoins.
         </p>
         <p className="mt-3">
           The idea is simple. Nigerians already move money constantly — to family, to
@@ -44,9 +44,10 @@ export default function AboutHubPage() {
           topped up in seconds from the same balance.
         </p>
         <p className="mt-3">
-          <strong>Buy and sell crypto without leaving.</strong> Move between Naira,
-          Bitcoin and USDT at a rate you see quoted before you commit, not one you
-          discover afterwards.
+          <strong>Hold dollars and receive stablecoins.</strong> Convert between
+          Naira, US dollars and supported digital assets at a rate you see quoted
+          before you commit, not one you discover afterwards, and receive USDT or
+          USDC to a deposit address of your own.
         </p>
       </Section>
 
@@ -57,11 +58,16 @@ export default function AboutHubPage() {
           usable for the people who are not trying to abuse it.
         </p>
         <p className="mt-3">
-          Sign-in is protected by two-factor authentication and an app lock, and your
+          You can protect sign-in with two-factor authentication and an app lock, and your
           account keeps a record of the devices it has been used on, so an unfamiliar
           one is something you can see rather than something you find out about later.
           Transactions are screened before they settle, and sensitive personal data is
           encrypted both in transit and at rest.
+        </p>
+        <p className="mt-3">
+          CheqPay is a technology platform, not a bank. Your money is held, and your
+          account and cards are issued, by our licensed payment partner, and your
+          balance is not covered by NDIC deposit insurance.
         </p>
         <p className="mt-3">
           We are also plain about limits. Crypto transfers are irreversible, exchange

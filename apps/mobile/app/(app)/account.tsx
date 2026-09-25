@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -11,7 +11,10 @@ type Row = {
   iconBg: string;
   title: string;
   subtitle: string;
-  route: string;
+  /** In-app screen, or… */
+  route?: string;
+  /** …a page on the website (the legal documents live there, one copy for web and app). */
+  url?: string;
   danger?: boolean;
 };
 
@@ -49,6 +52,14 @@ const rows: Row[] = [
     route: '/(app)/statement',
   },
   {
+    icon: 'shield-checkmark',
+    iconColor: '#6B5B95',
+    iconBg: 'rgba(107,91,149,0.15)',
+    title: 'Legal & policies',
+    subtitle: 'Terms, privacy, acceptable use and AML',
+    url: 'https://mycheqpay.com/legal/',
+  },
+  {
     icon: 'trash',
     iconColor: '#EF4444',
     iconBg: 'rgba(239,68,68,0.15)',
@@ -81,7 +92,11 @@ export default function AccountScreen() {
           {rows.map((row) => (
             <TouchableOpacity
               key={row.title}
-              onPress={() => router.push(row.route as never)}
+              onPress={() =>
+                row.url
+                  ? Linking.openURL(row.url).catch(() => undefined)
+                  : router.push(row.route as never)
+              }
               activeOpacity={0.8}
               className="flex-row items-center bg-card dark:bg-card-dark rounded-3xl p-4"
             >

@@ -7,12 +7,12 @@ import { canonical } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Legal",
   description:
-    "CheqPay's policies in one place: terms of service, privacy, anti-money-laundering and cookies.",
+    "CheqPay's policies in one place: terms of service, privacy, acceptable use, anti-money-laundering and cookies.",
   alternates: { canonical: canonical("/legal") },
   openGraph: {
     title: "Legal | CheqPay",
     description:
-      "CheqPay's policies in one place: terms of service, privacy, anti-money-laundering and cookies.",
+      "CheqPay's policies in one place: terms of service, privacy, acceptable use, anti-money-laundering and cookies.",
     url: canonical("/legal"),
   },
 };
