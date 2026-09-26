@@ -100,6 +100,7 @@ const STEP_UP_ROUTES: Array<{ file: string; superOnly?: boolean; why: string }> 
   { file: "kyc/route.ts", why: "approves identity and raises tiers" },
   { file: "blocked-ips/route.ts", superOnly: true, why: "lets blocked addresses back in" },
   { file: "credentials/route.ts", why: "changes the admin login" },
+  { file: "sub-admins/route.ts", superOnly: true, why: "gives people a dashboard login" },
 ];
 
 describe("sensitive admin routes", () => {

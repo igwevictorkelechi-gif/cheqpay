@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   settingUpsert: vi.fn(),
   otpConfigured: vi.fn(),
   otpConsume: vi.fn(),
+  subAdminState: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -22,6 +23,7 @@ vi.mock("./totp", () => ({
   consumeAdminOtp: h.otpConsume,
 }));
 vi.mock("./activity", () => ({ touchActivity: vi.fn() }));
+vi.mock("./adminCreds", () => ({ getSubAdminState: h.subAdminState }));
 
 const SECRET = "s".repeat(32);
 process.env.ADMIN_API_SECRET = SECRET;
@@ -43,6 +45,7 @@ beforeEach(() => {
   h.settingFind.mockResolvedValue({ key: "admin_session_epoch", value: "epoch-1" });
   h.otpConfigured.mockResolvedValue(true);
   h.otpConsume.mockResolvedValue(true);
+  h.subAdminState.mockResolvedValue({ active: true, mustChange: false });
 });
 
 describe("requireAdminActor", () => {
@@ -75,6 +78,22 @@ describe("requireAdminActor", () => {
     await expect(
       requireAdminActor(req({ ...good, "x-admin-role": "admin" }), { superOnly: true }),
     ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("limits a sub admin to Dashboard and Analytics data", async () => {
+    const sub = { ...good, "x-admin-actor": "sub@mycheqpay.com", "x-admin-role": "admin" };
+    const get = (path: string, h2: Record<string, string>) =>
+      new Request(`https://api.example${path}`, { method: "GET", headers: h2 });
+    await expect(requireAdminActor(get("/api/admin/analytics", sub))).resolves.toMatchObject({ role: "admin" });
+    await expect(requireAdminActor(get("/api/admin/users", sub))).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("locks out a sub admin who was removed", async () => {
+    h.subAdminState.mockResolvedValue({ active: false, mustChange: false });
+    const sub = { ...good, "x-admin-actor": "gone@mycheqpay.com", "x-admin-role": "admin" };
+    await expect(
+      requireAdminActor(new Request("https://api.example/api/admin/analytics", { headers: sub })),
+    ).rejects.toMatchObject({ status: 401 });
   });
 
   it("refuses a wrong service secret outright", async () => {

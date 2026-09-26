@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import SubAdminsPanel from '@/components/SubAdminsPanel';
 import { ShieldCheck, Trash2, Plus, Lock, Crown } from 'lucide-react';
 
 type Role = 'admin' | 'super';
@@ -18,9 +19,11 @@ export default function RolesPage() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const [reloadKey, setReloadKey] = useState(0);
+
   useEffect(() => {
     let active = true;
-    fetch('/api/roles')
+    fetch('/api/roles', { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) throw new Error('Failed to load roles (' + r.status + ')');
         return r.json();
@@ -37,7 +40,7 @@ export default function RolesPage() {
       .catch((e) => { if (active) setError(e.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [reloadKey]);
 
   const add = () => {
     const e = input.trim().toLowerCase();
@@ -91,7 +94,7 @@ export default function RolesPage() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Roles &amp; Access</h1>
         <p className="text-gray-600 mt-2">
-          Manage who can sign in, and whether they are a Super Admin or a regular Admin.
+          Manage who can sign in: Super Admins, and sub admins who can only view the Dashboard and Analytics.
         </p>
       </div>
 
@@ -108,10 +111,10 @@ export default function RolesPage() {
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex items-center gap-2 font-semibold text-gray-700">
-            <ShieldCheck size={16} /> Admin
+            <ShieldCheck size={16} /> Sub admin
           </div>
           <p className="mt-1 text-sm text-gray-600">
-            Day-to-day operations. The four areas above are hidden and blocked.
+            Can view the Dashboard and Analytics only. Everything else is hidden and blocked.
           </p>
         </div>
       </div>
@@ -123,6 +126,8 @@ export default function RolesPage() {
 
       {!loading && (
         <div className="space-y-6 max-w-3xl">
+          <SubAdminsPanel onChanged={() => setReloadKey((k) => k + 1)} />
+
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-4">
               <ShieldCheck size={20} className="text-brand-600" />
@@ -144,7 +149,7 @@ export default function RolesPage() {
                 onChange={(e) => setNewRole(e.target.value as Role)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
-                <option value="admin">Admin</option>
+                <option value="admin">Sub admin</option>
                 <option value="super">Super Admin</option>
               </select>
               <button onClick={add} className="flex items-center justify-center gap-1 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700">
@@ -163,7 +168,7 @@ export default function RolesPage() {
                         onClick={() => setRole(a.email, 'admin')}
                         className={roleBtn(a.role === 'admin', 'bg-gray-700 text-white')}
                       >
-                        Admin
+                        Sub
                       </button>
                       <button
                         onClick={() => setRole(a.email, 'super')}
@@ -185,7 +190,8 @@ export default function RolesPage() {
               {saved && <span className="text-sm text-green-600">Saved ✓</span>}
             </div>
             <p className="mt-3 text-xs text-gray-500">
-              Role changes take effect the next time that admin signs in.
+              Role changes take effect the next time that admin signs in. A sub admin also needs a
+              password (set it in Sub admins above) before they can sign in.
             </p>
           </div>
 

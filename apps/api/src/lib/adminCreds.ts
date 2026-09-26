@@ -98,3 +98,217 @@ export async function setAdminCredential(
   }
   await prisma.$transaction(ops);
 }
+
+// ---------------------------------------------------------------------------
+// Sub admins.
+//
+// A sub admin signs in with their own email and a password a Super Admin set
+// for them, and must replace it on first sign-in. They can only see the
+// Dashboard and Analytics; `requireAdmin` enforces that on every call, and an
+// account only works while its email is still on the Roles list as a regular
+// admin, so removing someone there locks them out at once.
+// ---------------------------------------------------------------------------
+
+const ROLES_KEY = "admin_emails";
+
+/** Password rule shared by every admin password. */
+export function isStrongAdminPassword(p: string): boolean {
+  return p.length >= 12 && p.length <= 200 && /[A-Za-z]/.test(p) && /\d/.test(p);
+}
+
+let accountsReady: Promise<void> | null = null;
+export function ensureAdminAccountsTable(): Promise<void> {
+  if (!accountsReady) {
+    accountsReady = (async () => {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS admin_accounts (
+          email text PRIMARY KEY,
+          password_hash text NOT NULL,
+          must_change boolean NOT NULL DEFAULT true,
+          created_by text,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          password_changed_at timestamptz
+        )`);
+    })().catch((err) => {
+      accountsReady = null;
+      throw err;
+    });
+  }
+  return accountsReady;
+}
+
+interface AccountRow {
+  email: string;
+  password_hash: string;
+  must_change: boolean;
+  created_at: Date;
+  password_changed_at: Date | null;
+}
+
+async function readAccount(email: string): Promise<AccountRow | null> {
+  await ensureAdminAccountsTable();
+  const rows = await prisma.$queryRaw<AccountRow[]>`
+    SELECT email, password_hash, must_change, created_at, password_changed_at
+    FROM admin_accounts WHERE email = ${email.trim().toLowerCase()}`;
+  return rows[0] ?? null;
+}
+
+/** Emails on the Roles list with the regular (non-super) role. */
+export async function listSubAdminEmails(): Promise<string[]> {
+  const raw = await getSetting(ROLES_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => {
+        if (typeof entry === "string") return entry.trim().toLowerCase();
+        if (entry && typeof entry === "object") {
+          const e = entry as { email?: unknown; role?: unknown };
+          return e.role === "super" ? "" : String(e.email ?? "").trim().toLowerCase();
+        }
+        return "";
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+export interface SubAdminState {
+  active: boolean;
+  mustChange: boolean;
+}
+
+/** Whether a sub admin may use the dashboard right now, and if they must change password. */
+export async function getSubAdminState(email: string): Promise<SubAdminState> {
+  const e = email.trim().toLowerCase();
+  if (!(await listSubAdminEmails()).includes(e)) return { active: false, mustChange: false };
+  const acct = await readAccount(e);
+  if (!acct) return { active: false, mustChange: false };
+  return { active: true, mustChange: acct.must_change };
+}
+
+/** Check a sub admin's sign-in. Null when it isn't a working sub-admin login. */
+export async function verifySubAdminLogin(
+  email: string,
+  password: string,
+): Promise<{ email: string; mustChange: boolean } | null> {
+  const e = email.trim().toLowerCase();
+  const acct = await readAccount(e);
+  if (!acct) {
+    // Same work as a real check, so a missing account can't be told apart by timing.
+    verifyPassword(password, `scrypt$${"00".repeat(16)}$${"00".repeat(64)}`);
+    return null;
+  }
+  if (!verifyPassword(password, acct.password_hash)) return null;
+  if (!(await listSubAdminEmails()).includes(e)) return null;
+  return { email: e, mustChange: acct.must_change };
+}
+
+/**
+ * Set a sub admin's password (create or reset) and add them to the Roles list.
+ * They must replace it the next time they sign in.
+ */
+export async function setSubAdminPassword(email: string, password: string, by: string): Promise<void> {
+  const e = email.trim().toLowerCase();
+  await ensureAdminAccountsTable();
+  const hash = hashPassword(password);
+  await prisma.$executeRaw`
+    INSERT INTO admin_accounts (email, password_hash, must_change, created_by)
+    VALUES (${e}, ${hash}, true, ${by})
+    ON CONFLICT (email) DO UPDATE
+      SET password_hash = EXCLUDED.password_hash, must_change = true, created_by = EXCLUDED.created_by`;
+
+  const current = await readRoles();
+  if (!current.some((a) => a.email === e)) {
+    current.push({ email: e, role: "admin" });
+    await writeRoles(current, by);
+  }
+}
+
+/** A sub admin replaces their own password. False when the current one is wrong. */
+export async function changeOwnSubAdminPassword(
+  email: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<boolean> {
+  const e = email.trim().toLowerCase();
+  const acct = await readAccount(e);
+  if (!acct || !verifyPassword(currentPassword, acct.password_hash)) return false;
+  const hash = hashPassword(newPassword);
+  await prisma.$executeRaw`
+    UPDATE admin_accounts
+    SET password_hash = ${hash}, must_change = false, password_changed_at = now()
+    WHERE email = ${e}`;
+  return true;
+}
+
+/** Remove a sub admin: their password and their place on the Roles list. */
+export async function deleteSubAdmin(email: string, by: string): Promise<void> {
+  const e = email.trim().toLowerCase();
+  await ensureAdminAccountsTable();
+  await prisma.$executeRaw`DELETE FROM admin_accounts WHERE email = ${e}`;
+  const current = await readRoles();
+  const next = current.filter((a) => a.email !== e);
+  if (next.length !== current.length) await writeRoles(next, by);
+}
+
+export interface SubAdminInfo {
+  email: string;
+  status: "pending" | "active" | "no_password";
+  createdAt: string | null;
+  passwordChangedAt: string | null;
+}
+
+/** Every sub admin on the Roles list, with whether they've signed in and set their own password. */
+export async function listSubAdmins(): Promise<SubAdminInfo[]> {
+  await ensureAdminAccountsTable();
+  const emails = await listSubAdminEmails();
+  if (emails.length === 0) return [];
+  const rows = await prisma.$queryRaw<AccountRow[]>`
+    SELECT email, password_hash, must_change, created_at, password_changed_at
+    FROM admin_accounts WHERE email = ANY(${emails})`;
+  const byEmail = new Map(rows.map((r) => [r.email, r]));
+  return emails.map((email) => {
+    const r = byEmail.get(email);
+    return {
+      email,
+      status: !r ? "no_password" : r.must_change ? "pending" : "active",
+      createdAt: r ? new Date(r.created_at).toISOString() : null,
+      passwordChangedAt: r?.password_changed_at ? new Date(r.password_changed_at).toISOString() : null,
+    };
+  });
+}
+
+type RoleEntry = { email: string; role: "admin" | "super" };
+
+async function readRoles(): Promise<RoleEntry[]> {
+  const raw = await getSetting(ROLES_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: RoleEntry[] = [];
+    for (const entry of parsed) {
+      if (typeof entry === "string") out.push({ email: entry.trim().toLowerCase(), role: "admin" });
+      else if (entry && typeof entry === "object") {
+        const e = entry as { email?: unknown; role?: unknown };
+        const email = String(e.email ?? "").trim().toLowerCase();
+        if (email) out.push({ email, role: e.role === "super" ? "super" : "admin" });
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function writeRoles(list: RoleEntry[], by: string): Promise<void> {
+  const value = JSON.stringify(list);
+  await prisma.platformSetting.upsert({
+    where: { key: ROLES_KEY },
+    update: { value, updatedBy: by },
+    create: { key: ROLES_KEY, value, updatedBy: by },
+  });
+}

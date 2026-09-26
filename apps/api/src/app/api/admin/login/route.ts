@@ -2,7 +2,7 @@ import { hasAdminServiceSecret } from "@/lib/auth";
 import { prisma } from "@cheqpay/db";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
-import { verifyAdminLogin, getAdminEmail } from "@/lib/adminCreds";
+import { verifyAdminLogin, getAdminEmail, verifySubAdminLogin } from "@/lib/adminCreds";
 import { consumeAdminOtp, isAdminOtpConfigured } from "@/lib/totp";
 import { getAdminSessionEpoch } from "@/lib/adminSession";
 import { clientIp } from "@/lib/requestContext";
@@ -19,8 +19,14 @@ export const dynamic = "force-dynamic";
  * took. A correct password without a code returns `otp_required`, which the
  * login page answers by asking for the code.
  *
- * Returns the canonical admin email and the current session epoch; the admin
- * app signs both into its session cookie so the session can be revoked.
+ * Two kinds of login:
+ *  - the main admin login (always a Super Admin), and
+ *  - a sub admin's own login, set by a Super Admin. Sub admins can only see the
+ *    Dashboard and Analytics, so they don't need the admin authenticator; they
+ *    must replace their starting password on first sign-in.
+ *
+ * Returns the canonical email, role, whether the password must be changed, and
+ * the current session epoch; the admin app signs these into its session cookie.
  */
 export async function POST(req: Request) {
   // The dashboard calls this from its own server, so the socket address is the
@@ -53,9 +59,25 @@ export async function POST(req: Request) {
     if (!email || !password) {
       return jsonOk({ error: "Email and password are required", code: "missing" }, 400);
     }
+    // Per-account limit as well as per-address: rotating addresses must not
+    // buy more guesses at one password.
+    await enforceRateLimit(`admin:login:email:${email.trim().toLowerCase().slice(0, 200)}`, 10, 15 * 60_000);
+
     if (!(await verifyAdminLogin(email, password))) {
-      await audit("admin.login.failed", ip, { email: email.toLowerCase().slice(0, 200), reason: "bad_credentials" });
-      return jsonOk({ error: "Invalid email or password", code: "bad_credentials" }, 401);
+      const sub = await verifySubAdminLogin(email, password);
+      if (!sub) {
+        await audit("admin.login.failed", ip, { email: email.toLowerCase().slice(0, 200), reason: "bad_credentials" });
+        return jsonOk({ error: "Invalid email or password", code: "bad_credentials" }, 401);
+      }
+      await audit("admin.login.succeeded", ip, { email: sub.email, role: "admin", subAdmin: true });
+      return jsonOk({
+        ok: true,
+        email: sub.email,
+        role: "admin",
+        mustChangePassword: sub.mustChange,
+        epoch: await getAdminSessionEpoch(),
+        otpConfigured: await isAdminOtpConfigured(),
+      });
     }
 
     if (await isAdminOtpConfigured()) {
@@ -74,6 +96,10 @@ export async function POST(req: Request) {
     return jsonOk({
       ok: true,
       email: canonical,
+      // The main login is the owner's: always a Super Admin, so a roles-list
+      // mistake can never lock the owner out of their own dashboard.
+      role: "super",
+      mustChangePassword: false,
       epoch: await getAdminSessionEpoch(),
       otpConfigured: await isAdminOtpConfigured(),
     });

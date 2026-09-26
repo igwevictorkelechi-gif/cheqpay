@@ -1,10 +1,12 @@
 import { decodeJwt } from "jose";
 import { prisma } from "@cheqpay/db";
 import { getEnv } from "./env";
-import { AuthError, ForbiddenError } from "./http";
+import { ApiError, AuthError, ForbiddenError } from "./http";
 import { touchActivity } from "./activity";
 import { assertAccessAllowed } from "./accessControl";
 import { assertSessionCurrent } from "./adminSession";
+import { getSubAdminState } from "./adminCreds";
+import { subAdminMayCall } from "./subAdminAccess";
 
 export interface AuthUser {
   id: string;
@@ -162,6 +164,7 @@ export async function requireAdmin(req: Request): Promise<void> {
     // from before the last password change / OTP reset / "sign out everywhere"
     // is refused here, on every admin route, not just the sensitive ones.
     await assertSessionCurrent(req);
+    await assertSubAdminAllowed(req);
     return;
   }
   // Path 2: admin user JWT (role/env allowlist, then DB allowlist).
@@ -173,6 +176,28 @@ export async function requireAdmin(req: Request): Promise<void> {
     return;
   }
   throw new ForbiddenError("Admin privileges required");
+}
+
+async function assertSubAdminAllowed(req: Request): Promise<void> {
+  const actor = (req.headers.get("x-admin-actor") ?? "").trim().toLowerCase();
+  const role = req.headers.get("x-admin-role");
+  // Server-to-server calls without a session (sign-in itself) and Super Admins
+  // are not limited here.
+  if (!actor || role === "super") return;
+
+  const state = await getSubAdminState(actor);
+  if (!state.active) {
+    // Same code as a revoked session, so the dashboard signs them out at once.
+    throw new ApiError(401, "Your admin access has been removed. Please contact the account owner.", "admin_session_revoked");
+  }
+  const pathname = new URL(req.url).pathname.replace(/\/+$/, "");
+  if (!subAdminMayCall(req.method, pathname, state.mustChange)) {
+    throw new ForbiddenError(
+      state.mustChange
+        ? "Set your own password before continuing."
+        : "Sub admins can only view the Dashboard and Analytics.",
+    );
+  }
 }
 
 /** True when the request carries the dashboard's service secret. */

@@ -16,6 +16,8 @@ export interface SessionInfo {
   iat: number;
   /** Backend session epoch at sign-in; rotating it revokes this session. */
   epoch: string;
+  /** A sub admin still on the starting password a Super Admin gave them. */
+  mustChangePassword: boolean;
 }
 
 /**
@@ -26,40 +28,31 @@ export interface SessionInfo {
  */
 export const SESSION_MAX_AGE_S = 60 * 60 * 8;
 
-// Areas only Super Admins may reach. Enforced in middleware for both the page
-// and the API proxy behind it (the backend is only reachable through these
-// proxies, which hold the shared secret — so blocking here is real, not just
-// cosmetic). Matched by prefix, so "/features" also covers "/features/popup".
-export const SUPER_ONLY_PAGE_PREFIXES = [
-  "/roles",
-  "/provider-settings",
-  "/payment-settings",
-  "/provider-check",
-  "/adjust-balance",
-  "/features",
-];
+// Sub admins (role "admin") see the Dashboard and Analytics and nothing else.
+// Everything not listed here is refused for them, so a new page or proxy is
+// Super-Admin-only until someone decides otherwise. The backend enforces the
+// same list on its side.
+export const SUB_ADMIN_PASSWORD_PAGE = "/account/password";
+const SUB_ADMIN_PAGES = ["/", "/dashboard", "/analytics", SUB_ADMIN_PASSWORD_PAGE];
+const SUB_ADMIN_READ_APIS = ["/api/analytics", "/api/transactions"];
+const SUB_ADMIN_ALWAYS_APIS = ["/api/auth", "/api/account/password"];
 
-export const SUPER_ONLY_API_PREFIXES = [
-  "/api/roles",
-  "/api/provider-status",
-  "/api/provider-check",
-  "/api/adjust-balance",
-  "/api/admin-otp",
-  "/api/features",
-  "/api/popup",
-  "/api/broadcast",
-];
+export type SubAdminDecision = "allow" | "change_password" | "denied";
 
-export function isSuperOnlyPage(pathname: string): boolean {
-  return SUPER_ONLY_PAGE_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(p + "/"),
-  );
-}
-
-export function isSuperOnlyApi(pathname: string): boolean {
-  return SUPER_ONLY_API_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(p + "/"),
-  );
+export function subAdminAccess(
+  pathname: string,
+  method: string,
+  mustChangePassword: boolean,
+): SubAdminDecision {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  if (path.startsWith("/api/")) {
+    if (SUB_ADMIN_ALWAYS_APIS.includes(path)) return "allow";
+    if (mustChangePassword) return "change_password";
+    return (method === "GET" || method === "HEAD") && SUB_ADMIN_READ_APIS.includes(path) ? "allow" : "denied";
+  }
+  if (path === SUB_ADMIN_PASSWORD_PAGE) return "allow";
+  if (mustChangePassword) return "change_password";
+  return SUB_ADMIN_PAGES.includes(path) ? "allow" : "denied";
 }
 
 /** Secret used to sign the session. Falls back to the API secret if set. */
@@ -102,37 +95,41 @@ export function timingSafeEqual(a: string, b: string): boolean {
 /**
  * Build the signed session cookie value for an authenticated admin.
  *
- * Format (v2):
- *   b64url(email).b64url(role).iat.b64url(epoch).hmac(`session:v2:${email}:${role}:${iat}:${epoch}`)
+ * Format (v3):
+ *   b64url(email).b64url(role).iat.b64url(epoch).flags.hmac(`session:v3:${email}:${role}:${iat}:${epoch}:${flags}`)
  *
  * Everything that decides what the session may do — who, which role, when it
- * was issued, which epoch — is under the signature, so none of it can be edited
- * client-side. The role is still trusted in Edge middleware without a database
- * round-trip; the epoch is checked by the backend on every call.
+ * was issued, which epoch, whether the password must still be changed — is
+ * under the signature, so none of it can be edited client-side. The role is
+ * trusted in Edge middleware without a database round-trip; the epoch and the
+ * sub admin's standing are checked by the backend on every call.
  */
 export async function sessionCookieValue(
   email: string,
   role: AdminRole,
   epoch: string,
   iat: number = Math.floor(Date.now() / 1000),
+  mustChangePassword = false,
 ): Promise<string> {
   const e = email.trim().toLowerCase();
-  const sig = await hmacHex(adminSecret(), `session:v2:${e}:${role}:${iat}:${epoch}`);
-  return `${b64urlEncode(e)}.${b64urlEncode(role)}.${iat}.${b64urlEncode(epoch)}.${sig}`;
+  const flags = mustChangePassword ? "p" : "-";
+  const sig = await hmacHex(adminSecret(), `session:v3:${e}:${role}:${iat}:${epoch}:${flags}`);
+  return `${b64urlEncode(e)}.${b64urlEncode(role)}.${iat}.${b64urlEncode(epoch)}.${flags}.${sig}`;
 }
 
 /**
  * Validate a session cookie and return its contents, or null.
  *
- * Only the v2 format is accepted. Every session minted before it — including
- * any copied out of a browser during the 22 Sep incident — fails here, which
- * signs everyone out once when this ships.
+ * v3 carries the "must change password" flag. v2 (no flag) is still read so
+ * nobody is signed out by this change; anything older fails, which is what
+ * signed out every session copied during the 22 Sep incident.
  */
 export async function sessionInfo(cookie: string | undefined): Promise<SessionInfo | null> {
   const secret = adminSecret();
   if (!cookie || !secret) return null;
   const parts = cookie.split(".");
-  if (parts.length !== 5) return null;
+  if (parts.length !== 5 && parts.length !== 6) return null;
+  const v3 = parts.length === 6;
   let email: string;
   let role: string;
   let epoch: string;
@@ -145,15 +142,26 @@ export async function sessionInfo(cookie: string | undefined): Promise<SessionIn
   }
   if (!/^\d{9,11}$/.test(parts[2])) return null;
   const iat = Number(parts[2]);
+  const flags = v3 ? parts[4] : "-";
+  if (flags !== "-" && flags !== "p") return null;
 
-  const expected = await hmacHex(secret, `session:v2:${email}:${role}:${iat}:${epoch}`);
-  if (!timingSafeEqual(parts[4], expected)) return null;
+  const message = v3
+    ? `session:v3:${email}:${role}:${iat}:${epoch}:${flags}`
+    : `session:v2:${email}:${role}:${iat}:${epoch}`;
+  const expected = await hmacHex(secret, message);
+  if (!timingSafeEqual(parts[v3 ? 5 : 4], expected)) return null;
 
   const now = Math.floor(Date.now() / 1000);
   if (iat > now + 60) return null; // issued in the future: not ours
   if (now - iat > SESSION_MAX_AGE_S) return null; // expired, however it is replayed
 
-  return { email, role: role === "super" ? "super" : "admin", iat, epoch };
+  return {
+    email,
+    role: role === "super" ? "super" : "admin",
+    iat,
+    epoch,
+    mustChangePassword: flags === "p",
+  };
 }
 
 /** The signed-in admin's email, or null. */
