@@ -22,6 +22,7 @@ const h = vi.hoisted(() => ({
   isWithinSingleTxLimit: vi.fn(),
   notifyUser: vi.fn(),
   getFxSideMarginBps: vi.fn(),
+  providerBalance: vi.fn(),
 }));
 
 const db = {
@@ -45,6 +46,7 @@ vi.mock("@cheqpay/db", () => ({
 }));
 vi.mock("./kyc", () => ({ isWithinSingleTxLimit: h.isWithinSingleTxLimit }));
 vi.mock("./maplerad/fx", () => ({ quoteFx: h.quoteFx, exchangeFx: h.exchangeFx }));
+vi.mock("./maplerad/treasury", () => ({ getProviderBalanceMinor: h.providerBalance }));
 vi.mock("./ensureUsdAsset", () => ({ ensureUsdAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./ensureQuoteProviderRef", () => ({ ensureQuoteProviderRef: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./settings", () => ({
@@ -80,6 +82,32 @@ describe("createConvertQuote — NGN↔USD routes to Maplerad FX", () => {
     h.isWithinSingleTxLimit.mockReturnValue(true);
     h.quoteCreate.mockResolvedValue({ id: "q1" });
     h.getFxSideMarginBps.mockResolvedValue(0);
+    h.providerBalance.mockResolvedValue(null);
+  });
+
+  it("refuses at quote time when our business wallet can't cover the swap", async () => {
+    // The live case: $167.01 asked, the business USD wallet held less.
+    h.providerBalance.mockResolvedValue(16_100n);
+    await expect(
+      createConvertQuote({ userId: "u1", tier: 2, fromAsset: "USD" as never, toAsset: "NGN" as never, amountInMinor: 16_701n }),
+    ).rejects.toMatchObject({ status: 503, code: "liquidity_low" });
+    expect(h.quoteFx).not.toHaveBeenCalled();
+    expect(h.providerBalance).toHaveBeenCalledWith("USD");
+  });
+
+  it("quotes normally when the business wallet covers it, or can't be read", async () => {
+    const fx = {
+      reference: "fxref",
+      source: { currency: "USD", amount: 16_100, human_readable_amount: 161 },
+      target: { currency: "NGN", amount: 21_976_500, human_readable_amount: 219_765 },
+      rate: 1365,
+    };
+    h.quoteFx.mockResolvedValue(fx);
+    h.providerBalance.mockResolvedValue(16_100n);
+    await createConvertQuote({ userId: "u1", tier: 2, fromAsset: "USD" as never, toAsset: "NGN" as never, amountInMinor: 16_100n });
+    h.providerBalance.mockResolvedValue(null);
+    await createConvertQuote({ userId: "u1", tier: 2, fromAsset: "USD" as never, toAsset: "NGN" as never, amountInMinor: 16_100n });
+    expect(h.quoteFx).toHaveBeenCalledTimes(2);
   });
 
   it("prices from a live FX quote and stores the provider reference", async () => {

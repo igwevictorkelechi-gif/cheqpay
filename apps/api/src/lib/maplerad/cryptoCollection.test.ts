@@ -25,6 +25,10 @@ vi.mock("@cheqpay/db", () => ({
 vi.mock("../ledger", () => ({ creditBalance: h.creditBalance }));
 vi.mock("../alerts", () => ({ notifyUser: h.notifyUser }));
 vi.mock("../ensureUsdAsset", () => ({ ensureUsdAsset: h.ensureUsdAsset }));
+vi.mock("../settings", async () => {
+  const actual = await vi.importActual<typeof import("../settings")>("../settings");
+  return { getPricing: async () => actual.PRICING_DEFAULTS };
+});
 
 import {
   coinFor,
@@ -105,6 +109,9 @@ describe("creditCryptoCollection", () => {
         userId: "user-1",
         asset: "USD",
         amountMinor: 1000n, // $10.00
+        // Our 1% conversion fee: Maplerad keeps its ramp cut from our wallet,
+        // so crediting the full amount lost money on every deposit.
+        feeMinor: 10n,
         network: "BSC",
         idempotencyKey: "deposit:maplerad:19cb3252-7665-40e3-8aff-6e29fd8db9aa",
         txHash: "0x9ef258b34f59980a3422acf61978e26247f49ab06600448064f8252edc63ef51",
@@ -119,8 +126,14 @@ describe("creditCryptoCollection", () => {
     );
     expect(res.outcome).toBe("credited");
     expect(h.creditBalance).toHaveBeenCalledWith(
-      expect.objectContaining({ asset: "USDT", amountMinor: 10_000_000n, network: "SOLANA" }),
+      expect.objectContaining({ asset: "USDT", amountMinor: 10_000_000n, feeMinor: 0n, network: "SOLANA" }),
     );
+  });
+
+  it("tells the user the conversion fee on an offramped deposit", async () => {
+    await creditCryptoCollection(live({ amount: 16099 }));
+    expect(h.creditBalance).toHaveBeenCalledWith(expect.objectContaining({ amountMinor: 16099n, feeMinor: 160n }));
+    expect(h.notifyUser.mock.calls[0][1].body).toContain("$159.39 added to your balance ($1.60 conversion fee)");
   });
 
   it("finds the owner by customer id, since account_id is null", async () => {
