@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { decodeJwt } from "jose";
 import { prisma } from "@cheqpay/db";
 import { getEnv } from "./env";
@@ -35,12 +36,69 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dGduc3dnZWZmeXliamZqbGtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NjIzMzMsImV4cCI6MjA5MjAzODMzM30.RWUrrTINfqPJ_H6vbFtLZ7uf0okWb5gUYJy9LK9NlCQ";
 
 /**
+ * Recently confirmed tokens, so one app open (about nine API calls) asks
+ * Supabase once instead of nine times. Keyed by a hash of the token, never the
+ * token itself. An entry lives at most AUTH_CACHE_TTL_MS (60s by default) and
+ * never past the token's own expiry. Blocked accounts are still refused on
+ * every call by assertAccessAllowed, which reads the database, not this cache.
+ */
+const authCache = new Map<string, { user: AuthUser; until: number }>();
+const AUTH_CACHE_MAX = 5_000;
+
+function authCacheTtlMs(): number {
+  const raw = process.env.AUTH_CACHE_TTL_MS;
+  if (raw !== undefined) return Math.max(0, Number(raw) || 0);
+  // Off under test by default, so tests that swap the auth server per case
+  // don't see each other's answers.
+  return process.env.NODE_ENV === "test" ? 0 : 60_000;
+}
+
+/** Test hook. */
+export function resetAuthCache(): void {
+  authCache.clear();
+}
+
+/**
+ * Validate a Supabase user access token, from the short-lived cache when this
+ * token was confirmed moments ago, otherwise by asking Supabase.
+ */
+export async function verifySupabaseJwt(token: string): Promise<AuthUser> {
+  const ttl = authCacheTtlMs();
+  if (ttl === 0) return verifyWithSupabase(token);
+
+  const key = createHash("sha256").update(token).digest("base64url");
+  const now = Date.now();
+  const hit = authCache.get(key);
+  if (hit && hit.until > now) return hit.user;
+  if (hit) authCache.delete(key);
+
+  const user = await verifyWithSupabase(token);
+
+  let expMs = 0;
+  try {
+    expMs = ((decodeJwt(token) as { exp?: number }).exp ?? 0) * 1000;
+  } catch {
+    /* no readable expiry: don't cache */
+  }
+  const until = Math.min(now + ttl, expMs);
+  if (until > now) {
+    if (authCache.size >= AUTH_CACHE_MAX) {
+      // Drop the oldest entry (Map keeps insertion order).
+      const oldest = authCache.keys().next().value;
+      if (oldest !== undefined) authCache.delete(oldest);
+    }
+    authCache.set(key, { user, until });
+  }
+  return user;
+}
+
+/**
  * Validate a Supabase user access token by asking Supabase to resolve it
  * (`GET /auth/v1/user`). This works regardless of the project's JWT signing
  * method (HS256 secret or asymmetric keys) — no shared secret to misconfigure.
  * The `aal` (MFA level) is read from the token after Supabase confirms it.
  */
-export async function verifySupabaseJwt(token: string): Promise<AuthUser> {
+async function verifyWithSupabase(token: string): Promise<AuthUser> {
   let res: Response;
   try {
     res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {

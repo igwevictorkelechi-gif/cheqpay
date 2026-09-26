@@ -1,4 +1,5 @@
 import { prisma } from "@cheqpay/db";
+import { cachedSetting, invalidateSetting } from "./settingsCache";
 import { ApiError } from "./http";
 
 /**
@@ -72,8 +73,12 @@ const DEFAULTS: Record<FeatureKey, boolean> = Object.fromEntries(
   FEATURE_DEFS.map((f) => [f.key, !DEFAULT_OFF.includes(f.key)])
 ) as Record<FeatureKey, boolean>;
 
-/** Current flags: stored values merged over all-on defaults. */
+/** Current flags: stored values merged over all-on defaults. Cached for a few seconds. */
 export async function getFeatureFlags(): Promise<Record<FeatureKey, boolean>> {
+  return { ...(await cachedSetting(FLAGS_KEY, readFeatureFlags)) };
+}
+
+async function readFeatureFlags(): Promise<Record<FeatureKey, boolean>> {
   const row = await prisma.platformSetting.findUnique({ where: { key: FLAGS_KEY } });
   if (!row) return { ...DEFAULTS };
   let stored: Record<string, unknown> = {};
@@ -93,13 +98,16 @@ export async function setFeatureFlags(
   patch: Partial<Record<FeatureKey, boolean>>,
   updatedBy?: string
 ): Promise<Record<FeatureKey, boolean>> {
-  const current = await getFeatureFlags();
+  // Read fresh, not cached: merging a patch into a stale copy could undo a
+  // change another admin just saved.
+  const current = await readFeatureFlags();
   const next = { ...current, ...patch };
   await prisma.platformSetting.upsert({
     where: { key: FLAGS_KEY },
     update: { value: JSON.stringify(next), updatedBy },
     create: { key: FLAGS_KEY, value: JSON.stringify(next), updatedBy },
   });
+  invalidateSetting(FLAGS_KEY);
   return next;
 }
 

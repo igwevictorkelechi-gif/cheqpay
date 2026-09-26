@@ -1,4 +1,5 @@
 import { prisma } from "@cheqpay/db";
+import { cachedSetting, invalidateSetting } from "./settingsCache";
 import { getEnv } from "./env";
 import { ApiError } from "./http";
 
@@ -416,6 +417,10 @@ export const PRICING_KEYS: Record<keyof Pricing, string> = {
 
 /** The whole price sheet in one read: stored values over the defaults. */
 export async function getPricing(): Promise<Pricing> {
+  return { ...(await cachedSetting("pricing", readPricing)) };
+}
+
+async function readPricing(): Promise<Pricing> {
   const fields = Object.keys(PRICING_KEYS) as (keyof Pricing)[];
   const rows = await prisma.platformSetting.findMany({
     where: { key: { in: fields.map((f) => PRICING_KEYS[f]) } },
@@ -562,4 +567,7 @@ async function upsertSetting(key: string, value: string, updatedBy?: string) {
     update: { value, updatedBy },
     create: { key, value, updatedBy },
   });
+  // Any saved setting can feed a cached one (pricing shares keys with the
+  // older single-value setters), so drop them all.
+  invalidateSetting();
 }

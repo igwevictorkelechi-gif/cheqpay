@@ -362,11 +362,38 @@ export interface TicketOrderResult {
   createdAt: string;
 }
 
+// Profile + wallet setup is idempotent but not free: two of the heaviest API
+// calls, and almost every screen asks for it. Run it once per signed-in user
+// per half hour instead of on every screen.
+const PROVISION_TTL_MS = 30 * 60_000;
+let provisioning: { userId: string; at: number; done: Promise<void> } | null = null;
+
 export const api = {
-  /** Idempotently create the app-side profile + wallets. Call after login. */
+  /**
+   * Idempotently create the app-side profile + wallets. Call after login.
+   * Skipped when it already ran for this user in the last half hour.
+   */
   async ensureProvisioned(): Promise<void> {
-    await apiFetch('/api/me', { method: 'POST' });
-    await apiFetch('/api/wallets', { method: 'POST' });
+    const { data } = await supabase.auth.getSession();
+    const userId = data.session?.user.id ?? '';
+    if (
+      provisioning &&
+      provisioning.userId === userId &&
+      Date.now() - provisioning.at < PROVISION_TTL_MS
+    ) {
+      return provisioning.done;
+    }
+    const done = (async () => {
+      await apiFetch('/api/me', { method: 'POST' });
+      await apiFetch('/api/wallets', { method: 'POST' });
+    })();
+    const entry = { userId, at: Date.now(), done };
+    provisioning = entry;
+    // A failed run must not stick: the next screen tries again.
+    done.catch(() => {
+      if (provisioning === entry) provisioning = null;
+    });
+    return done;
   },
 
   getMe(): Promise<Me> {

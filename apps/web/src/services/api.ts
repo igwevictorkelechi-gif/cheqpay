@@ -392,11 +392,53 @@ export interface TicketOrderResult {
   createdAt: string;
 }
 
+// Profile + wallet setup is idempotent but not free: two of the heaviest API
+// calls, and almost every page asks for it. Run it once per signed-in user per
+// half hour (per tab session) instead of on every page load.
+const PROVISION_TTL_MS = 30 * 60_000;
+const PROVISION_KEY = "cheqpay.provisioned";
+let provisioning: { userId: string; done: Promise<void> } | null = null;
+
+function provisionedRecently(userId: string): boolean {
+  try {
+    const raw = sessionStorage.getItem(PROVISION_KEY);
+    if (!raw) return false;
+    const { u, at } = JSON.parse(raw) as { u?: string; at?: number };
+    return u === userId && typeof at === "number" && Date.now() - at < PROVISION_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+function markProvisioned(userId: string): void {
+  try {
+    sessionStorage.setItem(PROVISION_KEY, JSON.stringify({ u: userId, at: Date.now() }));
+  } catch {
+    /* storage unavailable: the in-memory guard still applies */
+  }
+}
+
 export const api = {
-  /** Idempotently create the app-side profile + wallets. Call after login. */
+  /**
+   * Idempotently create the app-side profile + wallets. Call after login.
+   * Skipped when it already ran for this user in the last half hour.
+   */
   async ensureProvisioned(): Promise<void> {
-    await apiFetch("/api/me", { method: "POST" });
-    await apiFetch("/api/wallets", { method: "POST" });
+    const { data } = await supabase.auth.getSession();
+    const userId = data.session?.user.id ?? "";
+    if (provisioning && provisioning.userId === userId) return provisioning.done;
+    if (userId && provisionedRecently(userId)) return;
+    const done = (async () => {
+      await apiFetch("/api/me", { method: "POST" });
+      await apiFetch("/api/wallets", { method: "POST" });
+      if (userId) markProvisioned(userId);
+    })();
+    provisioning = { userId, done };
+    // A failed run must not stick: the next page tries again.
+    done.catch(() => {
+      if (provisioning?.done === done) provisioning = null;
+    });
+    return done;
   },
 
   getMe(): Promise<Me> {
