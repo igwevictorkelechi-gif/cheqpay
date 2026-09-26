@@ -41,7 +41,11 @@ type Db = Pick<typeof prisma, "transaction" | "$queryRaw">;
  * commit or rollback.
  */
 export async function lockUserMoney(db: Pick<typeof prisma, "$queryRaw">, userId: string): Promise<void> {
-  await db.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+  // pg_advisory_xact_lock returns `void`, a column Prisma cannot read back:
+  // selecting it directly takes the lock and then throws, which rolled back
+  // every withdrawal. Selecting a constant over it takes the same lock and
+  // returns an ordinary integer row.
+  await db.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext(${userId}))) AS l`;
 }
 
 export async function sumTodayWithdrawalsNgnKobo(userId: string, db: Db = prisma): Promise<bigint> {
