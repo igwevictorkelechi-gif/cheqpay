@@ -40,22 +40,30 @@ export async function POST(req: Request) {
     // Phone is unique; if the token's phone already belongs to another account
     // (or collides), provision without it rather than failing the whole login.
     const withPhone = auth.phone ?? undefined;
-    let user;
-    try {
-      user = await prisma.user.upsert({
-        where: { id: auth.id },
-        update: { email: auth.email, phone: withPhone },
-        create: { id: auth.id, email: auth.email, phone: auth.phone ?? null },
-      });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+    // Most calls come from a returning user whose email and phone haven't
+    // changed: read first and skip the write, which is most of this route's cost.
+    let user = await prisma.user.findUnique({ where: { id: auth.id } });
+    const unchanged =
+      user !== null &&
+      user.email === auth.email &&
+      (withPhone === undefined || user.phone === withPhone);
+    if (!user || !unchanged) {
+      try {
         user = await prisma.user.upsert({
           where: { id: auth.id },
-          update: { email: auth.email },
-          create: { id: auth.id, email: auth.email, phone: null },
+          update: { email: auth.email, phone: withPhone },
+          create: { id: auth.id, email: auth.email, phone: auth.phone ?? null },
         });
-      } else {
-        throw e;
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          user = await prisma.user.upsert({
+            where: { id: auth.id },
+            update: { email: auth.email },
+            create: { id: auth.id, email: auth.email, phone: null },
+          });
+        } else {
+          throw e;
+        }
       }
     }
 
