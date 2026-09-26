@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 
 // Base URL of the custodial backend (apps/api). Override per-env if needed.
-const API_BASE =
+export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "https://cheqpay-admin453.vercel.app";
 
 export class ApiError extends Error {

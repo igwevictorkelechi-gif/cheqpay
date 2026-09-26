@@ -27,13 +27,9 @@ export const authService = {
     if (error) throw error;
     if (!data.session || !data.user) return null;
 
-    // Prefer the legacy profile row if present; otherwise derive from session.
-    const { data: profile } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", data.user.id)
-      .single();
-    return profile ?? toUser(data.user);
+    // Built from the session. There used to be a lookup of an old "users"
+    // table here; it no longer exists, so every call came back 406.
+    return toUser(data.user);
   },
 
   /** Create an account with email + password (no SMS needed). */
@@ -91,14 +87,7 @@ export const authService = {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session) return null;
-
-      const { data } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", session.user.id)
-        .single();
-
-      return data ?? toUser(session.user);
+      return toUser(session.user);
     } catch (error) {
       console.error("getCurrentUser error:", error);
       return null;

@@ -48,7 +48,7 @@ export default function GadgetsPage() {
   useEffect(() => {
     api
       .getGadgets()
-      .then(({ products }) => setProducts(products))
+      .then((r) => setProducts(Array.isArray(r?.products) ? r.products : []))
       .catch((e) => {
         // 503 = the store is switched off (no catalog / not launched yet).
         if (e instanceof ApiError && e.status === 503) {

@@ -27,7 +27,7 @@ export default function WithdrawBeneficiaryPage() {
   const [amountStr, setAmountStr] = useState("0");
   const amount = Number(amountStr);
   const limits = useLimits();
-  const feeNgn = limits?.fees.withdrawalFeeNgn ?? 0;
+  const feeNgn = limits?.fees?.withdrawalFeeNgn ?? 0;
   const breakdown = withdrawalBreakdown(amount, feeNgn);
   // The summary sheet shown before the PIN: amount, fee, what arrives.
   const [confirming, setConfirming] = useState(false);
@@ -58,13 +58,16 @@ export default function WithdrawBeneficiaryPage() {
     let active = true;
     (async () => {
       try {
-        const [{ beneficiaries }, banksRes] = await Promise.all([
+        const [beneficiariesRes, banksRes] = await Promise.all([
           api.getBeneficiaries(),
           api.getBanks().catch(() => ({ banks: [] as Bank[] })),
         ]);
         if (!active) return;
+        const beneficiaries = Array.isArray(beneficiariesRes?.beneficiaries)
+          ? beneficiariesRes.beneficiaries
+          : [];
         setBeneficiaries(beneficiaries);
-        if (banksRes.banks.length) setBanks(banksRes.banks);
+        if (Array.isArray(banksRes?.banks) && banksRes.banks.length) setBanks(banksRes.banks);
         setSelectedId(beneficiaries[0]?.id ?? null);
         if (beneficiaries.length === 0) setMode("add");
       } catch {

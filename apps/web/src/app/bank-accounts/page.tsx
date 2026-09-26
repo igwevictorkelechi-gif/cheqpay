@@ -46,8 +46,8 @@ export default function BankAccountsPage() {
           api.getBanks().catch(() => ({ banks: [] as Bank[] })),
         ]);
         if (!active) return;
-        setBeneficiaries(beneficiaries);
-        if (banksRes.banks.length) setBanks(banksRes.banks);
+        setBeneficiaries(Array.isArray(beneficiaries) ? beneficiaries : []);
+        if (Array.isArray(banksRes?.banks) && banksRes.banks.length) setBanks(banksRes.banks);
       } catch {
         /* keep bank fallback; empty beneficiaries */
       } finally {

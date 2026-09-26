@@ -22,7 +22,7 @@ export default function EventsPage() {
   useEffect(() => {
     api
       .getEvents()
-      .then(({ events }) => setEvents(events))
+      .then((r) => setEvents(Array.isArray(r?.events) ? r.events : []))
       .catch((e) => {
         if (e instanceof ApiError && e.status === 503) {
           setComingSoon(true);
