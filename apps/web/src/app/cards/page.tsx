@@ -94,10 +94,12 @@ export default function CardsPage() {
   useEffect(() => {
     let active = true;
     Promise.all([api.getCards(), api.getBalances().catch(() => ({ balances: [] as Balance[] }))])
-      .then(([{ cards, available }, { balances }]) => {
+      .then(([cardsRes, balancesRes]) => {
         if (!active) return;
+        const cards = Array.isArray(cardsRes?.cards) ? cardsRes.cards : [];
+        const balances = Array.isArray(balancesRes?.balances) ? balancesRes.balances : [];
         setCards(cards);
-        setAvailable(available);
+        setAvailable(cardsRes?.available);
         setActiveId((id) => id ?? cards[0]?.id ?? null);
         setUsdBalance(balances.find((b) => b.asset === "USD") ?? null);
       })

@@ -121,7 +121,7 @@ export default function AssetPage() {
     if (!meta) return;
     api
       .getChart(symbol, range)
-      .then((r) => setCandles(r.candles))
+      .then((r) => setCandles(Array.isArray(r?.candles) ? r.candles : []))
       .catch(() => setCandles([]));
   }, [symbol, range, meta]);
 

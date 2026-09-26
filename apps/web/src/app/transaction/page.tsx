@@ -16,10 +16,23 @@ const STATUS_COLOR: Record<string, string> = {
   REVERSED: "#EF4444",
 };
 
-const num = (v: string) => {
+const num = (v: string | null | undefined) => {
+  if (v === null || v === undefined || v === "") return "—";
   const n = Number(v);
-  return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 8 }) : v;
+  return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 8 }) : String(v);
 };
+
+/** A receipt date that can't throw, whatever the browser's locale support. */
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  try {
+    return d.toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return d.toISOString().replace("T", " ").slice(0, 16);
+  }
+}
 
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
@@ -48,7 +61,11 @@ export default function TransactionDetailPage() {
   useEffect(() => {
     (async () => {
       try {
-        if (!(await getAccessToken()) || !id) return;
+        if (!id) {
+          setNotFound(true);
+          return;
+        }
+        if (!(await getAccessToken())) return;
         const { transaction } = await api.getTransaction(id);
         setTx(transaction);
       } catch {
@@ -133,9 +150,9 @@ export default function TransactionDetailPage() {
             <div className="mt-6 rounded-3xl bg-card px-4">
               <div className="flex items-start justify-between py-3">
                 <span className="text-sm text-muted">Type</span>
-                <span className="text-sm font-semibold text-ink">{tx.type}</span>
+                <span className="text-sm font-semibold text-ink">{tx.type ?? "—"}</span>
               </div>
-              <Row label="Date" value={new Date(tx.createdAt).toLocaleString("en-NG")} />
+              <Row label="Date" value={formatDate(tx.createdAt)} />
               {tx.fromFormatted && tx.toFormatted && (
                 <>
                   <Row label="From" value={`${num(tx.fromFormatted)} ${tx.fromAsset}`} />
@@ -153,7 +170,7 @@ export default function TransactionDetailPage() {
               )}
               {!!tx.toAddress && <Row label="Address" value={tx.toAddress} mono />}
               {!!tx.txHash && <Row label="Tx hash" value={tx.txHash} mono />}
-              <Row label="Reference" value={tx.id} mono />
+              <Row label="Reference" value={String(tx.id ?? id)} mono />
             </div>
 
             <button

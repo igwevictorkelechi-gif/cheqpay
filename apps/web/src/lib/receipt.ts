@@ -14,10 +14,20 @@ const num = (v: string) => {
   return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 8 }) : v;
 };
 
+function safeDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso ?? "—");
+  try {
+    return d.toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return d.toISOString().replace("T", " ").slice(0, 16);
+  }
+}
+
 function detailRows(tx: LedgerTransaction): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   out.push(["Type", tx.type]);
-  out.push(["Date", new Date(tx.createdAt).toLocaleString("en-NG")]);
+  out.push(["Date", safeDate(tx.createdAt)]);
   if (tx.fromFormatted && tx.toFormatted) {
     out.push(["From", `${num(tx.fromFormatted)} ${tx.fromAsset}`]);
     out.push(["To", `${num(tx.toFormatted)} ${tx.toAsset}`]);
@@ -176,7 +186,9 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 /** Share the branded receipt image, falling back to a download. */
-export async function shareReceiptImage(tx: LedgerTransaction): Promise<"shared" | "downloaded"> {
+export async function shareReceiptImage(
+  tx: LedgerTransaction,
+): Promise<"shared" | "downloaded" | "cancelled"> {
   const blob = await receiptBlob(tx);
   const file = new File([blob], `cheqpay-receipt-${tx.id.slice(0, 8)}.png`, { type: "image/png" });
 
@@ -185,8 +197,11 @@ export async function shareReceiptImage(tx: LedgerTransaction): Promise<"shared"
     try {
       await navigator.share({ files: [file], title: "CheqPay receipt" });
       return "shared";
-    } catch {
-      /* fall through to download */
+    } catch (err) {
+      // Closing the share sheet is a choice, not a failure. Falling through to
+      // the download here used to open a bare image page on iPhone.
+      if ((err as { name?: string })?.name === "AbortError") return "cancelled";
+      /* anything else: fall through to download */
     }
   }
   const url = URL.createObjectURL(blob);

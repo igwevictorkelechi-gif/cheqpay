@@ -50,8 +50,8 @@ export default function WithdrawAmountPage() {
 
   const available = availableExact === null ? null : Number(availableExact);
   const value = Number(amount || "0");
-  const feeNgn = limits?.fees.withdrawalFeeNgn ?? 0;
-  const minNgn = limits?.withdrawal.minNgn ?? 0;
+  const feeNgn = limits?.fees?.withdrawalFeeNgn ?? 0;
+  const minNgn = limits?.withdrawal?.minNgn ?? 0;
   const breakdown = withdrawalBreakdown(value, feeNgn);
 
   const overBalance = available !== null && value > available;
