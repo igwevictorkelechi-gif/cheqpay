@@ -30,6 +30,7 @@ import { awardCashback } from "./cashback";
 import { ensureUsdAsset } from "./ensureUsdAsset";
 import { ensureQuoteProviderRef } from "./ensureQuoteProviderRef";
 import { exchangeFx, quoteFx } from "./maplerad/fx";
+import { getProviderBalanceMinor } from "./maplerad/treasury";
 import type { FxCurrency } from "./maplerad/types";
 import { getPriceFeed, type PriceFeed } from "@/market";
 
@@ -237,6 +238,23 @@ async function createFxConvertQuote(params: {
   toAsset: Asset;
   amountInMinor: bigint;
 }) {
+  // The exchange is paid out of our business wallet at Maplerad. If it can't
+  // cover this amount, Maplerad refuses at execution — after the user has
+  // pressed Confirm. Say so now instead. An unreadable balance doesn't block.
+  const held = await getProviderBalanceMinor(fxCurrencyOf(params.fromAsset));
+  if (held !== null && held < params.amountInMinor) {
+    console.error("[fx] business wallet too low for a swap — top it up", {
+      currency: fxCurrencyOf(params.fromAsset),
+      heldMinor: held.toString(),
+      neededMinor: params.amountInMinor.toString(),
+    });
+    throw new ApiError(
+      503,
+      "Swaps are briefly limited right now. Please try a smaller amount or try again shortly.",
+      "liquidity_low",
+    );
+  }
+
   // Maplerad's amount is the minor unit of the source currency, which is exactly
   // our minor unit for NGN (kobo) and USD (cents).
   const fx = await quoteFx({

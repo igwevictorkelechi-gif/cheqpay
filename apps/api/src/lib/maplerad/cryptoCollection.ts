@@ -28,6 +28,8 @@ import { notifyUser } from "../alerts";
 import { ASSET_DECIMALS, fromMinorUnits } from "../money";
 import { isWithdrawableNetwork } from "../assets";
 import { ensureUsdAsset } from "../ensureUsdAsset";
+import { cryptoDepositFee } from "../fees";
+import { getPricing } from "../settings";
 import type { CreditResult } from "./deposits";
 import type { VerifiedTransaction } from "./transactions";
 
@@ -205,10 +207,18 @@ export async function creditCryptoCollection(
 
   if (asset === Asset.USD) await ensureUsdAsset();
 
+  // A coin that lands as dollars went through Maplerad's ramp, which keeps its
+  // cut out of our business wallet. Without charging our conversion fee here
+  // every offramped deposit cost us that cut — this is the path live deposits
+  // actually take, so it must price them the same as cryptoDeposits.ts does.
+  // A coin credited as itself costs us nothing.
+  const feeMinor = asset === Asset.USD ? cryptoDepositFee(amountMinor, await getPricing()) : 0n;
+
   const { created, transactionId } = await creditBalance({
     userId,
     asset,
     amountMinor,
+    feeMinor,
     type: TransactionType.DEPOSIT,
     idempotencyKey: `deposit:maplerad:${tx.id}`,
     network,
@@ -232,7 +242,9 @@ export async function creditCryptoCollection(
     category: "deposits",
     title: "Deposit received",
     body: offramp
-      ? `Your ${coin} deposit was converted and $${fromMinorUnits(amountMinor, asset)} added to your balance.`
+      ? feeMinor > 0n
+        ? `Your ${coin} deposit was converted and $${fromMinorUnits(amountMinor - feeMinor, asset)} added to your balance ($${fromMinorUnits(feeMinor, asset)} conversion fee).`
+        : `Your ${coin} deposit was converted and $${fromMinorUnits(amountMinor, asset)} added to your balance.`
       : `${fromMinorUnits(amountMinor, asset)} ${coin} has landed in your wallet.`,
     data: { transactionId },
   }).catch(() => undefined);
