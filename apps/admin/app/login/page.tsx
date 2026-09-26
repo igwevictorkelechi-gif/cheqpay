@@ -38,7 +38,10 @@ function LoginForm() {
         setError(body.error || "Login failed");
         return;
       }
-      router.replace(next.startsWith("/") ? next : "/");
+      const data = (await res.json().catch(() => ({}))) as { mustChangePassword?: boolean };
+      // A sub admin on their starting password sets their own before anything else.
+      const safeNext = /^\/(?![/\\])/.test(next) ? next : "/";
+      router.replace(data.mustChangePassword ? "/account/password" : safeNext);
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");

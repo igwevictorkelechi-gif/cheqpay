@@ -10,7 +10,7 @@ import {
   Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search,
   ShieldAlert, Monitor, Ban, Package, ShoppingBag, Ticket, CalendarDays, ScanLine, type LucideIcon,
 } from 'lucide-react';
-import { isSuperOnlyPage, type AdminRole } from '@/lib/adminAuth';
+import { subAdminAccess, SUB_ADMIN_PASSWORD_PAGE, type AdminRole } from '@/lib/adminAuth';
 
 type Item = { label: string; href: string; icon: LucideIcon };
 type Category = { label: string; icon: LucideIcon; items: Item[] };
@@ -118,6 +118,8 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
   // Live count of withdrawals awaiting review — surfaced as a nav badge so the
   // admin sees queued payouts the moment they open the dashboard.
   useEffect(() => {
+    // Only Super Admins review withdrawals; sub admins aren't allowed the data.
+    if (role !== 'super') return;
     let active = true;
     const poll = () =>
       fetch('/api/withdrawals', { cache: 'no-store' })
@@ -127,7 +129,7 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
     poll();
     const id = setInterval(poll, 60_000);
     return () => { active = false; clearInterval(id); };
-  }, []);
+  }, [role]);
   const logout = async () => {
     try {
       await fetch('/api/auth', { method: 'DELETE' });
@@ -142,15 +144,28 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
   });
   const toggle = (label: string) => setOpenCats((s) => ({ ...s, [label]: !s[label] }));
 
-  // Hide Super-Admin-only items from regular admins. While the role is still
-  // loading (null) we withhold them too, so a restricted link never flashes.
+  // Sub admins see only what they may open (Dashboard, Analytics) plus their
+  // own password page. While the role is still loading (null) we treat it as
+  // a sub admin, so a restricted link never flashes.
   const canSuper = role === 'super';
-  const visibleCategories = categories
+  const visibleCategories = (
+    canSuper
+      ? categories
+      : [
+          ...categories,
+          {
+            label: 'Account',
+            icon: KeyRound,
+            items: [{ label: 'Change password', href: SUB_ADMIN_PASSWORD_PAGE, icon: KeyRound }],
+          },
+        ]
+  )
     .map((cat) => ({
       ...cat,
-      items: cat.items.filter((i) => canSuper || !isSuperOnlyPage(i.href)),
+      items: cat.items.filter((i) => canSuper || subAdminAccess(i.href, 'GET', false) === 'allow'),
     }))
     .filter((cat) => cat.items.length > 0);
+  const profileHref = canSuper ? '/profile' : SUB_ADMIN_PASSWORD_PAGE;
 
   return (
     <>
@@ -238,7 +253,7 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
         <div className="shrink-0 p-4 border-t border-gray-200 bg-white">
           <div className="flex items-center gap-2">
             <Link
-              href="/profile"
+              href={profileHref}
               onClick={onClose}
               className="flex flex-1 items-center gap-3 rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors min-w-0"
             >
@@ -258,7 +273,7 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
                         : 'bg-gray-100 text-gray-600')
                     }
                   >
-                    {role === 'super' ? 'Super Admin' : 'Admin'}
+                    {role === 'super' ? 'Super Admin' : 'Sub admin'}
                   </span>
                 ) : (
                   <span className="block text-xs text-gray-500">View profile</span>

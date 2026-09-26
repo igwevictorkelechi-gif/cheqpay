@@ -5,46 +5,10 @@ import {
   adminSecret,
   sessionCookieValue,
   sessionInfo,
-  type AdminRole,
 } from "@/lib/adminAuth";
 import { API_URL } from "@/lib/apiUrl";
 
 export const dynamic = "force-dynamic";
-
-/**
- * Resolve an admin's role from the backend roles list. Env admins
- * (ADMIN_EMAILS) are always Super Admins; otherwise the DB-managed tier
- * applies. Defaults to the least privilege ("admin") if the list can't be read.
- */
-async function resolveRole(email: string): Promise<AdminRole> {
-  try {
-    const res = await fetch(`${API_URL}/api/admin/roles`, {
-      headers: { "x-admin-secret": process.env.ADMIN_API_SECRET ?? "" },
-      cache: "no-store",
-    });
-    if (!res.ok) return "admin";
-    const d = (await res.json()) as {
-      envAdmins?: unknown;
-      admins?: unknown;
-    };
-    const env = Array.isArray(d.envAdmins)
-      ? d.envAdmins.map((e) => String(e).toLowerCase())
-      : [];
-    if (env.includes(email)) return "super";
-    const managed = Array.isArray(d.admins) ? d.admins : [];
-    for (const a of managed) {
-      if (a && typeof a === "object") {
-        const row = a as { email?: unknown; role?: unknown };
-        if (String(row.email ?? "").toLowerCase() === email && row.role === "super") {
-          return "super";
-        }
-      }
-    }
-    return "admin";
-  } catch {
-    return "admin";
-  }
-}
 
 /** Log in with the admin dashboard credentials (verified by the backend). */
 export async function POST(req: Request) {
@@ -102,6 +66,8 @@ export async function POST(req: Request) {
   }
   const data = (await verify.json().catch(() => ({}))) as {
     email?: string;
+    role?: string;
+    mustChangePassword?: boolean;
     epoch?: string;
     otpConfigured?: boolean;
   };
@@ -111,10 +77,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Login is temporarily unavailable" }, { status: 502 });
   }
   const authedEmail = (data.email ?? email).toLowerCase();
-  const role = await resolveRole(authedEmail);
+  // The backend decides the role: the main login is a Super Admin, a sub
+  // admin's own login is not. Anything unexpected gets the least privilege.
+  const role = data.role === "super" ? "super" : "admin";
+  const mustChangePassword = role !== "super" && data.mustChangePassword === true;
 
-  const res = NextResponse.json({ ok: true, email: authedEmail, role, otpConfigured: !!data.otpConfigured });
-  res.cookies.set(SESSION_COOKIE, await sessionCookieValue(authedEmail, role, data.epoch), {
+  const res = NextResponse.json({
+    ok: true,
+    email: authedEmail,
+    role,
+    mustChangePassword,
+    otpConfigured: !!data.otpConfigured,
+  });
+  res.cookies.set(SESSION_COOKIE, await sessionCookieValue(authedEmail, role, data.epoch, undefined, mustChangePassword), {
     httpOnly: true,
     secure: true,
     // Strict: the session cookie is never sent on a request started from
@@ -137,7 +112,11 @@ export async function GET(req: Request) {
     .slice(1)
     .join("=");
   const info = await sessionInfo(cookie);
-  return NextResponse.json({ email: info?.email ?? null, role: info?.role ?? null });
+  return NextResponse.json({
+    email: info?.email ?? null,
+    role: info?.role ?? null,
+    mustChangePassword: info?.mustChangePassword ?? false,
+  });
 }
 
 /** Log out — clear the session cookie. */
