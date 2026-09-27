@@ -56,6 +56,12 @@ export default function Dashboard() {
   // balance block is showing.
   const [usd, setUsd] = useState<number>(() => readCache<number>(USD_CACHE) ?? 0);
   const [currency, setCurrency] = useState<"NGN" | "USD">("NGN");
+  // Whether the figures on screen are real: loaded this visit, or a cached
+  // copy from the last one. When neither, the balance is unknown — and must
+  // not be drawn as ₦0, which reads as "your money is gone".
+  const [known, setKnown] = useState<boolean>(() => readCache<number>(CASH_CACHE) !== null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [ngnTxns, setNgnTxns] = useState<LedgerTransaction[]>(
     () => readCache<LedgerTransaction[]>(HOME_TX_CACHE) ?? []
   );
@@ -87,6 +93,8 @@ export default function Dashboard() {
       const dollars = Number(balances.find((b) => b.asset === "USD")?.availableFormatted ?? 0);
       setNgn(cash);
       setUsd(dollars);
+      setKnown(true);
+      setLoadFailed(false);
       setNgnTxns(ngnRes.transactions);
       setUsdTxns(usdRes.transactions);
       writeCache(CASH_CACHE, cash);
@@ -99,20 +107,24 @@ export default function Dashboard() {
       try {
         await refresh();
       } catch (e) {
-        if (e instanceof ApiError && (e.status === 404 || e.status === 401)) {
+        if (e instanceof ApiError && e.status === 404) {
           try {
             await api.ensureProvisioned();
             await refresh();
+            return;
           } catch {
-            /* keep cached values */
+            /* fall through: say it failed */
           }
         }
+        // Cached figures stay on screen; with none, the balance shows as
+        // unavailable with a retry, never as zero.
+        if (active) setLoadFailed(true);
       }
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   const isUsd = currency === "USD";
   const value = isUsd ? usd : ngn;
@@ -120,7 +132,9 @@ export default function Dashboard() {
   const locale = isUsd ? "en-US" : "en-NG";
   // Everything below the tab reads from the selected currency only.
   const txns = isUsd ? usdTxns : ngnTxns;
-  const formattedBalance = showBalance
+  const formattedBalance = !known
+    ? `${symbol}—`
+    : showBalance
     ? symbol +
       value.toLocaleString(locale, {
         minimumFractionDigits: 2,
@@ -180,6 +194,16 @@ export default function Dashboard() {
         label={isUsd ? "USD Balance" : "Total Cash Balance"}
         amount={formattedBalance}
       />
+      {loadFailed ? (
+        <div className="-mt-2 mb-4 flex justify-center px-5">
+          <button
+            onClick={() => { setLoadFailed(false); setReloadKey((k) => k + 1); }}
+            className="min-h-[40px] rounded-full bg-card px-4 text-sm font-semibold text-ink"
+          >
+            {known ? "Couldn’t refresh your balance — tap to retry" : "Couldn’t load your balance — tap to retry"}
+          </button>
+        </div>
+      ) : null}
 
       <KycBanner />
 
@@ -188,7 +212,7 @@ export default function Dashboard() {
       </div>
 
       {/* First-run nudge: no money and no history yet, in this currency. */}
-      {features.ngn_deposits && value === 0 && txns.length === 0 && (
+      {features.ngn_deposits && known && value === 0 && txns.length === 0 && (
         <div className="mb-6 px-5">
           <button
             onClick={() => router.push(isUsd ? "/deposit?currency=USD" : "/deposit")}
@@ -249,7 +273,9 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="text-lg font-bold text-ink">
-              {showBalance
+              {!known
+                ? `— ${currency}`
+                : showBalance
                 ? `${value.toLocaleString(locale, { maximumFractionDigits: 2 })} ${currency}`
                 : `•••• ${currency}`}
             </p>

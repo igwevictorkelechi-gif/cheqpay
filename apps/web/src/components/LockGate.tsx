@@ -169,7 +169,7 @@ export default function LockGate() {
       // guessing. End the session; the owner signs back in with their password.
       disableAppLock();
       clearUserCaches();
-      await supabase.auth.signOut().catch(() => undefined);
+      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
       window.location.href = "/login/";
       return;
     }

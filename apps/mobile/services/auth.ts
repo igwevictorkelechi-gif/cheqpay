@@ -73,7 +73,9 @@ export const authService = {
 
   async logout() {
     try {
-      const { error } = await supabase.auth.signOut();
+      // This device only. The default ("global") ends the session on every
+      // device, so signing out here left the website showing ₦0.
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
       if (error) throw error;
       return { success: true };
     } catch (error) {

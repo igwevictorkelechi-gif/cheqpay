@@ -13,6 +13,7 @@ import {
   refundCardIssueFee,
 } from "@/lib/cardFunding";
 import { enforceRateLimit } from "@/lib/ratelimit";
+import { alertOpsOnce } from "@/lib/opsAlert";
 import { fromMinorUnits } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -107,11 +108,29 @@ export async function POST(req: Request) {
       ack = await createCard({ customerId: user.mapleradCustomerId, currency: "USD" });
     } catch (err) {
       if (charge) await refundCardIssueFee({ transactionId: charge.transactionId });
+      const reason = describeProviderError(err);
       console.error("[cards] issuing failed", {
         userId: auth.id,
         customerId: user.mapleradCustomerId,
-        error: describeProviderError(err),
+        error: reason,
       });
+      // Kept where it can be read later — the function log above expires
+      // within a day, which is why no card failure had ever been diagnosed.
+      await prisma.auditLog
+        .create({
+          data: {
+            userId: auth.id,
+            action: "card.issue_failed",
+            resourceType: "Card",
+            details: { reason, charged: false },
+          },
+        })
+        .catch(() => undefined);
+      await alertOpsOnce(
+        "card-issue-failed",
+        `⚠️ Virtual card creation is failing. Customers were not charged. Reason: ${reason}. If it says "upstream unreachable", the egress proxy is blocking /issuing — run Provider check in the admin.`,
+        { reason }
+      );
       throw new ApiError(
         502,
         "Our card provider could not be reached just now, so no card was created and you were not charged. Please try again shortly.",

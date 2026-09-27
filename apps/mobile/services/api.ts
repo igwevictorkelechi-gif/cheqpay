@@ -21,15 +21,54 @@ async function authHeader(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// Many screens fire requests together; when the token is refused they all
+// fail at once. Share one refresh between them.
+let refreshing: Promise<string | null> | null = null;
+function refreshAccessToken(): Promise<string | null> {
+  if (!refreshing) {
+    refreshing = supabase.auth
+      .refreshSession()
+      .then(({ data, error }) => (error ? null : data.session?.access_token ?? null))
+      .catch(() => null)
+      .finally(() => {
+        setTimeout(() => {
+          refreshing = null;
+        }, 0);
+      });
+  }
+  return refreshing;
+}
+
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = {
-    'content-type': 'application/json',
-    ...(await authHeader()),
-    ...((init.headers as Record<string, string>) ?? {}),
-  };
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  const auth = await authHeader();
+  const send = (authorization: Record<string, string>) =>
+    fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        'content-type': 'application/json',
+        ...authorization,
+        ...((init.headers as Record<string, string>) ?? {}),
+      },
+    });
+  let res = await send(auth);
+  let text = await res.text();
+  let data = text ? JSON.parse(text) : null;
+
+  // The token was refused outright (a PIN prompt has its own code). Try one
+  // refresh; if the session is really gone, end it on this device so the auth
+  // listener returns the app to sign-in, instead of every screen showing ₦0.
+  if (res.status === 401 && data?.code === 'unauthorized' && auth.Authorization) {
+    const fresh = await refreshAccessToken();
+    if (fresh) {
+      res = await send({ Authorization: `Bearer ${fresh}` });
+      text = await res.text();
+      data = text ? JSON.parse(text) : null;
+    }
+    if (res.status === 401 && data?.code === 'unauthorized') {
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    }
+  }
+
   if (!res.ok) {
     // A blocked account is refused on every call. End the session once — the
     // auth listener then returns the app to sign-in — and let the server's

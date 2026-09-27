@@ -81,6 +81,33 @@ export function ensureGadgetSchema(): Promise<void> {
       await prisma.$executeRawUnsafe(
         `CREATE INDEX IF NOT EXISTS gadget_orders_created_at_idx ON gadget_orders(created_at)`,
       );
+      // Order status is a Postgres enum in the Prisma schema, and Prisma writes
+      // it as `'PAID'::"GadgetOrderStatus"`. This table was first created with
+      // a plain text column and the enum type never existed, so every order
+      // insert failed ("type GadgetOrderStatus does not exist") and no checkout
+      // could complete. Create the type, then convert the column in place —
+      // only while it is still text, so this is a no-op once done.
+      await prisma.$executeRawUnsafe(`
+        DO $$ BEGIN
+          CREATE TYPE "GadgetOrderStatus" AS ENUM
+            ('PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+      `);
+      await prisma.$executeRawUnsafe(`
+        DO $$ BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'gadget_orders' AND column_name = 'status'
+               AND data_type = 'text'
+          ) THEN
+            ALTER TABLE gadget_orders
+              ALTER COLUMN status DROP DEFAULT,
+              ALTER COLUMN status TYPE "GadgetOrderStatus" USING status::"GadgetOrderStatus",
+              ALTER COLUMN status SET DEFAULT 'PAID';
+          END IF;
+        END $$;
+      `);
       // Discount fields on the order (columns on the existing gadget_orders
       // table — must run at boot, which this helper does).
       await prisma.$executeRawUnsafe(
