@@ -42,6 +42,8 @@ export interface AlertMessage {
   copyable?: { label: string; value: string };
   /** Overrides the template chosen from the category. */
   emailKind?: EmailContent["kind"];
+  /** A button in the email ("Verify now" → a page). Push uses data.url instead. */
+  action?: EmailContent["action"];
 }
 
 /** Email half of the fanout. Silent when unconfigured or opted out. */
@@ -65,6 +67,7 @@ async function sendEmailAlert(userId: string, msg: AlertMessage): Promise<boolea
       amount: msg.amount,
       details: msg.details,
       copyable: msg.copyable,
+      action: msg.action,
     };
     await sendEmail({
       to: user.email,

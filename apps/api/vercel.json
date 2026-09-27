@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/treasury-check",
       "schedule": "30 7 * * *"
+    },
+    {
+      "path": "/api/cron/kyc-reminders",
+      "schedule": "45 9 * * *"
     }
   ]
 }

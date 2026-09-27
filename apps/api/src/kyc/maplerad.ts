@@ -20,6 +20,7 @@
 // KYC_PROVIDER=maplerad until /api/admin/provider-check passes.
 
 import { verifyBvn } from "@/lib/maplerad/identity";
+import { alertLookupFailure } from "./lookupAlert";
 import type { KycProvider, KycVerifyInput, KycVerifyResult } from "./types";
 
 export class MapleradKycProvider implements KycProvider {
@@ -36,7 +37,9 @@ export class MapleradKycProvider implements KycProvider {
     } catch (err) {
       // Covers a refused lookup and an unreachable provider alike. Either way
       // the submission falls through to manual review rather than being
-      // reported to the user as a rejected identity.
+      // reported to the user as a rejected identity. When the lookup itself
+      // is broken (balance, credentials, network) ops hear about it now.
+      await alertLookupFailure(err);
       return {
         verified: false,
         tier: 1,
