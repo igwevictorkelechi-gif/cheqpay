@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,10 @@ import { router } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
 import { colors, Card } from '@/components/brand';
 import { api, ApiError, type EventTicket, type TicketStatus } from '@/services/api';
+import { shareTicket } from '@/lib/ticketShare';
+
+/** The handle react-native-qrcode-svg gives through getRef. */
+type QrHandle = { toDataURL: (cb: (base64: string) => void) => void };
 
 const STATUS: Record<TicketStatus, { label: string; color: string }> = {
   VALID: { label: 'Valid', color: '#16A34A' },
@@ -23,6 +27,20 @@ export default function MyTicketsScreen() {
   const insets = useSafeAreaInsets();
   const [tickets, setTickets] = useState<EventTicket[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Each card's own QR code is what goes into the shared ticket.
+  const qrRefs = useRef<Record<string, QrHandle | null>>({});
+  const [sharing, setSharing] = useState<string | null>(null);
+
+  const share = (t: EventTicket) => {
+    const qr = qrRefs.current[t.id];
+    if (!qr || sharing) return;
+    setSharing(t.id);
+    qr.toDataURL((base64) => {
+      shareTicket(t, base64.replace(/^data:image\/png;base64,/, ''))
+        .catch(() => undefined)
+        .finally(() => setSharing(null));
+    });
+  };
 
   useEffect(() => {
     api.getMyTickets()
@@ -65,13 +83,33 @@ export default function MyTicketsScreen() {
                     {whenLabel(t.startsAt) ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>{whenLabel(t.startsAt)}</Text> : null}
                     {t.venue ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{t.venue}</Text> : null}
                   </View>
-                  <View style={{ backgroundColor: s.color, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 }}>
-                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{s.label}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ backgroundColor: s.color, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 }}>
+                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{s.label}</Text>
+                    </View>
+                    {t.status === 'VALID' ? (
+                      <TouchableOpacity
+                        onPress={() => share(t)}
+                        disabled={sharing === t.id}
+                        accessibilityLabel="Share ticket"
+                        style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: 4 }}
+                      >
+                        {sharing === t.id ? (
+                          <ActivityIndicator color={colors.ink} />
+                        ) : (
+                          <Ionicons name="share-outline" size={22} color={colors.ink} />
+                        )}
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
                 </View>
                 <View style={{ backgroundColor: '#fff', alignItems: 'center', paddingVertical: 20 }}>
                   <View style={{ opacity: dimmed ? 0.4 : 1 }}>
-                    <QRCode value={t.reference} size={150} />
+                    <QRCode
+                      value={t.reference}
+                      size={150}
+                      getRef={(c: unknown) => { qrRefs.current[t.id] = c as QrHandle | null; }}
+                    />
                   </View>
                   <Text style={{ marginTop: 12, fontFamily: 'monospace', fontWeight: '700', color: '#1B1726' }}>{t.reference}</Text>
                   <Text style={{ marginTop: 2, fontSize: 12, color: '#6E6880' }}>Show this at the gate</Text>

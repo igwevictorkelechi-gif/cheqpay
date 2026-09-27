@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
-import { ArrowLeft, Loader2, CalendarDays, MapPin } from "lucide-react";
+import { ArrowLeft, Loader2, CalendarDays, MapPin, Share2, Check } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card } from "@/components/MobileUI";
 import { api, ApiError, type EventTicket } from "@/services/api";
+import { shareTicketImage } from "@/lib/ticketShare";
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   VALID: { label: "Valid", cls: "bg-green-500/15 text-green-500" },
@@ -24,6 +25,27 @@ export default function MyTicketsPage() {
   const router = useRouter();
   const [tickets, setTickets] = useState<EventTicket[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The card's own QR code is what goes into the shared image.
+  const qrRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [sharing, setSharing] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+
+  const share = async (t: EventTicket) => {
+    const svg = qrRefs.current[t.id]?.querySelector("svg");
+    if (!svg || sharing) return;
+    setSharing(t.id);
+    try {
+      const result = await shareTicketImage(t, svg);
+      if (result === "downloaded") {
+        setSaved(t.id);
+        setTimeout(() => setSaved(null), 1800);
+      }
+    } catch {
+      /* nothing shared; the ticket is still on screen */
+    } finally {
+      setSharing(null);
+    }
+  };
 
   useEffect(() => {
     api.getMyTickets()
@@ -68,10 +90,29 @@ export default function MyTicketsPage() {
                     {whenLabel(t.startsAt) ? <p className="mt-1 flex items-center gap-1 text-xs text-muted"><CalendarDays className="h-3 w-3" /> {whenLabel(t.startsAt)}</p> : null}
                     {t.venue ? <p className="mt-0.5 flex items-center gap-1 text-xs text-muted"><MapPin className="h-3 w-3" /> {t.venue}</p> : null}
                   </div>
-                  <span className={"shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold " + s.cls}>{s.label}</span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className={"rounded-full px-2.5 py-1 text-xs font-semibold " + s.cls}>{s.label}</span>
+                    {t.status === "VALID" && (
+                      <button
+                        onClick={() => share(t)}
+                        disabled={sharing === t.id}
+                        className="flex h-11 w-11 items-center justify-center rounded-full text-ink active:opacity-70 disabled:opacity-60"
+                        aria-label="Share ticket"
+                        title="Share ticket"
+                      >
+                        {sharing === t.id ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : saved === t.id ? (
+                          <Check className="h-5 w-5 text-green-500" />
+                        ) : (
+                          <Share2 className="h-5 w-5" />
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-col items-center border-t border-border bg-white px-4 py-5">
-                  <div className={dimmed ? "opacity-40" : ""}>
+                  <div ref={(el) => { qrRefs.current[t.id] = el; }} className={dimmed ? "opacity-40" : ""}>
                     <QRCodeSVG value={t.reference} size={150} level="M" includeMargin />
                   </div>
                   <p className="mt-3 font-mono text-sm font-bold tracking-wide text-[#1B1726]">{t.reference}</p>
