@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Plus, Loader2, CalendarDays, Ticket } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import ImageUploadField from '@/components/ImageUploadField';
+import { EVENT_CATEGORIES } from '@/lib/eventCategories';
 
 interface Tier { id: string; name: string; priceFormatted: string; sold: number; capacity: number | null; active: boolean }
 interface Event {
@@ -20,9 +21,9 @@ interface Event {
 }
 
 interface Draft {
-  title: string; venue: string; city: string; startsAt: string; imageUrl: string; description: string;
+  title: string; venue: string; city: string; category: string; startsAt: string; imageUrl: string; description: string;
 }
-const EMPTY: Draft = { title: '', venue: '', city: '', startsAt: '', imageUrl: '', description: '' };
+const EMPTY: Draft = { title: '', venue: '', city: '', category: '', startsAt: '', imageUrl: '', description: '' };
 const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none';
 
 export default function EventsPage() {
@@ -59,6 +60,7 @@ export default function EventsPage() {
           title: draft.title.trim(),
           venue: draft.venue.trim() || undefined,
           city: draft.city.trim() || undefined,
+          category: draft.category || undefined,
           description: draft.description.trim() || undefined,
           imageUrl: draft.imageUrl.trim() || undefined,
           startsAt: draft.startsAt ? new Date(draft.startsAt).toISOString() : null,
@@ -108,8 +110,13 @@ export default function EventsPage() {
               onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
             <input className={INPUT} placeholder="Venue" value={draft.venue}
               onChange={(e) => setDraft({ ...draft, venue: e.target.value })} />
-            <input className={INPUT} placeholder="City" value={draft.city}
+            <input className={INPUT} placeholder="City (e.g. Lagos)" value={draft.city}
               onChange={(e) => setDraft({ ...draft, city: e.target.value })} />
+            <select className={INPUT} value={draft.category} aria-label="Category"
+              onChange={(e) => setDraft({ ...draft, category: e.target.value })}>
+              <option value="">Category (customers filter by this)</option>
+              {EVENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
             <div>
               <label className="mb-1 block text-xs text-gray-500">Date &amp; time (optional)</label>
               <input className={INPUT} type="datetime-local" value={draft.startsAt}

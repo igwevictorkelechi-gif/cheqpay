@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { imageValue } from "@/lib/uploadedImage";
+import { EVENT_CATEGORIES } from "@/lib/events";
 import { deactivateEvent, getEventDetail, updateEvent } from "@/lib/eventsAdmin";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ const patchSchema = z.object({
   description: z.string().max(4000).optional(),
   venue: z.string().max(200).optional(),
   city: z.string().max(120).optional(),
+  category: z.union([z.enum(EVENT_CATEGORIES), z.literal("")]).optional(),
   imageUrl: imageValue.nullable().optional(),
   startsAt: z.string().nullable().optional(),
   active: z.boolean().optional(),

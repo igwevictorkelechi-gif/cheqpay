@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSelectedLayoutSegments } from "next/navigation";
 import { supabase } from "@/services/supabase";
+import { rememberReturnTo } from "@/lib/returnTo";
 
 // Routes reachable without a session.
 // "/" is public because it now serves the landing page to signed-out
@@ -73,6 +74,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         // A deep link into the app does want a sign-in form — somebody asking
         // for /withdraw knows what they came for. The bare root no longer needs
         // handling here: it is public and renders the landing page itself.
+        // Keep the query too (a shared event is /events/view/?id=…), so the
+        // person lands back on it after signing in.
+        rememberReturnTo(`${path}${window.location.search}`);
         router.replace(`/login?next=${encodeURIComponent(path)}`);
       } else if (ok && (path === "/login" || path === "/signup" || path === LANDING)) {
         router.replace("/");

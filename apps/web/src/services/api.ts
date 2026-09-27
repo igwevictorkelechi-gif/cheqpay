@@ -362,6 +362,8 @@ export interface EventItem {
   description: string;
   venue: string;
   city: string;
+  /** Storefront category, e.g. "Music". Empty when not set. */
+  category: string;
   imageUrl: string | null;
   startsAt: string | null;
   active: boolean;
@@ -991,8 +993,17 @@ export const api = {
   },
 
   // ---- Events / tickets ----
-  getEvents(): Promise<{ events: EventItem[] }> {
-    return apiFetch("/api/events");
+  /** Active events, optionally narrowed by search text, city and category. */
+  getEvents(filters: { q?: string; city?: string; category?: string } = {}): Promise<{
+    events: EventItem[];
+    filters?: { cities: string[]; categories: string[] };
+  }> {
+    const qs = new URLSearchParams();
+    if (filters.q?.trim()) qs.set("q", filters.q.trim());
+    if (filters.city) qs.set("city", filters.city);
+    if (filters.category) qs.set("category", filters.category);
+    const s = qs.toString();
+    return apiFetch(`/api/events${s ? `?${s}` : ""}`);
   },
 
   getEvent(id: string): Promise<{ event: EventItem }> {

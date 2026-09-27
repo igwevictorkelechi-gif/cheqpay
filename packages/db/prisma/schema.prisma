@@ -539,6 +539,8 @@ model Event {
   description String    @default("")
   venue       String    @default("")
   city        String    @default("")
+  /// Storefront category (see EVENT_CATEGORIES in apps/api/src/lib/events.ts). Empty = uncategorised.
+  category    String    @default("")
   imageUrl    String?   @map("image_url")
   /// When the event happens (optional).
   startsAt    DateTime? @map("starts_at")

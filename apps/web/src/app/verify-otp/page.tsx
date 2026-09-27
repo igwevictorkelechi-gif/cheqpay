@@ -6,6 +6,7 @@ import AuthLayout from "@/components/AuthLayout";
 import { authService } from "@/services/auth";
 import { api } from "@/services/api";
 import { useAuthStore } from "@/store";
+import { takeReturnTo } from "@/lib/returnTo";
 
 function VerifyOTPForm() {
   const router = useRouter();
@@ -67,7 +68,9 @@ function VerifyOTPForm() {
       } catch {
         /* default to onboarding on any error */
       }
-      router.push(tier >= 2 ? "/" : "/onboarding");
+      // A verified user who arrived from a shared link (an event, say) goes
+      // back to it; everyone else follows the usual route.
+      router.push(tier >= 2 ? takeReturnTo() ?? "/" : "/onboarding");
     } catch (err) {
       setError("Invalid or expired code. Please try again.");
       console.error(err);

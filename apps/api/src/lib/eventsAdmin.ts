@@ -48,6 +48,7 @@ export interface AdminEventView {
   description: string;
   venue: string;
   city: string;
+  category: string;
   imageUrl: string | null;
   startsAt: string | null;
   active: boolean;
@@ -87,6 +88,7 @@ function eventView(
     description: string;
     venue: string;
     city: string;
+    category: string;
     imageUrl: string | null;
     startsAt: Date | null;
     active: boolean;
@@ -103,6 +105,7 @@ function eventView(
     description: e.description,
     venue: e.venue,
     city: e.city,
+    category: e.category,
     imageUrl: e.imageUrl,
     startsAt: e.startsAt ? e.startsAt.toISOString() : null,
     active: e.active,
@@ -151,6 +154,7 @@ export interface EventInput {
   description?: string;
   venue?: string;
   city?: string;
+  category?: string;
   imageUrl?: string | null;
   startsAt?: string | null;
   active?: boolean;
@@ -165,6 +169,7 @@ export async function createEvent(input: EventInput): Promise<AdminEventView> {
       description: input.description?.trim() ?? "",
       venue: input.venue?.trim() ?? "",
       city: input.city?.trim() ?? "",
+      category: input.category?.trim() ?? "",
       imageUrl: input.imageUrl?.trim() || null,
       startsAt: parseDate(input.startsAt),
       active: input.active ?? true,
@@ -185,6 +190,7 @@ export async function updateEvent(id: string, patch: Partial<EventInput>): Promi
       ...(patch.description !== undefined ? { description: patch.description.trim() } : {}),
       ...(patch.venue !== undefined ? { venue: patch.venue.trim() } : {}),
       ...(patch.city !== undefined ? { city: patch.city.trim() } : {}),
+      ...(patch.category !== undefined ? { category: patch.category.trim() } : {}),
       ...(patch.imageUrl !== undefined ? { imageUrl: patch.imageUrl?.trim() || null } : {}),
       ...(patch.startsAt !== undefined ? { startsAt: parseDate(patch.startsAt) } : {}),
       ...(patch.active !== undefined ? { active: patch.active } : {}),

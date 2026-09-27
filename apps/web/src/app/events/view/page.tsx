@@ -7,7 +7,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, CalendarDays, MapPin, Ticket, Check } from "lucide-react";
+import { ArrowLeft, Loader2, CalendarDays, MapPin, Ticket, Check, Share2 } from "lucide-react";
+import { shareEvent } from "@/lib/eventShare";
 import AppShell from "@/components/AppShell";
 import { Card, useToast } from "@/components/MobileUI";
 import { api, ApiError, type EventItem, type EventTier } from "@/services/api";
@@ -95,10 +96,23 @@ export default function EventDetailPage() {
 
   return (
     <AppShell>
-      <div className="px-5 pt-4">
+      <div className="flex items-center justify-between px-5 pt-4">
         <button onClick={() => router.push("/events")} className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink" aria-label="Back">
           <ArrowLeft className="h-5 w-5" />
         </button>
+        {event ? (
+          <button
+            onClick={async () => {
+              const result = await shareEvent(event);
+              if (result === "copied") toast.show("Event link copied — paste it to share.");
+              else if (result === "failed") toast.show("Couldn't share this event. Try again.");
+            }}
+            className="flex min-h-[44px] items-center gap-2 rounded-full bg-card px-4 text-sm font-semibold text-ink"
+            aria-label="Share event"
+          >
+            <Share2 className="h-4 w-4" /> Share
+          </button>
+        ) : null}
       </div>
 
       {error ? (

@@ -55,6 +55,7 @@ export interface EventView {
   description: string;
   venue: string;
   city: string;
+  category: string;
   imageUrl: string | null;
   startsAt: string | null;
   active: boolean;
@@ -85,12 +86,27 @@ function toTierView(t: TierRow): TierView {
   };
 }
 
+/** The categories an event can be listed under. Admins pick one per event. */
+export const EVENT_CATEGORIES = [
+  "Music",
+  "Comedy",
+  "Nightlife",
+  "Sports",
+  "Conference",
+  "Arts & Theatre",
+  "Festival",
+  "Faith",
+  "Food & Drink",
+  "Other",
+] as const;
+
 function toEventView(e: {
   id: string;
   title: string;
   description: string;
   venue: string;
   city: string;
+  category: string;
   imageUrl: string | null;
   startsAt: Date | null;
   active: boolean;
@@ -105,6 +121,7 @@ function toEventView(e: {
     description: e.description,
     venue: e.venue,
     city: e.city,
+    category: e.category,
     imageUrl: e.imageUrl,
     startsAt: e.startsAt ? e.startsAt.toISOString() : null,
     active: e.active,
@@ -128,15 +145,70 @@ export interface TicketView {
 
 // ---- Catalog reads --------------------------------------------------------
 
-/** The storefront: active events (with their active tiers), soonest first. */
-export async function listActiveEvents(): Promise<EventView[]> {
+export interface EventFilters {
+  /** Free text, matched against title, venue, city and description. */
+  q?: string;
+  city?: string;
+  category?: string;
+}
+
+/**
+ * The storefront: active events (with their active tiers), soonest first,
+ * narrowed by search text, city and category. Matching ignores case.
+ */
+export async function listActiveEvents(filters: EventFilters = {}): Promise<EventView[]> {
   await ensureEventsSchema();
+  const q = filters.q?.trim().slice(0, 100);
+  const city = filters.city?.trim().slice(0, 120);
+  const category = filters.category?.trim().slice(0, 60);
   const rows = await prisma.event.findMany({
-    where: { active: true },
+    where: {
+      active: true,
+      ...(city ? { city: { equals: city, mode: "insensitive" as const } } : {}),
+      ...(category ? { category: { equals: category, mode: "insensitive" as const } } : {}),
+      ...(q
+        ? {
+            OR: [
+              { title: { contains: q, mode: "insensitive" as const } },
+              { venue: { contains: q, mode: "insensitive" as const } },
+              { city: { contains: q, mode: "insensitive" as const } },
+              { description: { contains: q, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    },
     orderBy: [{ startsAt: "asc" }, { createdAt: "desc" }],
     include: { tiers: { where: { active: true }, orderBy: { sortOrder: "asc" } } },
   });
   return rows.map((e) => toEventView(e));
+}
+
+/** The cities and categories that currently have events, for the filter chips. */
+export async function listEventFacets(): Promise<{ cities: string[]; categories: string[] }> {
+  await ensureEventsSchema();
+  const rows = await prisma.event.findMany({
+    where: { active: true },
+    select: { city: true, category: true },
+  });
+  // One entry per name whatever its case, keeping the first spelling seen.
+  const uniq = (xs: string[]) => {
+    const seen = new Map<string, string>();
+    for (const x of xs.map((v) => v.trim()).filter(Boolean)) {
+      if (!seen.has(x.toLowerCase())) seen.set(x.toLowerCase(), x);
+    }
+    return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+  };
+  const used = new Set(rows.map((r) => r.category.trim().toLowerCase()).filter(Boolean));
+  return {
+    cities: uniq(rows.map((r) => r.city)),
+    // Keep the curated order, then anything else an older event carries.
+    categories: [
+      ...EVENT_CATEGORIES.filter((c) => used.has(c.toLowerCase())),
+      ...uniq(rows.map((r) => r.category)).filter(
+        (c) => !EVENT_CATEGORIES.some((k) => k.toLowerCase() === c.toLowerCase()),
+      ),
+    ],
+  };
 }
 
 /** One event for the storefront. Throws 404 if it is not sellable. */

@@ -44,6 +44,11 @@ export function ensureEventsSchema(): Promise<void> {
       await prisma.$executeRawUnsafe(
         `CREATE INDEX IF NOT EXISTS events_active_idx ON events(active)`,
       );
+      // Added for storefront filters. Must exist before Prisma reads an event,
+      // since the client selects every column the schema names.
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE events ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT ''`,
+      );
 
       await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS ticket_tiers (
