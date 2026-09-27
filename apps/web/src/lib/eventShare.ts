@@ -30,7 +30,7 @@ export async function shareEvent(ev: EventItem): Promise<"shared" | "copied" | "
   const text = [
     `Get tickets for ${ev.title} on CheqPay`,
     [when(ev.startsAt), place].filter(Boolean).join(" · "),
-    ev.fromPriceFormatted ? `From ${ev.fromPriceFormatted}` : null,
+    ev.fromPriceFormatted ? (ev.fromPriceFormatted === "Free" ? "Free entry" : `From ${ev.fromPriceFormatted}`) : null,
   ]
     .filter(Boolean)
     .join("\n");

@@ -18,7 +18,7 @@ async function shareEvent(ev: EventItem) {
   const lines = [
     `Get tickets for ${ev.title} on CheqPay`,
     [whenLabel(ev.startsAt), place].filter(Boolean).join(' · '),
-    ev.fromPriceFormatted ? `From ${ev.fromPriceFormatted}` : '',
+    ev.fromPriceFormatted ? (ev.fromPriceFormatted === 'Free' ? 'Free entry' : `From ${ev.fromPriceFormatted}`) : '',
     url,
   ].filter(Boolean);
   try {
@@ -71,6 +71,8 @@ export default function EventsScreen() {
   const [query, setQuery] = useState('');
   const [city, setCity] = useState('');
   const [category, setCategory] = useState('');
+  const [freeOnly, setFreeOnly] = useState(false);
+  const [hasFree, setHasFree] = useState(false);
   const [cities, setCities] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const requestId = useRef(0);
@@ -80,13 +82,14 @@ export default function EventsScreen() {
   useEffect(() => {
     const id = ++requestId.current;
     const t = setTimeout(() => {
-      api.getEvents({ q: query, city, category })
+      api.getEvents({ q: query, city, category, free: freeOnly })
         .then((r) => {
           if (id !== requestId.current) return;
           setEvents(Array.isArray(r?.events) ? r.events : []);
           if (r?.filters) {
             setCities(Array.isArray(r.filters.cities) ? r.filters.cities : []);
             setCategories(Array.isArray(r.filters.categories) ? r.filters.categories : []);
+            setHasFree(!!r.filters.hasFree);
           }
           setError(null);
         })
@@ -97,8 +100,8 @@ export default function EventsScreen() {
         });
     }, query ? 300 : 0);
     return () => clearTimeout(t);
-  }, [query, city, category]);
-  const filtering = !!(query.trim() || city || category);
+  }, [query, city, category, freeOnly]);
+  const filtering = !!(query.trim() || city || category || freeOnly);
 
   function openEvent(ev: EventItem) {
     setSelected(ev);
@@ -110,13 +113,22 @@ export default function EventsScreen() {
   }
 
   const tier: EventTier | undefined = selected?.tiers.find((t) => t.id === tierId);
-  const maxQty = Math.min(10, tier?.remaining ?? 10);
+  // Older API responses carry no `free` flag; a ₦0 price means the same.
+  const isFree = !!tier && (tier.free ?? tier.priceMinor === '0');
+  // Free tiers cap what one person can claim (4), so the stepper stops there.
+  const maxQty = Math.min(isFree ? 4 : 10, tier?.remaining ?? 10);
 
   async function pay() {
     if (!selected || !tier) return;
     setBusy(true);
     setFormError(null);
     try {
+      if (isFree) {
+        // Nothing is paid, so no PIN — just claim it.
+        await api.buyTickets({ eventId: selected.id, tierId: tier.id, quantity: qty });
+        setStep('done');
+        return;
+      }
       await authorize(
         (pin) => api.buyTickets({ eventId: selected.id, tierId: tier.id, quantity: qty }, pin),
         { title: 'Confirm this purchase', detail: `${qty} × ${tier.name}` },
@@ -210,7 +222,7 @@ export default function EventsScreen() {
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 20 }}>
                 <Text style={{ color: colors.muted, fontSize: 14 }}>Total</Text>
-                <Text style={{ color: colors.ink, fontSize: 20, fontWeight: '800' }}>₦{total.toLocaleString('en-NG', { maximumFractionDigits: 2 })}</Text>
+                <Text style={{ color: colors.ink, fontSize: 20, fontWeight: '800' }}>{isFree ? 'Free' : `₦${total.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`}</Text>
               </View>
 
               {formError ? <Text style={{ color: '#F87171', fontSize: 13, marginTop: 12 }}>{formError}</Text> : null}
@@ -218,7 +230,7 @@ export default function EventsScreen() {
               <TouchableOpacity onPress={pay} disabled={busy}
                 style={{ marginTop: 20, backgroundColor: colors.brandLight, borderRadius: 999, paddingVertical: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8, opacity: busy ? 0.6 : 1 }}>
                 {busy ? <ActivityIndicator color={colors.white} size="small" /> : null}
-                <Text style={{ color: colors.white, fontSize: 16, fontWeight: '800' }}>{busy ? 'Booking…' : 'Pay & get tickets'}</Text>
+                <Text style={{ color: colors.white, fontSize: 16, fontWeight: '800' }}>{busy ? 'Booking…' : isFree ? `Get free ticket${qty > 1 ? 's' : ''}` : 'Pay & get tickets'}</Text>
               </TouchableOpacity>
             </>
           ) : null}
@@ -263,6 +275,9 @@ export default function EventsScreen() {
                 </TouchableOpacity>
               ) : null}
             </View>
+            {hasFree || freeOnly ? (
+              <FilterChips label="Price" options={['Free']} value={freeOnly ? 'Free' : ''} onChange={(v) => setFreeOnly(v === 'Free')} />
+            ) : null}
             <FilterChips label="Location" options={cities} value={city} onChange={setCity} />
             <FilterChips label="Category" options={categories} value={category} onChange={setCategory} />
           </>
@@ -280,7 +295,7 @@ export default function EventsScreen() {
               <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                 <Text style={{ color: colors.muted, textAlign: 'center' }}>{filtering ? 'No events match your search.' : 'No events listed yet.'}</Text>
                 {filtering ? (
-                  <TouchableOpacity onPress={() => { setQuery(''); setCity(''); setCategory(''); }} style={{ marginTop: 14, backgroundColor: colors.brandLight, borderRadius: 999, paddingHorizontal: 24, paddingVertical: 10 }}>
+                  <TouchableOpacity onPress={() => { setQuery(''); setCity(''); setCategory(''); setFreeOnly(false); }} style={{ marginTop: 14, backgroundColor: colors.brandLight, borderRadius: 999, paddingHorizontal: 24, paddingVertical: 10 }}>
                     <Text style={{ color: colors.white, fontWeight: '800' }}>Clear filters</Text>
                   </TouchableOpacity>
                 ) : null}
@@ -296,11 +311,16 @@ export default function EventsScreen() {
                   {ev.imageUrl ? <Image source={{ uri: ev.imageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : <Ionicons name="calendar" size={32} color={colors.muted} />}
                 </View>
                 <View style={{ flex: 1, padding: 12, paddingRight: 44 }}>
-                  {ev.category ? <Text style={{ color: colors.brandLight, fontSize: 11, fontWeight: '700', marginBottom: 2 }}>{ev.category}</Text> : null}
+                  {ev.free || ev.category ? (
+                    <Text style={{ color: colors.brandLight, fontSize: 11, fontWeight: '700', marginBottom: 2 }}>
+                      {ev.free ? <Text style={{ color: '#10B981' }}>FREE{ev.category ? ' · ' : ''}</Text> : null}
+                      {ev.category}
+                    </Text>
+                  ) : null}
                   <Text numberOfLines={2} style={{ color: colors.ink, fontWeight: '700', fontSize: 14 }}>{ev.title}</Text>
                   {whenLabel(ev.startsAt) ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{whenLabel(ev.startsAt)}</Text> : null}
                   {ev.venue || ev.city ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{[ev.venue, ev.city].filter(Boolean).join(', ')}</Text> : null}
-                  <Text style={{ color: colors.brandLight, fontWeight: '800', fontSize: 14, marginTop: 4 }}>{ev.fromPriceFormatted ? `From ${ev.fromPriceFormatted}` : 'Sold out'}</Text>
+                  <Text style={{ color: colors.brandLight, fontWeight: '800', fontSize: 14, marginTop: 4 }}>{!ev.fromPriceFormatted ? 'Sold out' : ev.fromPriceFormatted === 'Free' ? 'Free' : `From ${ev.fromPriceFormatted}`}</Text>
                 </View>
                 <TouchableOpacity onPress={() => void shareEvent(ev)} accessibilityLabel={`Share ${ev.title}`}
                   style={{ position: 'absolute', right: 2, top: 2, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * The storefront: active events with their tiers. Optional `q` (search text),
- * `city` and `category` narrow the list; `filters` lists the cities and
+ * `city`, `category` and `free=1` narrow the list; `filters` lists the cities and
  * categories that currently have events, for the filter chips.
  */
 export async function GET(req: Request) {
@@ -20,6 +20,7 @@ export async function GET(req: Request) {
         q: url.searchParams.get("q") ?? undefined,
         city: url.searchParams.get("city") ?? undefined,
         category: url.searchParams.get("category") ?? undefined,
+        free: url.searchParams.get("free") === "1",
       }),
       listEventFacets(),
     ]);

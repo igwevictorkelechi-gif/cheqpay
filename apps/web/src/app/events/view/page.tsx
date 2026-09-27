@@ -54,13 +54,22 @@ export default function EventDetailPage() {
   }, []);
 
   const tier: EventTier | undefined = event?.tiers.find((t) => t.id === tierId);
-  const maxQty = Math.min(10, tier?.remaining ?? 10);
+  // Older API responses carry no `free` flag; a ₦0 price means the same.
+  const isFree = !!tier && (tier.free ?? tier.priceMinor === "0");
+  // Free tiers cap what one person can claim (4), so the stepper stops there.
+  const maxQty = Math.min(isFree ? 4 : 10, tier?.remaining ?? 10);
   const canPay = !!tier && tier.available && qty >= 1 && !busy;
 
   async function pay() {
     if (!event || !tier || !eventId) return;
     setBusy(true);
     try {
+      if (isFree) {
+        // Nothing is paid, so no PIN — just claim it.
+        await api.buyTickets({ eventId, tierId: tier.id, quantity: qty });
+        setDone(true);
+        return;
+      }
       await authorize(
         (pin) => api.buyTickets({ eventId, tierId: tier.id, quantity: qty }, pin),
         { title: "Confirm this purchase", detail: `${qty} × ${tier.name} — ${tier.priceFormatted} each.` },
@@ -177,14 +186,14 @@ export default function EventDetailPage() {
               <div className="mt-6 flex items-center justify-between rounded-2xl bg-card px-4 py-4">
                 <span className="text-sm text-muted">Total</span>
                 <span className="text-xl font-extrabold text-ink">
-                  ₦{((Number(tier.priceMinor) * qty) / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}
+                  {isFree ? "Free" : `₦${((Number(tier.priceMinor) * qty) / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`}
                 </span>
               </div>
 
               <button onClick={pay} disabled={!canPay}
                 className="mt-5 mb-4 flex w-full items-center justify-center gap-2 rounded-full bg-brand py-4 text-base font-bold text-white disabled:opacity-50">
                 {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-                {busy ? "Booking…" : "Pay & get tickets"}
+                {busy ? "Booking…" : isFree ? `Get free ticket${qty > 1 ? "s" : ""}` : "Pay & get tickets"}
               </button>
             </>
           ) : null}

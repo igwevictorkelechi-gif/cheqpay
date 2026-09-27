@@ -63,6 +63,8 @@ export default function EventsPage() {
   const [query, setQuery] = useState("");
   const [city, setCity] = useState("");
   const [category, setCategory] = useState("");
+  const [freeOnly, setFreeOnly] = useState(false);
+  const [hasFree, setHasFree] = useState(false);
   const [cities, setCities] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -76,13 +78,14 @@ export default function EventsPage() {
     const t = setTimeout(
       () => {
         api
-          .getEvents({ q: query, city, category })
+          .getEvents({ q: query, city, category, free: freeOnly })
           .then((r) => {
             if (id !== requestId.current) return;
             setEvents(Array.isArray(r?.events) ? r.events : []);
             if (r?.filters) {
               setCities(Array.isArray(r.filters.cities) ? r.filters.cities : []);
               setCategories(Array.isArray(r.filters.categories) ? r.filters.categories : []);
+              setHasFree(!!r.filters.hasFree);
             }
             setError(null);
           })
@@ -102,9 +105,9 @@ export default function EventsPage() {
       query ? 300 : 0,
     );
     return () => clearTimeout(t);
-  }, [query, city, category]);
+  }, [query, city, category, freeOnly]);
 
-  const filtering = !!(query.trim() || city || category);
+  const filtering = !!(query.trim() || city || category || freeOnly);
 
   const share = async (ev: EventItem) => {
     const result = await shareEvent(ev);
@@ -149,6 +152,9 @@ export default function EventsPage() {
               ) : null}
             </label>
           </div>
+          {hasFree || freeOnly ? (
+            <Chips label="Price" options={["Free"]} value={freeOnly ? "Free" : ""} onChange={(v) => setFreeOnly(v === "Free")} />
+          ) : null}
           <Chips label="Location" options={cities} value={city} onChange={setCity} />
           <Chips label="Category" options={categories} value={category} onChange={setCategory} />
         </>
@@ -169,7 +175,7 @@ export default function EventsPage() {
               </p>
               {filtering ? (
                 <button
-                  onClick={() => { setQuery(""); setCity(""); setCategory(""); }}
+                  onClick={() => { setQuery(""); setCity(""); setCategory(""); setFreeOnly(false); }}
                   className="mt-4 rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white"
                 >
                   Clear filters
@@ -195,8 +201,15 @@ export default function EventsPage() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1 p-3 pr-12">
-                  {ev.category ? (
-                    <span className="mb-1 inline-block rounded-full bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand">{ev.category}</span>
+                  {ev.category || ev.free ? (
+                    <div className="mb-1 flex flex-wrap gap-1">
+                      {ev.free ? (
+                        <span className="inline-block rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">Free</span>
+                      ) : null}
+                      {ev.category ? (
+                        <span className="inline-block rounded-full bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand">{ev.category}</span>
+                      ) : null}
+                    </div>
                   ) : null}
                   <p className="line-clamp-2 text-sm font-bold text-ink">{ev.title}</p>
                   {whenLabel(ev.startsAt) ? <p className="mt-1 text-xs text-muted">{whenLabel(ev.startsAt)}</p> : null}
@@ -206,7 +219,7 @@ export default function EventsPage() {
                     </p>
                   ) : null}
                   <p className="mt-1 text-sm font-extrabold text-brand">
-                    {ev.fromPriceFormatted ? `From ${ev.fromPriceFormatted}` : "Sold out"}
+                    {!ev.fromPriceFormatted ? "Sold out" : ev.fromPriceFormatted === "Free" ? "Free" : `From ${ev.fromPriceFormatted}`}
                   </p>
                 </div>
               </button>
