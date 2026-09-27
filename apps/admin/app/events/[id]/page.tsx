@@ -6,13 +6,14 @@ import { useParams } from 'next/navigation';
 import { ArrowLeft, Loader2, Plus, Trash2, Ticket } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import ImageUploadField from '@/components/ImageUploadField';
+import { EVENT_CATEGORIES } from '@/lib/eventCategories';
 
 interface Tier {
   id: string; name: string; priceMinor: string; priceFormatted: string;
   capacity: number | null; sold: number; active: boolean; sortOrder: number;
 }
 interface EventDetail {
-  id: string; title: string; venue: string; city: string; startsAt: string | null;
+  id: string; title: string; venue: string; city: string; category: string; startsAt: string | null;
   imageUrl: string | null;
   active: boolean; tiers: Tier[]; soldCount: number; revenueFormatted: string;
 }
@@ -116,6 +117,18 @@ export default function EventDetailPage() {
                 {ev.startsAt ? ` · ${new Date(ev.startsAt).toLocaleString('en-NG')}` : ''}
               </p>
               <p className="mt-1 text-sm text-gray-500">{ev.soldCount} sold · {ev.revenueFormatted} revenue</p>
+              <label className="mt-3 flex items-center gap-2 text-sm text-gray-600">
+                Category
+                <select
+                  className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none"
+                  value={ev.category ?? ''}
+                  disabled={busy === 'event'}
+                  onChange={(e) => void patchEvent({ category: e.target.value })}
+                >
+                  <option value="">None</option>
+                  {EVENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
             </div>
             <button
               disabled={busy === 'event'}

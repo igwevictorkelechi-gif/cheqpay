@@ -95,6 +95,7 @@ async function ensureSchema(): Promise<void> {
       { ensureQuoteProviderRef },
       { ensureTransactionPinColumns },
       { ensureGadgetSchema },
+      { ensureEventsSchema },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
@@ -102,6 +103,7 @@ async function ensureSchema(): Promise<void> {
       import("@/lib/ensureQuoteProviderRef"),
       import("@/lib/ensureTransactionPin"),
       import("@/lib/ensureGadgets"),
+      import("@/lib/ensureEvents"),
     ]);
     await Promise.all([
       ensureRetentionSchema(),
@@ -126,6 +128,9 @@ async function ensureSchema(): Promise<void> {
       // every gadget_products query began selecting it. (It also creates the
       // gadget tables, which is harmless to do at boot.)
       ensureGadgetSchema(),
+      // events.category, same hazard: every Event query selects it (storefront,
+      // my tickets, checkout, admin). Also creates the event tables if missing.
+      ensureEventsSchema(),
     ]);
     // NB: the KYC document TABLE (image bytes) is created lazily by
     // lib/kycDocuments on first use, not here. It is a new table, so it is

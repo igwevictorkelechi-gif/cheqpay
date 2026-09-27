@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Image, TextInput, Share } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -8,6 +8,45 @@ import { api, ApiError, type EventItem, type EventTier } from '@/services/api';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 
 type Step = 'browse' | 'buy' | 'done';
+
+/** The web page for an event; anyone can open it, sign in, and buy. */
+const WEB_BASE = 'https://mycheqpay.com';
+
+async function shareEvent(ev: EventItem) {
+  const place = [ev.venue, ev.city].filter(Boolean).join(', ');
+  const url = `${WEB_BASE}/events/view/?id=${encodeURIComponent(ev.id)}`;
+  const lines = [
+    `Get tickets for ${ev.title} on CheqPay`,
+    [whenLabel(ev.startsAt), place].filter(Boolean).join(' · '),
+    ev.fromPriceFormatted ? `From ${ev.fromPriceFormatted}` : '',
+    url,
+  ].filter(Boolean);
+  try {
+    await Share.share({ title: ev.title, message: lines.join('\n'), url });
+  } catch {
+    /* closed or unavailable: nothing to do */
+  }
+}
+
+function FilterChips({ label, options, value, onChange }: { label: string; options: string[]; value: string; onChange: (v: string) => void }) {
+  if (options.length === 0) return null;
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', paddingHorizontal: 20, marginBottom: 6 }}>{label}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
+        {['', ...options].map((opt) => {
+          const active = value === opt;
+          return (
+            <TouchableOpacity key={opt || 'all'} onPress={() => onChange(opt)} accessibilityState={{ selected: active }}
+              style={{ backgroundColor: active ? colors.brandLight : colors.card, borderRadius: 999, paddingHorizontal: 16, minHeight: 36, justifyContent: 'center' }}>
+              <Text style={{ color: active ? colors.white : colors.ink, fontWeight: '700', fontSize: 13 }}>{opt || 'All'}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
 
 function whenLabel(iso: string | null): string | null {
   if (!iso) return null;
@@ -29,14 +68,37 @@ export default function EventsScreen() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const [query, setQuery] = useState('');
+  const [city, setCity] = useState('');
+  const [category, setCategory] = useState('');
+  const [cities, setCities] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const requestId = useRef(0);
+
+  // Search as the person types (after a short pause) and whenever a filter
+  // changes. Only the latest request's answer is shown.
   useEffect(() => {
-    api.getEvents()
-      .then(({ events }) => setEvents(events))
-      .catch((e) => {
-        if (e instanceof ApiError && e.status === 503) { setComingSoon(true); setEvents([]); }
-        else { setError(e instanceof ApiError ? e.message : "Couldn't load events."); setEvents([]); }
-      });
-  }, []);
+    const id = ++requestId.current;
+    const t = setTimeout(() => {
+      api.getEvents({ q: query, city, category })
+        .then((r) => {
+          if (id !== requestId.current) return;
+          setEvents(Array.isArray(r?.events) ? r.events : []);
+          if (r?.filters) {
+            setCities(Array.isArray(r.filters.cities) ? r.filters.cities : []);
+            setCategories(Array.isArray(r.filters.categories) ? r.filters.categories : []);
+          }
+          setError(null);
+        })
+        .catch((e) => {
+          if (id !== requestId.current) return;
+          if (e instanceof ApiError && e.status === 503) { setComingSoon(true); setEvents([]); }
+          else { setError(e instanceof ApiError ? e.message : "Couldn't load events."); setEvents([]); }
+        });
+    }, query ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [query, city, category]);
+  const filtering = !!(query.trim() || city || category);
 
   function openEvent(ev: EventItem) {
     setSelected(ev);
@@ -97,9 +159,16 @@ export default function EventsScreen() {
     return (
       <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top }}>
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
-          <TouchableOpacity onPress={() => setStep('browse')} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="arrow-back" size={20} color={colors.ink} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <TouchableOpacity onPress={() => setStep('browse')} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="arrow-back" size={20} color={colors.ink} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => void shareEvent(selected)} accessibilityLabel="Share event"
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.card, borderRadius: 999, paddingHorizontal: 16, minHeight: 44 }}>
+              <Ionicons name="share-outline" size={18} color={colors.ink} />
+              <Text style={{ color: colors.ink, fontWeight: '700' }}>Share</Text>
+            </TouchableOpacity>
+          </View>
 
           {selected.imageUrl ? (
             <Image source={{ uri: selected.imageUrl }} style={{ width: '100%', height: 190, borderRadius: 16, marginTop: 16 }} resizeMode="cover" />
@@ -175,6 +244,30 @@ export default function EventsScreen() {
         <Text style={{ color: colors.ink, fontSize: 32, fontWeight: '800', paddingHorizontal: 20, marginTop: 12 }}>Events</Text>
         <Text style={{ color: colors.muted, fontSize: 14, paddingHorizontal: 20, marginTop: 4, marginBottom: 16 }}>Concerts, shows and more.</Text>
 
+        {!comingSoon ? (
+          <>
+            <View style={{ marginHorizontal: 20, marginBottom: 14, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 16, paddingHorizontal: 14 }}>
+              <Ionicons name="search" size={16} color={colors.muted} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search events, venues or cities"
+                placeholderTextColor={colors.muted}
+                returnKeyType="search"
+                accessibilityLabel="Search events"
+                style={{ flex: 1, color: colors.ink, minHeight: 48, marginLeft: 8, fontSize: 14 }}
+              />
+              {query ? (
+                <TouchableOpacity onPress={() => setQuery('')} accessibilityLabel="Clear search" style={{ padding: 6 }}>
+                  <Ionicons name="close" size={16} color={colors.muted} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <FilterChips label="Location" options={cities} value={city} onChange={setCity} />
+            <FilterChips label="Category" options={categories} value={category} onChange={setCategory} />
+          </>
+        ) : null}
+
         {events === null ? (
           <ActivityIndicator color={colors.muted} style={{ marginTop: 60 }} />
         ) : comingSoon ? (
@@ -182,7 +275,18 @@ export default function EventsScreen() {
         ) : error ? (
           <View style={{ paddingHorizontal: 20 }}><Card><Text style={{ color: colors.muted, textAlign: 'center', paddingVertical: 20 }}>{error}</Text></Card></View>
         ) : events.length === 0 ? (
-          <View style={{ paddingHorizontal: 20 }}><Card><Text style={{ color: colors.muted, textAlign: 'center', paddingVertical: 28 }}>No events listed yet.</Text></Card></View>
+          <View style={{ paddingHorizontal: 20 }}>
+            <Card>
+              <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                <Text style={{ color: colors.muted, textAlign: 'center' }}>{filtering ? 'No events match your search.' : 'No events listed yet.'}</Text>
+                {filtering ? (
+                  <TouchableOpacity onPress={() => { setQuery(''); setCity(''); setCategory(''); }} style={{ marginTop: 14, backgroundColor: colors.brandLight, borderRadius: 999, paddingHorizontal: 24, paddingVertical: 10 }}>
+                    <Text style={{ color: colors.white, fontWeight: '800' }}>Clear filters</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </Card>
+          </View>
         ) : (
           <View style={{ paddingHorizontal: 20 }}>
             {events.map((ev) => (
@@ -191,12 +295,17 @@ export default function EventsScreen() {
                 <View style={{ width: 96, height: 96, backgroundColor: colors.circle, alignItems: 'center', justifyContent: 'center' }}>
                   {ev.imageUrl ? <Image source={{ uri: ev.imageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : <Ionicons name="calendar" size={32} color={colors.muted} />}
                 </View>
-                <View style={{ flex: 1, padding: 12 }}>
+                <View style={{ flex: 1, padding: 12, paddingRight: 44 }}>
+                  {ev.category ? <Text style={{ color: colors.brandLight, fontSize: 11, fontWeight: '700', marginBottom: 2 }}>{ev.category}</Text> : null}
                   <Text numberOfLines={2} style={{ color: colors.ink, fontWeight: '700', fontSize: 14 }}>{ev.title}</Text>
                   {whenLabel(ev.startsAt) ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{whenLabel(ev.startsAt)}</Text> : null}
                   {ev.venue || ev.city ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{[ev.venue, ev.city].filter(Boolean).join(', ')}</Text> : null}
                   <Text style={{ color: colors.brandLight, fontWeight: '800', fontSize: 14, marginTop: 4 }}>{ev.fromPriceFormatted ? `From ${ev.fromPriceFormatted}` : 'Sold out'}</Text>
                 </View>
+                <TouchableOpacity onPress={() => void shareEvent(ev)} accessibilityLabel={`Share ${ev.title}`}
+                  style={{ position: 'absolute', right: 2, top: 2, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="share-outline" size={20} color={colors.ink} />
+                </TouchableOpacity>
               </TouchableOpacity>
             ))}
           </View>
