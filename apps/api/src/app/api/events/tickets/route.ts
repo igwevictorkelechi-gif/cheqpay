@@ -4,7 +4,7 @@ import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { assertFeatureEnabled } from "@/lib/features";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { readPin, requireTransactionPin } from "@/lib/transactionPin";
-import { checkoutTickets, listUserTickets } from "@/lib/events";
+import { checkoutTickets, listUserTickets, tierIsFree } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,8 @@ export async function GET(req: Request) {
 /**
  * Buy tickets. Money-safe:
  *   - the tier price is resolved on the server, never trusted from the body;
- *   - the transaction PIN authorises the spend, checked before the lib runs;
+ *   - the transaction PIN authorises the spend, checked before the lib runs
+ *     (free tickets skip it — nothing is spent);
  *   - the debit + capacity decrement + order + tickets + ledger row settle in
  *     one guarded transaction;
  *   - it is idempotent on the Idempotency-Key header.
@@ -46,7 +47,10 @@ export async function POST(req: Request) {
     }
 
     const body = checkoutSchema.parse(await req.json());
-    await requireTransactionPin(auth.id, readPin(req));
+    // A free ticket moves no money, so there is nothing for a PIN to protect.
+    if ((await tierIsFree(body.tierId)) !== true) {
+      await requireTransactionPin(auth.id, readPin(req));
+    }
 
     const order = await checkoutTickets({
       userId: auth.id,

@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   orderCreate: vi.fn(),
   orderFindFirst: vi.fn(),
   ticketCreate: vi.fn(),
+  ticketCount: vi.fn(),
   auditCreate: vi.fn(),
   notifyUser: vi.fn(),
 }));
@@ -19,7 +20,7 @@ const db = {
   ticketTier: { updateMany: h.tierUpdateMany, update: h.tierUpdate },
   transaction: { create: h.txCreate },
   ticketOrder: { create: h.orderCreate },
-  ticket: { create: h.ticketCreate },
+  ticket: { create: h.ticketCreate, count: h.ticketCount },
   auditLog: { create: h.auditCreate },
 };
 
@@ -39,7 +40,7 @@ vi.mock("./ensureEvents", () => ({ ensureEventsSchema: vi.fn().mockResolvedValue
 vi.mock("./ensureTicketTxnType", () => ({ ensureTicketTxnType: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./alerts", () => ({ notifyUser: h.notifyUser }));
 
-import { checkoutTickets } from "./events";
+import { checkoutTickets, toEventView, toTierView } from "./events";
 
 const base = {
   userId: "u1",
@@ -77,6 +78,7 @@ beforeEach(() => {
     Promise.resolve({ id: `tk${++n}`, reference: data.reference, status: "VALID", eventTitle: "Concert", tierName: "VIP" }),
   );
   h.auditCreate.mockResolvedValue({});
+  h.ticketCount.mockResolvedValue(0);
   h.notifyUser.mockResolvedValue(undefined);
 });
 
@@ -140,5 +142,46 @@ describe("checkoutTickets", () => {
   it("404s when the tier is missing or inactive", async () => {
     h.tierFindUnique.mockResolvedValue(null);
     await expect(checkoutTickets(base)).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("free events", () => {
+  const freeTier = () => tier({ priceMinor: 0n, name: "General" });
+
+  it("issues free tickets without touching the balance", async () => {
+    h.tierFindUnique.mockResolvedValue(freeTier());
+    h.orderCreate.mockResolvedValue({ id: "o1", quantity: 2, totalMinor: 0n, createdAt: new Date() });
+    const order = await checkoutTickets(base);
+    expect(h.balanceUpdateMany).not.toHaveBeenCalled();
+    expect(h.ticketCreate).toHaveBeenCalledTimes(2);
+    expect(order.totalFormatted).toBe("Free");
+    expect(h.txCreate.mock.calls[0][0].data.amount).toBe(0n);
+    const msg = h.notifyUser.mock.calls[0][1];
+    expect(msg.amount).toBeUndefined();
+    expect(msg.category).toBe("updates");
+  });
+
+  it("caps how many free tickets one person can hold per tier", async () => {
+    h.tierFindUnique.mockResolvedValue(freeTier());
+    h.ticketCount.mockResolvedValue(3);
+    await expect(checkoutTickets(base)).rejects.toMatchObject({ code: "free_limit" });
+    expect(h.ticketCreate).not.toHaveBeenCalled();
+  });
+
+  it("still respects capacity", async () => {
+    h.tierFindUnique.mockResolvedValue({ ...freeTier(), capacity: 1, sold: 1 });
+    await expect(checkoutTickets(base)).rejects.toMatchObject({ code: "sold_out" });
+  });
+
+  it("labels free tiers and events as Free", () => {
+    const row = { id: "t", name: "Gen", priceMinor: 0n, capacity: null, sold: 0, active: true, sortOrder: 0 };
+    expect(toTierView(row)).toMatchObject({ free: true, priceFormatted: "Free" });
+    const ev = toEventView({
+      id: "e", title: "T", description: "", venue: "", city: "", category: "", imageUrl: null,
+      startsAt: null, active: true,
+      tiers: [row, { ...row, id: "t2", priceMinor: 500_00n }],
+    });
+    expect(ev.free).toBe(true);
+    expect(ev.fromPriceFormatted).toBe("Free");
   });
 });

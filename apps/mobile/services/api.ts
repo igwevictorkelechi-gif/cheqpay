@@ -323,6 +323,8 @@ export interface EventTier {
   name: string;
   priceMinor: string;
   priceFormatted: string;
+  /** A ₦0 tier — claimed without a PIN. */
+  free?: boolean;
   remaining: number | null;
   available: boolean;
 }
@@ -339,6 +341,8 @@ export interface EventItem {
   active: boolean;
   tiers: EventTier[];
   fromPriceFormatted: string | null;
+  /** Has a free ticket that can still be claimed. */
+  free?: boolean;
 }
 export type TicketStatus = 'VALID' | 'USED' | 'CANCELLED' | 'REFUNDED';
 export interface EventTicket {
@@ -597,14 +601,15 @@ export const api = {
 
   // ---- Events / tickets ----
   /** Active events, optionally narrowed by search text, city and category. */
-  getEvents(filters: { q?: string; city?: string; category?: string } = {}): Promise<{
+  getEvents(filters: { q?: string; city?: string; category?: string; free?: boolean } = {}): Promise<{
     events: EventItem[];
-    filters?: { cities: string[]; categories: string[] };
+    filters?: { cities: string[]; categories: string[]; hasFree?: boolean };
   }> {
     const parts: string[] = [];
     if (filters.q?.trim()) parts.push(`q=${encodeURIComponent(filters.q.trim())}`);
     if (filters.city) parts.push(`city=${encodeURIComponent(filters.city)}`);
     if (filters.category) parts.push(`category=${encodeURIComponent(filters.category)}`);
+    if (filters.free) parts.push('free=1');
     return apiFetch(`/api/events${parts.length ? `?${parts.join('&')}` : ''}`);
   },
   getEvent(id: string): Promise<{ event: EventItem }> {

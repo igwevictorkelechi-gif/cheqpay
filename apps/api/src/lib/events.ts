@@ -28,6 +28,17 @@ import { notifyUser } from "./alerts";
 /** Sanity ceiling on one order — a storefront, not a wholesaler. */
 const MAX_QUANTITY = 10;
 
+/**
+ * Free tickets cost nothing to grab, so one person could otherwise empty a
+ * free event's capacity. Cap what one account holds per free tier.
+ */
+const MAX_FREE_PER_USER = 4;
+
+/** What a price shows as: "Free" for ₦0, otherwise naira. */
+function priceLabel(minor: bigint): string {
+  return minor === 0n ? "Free" : formatNairaMinor(minor);
+}
+
 // Crockford base32 (no I/L/O/U) so a reference is easy to read aloud and type.
 const REF_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 function makeReference(): string {
@@ -44,6 +55,8 @@ export interface TierView {
   name: string;
   priceMinor: string;
   priceFormatted: string;
+  /** A ₦0 tier: claimed without a PIN and without touching the balance. */
+  free: boolean;
   /** null when unlimited; otherwise units left. */
   remaining: number | null;
   available: boolean;
@@ -62,6 +75,8 @@ export interface EventView {
   tiers: TierView[];
   /** Lowest available tier price, for the card. null when nothing is sellable. */
   fromPriceFormatted: string | null;
+  /** Has at least one free tier that can still be claimed. */
+  free: boolean;
 }
 
 interface TierRow {
@@ -80,7 +95,8 @@ function toTierView(t: TierRow): TierView {
     id: t.id,
     name: t.name,
     priceMinor: t.priceMinor.toString(),
-    priceFormatted: formatNairaMinor(t.priceMinor),
+    priceFormatted: priceLabel(t.priceMinor),
+    free: t.priceMinor === 0n,
     remaining,
     available: t.active && (remaining === null || remaining > 0),
   };
@@ -126,7 +142,8 @@ function toEventView(e: {
     startsAt: e.startsAt ? e.startsAt.toISOString() : null,
     active: e.active,
     tiers,
-    fromPriceFormatted: from === null ? null : formatNairaMinor(from),
+    fromPriceFormatted: from === null ? null : priceLabel(from),
+    free: from === 0n,
   };
 }
 
@@ -150,6 +167,8 @@ export interface EventFilters {
   q?: string;
   city?: string;
   category?: string;
+  /** Only events with a free ticket that can still be claimed. */
+  free?: boolean;
 }
 
 /**
@@ -180,15 +199,20 @@ export async function listActiveEvents(filters: EventFilters = {}): Promise<Even
     orderBy: [{ startsAt: "asc" }, { createdAt: "desc" }],
     include: { tiers: { where: { active: true }, orderBy: { sortOrder: "asc" } } },
   });
-  return rows.map((e) => toEventView(e));
+  const events = rows.map((e) => toEventView(e));
+  return filters.free ? events.filter((e) => e.free) : events;
 }
 
 /** The cities and categories that currently have events, for the filter chips. */
-export async function listEventFacets(): Promise<{ cities: string[]; categories: string[] }> {
+export async function listEventFacets(): Promise<{ cities: string[]; categories: string[]; hasFree: boolean }> {
   await ensureEventsSchema();
   const rows = await prisma.event.findMany({
     where: { active: true },
     select: { city: true, category: true },
+  });
+  const freeTier = await prisma.ticketTier.findFirst({
+    where: { active: true, priceMinor: 0n, event: { active: true } },
+    select: { id: true, capacity: true, sold: true },
   });
   // One entry per name whatever its case, keeping the first spelling seen.
   const uniq = (xs: string[]) => {
@@ -200,6 +224,9 @@ export async function listEventFacets(): Promise<{ cities: string[]; categories:
   };
   const used = new Set(rows.map((r) => r.category.trim().toLowerCase()).filter(Boolean));
   return {
+    // Whether to offer the "Free" chip at all. Approximate on capacity (one
+    // sold-out free tier hides nothing); the list itself is exact.
+    hasFree: !!freeTier,
     cities: uniq(rows.map((r) => r.city)),
     // Keep the curated order, then anything else an older event carries.
     categories: [
@@ -298,15 +325,34 @@ export async function checkoutTickets(input: TicketCheckoutInput): Promise<Ticke
   const totalMinor = unitPriceMinor * BigInt(qty);
   const eventTitle = tier.event.title;
   const tierName = tier.name;
+  const free = unitPriceMinor === 0n;
 
   const order = await prisma.$transaction(async (db) => {
-    // Guarded debit: a balance floor means an overdraw changes zero rows.
-    const debit = await db.balance.updateMany({
-      where: { userId: input.userId, asset: Asset.NGN, available: { gte: totalMinor } },
-      data: { available: { decrement: totalMinor } },
-    });
-    if (debit.count !== 1) {
-      throw new ApiError(422, "Insufficient NGN balance", "insufficient_funds");
+    if (free) {
+      // Nothing to debit — but one account can't hoard a free event. Counted
+      // inside the transaction; the per-user rate limit covers the rest.
+      const held = await db.ticket.count({
+        where: { userId: input.userId, tierId: tier.id, status: { in: [TicketStatus.VALID, TicketStatus.USED] } },
+      });
+      if (held + qty > MAX_FREE_PER_USER) {
+        const left = Math.max(0, MAX_FREE_PER_USER - held);
+        throw new ApiError(
+          409,
+          left === 0
+            ? `You already have the most free tickets allowed for this event (${MAX_FREE_PER_USER}).`
+            : `You can claim ${left} more free ticket${left === 1 ? "" : "s"} for this event.`,
+          "free_limit",
+        );
+      }
+    } else {
+      // Guarded debit: a balance floor means an overdraw changes zero rows.
+      const debit = await db.balance.updateMany({
+        where: { userId: input.userId, asset: Asset.NGN, available: { gte: totalMinor } },
+        data: { available: { decrement: totalMinor } },
+      });
+      if (debit.count !== 1) {
+        throw new ApiError(422, "Insufficient NGN balance", "insufficient_funds");
+      }
     }
 
     // Guarded capacity decrement: a tracked tier must still have room at commit
@@ -339,6 +385,7 @@ export async function checkoutTickets(input: TicketCheckoutInput): Promise<Ticke
           tierId: tier.id,
           tierName,
           quantity: qty,
+          ...(free ? { free: true } : {}),
         },
       },
     });
@@ -385,17 +432,25 @@ export async function checkoutTickets(input: TicketCheckoutInput): Promise<Ticke
     return { ...created, tickets };
   });
 
+  const confirmation = free
+    ? {
+        category: "updates" as const,
+        title: qty > 1 ? "Free tickets booked" : "Free ticket booked",
+      }
+    : {
+        category: "withdrawals" as const,
+        emailKind: "money_out" as const,
+        title: "Tickets booked",
+        amount: formatNairaMinor(totalMinor),
+      };
   await notifyUser(input.userId, {
-    category: "withdrawals",
-    emailKind: "money_out",
-    title: "Tickets booked",
+    ...confirmation,
     body: `Your ${qty} × ${tierName} ticket${qty > 1 ? "s" : ""} for ${eventTitle} ${qty > 1 ? "are" : "is"} confirmed. Find ${qty > 1 ? "them" : "it"} under My tickets.`,
-    amount: formatNairaMinor(totalMinor),
     data: { orderId: order.id },
     details: [
       { label: "Event", value: eventTitle },
       { label: "Tickets", value: `${qty} × ${tierName}` },
-      { label: "Total", value: formatNairaMinor(totalMinor) },
+      { label: "Total", value: priceLabel(totalMinor) },
     ],
   }).catch(() => {});
 
@@ -415,7 +470,7 @@ function toOrderView(o: {
     eventTitle: first?.eventTitle ?? "",
     tierName: first?.tierName ?? "",
     quantity: o.quantity,
-    totalFormatted: formatNairaMinor(o.totalMinor),
+    totalFormatted: priceLabel(o.totalMinor),
     totalMinor: o.totalMinor.toString(),
     tickets: o.tickets.map((t) => ({ id: t.id, reference: t.reference, status: t.status })),
     createdAt: o.createdAt.toISOString(),
@@ -444,7 +499,7 @@ export async function listUserTickets(userId: string): Promise<TicketView[]> {
       eventId: t.eventId,
       eventTitle: t.eventTitle,
       tierName: t.tierName,
-      priceFormatted: formatNairaMinor(t.priceMinor),
+      priceFormatted: priceLabel(t.priceMinor),
       status: t.status,
       venue: e ? e.venue : null,
       startsAt: e && e.startsAt ? e.startsAt.toISOString() : null,
@@ -453,4 +508,14 @@ export async function listUserTickets(userId: string): Promise<TicketView[]> {
   });
 }
 
-export { toEventView, toTierView, MAX_QUANTITY };
+/**
+ * Whether a tier is free, for the route to decide if a PIN is needed. Null
+ * when the tier doesn't exist (checkout then reports it properly).
+ */
+export async function tierIsFree(tierId: string): Promise<boolean | null> {
+  await ensureEventsSchema();
+  const tier = await prisma.ticketTier.findUnique({ where: { id: tierId }, select: { priceMinor: true } });
+  return tier ? tier.priceMinor === 0n : null;
+}
+
+export { toEventView, toTierView, MAX_QUANTITY, MAX_FREE_PER_USER };

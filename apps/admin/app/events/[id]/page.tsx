@@ -30,7 +30,7 @@ export default function EventDetailPage() {
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [tierDraft, setTierDraft] = useState({ name: '', price: '', capacity: '' });
+  const [tierDraft, setTierDraft] = useState({ name: '', price: '', capacity: '', free: false });
   // Image is edited locally and saved explicitly, so picking a file by mistake
   // doesn't immediately change what customers see.
   const [imageDraft, setImageDraft] = useState<string | null>(null);
@@ -68,12 +68,12 @@ export default function EventDetailPage() {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           name: tierDraft.name.trim(),
-          price: tierDraft.price.trim(),
+          price: tierDraft.free ? '0' : tierDraft.price.trim(),
           capacity: tierDraft.capacity.trim() === '' ? null : Number(tierDraft.capacity),
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? 'Could not add tier');
-      setTierDraft({ name: '', price: '', capacity: '' });
+      setTierDraft({ name: '', price: '', capacity: '', free: false });
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(null); }
   }
@@ -187,11 +187,17 @@ export default function EventDetailPage() {
             <div className="flex flex-col gap-2 border-t border-gray-100 pt-4 sm:flex-row">
               <input className={INPUT} placeholder="Tier name (e.g. VIP)" value={tierDraft.name}
                 onChange={(e) => setTierDraft({ ...tierDraft, name: e.target.value })} />
-              <input className={INPUT + ' sm:w-40'} placeholder="Price ₦" inputMode="decimal" value={tierDraft.price}
+              <input className={INPUT + ' sm:w-40 disabled:bg-gray-100'} placeholder={tierDraft.free ? 'Free' : 'Price ₦'} inputMode="decimal"
+                value={tierDraft.free ? '' : tierDraft.price} disabled={tierDraft.free}
                 onChange={(e) => setTierDraft({ ...tierDraft, price: e.target.value })} />
+              <label className="inline-flex shrink-0 items-center gap-2 px-1 text-sm font-medium text-gray-700">
+                <input type="checkbox" checked={tierDraft.free}
+                  onChange={(e) => setTierDraft({ ...tierDraft, free: e.target.checked })} />
+                Free
+              </label>
               <input className={INPUT + ' sm:w-40'} placeholder="Capacity (∞)" inputMode="numeric" value={tierDraft.capacity}
                 onChange={(e) => setTierDraft({ ...tierDraft, capacity: e.target.value.replace(/\D/g, '') })} />
-              <button onClick={addTier} disabled={busy === 'add-tier' || !tierDraft.name.trim() || !tierDraft.price.trim()}
+              <button onClick={addTier} disabled={busy === 'add-tier' || !tierDraft.name.trim() || (!tierDraft.free && !tierDraft.price.trim())}
                 className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50">
                 <Plus size={16} /> Add tier
               </button>
@@ -246,10 +252,13 @@ function TierRow({ tier, busy, onPatch, onDelete }: {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 p-3">
       <span className="flex items-center gap-1.5 font-semibold text-gray-900"><Ticket size={14} /> {tier.name}</span>
-      <span className="text-xs text-gray-500">{tier.sold} sold{tier.capacity !== null ? ` / ${tier.capacity}` : ''}</span>
+      {tier.priceMinor === '0' && (
+        <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">Free</span>
+      )}
+      <span className="text-xs text-gray-500">{tier.sold} {tier.priceMinor === '0' ? 'claimed' : 'sold'}{tier.capacity !== null ? ` / ${tier.capacity}` : ''}</span>
       <div className="ml-auto flex items-center gap-2">
         <input className="w-24 rounded-lg border border-gray-300 px-2 py-1 text-sm" value={price} inputMode="decimal"
-          onChange={(e) => setPrice(e.target.value)} />
+          title="Price in ₦ — 0 makes it free" onChange={(e) => setPrice(e.target.value)} />
         <input className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-sm" value={capacity} placeholder="∞" inputMode="numeric"
           onChange={(e) => setCapacity(e.target.value.replace(/\D/g, ''))} />
         {dirty && (

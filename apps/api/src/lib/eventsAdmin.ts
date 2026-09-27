@@ -9,9 +9,11 @@ import { ApiError } from "./http";
 import { toMinorUnits, formatNairaMinor } from "./money";
 import { ensureEventsSchema } from "./ensureEvents";
 
+/** A tier price in kobo. "0" (or "free") makes a free tier. */
 function priceToMinor(price: string): bigint {
+  if (/^\s*free\s*$/i.test(price)) return 0n;
   const minor = toMinorUnits(price, Asset.NGN);
-  if (minor <= 0n) throw new ApiError(422, "Price must be greater than zero.", "bad_price");
+  if (minor < 0n) throw new ApiError(422, "Price can’t be negative.", "bad_price");
   return minor;
 }
 
@@ -73,7 +75,7 @@ function toTierView(t: TierRow): AdminTierView {
     id: t.id,
     name: t.name,
     priceMinor: t.priceMinor.toString(),
-    priceFormatted: formatNairaMinor(t.priceMinor),
+    priceFormatted: t.priceMinor === 0n ? "Free" : formatNairaMinor(t.priceMinor),
     capacity: t.capacity,
     sold: t.sold,
     active: t.active,

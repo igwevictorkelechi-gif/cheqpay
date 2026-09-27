@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({ findMany: vi.fn() }));
+const h = vi.hoisted(() => ({ findMany: vi.fn(), tierFindFirst: vi.fn() }));
 vi.mock("@cheqpay/db", () => ({
   Prisma: {},
   TicketStatus: { VALID: "VALID" },
-  prisma: { event: { findMany: h.findMany } },
+  prisma: { event: { findMany: h.findMany }, ticketTier: { findFirst: h.tierFindFirst } },
 }));
 vi.mock("./ensureEvents", () => ({ ensureEventsSchema: vi.fn().mockResolvedValue(undefined) }));
 
@@ -13,6 +13,7 @@ import { listActiveEvents, listEventFacets } from "./events";
 beforeEach(() => {
   vi.clearAllMocks();
   h.findMany.mockResolvedValue([]);
+  h.tierFindFirst.mockResolvedValue(null);
 });
 
 describe("event search and filters", () => {
@@ -38,6 +39,22 @@ describe("event search and filters", () => {
       { city: "Abuja", category: "Music" },
       { city: "", category: "" },
     ]);
-    await expect(listEventFacets()).resolves.toEqual({ cities: ["Abuja", "Lagos"], categories: ["Music", "Comedy"] });
+    await expect(listEventFacets()).resolves.toEqual({ cities: ["Abuja", "Lagos"], categories: ["Music", "Comedy"], hasFree: false });
+  });
+
+  it("narrows to events with a free ticket when asked", async () => {
+    const tierRow = (price: bigint) => ({ id: `t${price}`, name: "x", priceMinor: price, capacity: null, sold: 0, active: true, sortOrder: 0 });
+    const ev = (id: string, prices: bigint[]) => ({
+      id, title: id, description: "", venue: "", city: "", category: "", imageUrl: null, startsAt: null, active: true,
+      tiers: prices.map(tierRow),
+    });
+    h.findMany.mockResolvedValue([ev("paid", [500_00n]), ev("free", [0n, 1000_00n])]);
+    const list = await listActiveEvents({ free: true });
+    expect(list.map((e) => e.id)).toEqual(["free"]);
+  });
+
+  it("offers the Free chip only when a free tier exists", async () => {
+    h.tierFindFirst.mockResolvedValue({ id: "t", capacity: null, sold: 0 });
+    expect((await listEventFacets()).hasFree).toBe(true);
   });
 });
