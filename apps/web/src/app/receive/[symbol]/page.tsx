@@ -260,6 +260,17 @@ export default function ReceiveDetailPage() {
           <p className="text-sm text-muted">{netLabel ?? meta.networkLabel}</p>
         </div>
 
+        {/* Stablecoins are converted on arrival and land in the Dollar balance,
+            so the coin's own balance stays at 0 — which reads as "it never
+            came" unless we say so up front, not in the fee small print. */}
+        {meta.symbol === "USDT" || meta.symbol === "USDC" ? (
+          <div className="mt-5 rounded-2xl bg-brand/10 px-4 py-3 text-sm leading-relaxed text-ink">
+            {meta.symbol} you receive here is converted and added to your{" "}
+            <span className="font-bold">Dollar (USD) balance</span>. If your {meta.symbol} balance
+            doesn&apos;t change, check the USD tab on the home screen.
+          </div>
+        ) : null}
+
         {/* Network selector. A stablecoin lives on several chains and the
             address differs per chain, so the choice is explicit — picking one
             swaps the QR and the address below it. Chains with no address yet

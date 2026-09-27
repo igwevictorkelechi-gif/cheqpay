@@ -3,6 +3,7 @@ import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { getBillsProvider } from "@/payments";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
+import { alertOpsOnce } from "@/lib/opsAlert";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { awardCashback } from "@/lib/cashback";
@@ -160,6 +161,15 @@ export async function POST(req: Request) {
 
       if (status === TransactionStatus.FAILED) {
         await refund(auth.id, totalMinor, tx.id);
+        await recordBillFailure({
+          userId: auth.id,
+          txId: tx.id,
+          initiatorIp,
+          service: body.service,
+          biller: biller.name,
+          planName,
+          reason: `Provider reported the purchase as failed (ref ${result.providerRef})`,
+        });
         throw new ApiError(502, "Bill payment was declined; funds refunded", "bill_failed");
       }
 
@@ -245,6 +255,20 @@ export async function POST(req: Request) {
         providerMessage: err instanceof BillPaymentError ? err.providerMessage : undefined,
       });
       await refund(auth.id, totalMinor, tx.id);
+      await recordBillFailure({
+        userId: auth.id,
+        txId: tx.id,
+        initiatorIp,
+        service: body.service,
+        biller: biller.name,
+        planName,
+        reason:
+          err instanceof BillPaymentError
+            ? `HTTP ${err.providerStatus ?? "?"} — ${err.providerMessage ?? err.message}`
+            : err instanceof Error
+              ? err.message
+              : String(err),
+      });
       // Surface the PSP's own reason so the user knows *why* it failed and that
       // their money was returned.
       const reason =
@@ -256,6 +280,51 @@ export async function POST(req: Request) {
   } catch (err) {
     return toErrorResponse(err);
   }
+}
+
+/**
+ * Keep the reason a purchase failed where someone can read it later. Before
+ * this, a failed bill kept only its status: the provider's reason went to a
+ * function log that expires within a day, so "data never works" could not be
+ * diagnosed after the fact. Also tells ops once per hour per service, since a
+ * failing service fails for everyone. Never throws.
+ */
+async function recordBillFailure(f: {
+  userId: string;
+  txId: string;
+  initiatorIp: string | null;
+  service: string;
+  biller: string;
+  planName: string | null;
+  reason: string;
+}): Promise<void> {
+  const reason = f.reason.slice(0, 500);
+  const { initiatorIp } = f;
+  try {
+    const row = await prisma.transaction.findUnique({ where: { id: f.txId }, select: { metadata: true } });
+    const meta = row?.metadata && typeof row.metadata === "object" ? (row.metadata as Record<string, unknown>) : {};
+    await prisma.transaction.update({
+      where: { id: f.txId },
+      data: { metadata: { ...meta, failureReason: reason } },
+    });
+    await prisma.auditLog.create({
+      data: {
+        userId: f.userId,
+        ipAddress: initiatorIp,
+        action: "bill.failed",
+        resourceType: "Transaction",
+        resourceId: f.txId,
+        details: { service: f.service, biller: f.biller, planName: f.planName, reason },
+      },
+    });
+  } catch (e) {
+    console.error("[bills/pay] could not record failure", e);
+  }
+  await alertOpsOnce(
+    `bill-failed:${f.service}`,
+    `⚠️ ${f.service} purchases are failing (${f.biller}${f.planName ? `, ${f.planName}` : ""}). Customers were refunded. Reason: ${reason}`,
+    { service: f.service, biller: f.biller, reason }
+  );
 }
 
 async function refund(userId: string, amountMinor: bigint, txId: string) {

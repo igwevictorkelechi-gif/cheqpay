@@ -19,6 +19,8 @@ export default function LoginPage() {
     try {
       if (new URLSearchParams(window.location.search).get("blocked") === "1") {
         setError("This account has been blocked. Contact support if you believe this is a mistake.");
+      } else if (new URLSearchParams(window.location.search).get("expired") === "1") {
+        setError("You were signed out. Please sign in again — your money is safe.");
       }
     } catch {
       /* ignore */

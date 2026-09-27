@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { clearUserCaches } from "@/lib/cache";
 
 // Base URL of the custodial backend (apps/api). Override per-env if needed.
 export const API_BASE =
@@ -21,15 +22,69 @@ async function authHeader(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/**
+ * The sign-in has ended (signed out on another device, or expired past
+ * refreshing). Rather than let every screen quietly show ₦0 because each
+ * request was refused, end it here once and send the person to sign in again.
+ */
+let sessionEnding = false;
+async function endExpiredSession(): Promise<void> {
+  if (sessionEnding) return;
+  sessionEnding = true;
+  clearUserCaches();
+  await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+  if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    window.location.href = "/login/?expired=1";
+  }
+}
+
+// Many screens fire requests together; when the token is refused they all
+// fail at once. Share one refresh between them.
+let refreshing: Promise<string | null> | null = null;
+function refreshAccessToken(): Promise<string | null> {
+  if (!refreshing) {
+    refreshing = supabase.auth
+      .refreshSession()
+      .then(({ data, error }) => (error ? null : data.session?.access_token ?? null))
+      .catch(() => null)
+      .finally(() => {
+        setTimeout(() => {
+          refreshing = null;
+        }, 0);
+      });
+  }
+  return refreshing;
+}
+
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-    ...(await authHeader()),
-    ...((init.headers as Record<string, string>) ?? {}),
-  };
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  const auth = await authHeader();
+  const send = (authorization: Record<string, string>) =>
+    fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...authorization,
+        ...((init.headers as Record<string, string>) ?? {}),
+      },
+    });
+  let res = await send(auth);
+  let text = await res.text();
+  let data = text ? JSON.parse(text) : null;
+
+  // The token was refused outright (not a PIN prompt, which has its own code).
+  // Try one refresh; if the session is really gone, send them to sign in.
+  if (res.status === 401 && data?.code === "unauthorized" && auth.Authorization) {
+    const fresh = await refreshAccessToken();
+    if (fresh) {
+      res = await send({ Authorization: `Bearer ${fresh}` });
+      text = await res.text();
+      data = text ? JSON.parse(text) : null;
+    }
+    if (res.status === 401 && data?.code === "unauthorized") {
+      await endExpiredSession();
+    }
+  }
+
   if (!res.ok) {
     // A blocked account is refused on every call. Rather than let each screen
     // fail on its own, end the session once and say why on the login page.
