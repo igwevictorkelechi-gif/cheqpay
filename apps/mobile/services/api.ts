@@ -924,9 +924,28 @@ export const api = {
   },
 
   /** Charges the card price (fees.cardIssueFeeUsd) from the USD wallet. */
-  createCard(): Promise<{ card: VirtualCard; fee?: string }> {
+  /**
+   * Step 1: pay the card fee. Returns a card in status "unfunded" — nothing is
+   * issued until it is funded (activateCard). Someone who already paid for an
+   * unfunded card gets that one back (alreadyPaid) rather than paying again.
+   */
+  createCard(): Promise<{ card: VirtualCard; fee?: string; alreadyPaid?: boolean }> {
     // Idempotent, so a double tap can't buy two cards.
     return apiFetch('/api/cards', { method: 'POST', headers: { 'idempotency-key': idemKey() } });
+  },
+
+  /** Step 2: fund a paid card with its first top-up; this is when it is created. */
+  activateCard(id: string, amount: string, pin?: string): Promise<{ card: VirtualCard; fee: string }> {
+    return apiFetch(`/api/cards/${id}/activate`, {
+      method: 'POST',
+      headers: { 'idempotency-key': idemKey(), ...pinHeader(pin) },
+      body: JSON.stringify({ amount }),
+    });
+  },
+
+  /** Cancel a paid card that was never funded; its card fee is refunded. */
+  cancelCard(id: string): Promise<{ cancelled: boolean }> {
+    return apiFetch(`/api/cards/${id}`, { method: 'DELETE' });
   },
 
   getCard(id: string): Promise<{ card: VirtualCard }> {

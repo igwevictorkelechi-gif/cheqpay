@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   fundCard: vi.fn(),
   withdrawFromCard: vi.fn(),
   txFindFirst: vi.fn(),
+  txFindMany: vi.fn(),
   txUpdateMany: vi.fn(),
 }));
 
@@ -24,6 +25,7 @@ const db = {
     create: h.txCreate,
     update: h.txUpdate,
     findFirst: h.txFindFirst,
+    findMany: h.txFindMany,
     updateMany: h.txUpdateMany,
   },
 };
@@ -226,7 +228,7 @@ describe("card price", () => {
   });
 
   it("refunds the price once, and only once", async () => {
-    h.txFindFirst.mockResolvedValue({ id: "fee-1", userId: "u1", fee: 300n });
+    h.txFindMany.mockResolvedValue([{ id: "fee-1", userId: "u1", amount: 0n, fee: 300n }]);
     h.txUpdateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
     await refundCardIssueFee({ reference: "ref-1" });
     await refundCardIssueFee({ reference: "ref-1" });
@@ -234,5 +236,19 @@ describe("card price", () => {
     expect(h.balanceUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: { available: { increment: 300n } } }),
     );
+  });
+
+  it("refunds a first top-up with the price when the card is never created", async () => {
+    h.txFindMany.mockResolvedValue([
+      { id: "fee-1", userId: "u1", amount: 0n, fee: 300n },
+      { id: "fund-1", userId: "u1", amount: 1000n, fee: 150n },
+    ]);
+    h.txUpdateMany.mockResolvedValue({ count: 1 });
+    await refundCardIssueFee({ reference: "ref-2" });
+    const credits = h.balanceUpdate.mock.calls.map((c) => c[0].data.available.increment);
+    expect(credits).toEqual([300n, 1150n]);
+    const where = h.txFindMany.mock.calls[0][0].where;
+    expect(where.externalRef).toBe("ref-2");
+    expect(where.type).toEqual({ in: ["CARD_ISSUE", "CARD_FUND"] });
   });
 });

@@ -331,27 +331,36 @@ export async function linkCardIssueFee(transactionId: string, reference: string)
 }
 
 /**
- * Give the card price back: the card was never created. Idempotent — only a
- * COMPLETED charge is refunded, and it becomes REVERSED in the same step.
+ * Give the money for a card back: the card was never created. Refunds the card
+ * price and, when the card was requested with a first top-up, that top-up and
+ * its fee too — every COMPLETED card-issue or card-fund row carrying the same
+ * reference. Idempotent: each row flips to REVERSED exactly once, in the same
+ * step as its credit.
  */
 export async function refundCardIssueFee(where: { transactionId?: string; reference?: string }): Promise<void> {
   await prisma.$transaction(async (db) => {
-    const tx = await db.transaction.findFirst({
+    const rows = await db.transaction.findMany({
       where: {
-        type: TransactionType.CARD_ISSUE,
         status: TransactionStatus.COMPLETED,
-        ...(where.transactionId ? { id: where.transactionId } : { externalRef: where.reference }),
+        ...(where.transactionId
+          ? { id: where.transactionId, type: TransactionType.CARD_ISSUE }
+          : {
+              externalRef: where.reference,
+              type: { in: [TransactionType.CARD_ISSUE, TransactionType.CARD_FUND] },
+            }),
       },
     });
-    if (!tx) return;
-    const flipped = await db.transaction.updateMany({
-      where: { id: tx.id, status: TransactionStatus.COMPLETED },
-      data: { status: TransactionStatus.REVERSED },
-    });
-    if (flipped.count !== 1) return;
-    await db.balance.update({
-      where: { userId_asset: { userId: tx.userId, asset: Asset.USD } },
-      data: { available: { increment: tx.fee } },
-    });
+    for (const tx of rows) {
+      const flipped = await db.transaction.updateMany({
+        where: { id: tx.id, status: TransactionStatus.COMPLETED },
+        data: { status: TransactionStatus.REVERSED },
+      });
+      if (flipped.count !== 1) continue;
+      // A card-issue row is all fee (amount 0); a first top-up is amount + fee.
+      await db.balance.update({
+        where: { userId_asset: { userId: tx.userId, asset: Asset.USD } },
+        data: { available: { increment: tx.amount + tx.fee } },
+      });
+    }
   });
 }

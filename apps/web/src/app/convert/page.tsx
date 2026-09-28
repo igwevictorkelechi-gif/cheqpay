@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronDown, ArrowUpDown, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { CoinBadge } from "@/components/MobileUI";
 import { api } from "@/services/api";
+import { rememberAfterConvert } from "@/lib/afterConvert";
 import {
   CONVERT_ASSETS,
   ASSET_NAMES,
@@ -81,6 +82,25 @@ export default function ConvertPage() {
   const [quoting, setQuoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [picker, setPicker] = useState<Side | null>(null);
+
+  // Opened from another screen with a pair in mind ("convert naira to
+  // dollars to pay for a card"): start on that pair, and remember where to go
+  // back to once the conversion is done.
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const f = q.get("from") as ConvertSymbol | null;
+      const t = q.get("to") as ConvertSymbol | null;
+      if (f && CONVERT_ASSETS.includes(f)) setFromSym(f);
+      if (t && CONVERT_ASSETS.includes(t) && t !== f) setToSym(t);
+      const amt = q.get("amount");
+      if (amt && /^\d+(\.\d{1,8})?$/.test(amt)) setAmount(amt);
+      const back = q.get("back");
+      if (back) rememberAfterConvert(back);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     (async () => {

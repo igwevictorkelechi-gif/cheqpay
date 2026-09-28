@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/components/brand';
 import { api } from '@/services/api';
 import {
@@ -84,6 +84,16 @@ export default function ConvertScreen() {
   const [error, setError] = useState<string | null>(null);
   const [picker, setPicker] = useState<null | 'from' | 'to'>(null);
   const [bal, setBal] = useState<Record<string, string>>({});
+
+  // Opened with a pair in mind ("convert naira to dollars to pay for a card"):
+  // start on it.
+  const params = useLocalSearchParams<{ from?: string; to?: string }>();
+  useEffect(() => {
+    const f = params.from as ConvertSymbol | undefined;
+    const t = params.to as ConvertSymbol | undefined;
+    if (f && CONVERT_ASSETS.includes(f)) setFromSym(f);
+    if (t && CONVERT_ASSETS.includes(t) && t !== f) setToSym(t);
+  }, [params.from, params.to]);
 
   useEffect(() => {
     (async () => {

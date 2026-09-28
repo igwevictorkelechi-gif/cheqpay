@@ -62,10 +62,11 @@ export default function CardsPage() {
   const [available, setAvailable] = useState(false);
   const [usdBalance, setUsdBalance] = useState<Balance | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const creating = false;
   const [error, setError] = useState<string | null>(null);
-  // A card costs money, so asking for one opens a confirmation first.
-  const [confirmCreate, setConfirmCreate] = useState(false);
+  // Getting a card is a short guided flow (pay the card fee, then fund it).
+  // null = closed; "new" = start from the fee; a card = resume funding it.
+  const [wizard, setWizard] = useState<null | "new" | VirtualCard>(null);
   const fees = useFees();
 
   const activeCard = useMemo(
@@ -118,26 +119,28 @@ export default function CardsPage() {
 
   const createCard = useCallback(() => {
     setError(null);
-    setConfirmCreate(true);
-  }, []);
+    // Someone who already paid for a card and hasn't funded it goes straight
+    // to funding that card — never pays twice.
+    const waiting = cards.find((c) => c.status === "unfunded");
+    setWizard(waiting ?? "new");
+  }, [cards]);
 
-  const doCreateCard = useCallback(async () => {
-    setConfirmCreate(false);
-    setError(null);
-    setCreating(true);
+  // Back from converting or depositing for a card: reopen where they left off.
+  useEffect(() => {
+    if (loading) return;
     try {
-      const { card } = await api.createCard();
-      setCards((prev) => [card, ...prev]);
-      setActiveId(card.id);
-      toast.show("Card requested — it'll appear here once it's issued.");
-    } catch (e) {
-      setError(
-        e instanceof ApiError ? e.message : "Couldn't create a card right now. Please try again.",
-      );
-    } finally {
-      setCreating(false);
+      const q = new URLSearchParams(window.location.search);
+      const fund = q.get("fund");
+      const create = q.get("create");
+      if (!fund && !create) return;
+      window.history.replaceState(null, "", "/cards");
+      const card = fund ? cards.find((c) => c.id === fund && c.status === "unfunded") : undefined;
+      setWizard(card ?? (create ? "new" : null));
+    } catch {
+      /* ignore */
     }
-  }, [toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const comingSoon = !features.virtual_cards || !available;
 
@@ -204,6 +207,7 @@ export default function CardsPage() {
               usdAvailable={usdBalance?.availableFormatted ?? null}
               creating={creating}
               onCreate={createCard}
+              onActivate={(card) => setWizard(card)}
               onFunded={async () => {
                 if (!activeCard) return;
                 await Promise.all([refreshCard(activeCard.id), refreshUsd()]);
@@ -242,48 +246,32 @@ export default function CardsPage() {
         {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
       </div>
 
-      {confirmCreate && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
-          onClick={() => setConfirmCreate(false)}
-        >
-          <div
-            className="w-full max-w-md rounded-t-3xl bg-surface p-5 pb-8"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-bold text-ink">Create a virtual card</h2>
-            <div className="mt-4 space-y-2 rounded-2xl bg-card p-4 text-sm">
-              <div className="flex justify-between font-bold text-ink">
-                <span>Card price</span>
-                <span>{fees ? dollars(fees.cardIssueFeeUsd) : "…"}</span>
-              </div>
-              <div className="flex justify-between text-muted">
-                <span>Paid from</span>
-                <span>
-                  Your USD balance
-                  {usdBalance ? ` · $${usdBalance.availableFormatted} available` : ""}
-                </span>
-              </div>
-            </div>
-            <p className="mt-3 text-xs text-muted">
-              If the card can&apos;t be issued, the price is refunded automatically.
-            </p>
-            <div className="mt-5 flex gap-3">
-              <button
-                onClick={() => setConfirmCreate(false)}
-                className="flex-1 rounded-2xl bg-card py-4 font-bold text-ink active:scale-[0.99]"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={doCreateCard}
-                className="flex-1 rounded-2xl bg-brand py-4 font-bold text-white active:scale-[0.99]"
-              >
-                Pay {fees ? dollars(fees.cardIssueFeeUsd) : ""} &amp; create
-              </button>
-            </div>
-          </div>
-        </div>
+      {wizard && fees && (
+        <CreateCardSheet
+          fees={fees}
+          startCard={wizard === "new" ? null : wizard}
+          usdAvailable={usdBalance ? Number(usdBalance.availableFormatted) : null}
+          onClose={() => setWizard(null)}
+          onPaid={(card) => {
+            setCards((prev) => (prev.some((c) => c.id === card.id) ? prev : [card, ...prev]));
+            setActiveId(card.id);
+            void refreshUsd();
+          }}
+          onCancelled={(id) => {
+            setCards((prev) => prev.filter((c) => c.id !== id));
+            setActiveId(null);
+            setWizard(null);
+            void refreshUsd();
+            toast.show("Card cancelled — your card fee was refunded.");
+          }}
+          onDone={(card) => {
+            setCards((prev) => prev.map((c) => (c.id === card.id ? { ...c, ...card } : c)));
+            setActiveId(card.id);
+            setWizard(null);
+            void refreshUsd();
+            toast.show("Your card is being created — it'll be ready in a moment.");
+          }}
+        />
       )}
     </AppShell>
   );
@@ -350,6 +338,7 @@ function CardPocket({
   usdAvailable,
   creating,
   onCreate,
+  onActivate,
   onFunded,
   onFrozen,
 }: {
@@ -359,12 +348,14 @@ function CardPocket({
   usdAvailable: string | null;
   creating: boolean;
   onCreate: () => void;
+  onActivate: (card: VirtualCard) => void;
   onFunded: () => Promise<void>;
   onFrozen: (status: string) => void;
 }) {
   const toast = useToast();
   const frozen = card?.status === "frozen";
   const pending = card?.status === "pending";
+  const unfunded = card?.status === "unfunded";
   const active = card?.status === "active";
   const balance = usd(card?.balanceMinor);
 
@@ -504,6 +495,11 @@ function CardPocket({
               <p className="text-xs font-semibold uppercase tracking-wide text-white/70">
                 Card balance
               </p>
+              {unfunded && (
+                <span className="rounded-full bg-black/25 px-2 py-0.5 text-[11px] font-semibold text-white">
+                  Awaiting first top-up
+                </span>
+              )}
               {(frozen || pending) && (
                 <span className="flex items-center gap-1 rounded-full bg-black/25 px-2 py-0.5 text-[11px] font-semibold capitalize text-white">
                   {frozen ? (
@@ -522,15 +518,24 @@ function CardPocket({
             <p className="mt-1.5 text-[11px] text-white/60">
               {!card
                 ? "Create a card to start spending online"
-                : balance
+                : unfunded
+                  ? "Your card fee is paid. Add a first top-up to create the card."
+                  : balance
                   ? usdAvailable
                     ? `${usdAvailable} available to load`
                     : "\u00A0"
                   : "Balance appears once the card is active"}
             </p>
 
-            {/* No card yet — the pocket's action is to make one. */}
-            {!card ? (
+            {/* Paid for, not funded yet — the one thing to do is fund it. */}
+            {unfunded && card ? (
+              <button
+                onClick={() => onActivate(card)}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-white py-3 text-sm font-bold text-brand active:scale-[0.99]"
+              >
+                <Plus className="h-4 w-4" /> Fund to activate
+              </button>
+            ) : /* No card yet — the pocket's action is to make one. */ !card ? (
               <button
                 onClick={onCreate}
                 disabled={creating}
@@ -882,5 +887,250 @@ function CardActivity({ cardId }: { cardId: string | null }) {
         </div>
       )}
     </section>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+
+const FUND_QUICK = ["5", "10", "25", "50", "100"];
+
+/**
+ * Getting a card, one step at a time:
+ *
+ *   1. The card fee. With enough dollars, pay it; without, the way to get
+ *      dollars (convert naira, or deposit USDT, which arrives as dollars).
+ *   2. The first top-up. The card is created only now, with this loaded on it.
+ *      Short of dollars again → the same two ways to get them.
+ *
+ * Paying the fee reserves the card, so leaving between the steps loses
+ * nothing: the card waits as "Awaiting first top-up", and can be cancelled for
+ * a refund of the fee.
+ */
+function CreateCardSheet({
+  fees,
+  startCard,
+  usdAvailable,
+  onClose,
+  onPaid,
+  onCancelled,
+  onDone,
+}: {
+  fees: NonNullable<ReturnType<typeof useFees>>;
+  startCard: VirtualCard | null;
+  usdAvailable: number | null;
+  onClose: () => void;
+  onPaid: (card: VirtualCard) => void;
+  onCancelled: (id: string) => void;
+  onDone: (card: VirtualCard) => void;
+}) {
+  const router = useRouter();
+  const { authorize } = useTransactionPin();
+  const [card, setCard] = useState<VirtualCard | null>(startCard);
+  const [available, setAvailable] = useState<number | null>(usdAvailable);
+  const [amount, setAmount] = useState(String(Math.max(10, fees.cardFundMinUsd)));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => setAvailable(usdAvailable), [usdAvailable]);
+
+  const step: "fee" | "fund" = card ? "fund" : "fee";
+  const feeUsd = fees.cardIssueFeeUsd;
+  const have = available ?? 0;
+  const n = Number(amount) || 0;
+  const b = cardFundBreakdown(n, fees);
+
+  // What is missing for the step we're on, in dollars (0 = enough).
+  const shortBy =
+    available === null
+      ? 0
+      : step === "fee"
+        ? Math.max(0, Math.round((feeUsd - have) * 100) / 100)
+        : b.belowMin || n <= 0
+          ? 0
+          : Math.max(0, Math.round((b.total - have) * 100) / 100);
+
+  const back = card ? `/cards?fund=${card.id}` : "/cards?create=1";
+
+  async function payFee() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const { card: paid } = await api.createCard();
+      setCard(paid);
+      setAvailable((a) => (a === null ? a : Math.round((a - feeUsd) * 100) / 100));
+      onPaid(paid);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Couldn't take the card fee. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fund() {
+    if (!card) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const { card: created } = await authorize((pin) => api.activateCard(card.id, amount, pin), {
+        title: "Fund and create your card",
+        detail: `Load ${dollars(b.amount)} onto your card (${dollars(b.fee)} fee, ${dollars(b.total)} total).`,
+      });
+      onDone(created);
+    } catch (e) {
+      if (e instanceof Error && e.message === PIN_CANCELLED) return;
+      setErr(e instanceof ApiError ? e.message : "Couldn't create the card. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel() {
+    if (!card) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.cancelCard(card.id);
+      onCancelled(card.id);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Couldn't cancel the card. Please try again.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-surface p-5 pb-8"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label="Create a virtual card"
+      >
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+            Step {step === "fee" ? 1 : 2} of 2
+          </p>
+          <button onClick={onClose} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-ink">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <h2 className="mt-1 text-lg font-bold text-ink">
+          {step === "fee" ? "Pay for your card" : "Fund your card to activate it"}
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          {step === "fee"
+            ? `A virtual dollar card costs ${dollars(feeUsd)}, paid from your USD balance.`
+            : "Your card fee is paid. Add a first top-up — your card is created with it loaded."}
+        </p>
+
+        {step === "fund" && (
+          <>
+            <div className="mt-4 flex items-center gap-2 rounded-2xl bg-card px-4">
+              <span className="text-lg font-bold text-ink">$</span>
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+                inputMode="decimal"
+                aria-label="Top-up amount in dollars"
+                className="min-h-[52px] w-full bg-transparent text-lg font-bold text-ink focus:outline-none"
+              />
+            </div>
+            <div className="mt-3 flex gap-2 overflow-x-auto [scrollbar-width:none]">
+              {FUND_QUICK.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => setAmount(q)}
+                  className={`min-h-[40px] shrink-0 rounded-full px-4 text-sm font-semibold ${
+                    amount === q ? "bg-brand text-white" : "bg-card text-ink"
+                  }`}
+                >
+                  ${q}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="mt-4 space-y-2 rounded-2xl bg-card p-4 text-sm">
+          {step === "fee" ? (
+            <div className="flex justify-between font-bold text-ink">
+              <span>Card fee</span>
+              <span>{dollars(feeUsd)}</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex justify-between text-ink">
+                <span>Loaded on your card</span>
+                <span>{dollars(b.amount)}</span>
+              </div>
+              <div className="flex justify-between text-muted">
+                <span>Top-up fee</span>
+                <span>{dollars(b.fee)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-ink">
+                <span>Total from your USD balance</span>
+                <span>{dollars(b.total)}</span>
+              </div>
+            </>
+          )}
+          <div className="flex justify-between text-muted">
+            <span>Your USD balance</span>
+            <span>{available === null ? "…" : dollars(have)}</span>
+          </div>
+        </div>
+
+        {step === "fund" && b.belowMin && n > 0 ? (
+          <p className="mt-3 text-sm text-red-400">The smallest top-up is {dollars(fees.cardFundMinUsd)}.</p>
+        ) : null}
+
+        {shortBy > 0 ? (
+          <div className="mt-4 rounded-2xl border border-brand/30 bg-brand/10 p-4">
+            <p className="text-sm font-semibold text-ink">
+              You need {dollars(shortBy)} more in your USD balance.
+            </p>
+            <p className="mt-1 text-xs text-muted">Get dollars, then come back — we&apos;ll bring you right here.</p>
+            <div className="mt-3 flex flex-col gap-2">
+              <button
+                onClick={() => router.push(`/convert?from=NGN&to=USD&back=${encodeURIComponent(back)}`)}
+                className="rounded-full bg-brand py-3 text-sm font-bold text-white"
+              >
+                Convert naira to dollars
+              </button>
+              <button
+                onClick={() => router.push("/receive/USDT")}
+                className="rounded-full bg-card py-3 text-sm font-bold text-ink"
+              >
+                Deposit USDT (arrives as dollars)
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={step === "fee" ? payFee : fund}
+            disabled={busy || available === null || (step === "fund" && (b.belowMin || n <= 0))}
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 font-bold text-white active:scale-[0.99] disabled:opacity-50"
+          >
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            {step === "fee" ? `Pay ${dollars(feeUsd)} & continue` : `Fund ${dollars(b.amount)} & create card`}
+          </button>
+        )}
+
+        {err && <p className="mt-3 text-sm text-red-400">{err}</p>}
+
+        {step === "fund" && card ? (
+          <button
+            onClick={cancel}
+            disabled={busy}
+            className="mt-4 w-full text-center text-sm font-semibold text-muted disabled:opacity-50"
+          >
+            Cancel this card and refund {dollars(feeUsd)}
+          </button>
+        ) : (
+          <p className="mt-3 text-xs text-muted">
+            Your card is only created once it&apos;s funded. If it can&apos;t be created, your money comes back.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }

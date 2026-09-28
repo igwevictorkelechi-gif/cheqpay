@@ -4,16 +4,9 @@ import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { assertFeatureEnabled } from "@/lib/features";
 import { ensureCardsTable } from "@/lib/ensureCards";
 import { cardsAvailable } from "@/lib/cards";
-import { createCard } from "@/lib/maplerad/issuing";
-import { describeProviderError } from "@/lib/mapleradCustomer";
-import {
-  cardIssueKey,
-  chargeCardIssueFee,
-  linkCardIssueFee,
-  refundCardIssueFee,
-} from "@/lib/cardFunding";
+import { cardIssueKey } from "@/lib/cardFunding";
+import { payForCard } from "@/lib/cardIssue";
 import { enforceRateLimit } from "@/lib/ratelimit";
-import { alertOpsOnce } from "@/lib/opsAlert";
 import { fromMinorUnits } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -44,115 +37,43 @@ export async function GET(req: Request) {
 }
 
 /**
- * Request a new USD virtual card (Maplerad). Issuing is ASYNC: Maplerad returns
- * a reference immediately and confirms the card by webhook, so we store a
- * `pending` card now and reconcile it in the issuing webhook.
+ * Step 1 of getting a card: pay the card fee and reserve a card slot.
+ *
+ * Nothing is requested from Maplerad yet — the card is created when the person
+ * funds it (POST /api/cards/{id}/activate). Someone who already has a paid,
+ * unfunded card gets that one back rather than paying again. See
+ * lib/cardIssue.ts for the whole flow.
  */
 export async function POST(req: Request) {
   try {
     const auth = await requireUser(req);
     await assertFeatureEnabled("virtual_cards");
-    await enforceRateLimit(`card-create:${auth.id}`, 3, 60 * 60_000);
-    await ensureCardsTable();
+    await enforceRateLimit(`card-create:${auth.id}`, 5, 60 * 60_000);
 
     // A card costs money, so a double tap or a retried request must not buy
-    // two. The key names this create request; a repeat returns the first card.
+    // two. The key names this request; a repeat returns the same slot.
     const requestKey = req.headers.get("idempotency-key");
     if (!requestKey) {
       throw new ApiError(400, "Missing Idempotency-Key header", "no_idempotency_key");
     }
     const prior = await prisma.transaction.findUnique({
       where: { idempotencyKey: cardIssueKey(auth.id, requestKey) },
-      select: { externalRef: true },
+      select: { metadata: true },
     });
-    if (prior) {
-      const existingCard = prior.externalRef
-        ? await prisma.card.findFirst({
-            where: { userId: auth.id, reference: prior.externalRef },
-            select: CARD_SELECT,
-          })
-        : null;
-      if (!existingCard) {
-        throw new ApiError(409, "This card request is already being processed.", "card_in_progress");
-      }
-      return jsonOk({ card: existingCard }, 202);
-    }
-
-    // Card issuing hangs off an enrolled Maplerad customer, which is created at
-    // KYC approval (needs the BVN). No customer id ⇒ the user hasn't completed
-    // the KYC that enrolls them.
-    const user = await prisma.user.findUnique({
-      where: { id: auth.id },
-      select: { mapleradCustomerId: true },
-    });
-    if (!user?.mapleradCustomerId) {
-      throw new ApiError(
-        409,
-        "Complete your identity verification (KYC) before creating a card.",
-        "kyc_required"
-      );
-    }
-
-    // A provider failure here is not our bug and must not read as one. Left
-    // unhandled it surfaces as a bare 500 "Internal server error", which tells
-    // the user nothing and hides that the call never reached Maplerad — the
-    // live failure was the egress proxy answering 502 "upstream unreachable"
-    // for POST /issuing while proxying every other Maplerad call fine.
-    // The card's price comes out of the USD balance first, so no card is
-    // requested that hasn't been paid for. Refunded below if the request fails,
-    // and by the issuing webhook if Maplerad later reports the card failed.
-    const charge = await chargeCardIssueFee(auth.id, requestKey);
-
-    let ack: Awaited<ReturnType<typeof createCard>>;
-    try {
-      ack = await createCard({ customerId: user.mapleradCustomerId, currency: "USD" });
-    } catch (err) {
-      if (charge) await refundCardIssueFee({ transactionId: charge.transactionId });
-      const reason = describeProviderError(err);
-      console.error("[cards] issuing failed", {
-        userId: auth.id,
-        customerId: user.mapleradCustomerId,
-        error: reason,
+    const priorCardId =
+      prior?.metadata && typeof prior.metadata === "object"
+        ? (prior.metadata as { cardId?: string }).cardId
+        : undefined;
+    if (priorCardId) {
+      const card = await prisma.card.findFirst({
+        where: { id: priorCardId, userId: auth.id },
+        select: CARD_SELECT,
       });
-      // Kept where it can be read later — the function log above expires
-      // within a day, which is why no card failure had ever been diagnosed.
-      await prisma.auditLog
-        .create({
-          data: {
-            userId: auth.id,
-            action: "card.issue_failed",
-            resourceType: "Card",
-            details: { reason, charged: false },
-          },
-        })
-        .catch(() => undefined);
-      await alertOpsOnce(
-        "card-issue-failed",
-        `⚠️ Virtual card creation is failing. Customers were not charged. Reason: ${reason}. If it says "upstream unreachable", the egress proxy is blocking /issuing — run Provider check in the admin.`,
-        { reason }
-      );
-      throw new ApiError(
-        502,
-        "Our card provider could not be reached just now, so no card was created and you were not charged. Please try again shortly.",
-        "card_issuing_unavailable",
-      );
+      if (card) return jsonOk({ card, fee: "0.00", alreadyPaid: true }, 200);
     }
 
-    const card = await prisma.card.create({
-      data: {
-        userId: auth.id,
-        provider: "maplerad",
-        reference: ack.reference,
-        currency: "USD",
-        status: "pending",
-      },
-      select: CARD_SELECT,
-    });
-    if (charge) await linkCardIssueFee(charge.transactionId, ack.reference);
-    return jsonOk(
-      { card, fee: charge ? fromMinorUnits(charge.feeCents, Asset.USD) : "0.00" },
-      202,
-    );
+    const { card, feeCents, alreadyPaid } = await payForCard(auth.id, requestKey);
+    return jsonOk({ card, fee: fromMinorUnits(feeCents, Asset.USD), alreadyPaid }, alreadyPaid ? 200 : 201);
   } catch (err) {
     return toErrorResponse(err);
   }

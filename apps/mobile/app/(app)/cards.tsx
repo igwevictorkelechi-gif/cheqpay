@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { colors, TopBar } from '@/components/brand';
 import { useAuthStore } from '@/store';
 import {
@@ -52,7 +52,7 @@ export default function CardsScreen() {
   const [available, setAvailable] = useState(false);
   const [usdBalance, setUsdBalance] = useState<Balance | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const creating = false;
   const [error, setError] = useState<string | null>(null);
   const fees = useFees();
 
@@ -103,36 +103,23 @@ export default function CardsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCard?.id]);
 
-  /** A card costs money, so asking for one confirms the price first. */
+  // Getting a card is a short guided flow (pay the card fee, then fund it).
+  // null = closed; 'new' = start from the fee; a card = resume funding it.
+  const [wizard, setWizard] = useState<null | 'new' | VirtualCard>(null);
+
+  // Coming back from converting or depositing: show the new dollar balance.
+  useFocusEffect(
+    useCallback(() => {
+      void refreshUsd();
+    }, [refreshUsd]),
+  );
+
   function createCard() {
     setError(null);
-    const price = fees ? dollars(fees.cardIssueFeeUsd) : null;
-    Alert.alert(
-      'Create a virtual card',
-      price
-        ? `The card costs ${price}, paid from your USD balance${
-            usdBalance ? ` ($${usdBalance.availableFormatted} available)` : ''
-          }. If it can't be issued, the price is refunded automatically.`
-        : 'The card price is paid from your USD balance.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: price ? `Pay ${price} & create` : 'Create', onPress: () => void doCreateCard() },
-      ],
-    );
-  }
-
-  async function doCreateCard() {
-    setError(null);
-    setCreating(true);
-    try {
-      const { card } = await api.createCard();
-      setCards((prev) => [card, ...prev]);
-      setActiveId(card.id);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Couldn’t create a card right now.');
-    } finally {
-      setCreating(false);
-    }
+    // Someone who already paid for a card and hasn't funded it goes straight to
+    // funding that card — never pays twice.
+    const waiting = cards.find((c) => c.status === 'unfunded');
+    setWizard(waiting ?? 'new');
   }
 
   const comingSoon = !features.virtual_cards || !available;
@@ -185,6 +172,7 @@ export default function CardsScreen() {
                 usdAvailable={usdBalance?.availableFormatted ?? null}
                 creating={creating}
                 onCreate={createCard}
+                onActivate={(card) => setWizard(card)}
                 onFunded={async () => {
                   if (!activeCard) return;
                   await Promise.all([refreshCard(activeCard.id), refreshUsd()]);
@@ -224,6 +212,35 @@ export default function CardsScreen() {
           {error && <Text style={{ color: '#F87171', marginTop: 16 }}>{error}</Text>}
         </ScrollView>
       )}
+
+      {wizard && fees ? (
+        <CreateCardSheet
+          fees={fees}
+          startCard={wizard === 'new' ? null : wizard}
+          usdAvailable={usdBalance ? Number(usdBalance.availableFormatted) : null}
+          onClose={() => setWizard(null)}
+          onLeave={() => setWizard(null)}
+          onPaid={(card) => {
+            setCards((prev) => (prev.some((c) => c.id === card.id) ? prev : [card, ...prev]));
+            setActiveId(card.id);
+            void refreshUsd();
+          }}
+          onCancelled={(id) => {
+            setCards((prev) => prev.filter((c) => c.id !== id));
+            setActiveId(null);
+            setWizard(null);
+            void refreshUsd();
+            Alert.alert('Card cancelled', 'Your card fee was refunded.');
+          }}
+          onDone={(card) => {
+            setCards((prev) => prev.map((c) => (c.id === card.id ? { ...c, ...card } : c)));
+            setActiveId(card.id);
+            setWizard(null);
+            void refreshUsd();
+            Alert.alert('Card on its way', 'Your card is being created — it’ll be ready in a moment.');
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -295,6 +312,7 @@ function CardPocket({
   usdAvailable,
   creating,
   onCreate,
+  onActivate,
   onFunded,
   onFrozen,
 }: {
@@ -304,11 +322,13 @@ function CardPocket({
   usdAvailable: string | null;
   creating: boolean;
   onCreate: () => void;
+  onActivate: (card: VirtualCard) => void;
   onFunded: () => Promise<void>;
   onFrozen: (status: string) => void;
 }) {
   const frozen = card?.status === 'frozen';
   const pending = card?.status === 'pending';
+  const unfunded = card?.status === 'unfunded';
   const active = card?.status === 'active';
   const balance = usd(card?.balanceMinor);
 
@@ -508,6 +528,11 @@ function CardPocket({
             >
               Card balance
             </Text>
+            {unfunded && (
+              <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}>
+                <Text style={{ color: colors.white, fontSize: 11 }}>Awaiting first top-up</Text>
+              </View>
+            )}
             {(frozen || pending) && (
               <View className="flex-row items-center px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}>
                 <Ionicons name={frozen ? 'snow' : 'time-outline'} size={11} color={colors.white} />
@@ -522,15 +547,28 @@ function CardPocket({
           <Text style={{ color: colors.white, opacity: 0.6, fontSize: 11, marginTop: 6 }}>
             {!card
               ? 'Create a card to start spending online'
-              : balance
+              : unfunded
+                ? 'Your card fee is paid. Add a first top-up to create the card.'
+                : balance
                 ? usdAvailable
                   ? `${usdAvailable} available to load`
                   : ' '
                 : 'Balance appears once the card is active'}
           </Text>
 
-          {/* No card yet — the pocket's action is to make one. */}
-          {!card ? (
+          {/* Paid for, not funded yet — the one thing to do is fund it. */}
+          {unfunded && card ? (
+            <TouchableOpacity
+              onPress={() => onActivate(card)}
+              className="flex-row items-center justify-center"
+              style={{ marginTop: 16, borderRadius: 999, backgroundColor: colors.white, paddingVertical: 12 }}
+            >
+              <Ionicons name="add" size={16} color={colors.brand} />
+              <Text style={{ color: colors.brand, fontWeight: '800', fontSize: 14, marginLeft: 6 }}>
+                Fund to activate
+              </Text>
+            </TouchableOpacity>
+          ) : /* No card yet — the pocket's action is to make one. */ !card ? (
             <TouchableOpacity
               onPress={onCreate}
               disabled={creating}
@@ -934,5 +972,236 @@ function CardActivity({ cardId }: { cardId: string }) {
         </View>
       )}
     </View>
+  );
+}
+
+
+/* ---------------------------------------------------------------------- */
+
+const FUND_QUICK = ['5', '10', '25', '50', '100'];
+
+/**
+ * Getting a card, one step at a time: (1) pay the card fee — or, short of
+ * dollars, go get them (convert naira, or deposit USDT, which arrives as
+ * dollars); (2) fund it — the card is created only now, with the top-up
+ * loaded. Paying the fee reserves the card, so leaving between the steps loses
+ * nothing: it waits as "Awaiting first top-up" and can be cancelled for a
+ * refund of the fee.
+ */
+function CreateCardSheet({
+  fees,
+  startCard,
+  usdAvailable,
+  onClose,
+  onLeave,
+  onPaid,
+  onCancelled,
+  onDone,
+}: {
+  fees: NonNullable<ReturnType<typeof useFees>>;
+  startCard: VirtualCard | null;
+  usdAvailable: number | null;
+  onClose: () => void;
+  onLeave: () => void;
+  onPaid: (card: VirtualCard) => void;
+  onCancelled: (id: string) => void;
+  onDone: (card: VirtualCard) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const { authorize } = useTransactionPin();
+  const [card, setCard] = useState<VirtualCard | null>(startCard);
+  const [available, setAvailable] = useState<number | null>(usdAvailable);
+  const [amount, setAmount] = useState(String(Math.max(10, fees.cardFundMinUsd)));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => setAvailable(usdAvailable), [usdAvailable]);
+
+  const step: 'fee' | 'fund' = card ? 'fund' : 'fee';
+  const feeUsd = fees.cardIssueFeeUsd;
+  const have = available ?? 0;
+  const n = Number(amount) || 0;
+  const b = cardFundBreakdown(n, fees);
+  const shortBy =
+    available === null
+      ? 0
+      : step === 'fee'
+        ? Math.max(0, Math.round((feeUsd - have) * 100) / 100)
+        : b.belowMin || n <= 0
+          ? 0
+          : Math.max(0, Math.round((b.total - have) * 100) / 100);
+
+  async function payFee() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const { card: paid } = await api.createCard();
+      setCard(paid);
+      setAvailable((a) => (a === null ? a : Math.round((a - feeUsd) * 100) / 100));
+      onPaid(paid);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Couldn’t take the card fee. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fund() {
+    if (!card) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const { card: created } = await authorize((pin) => api.activateCard(card.id, amount, pin), {
+        title: 'Fund and create your card',
+        detail: `Load ${dollars(b.amount)} onto your card (${dollars(b.fee)} fee, ${dollars(b.total)} total).`,
+      });
+      onDone(created);
+    } catch (e) {
+      if (e instanceof Error && e.message === PIN_CANCELLED) return;
+      setErr(e instanceof ApiError ? e.message : 'Couldn’t create the card. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel() {
+    if (!card) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.cancelCard(card.id);
+      onCancelled(card.id);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Couldn’t cancel the card. Please try again.');
+      setBusy(false);
+    }
+  }
+
+  const row = (label: string, value: string, strong = false) => (
+    <View className="flex-row justify-between" style={{ marginTop: 6 }}>
+      <Text style={{ color: strong ? colors.ink : colors.muted, fontWeight: strong ? '800' : '400' }}>{label}</Text>
+      <Text style={{ color: strong ? colors.ink : colors.muted, fontWeight: strong ? '800' : '400' }}>{value}</Text>
+    </View>
+  );
+
+  return (
+    <Modal transparent animationType="slide" visible onRequestClose={onClose}>
+      <TouchableOpacity activeOpacity={1} onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} />
+      <View style={{ backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: insets.bottom + 24 }}>
+        <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>
+          Step {step === 'fee' ? 1 : 2} of 2
+        </Text>
+        <Text style={{ color: colors.ink, fontSize: 18, fontWeight: '800', marginTop: 4 }}>
+          {step === 'fee' ? 'Pay for your card' : 'Fund your card to activate it'}
+        </Text>
+        <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4 }}>
+          {step === 'fee'
+            ? `A virtual dollar card costs ${dollars(feeUsd)}, paid from your USD balance.`
+            : 'Your card fee is paid. Add a first top-up — your card is created with it loaded.'}
+        </Text>
+
+        {step === 'fund' ? (
+          <>
+            <View className="flex-row items-center" style={{ marginTop: 14, backgroundColor: colors.card, borderRadius: 16, paddingHorizontal: 14 }}>
+              <Text style={{ color: colors.ink, fontSize: 18, fontWeight: '800' }}>$</Text>
+              <TextInput
+                value={amount}
+                onChangeText={(v) => setAmount(v.replace(/[^\d.]/g, ''))}
+                keyboardType="decimal-pad"
+                style={{ flex: 1, color: colors.ink, fontSize: 18, fontWeight: '800', paddingVertical: 12, marginLeft: 4 }}
+              />
+            </View>
+            <View className="flex-row" style={{ marginTop: 10, gap: 8 }}>
+              {FUND_QUICK.map((q) => (
+                <TouchableOpacity
+                  key={q}
+                  onPress={() => setAmount(q)}
+                  style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: amount === q ? colors.brand : colors.card }}
+                >
+                  <Text style={{ color: amount === q ? colors.white : colors.ink, fontWeight: '700' }}>${q}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        ) : null}
+
+        <View style={{ marginTop: 14, backgroundColor: colors.card, borderRadius: 16, padding: 14 }}>
+          {step === 'fee' ? (
+            row('Card fee', dollars(feeUsd), true)
+          ) : (
+            <>
+              {row('Loaded on your card', dollars(b.amount))}
+              {row('Top-up fee', dollars(b.fee))}
+              {row('Total from your USD balance', dollars(b.total), true)}
+            </>
+          )}
+          {row('Your USD balance', available === null ? '…' : dollars(have))}
+        </View>
+
+        {step === 'fund' && b.belowMin && n > 0 ? (
+          <Text style={{ color: '#F87171', marginTop: 10 }}>The smallest top-up is {dollars(fees.cardFundMinUsd)}.</Text>
+        ) : null}
+
+        {shortBy > 0 ? (
+          <View style={{ marginTop: 14, borderRadius: 16, padding: 14, backgroundColor: 'rgba(107,91,149,0.15)' }}>
+            <Text style={{ color: colors.ink, fontWeight: '700' }}>You need {dollars(shortBy)} more in your USD balance.</Text>
+            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>
+              Get dollars, then come back to Cards to continue.
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                onLeave();
+                router.push({ pathname: '/(app)/convert', params: { from: 'NGN', to: 'USD' } });
+              }}
+              style={{ marginTop: 12, borderRadius: 999, backgroundColor: colors.brand, paddingVertical: 12, alignItems: 'center' }}
+            >
+              <Text style={{ color: colors.white, fontWeight: '800' }}>Convert naira to dollars</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                onLeave();
+                router.push('/(app)/receive');
+              }}
+              style={{ marginTop: 8, borderRadius: 999, backgroundColor: colors.card, paddingVertical: 12, alignItems: 'center' }}
+            >
+              <Text style={{ color: colors.ink, fontWeight: '800' }}>Deposit USDT (arrives as dollars)</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            onPress={step === 'fee' ? payFee : fund}
+            disabled={busy || available === null || (step === 'fund' && (b.belowMin || n <= 0))}
+            style={{
+              marginTop: 16,
+              borderRadius: 16,
+              backgroundColor: colors.brand,
+              paddingVertical: 16,
+              alignItems: 'center',
+              opacity: busy || available === null || (step === 'fund' && (b.belowMin || n <= 0)) ? 0.5 : 1,
+            }}
+          >
+            {busy ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={{ color: colors.white, fontWeight: '800', fontSize: 16 }}>
+                {step === 'fee' ? `Pay ${dollars(feeUsd)} & continue` : `Fund ${dollars(b.amount)} & create card`}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {err ? <Text style={{ color: '#F87171', marginTop: 10 }}>{err}</Text> : null}
+
+        {step === 'fund' && card ? (
+          <TouchableOpacity onPress={cancel} disabled={busy} style={{ marginTop: 14, alignItems: 'center' }}>
+            <Text style={{ color: colors.muted, fontWeight: '700' }}>Cancel this card and refund {dollars(feeUsd)}</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={{ color: colors.muted, fontSize: 12, marginTop: 10 }}>
+            Your card is only created once it’s funded. If it can’t be created, your money comes back.
+          </Text>
+        )}
+      </View>
+    </Modal>
   );
 }
