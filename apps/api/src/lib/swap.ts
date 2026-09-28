@@ -30,6 +30,8 @@ import { awardCashback } from "./cashback";
 import { ensureUsdAsset } from "./ensureUsdAsset";
 import { ensureQuoteProviderRef } from "./ensureQuoteProviderRef";
 import { exchangeFx, quoteFx } from "./maplerad/fx";
+import { MapleradError } from "./maplerad/client";
+import { alertOpsOnce } from "./opsAlert";
 import { getProviderBalanceMinor } from "./maplerad/treasury";
 import type { FxCurrency } from "./maplerad/types";
 import { getPriceFeed, type PriceFeed } from "@/market";
@@ -37,6 +39,44 @@ import { getPriceFeed, type PriceFeed } from "@/market";
 /** The internal Asset for a fiat leg maps 1:1 to Maplerad's FX currency code. */
 function fxCurrencyOf(asset: Asset): FxCurrency {
   return asset === Asset.USD ? "USD" : "NGN";
+}
+
+/**
+ * Turn a refused FX quote into something the customer can act on. Left alone
+ * it surfaced as a bare 500 "Internal server error". The live case: Maplerad
+ * answers NGN -> USD with "NGN exchanges are not enabled for this business"
+ * (an account setting on their side) while USD -> NGN works, so the message
+ * says which direction still works. Ops hear about it once an hour.
+ */
+export function fxQuoteError(err: unknown, from: Asset, to: Asset): ApiError {
+  if (err instanceof ApiError) return err;
+  const message = err instanceof Error ? err.message : String(err);
+  const status = err instanceof MapleradError ? err.status : 0;
+  const pair = `${fxCurrencyOf(from)}→${fxCurrencyOf(to)}`;
+  void alertOpsOnce(
+    `fx-quote:${pair}:${/not enabled/i.test(message) ? "disabled" : "failed"}`,
+    `⚠️ ${pair} conversions are failing at Maplerad: "${message}". ${
+      /not enabled/i.test(message)
+        ? "This is a setting on the Maplerad business account — ask Maplerad to enable NGN exchanges."
+        : ""
+    }`,
+    { pair, reason: message.slice(0, 300) }
+  );
+  if (/not enabled/i.test(message)) {
+    const other = to === Asset.USD ? "dollars to naira" : "naira to dollars";
+    return new ApiError(
+      503,
+      `Converting ${from === Asset.NGN ? "naira to dollars" : "dollars to naira"} isn't available right now. You can still convert ${other}. Nothing was charged.`,
+      "fx_direction_unavailable",
+    );
+  }
+  return new ApiError(
+    502,
+    status >= 500 || status === 0
+      ? "The exchange provider couldn't be reached. Please try again shortly — nothing was charged."
+      : "The exchange provider couldn't price that conversion. Please try a different amount — nothing was charged.",
+    "fx_quote_failed",
+  );
 }
 
 /** Minor units -> whole units for an asset, as a Decimal. */
@@ -261,6 +301,8 @@ async function createFxConvertQuote(params: {
     sourceCurrency: fxCurrencyOf(params.fromAsset),
     targetCurrency: fxCurrencyOf(params.toAsset),
     amount: Number(params.amountInMinor),
+  }).catch((err) => {
+    throw fxQuoteError(err, params.fromAsset, params.toAsset);
   });
 
   if (!Number.isInteger(fx.target?.amount) || fx.target.amount <= 0) {
