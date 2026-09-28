@@ -2,38 +2,30 @@ import { describe, expect, it } from "vitest";
 import { getBiller, getAllBillers } from "./bills";
 
 /**
- * Data purchases failed with "request failed" while the bundle list, the bundle
- * code and the price were all correct, because the identifier that LISTS a
- * network's bundles is not the one that BUYS one.
+ * Which identifier a bill is bought with. Data briefly bought on the bare
+ * network id (`airtel-ng`); Maplerad answered every such purchase with 400
+ * "invalid service identifier". Data buys on its `*-data-ng` id.
  */
 describe("the identifier a bill is paid with", () => {
-  it("buys data on the network id, not the catalog slug", () => {
-    const airtel = getBiller("data", "airtel")!;
-    expect(airtel.mapleradId).toBe("airtel-data-ng"); // lists the bundles
-    expect(airtel.mapleradPayId).toBe("airtel-ng"); // buys one
-  });
-
-  it("gives every data network a purchase id that drops the -data- segment", () => {
+  it("buys data on the same *-data-ng id that lists the bundles", () => {
     for (const id of ["mtn", "airtel", "glo", "9mobile"]) {
       const b = getBiller("data", id)!;
-      expect(b.mapleradId).toContain("-data-");
-      expect(b.mapleradPayId).toBe(`${id}-ng`);
-      expect(b.mapleradPayId).not.toContain("-data-");
+      expect(b.mapleradId).toBe(`${id}-data-ng`);
+      // What the pay route sends: the pay id when set, else the list id.
+      expect(b.mapleradPayId ?? b.mapleradId).toBe(`${id}-data-ng`);
     }
   });
 
-  it("matches the airtime identifier for the same network", () => {
-    // Airtime on airtel-ng is the one purchase we have seen succeed in
-    // production, so data buying on the same identifier is the whole point.
-    expect(getBiller("data", "airtel")!.mapleradPayId).toBe(
-      getBiller("airtime", "airtel")!.mapleradId,
-    );
+  it("never buys data on the bare network id Maplerad rejected", () => {
+    const airtel = getBiller("data", "airtel")!;
+    expect(airtel.mapleradPayId ?? airtel.mapleradId).not.toBe("airtel-ng");
   });
 
-  it("leaves every other service paying on the id it already used", () => {
-    for (const b of getAllBillers()) {
-      if (b.service === "data") continue;
-      expect(b.mapleradPayId).toBeUndefined();
-    }
+  it("leaves airtime on the network id it succeeds with", () => {
+    expect(getBiller("airtime", "airtel")!.mapleradId).toBe("airtel-ng");
+  });
+
+  it("sets no separate purchase id on any biller", () => {
+    for (const b of getAllBillers()) expect(b.mapleradPayId).toBeUndefined();
   });
 });

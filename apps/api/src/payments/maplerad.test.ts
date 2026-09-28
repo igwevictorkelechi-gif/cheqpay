@@ -250,6 +250,34 @@ describe("MapleradProvider — live plan lists", () => {
       { code: "sub-2-month", name: "Dstv Jinja Bouquet · 2 months", amountMinor: 10_000 },
     ]);
   });
+
+  it("uses the bouquet's plan_id when Maplerad sends an empty subscription_id", async () => {
+    // What production actually returns: every option has subscription_id "".
+    // Taken literally, every cable plan shared one blank code and none could
+    // be bought.
+    stubMaplerad({
+      "GET /bills/cable/subscriptions/gotv-ng": [
+        {
+          title: "GOtv Max",
+          plan_id: "GOTV_MAX",
+          payment_options: [{ subscription_id: "", duration: { value: 1, type: "monthly" }, price: 850_000 }],
+        },
+        {
+          title: "GOtv Supa",
+          plan_id: "GOTV_SUPA",
+          payment_options: [{ subscription_id: "", duration: { value: 1, type: "monthly" }, price: 1_140_000 }],
+        },
+        {
+          title: "No code at all",
+          payment_options: [{ subscription_id: "", duration: { value: 1, type: "monthly" }, price: 1 }],
+        },
+      ],
+    });
+    await expect(psp.listBillPlans("cabletv", "gotv-ng")).resolves.toEqual([
+      { code: "GOTV_MAX", name: "GOtv Max", amountMinor: 850_000 },
+      { code: "GOTV_SUPA", name: "GOtv Supa", amountMinor: 1_140_000 },
+    ]);
+  });
 });
 
 describe("MapleradProvider — money movement", () => {

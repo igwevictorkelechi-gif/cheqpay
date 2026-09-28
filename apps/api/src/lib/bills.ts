@@ -41,16 +41,13 @@ export interface Biller {
    */
   mapleradId?: string;
   /**
-   * The identifier to send when PAYING, when it differs from the one used to
-   * LIST this biller's plans.
+   * The identifier to send when PAYING, for a biller whose purchase id differs
+   * from the one used to LIST its plans. Falls back to mapleradId when unset.
    *
-   * Data is the case that needs it. `GET /bills/data/bundle/airtel-data-ng`
-   * lists Airtel's bundles happily, but posting that same `airtel-data-ng` to
-   * /bills/data is refused ("request failed"), while /bills/airtime accepts the
-   * bare network `airtel-ng`. The catalog slug names a LIST; the purchase
-   * identifier names the NETWORK, and `bundle_identifier` already says the
-   * purchase is data. Falls back to mapleradId when unset, so every other
-   * service is untouched.
+   * No biller sets it today. Data once did (`airtel-ng` to buy, `airtel-data-ng`
+   * to list), and Maplerad refused every purchase with 400 "invalid service
+   * identifier" — data buys on its `*-data-ng` id like everything else. Kept
+   * for the next provider whose ids really do split.
    */
   mapleradPayId?: string;
 }
@@ -112,16 +109,18 @@ const AIRTIME_NETWORKS: Biller[] = [
 ];
 
 /**
- * `mapleradId` lists the bundles; `mapleradPayId` buys one. They differ, and
- * assuming they did not is what made every data purchase fail with "request
- * failed" while the bundle list, the bundle code and the price were all
- * correct — see Biller.mapleradPayId.
+ * Data buys on the same `*-data-ng` identifier that lists its bundles.
+ *
+ * For a while purchases used the bare network (`airtel-ng`, as airtime does),
+ * on the theory that the data slug only named a list. Maplerad settled it:
+ * `POST /bills/data` with `airtel-ng` answers 400 "invalid service identifier",
+ * while `airtel-data-ng` gets past the identifier check. See Biller.mapleradPayId.
  */
 const DATA_NETWORKS: Biller[] = [
-  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", mapleradId: "mtn-data-ng", mapleradPayId: "mtn-ng" },
-  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", mapleradId: "airtel-data-ng", mapleradPayId: "airtel-ng" },
-  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", mapleradId: "glo-data-ng", mapleradPayId: "glo-ng" },
-  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", mapleradId: "9mobile-data-ng", mapleradPayId: "9mobile-ng" },
+  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", mapleradId: "mtn-data-ng" },
+  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", mapleradId: "airtel-data-ng" },
+  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", mapleradId: "glo-data-ng" },
+  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", mapleradId: "9mobile-data-ng" },
 ];
 
 /**

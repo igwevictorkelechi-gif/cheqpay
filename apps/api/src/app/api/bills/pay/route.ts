@@ -141,12 +141,15 @@ export async function POST(req: Request) {
       });
     });
 
+    // What goes to the provider, kept so a failure can be read back exactly.
+    const payIdentifier = biller.mapleradPayId ?? biller.mapleradId;
+    const sent = { identifier: payIdentifier ?? null, planCode: planCode ?? null, amountMinor: amountMinor.toString() };
+
     // Submit to the PSP. Refund + fail on error.
     try {
       const result = await psp.payBill({
         service: body.service,
-        // The purchase identifier, which for data is not the catalog slug.
-        billerCode: biller.mapleradPayId ?? biller.mapleradId,
+        billerCode: payIdentifier,
         planCode,
         customer: body.customer,
         amount,
@@ -169,6 +172,7 @@ export async function POST(req: Request) {
           biller: biller.name,
           planName,
           reason: `Provider reported the purchase as failed (ref ${result.providerRef})`,
+          sent,
         });
         throw new ApiError(502, "Bill payment was declined; funds refunded", "bill_failed");
       }
@@ -268,6 +272,7 @@ export async function POST(req: Request) {
             : err instanceof Error
               ? err.message
               : String(err),
+        sent,
       });
       // Surface the PSP's own reason so the user knows *why* it failed and that
       // their money was returned.
@@ -297,6 +302,8 @@ async function recordBillFailure(f: {
   biller: string;
   planName: string | null;
   reason: string;
+  /** The identifier, plan code and amount we sent the provider. */
+  sent?: { identifier: string | null; planCode: string | null; amountMinor: string };
 }): Promise<void> {
   const reason = f.reason.slice(0, 500);
   const { initiatorIp } = f;
@@ -305,7 +312,7 @@ async function recordBillFailure(f: {
     const meta = row?.metadata && typeof row.metadata === "object" ? (row.metadata as Record<string, unknown>) : {};
     await prisma.transaction.update({
       where: { id: f.txId },
-      data: { metadata: { ...meta, failureReason: reason } },
+      data: { metadata: { ...meta, failureReason: reason, ...(f.sent ? { providerRequest: f.sent } : {}) } },
     });
     await prisma.auditLog.create({
       data: {
@@ -314,7 +321,7 @@ async function recordBillFailure(f: {
         action: "bill.failed",
         resourceType: "Transaction",
         resourceId: f.txId,
-        details: { service: f.service, biller: f.biller, planName: f.planName, reason },
+        details: { service: f.service, biller: f.biller, planName: f.planName, reason, ...(f.sent ? { sent: f.sent } : {}) },
       },
     });
   } catch (e) {
