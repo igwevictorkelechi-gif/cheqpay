@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { ensureCardsTable } from "@/lib/ensureCards";
 import { getCard } from "@/lib/maplerad/issuing";
+import { cancelUnfundedCard } from "@/lib/cardIssue";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,17 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     const { providerCardId: _omit, ...safe } = card;
     return jsonOk({ card: { ...safe, balanceMinor, liveStatus } });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+/** Cancel a paid card that was never funded: its card fee is refunded. */
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  try {
+    const auth = await requireUser(req);
+    await cancelUnfundedCard(auth.id, params.id);
+    return jsonOk({ cancelled: true });
   } catch (err) {
     return toErrorResponse(err);
   }

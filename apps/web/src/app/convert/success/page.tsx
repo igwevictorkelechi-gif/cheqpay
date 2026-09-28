@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { CoinBadge } from "@/components/MobileUI";
+import { takeAfterConvert } from "@/lib/afterConvert";
 
 function SuccessInner() {
   const router = useRouter();
@@ -13,6 +14,10 @@ function SuccessInner() {
   const to = params.get("to") || "22.85";
   const fromSym = params.get("fromSym") || "BTC";
   const toSym = params.get("toSym") || "ETH";
+  // Sent here to convert for something (a card fee, a card top-up): offer the
+  // way straight back to it.
+  const [back, setBack] = useState<string | null>(null);
+  useEffect(() => setBack(takeAfterConvert()), []);
 
   return (
     <AppShell>
@@ -57,6 +62,14 @@ function SuccessInner() {
 
       {/* Actions */}
       <div className="mt-2 space-y-3 px-5 pb-2">
+        {back ? (
+          <button
+            onClick={() => router.push(back)}
+            className="w-full rounded-full bg-brand py-4 text-base font-bold text-white"
+          >
+            {back.startsWith("/cards") ? "Continue to your card" : "Continue"}
+          </button>
+        ) : null}
         <button
           onClick={() => router.push("/transactions")}
           className="w-full rounded-full py-4 text-base font-bold text-white"
