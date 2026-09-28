@@ -228,6 +228,7 @@ export class MapleradProvider implements PaymentProvider {
     const bouquets = await this.req<
       Array<{
         title: string;
+        plan_id?: string;
         payment_options?: Array<{
           subscription_id: string;
           price: number;
@@ -236,9 +237,16 @@ export class MapleradProvider implements PaymentProvider {
       }>
     >(`/bills/cable/subscriptions/${billerCode}`);
 
+    // Maplerad returns `subscription_id: ""` on every option and puts the real
+    // code in the bouquet's `plan_id` (DSTV_COMPACT, GOTV_MAX…). Using the
+    // empty one gave every cable plan the same blank code, so none could be
+    // bought. Prefer a non-empty subscription id; otherwise the plan id; drop
+    // an option that has neither rather than list something unbuyable.
     return bouquets.flatMap((b) =>
-      (b.payment_options ?? []).map((o) => ({
-        code: o.subscription_id,
+      (b.payment_options ?? [])
+        .filter((o) => (o.subscription_id || b.plan_id || "").trim() !== "")
+        .map((o) => ({
+        code: (o.subscription_id || b.plan_id || "").trim(),
         name: o.duration && o.duration.value > 1
           ? `${b.title} · ${o.duration.value} ${o.duration.type === "monthly" ? "months" : o.duration.type}`
           : b.title,
