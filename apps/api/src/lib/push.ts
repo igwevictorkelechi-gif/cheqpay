@@ -80,15 +80,23 @@ async function postExpo(messages: unknown[]): Promise<void> {
   }
 }
 
+export interface BroadcastResult {
+  /** Id the browsers report receipts against. */
+  id: string;
+  /** Browsers whose push service (Apple, Google, Mozilla) accepted it. */
+  browsers: number;
+  /** App devices it was handed to Expo for. */
+  apps: number;
+}
+
 /**
  * Fan a single message out to every user opted into `msg.category` who has at
- * least one registered device. Batched to Expo's 100-message limit. Returns the
- * number of devices targeted. Best-effort — never throws.
+ * least one registered device or browser. Best-effort — never throws.
  */
-export async function broadcastPush(msg: PushMessage & { url?: string }): Promise<number> {
-  // Browsers get it too; counted together with the app devices below.
-  const browsers = await broadcastWebPush(msg);
-  return browsers + (await broadcastExpo(msg));
+export async function broadcastPush(msg: PushMessage & { url?: string }): Promise<BroadcastResult> {
+  const web = await broadcastWebPush(msg);
+  const apps = await broadcastExpo(msg);
+  return { id: web.id, browsers: web.accepted, apps };
 }
 
 async function broadcastExpo(msg: PushMessage): Promise<number> {

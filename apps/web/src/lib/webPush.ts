@@ -82,6 +82,49 @@ export async function enablePush(): Promise<PushSupport> {
   return "granted";
 }
 
+/**
+ * Keep this browser subscribed for whoever is signed in. Once the user has
+ * allowed notifications, re-subscribing needs no prompt, so after a sign-out,
+ * an expired session or a cleared subscription we quietly set it up again and
+ * tell the API — instead of notifications stopping until the user finds the
+ * "Turn on" button. Safe to call often; never throws.
+ */
+let resynced: Promise<void> | null = null;
+export function resyncPush(): Promise<void> {
+  if (!resynced) {
+    resynced = (async () => {
+      if (pushSupport() !== "granted") return;
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) return;
+      await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        const { publicKey } = await api.getWebPushKey();
+        if (!publicKey) return;
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
+      }
+      await api.subscribeWebPush(sub.toJSON());
+    })().catch(() => {
+      resynced = null;
+    });
+  }
+  return resynced;
+}
+
+/** Forget that this page already resynced — the next sign-in should do it again. */
+export function resetPushResync(): void {
+  resynced = null;
+}
+
+/** Send this user a test notification on every browser they've turned on. */
+export async function sendTestPush(): Promise<number> {
+  const { sent } = await api.testWebPush();
+  return sent;
+}
+
 /** Stop notifications on this browser. */
 export async function disablePush(): Promise<void> {
   const sub = await (await registration()).pushManager.getSubscription();

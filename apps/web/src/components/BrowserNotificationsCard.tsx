@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Bell, BellOff, Loader2 } from "lucide-react";
-import { disablePush, enablePush, isPushEnabled, pushSupport, type PushSupport } from "@/lib/webPush";
+import { disablePush, enablePush, isPushEnabled, pushSupport, sendTestPush, type PushSupport } from "@/lib/webPush";
 
 /** Turn this browser's notifications on or off, with a plain answer for each case. */
 export default function BrowserNotificationsCard() {
@@ -10,6 +10,8 @@ export default function BrowserNotificationsCard() {
   const [on, setOn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const s = pushSupport();
@@ -34,6 +36,23 @@ export default function BrowserNotificationsCard() {
       setMsg(e instanceof Error ? e.message : "Couldn't change browser notifications.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const test = async () => {
+    setTesting(true);
+    setTestMsg(null);
+    try {
+      const sent = await sendTestPush();
+      setTestMsg(
+        sent > 0
+          ? "Sent — it should pop up in a few seconds. If it doesn't, check that notifications for CheqPay are allowed in your phone's settings and Focus mode is off."
+          : "Couldn't reach this browser. Turn notifications off and on again, then retry."
+      );
+    } catch (e) {
+      setTestMsg(e instanceof Error ? e.message : "Couldn't send a test notification.");
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -75,6 +94,16 @@ export default function BrowserNotificationsCard() {
         )}
       </div>
       {msg && <p className="mt-2 text-xs text-red-400">{msg}</p>}
+      {on && (
+        <button
+          onClick={test}
+          disabled={testing}
+          className="mt-3 text-sm font-semibold text-brand-light active:scale-95 disabled:opacity-50"
+        >
+          {testing ? "Sending…" : "Send me a test notification"}
+        </button>
+      )}
+      {testMsg && <p className="mt-1 text-xs text-muted">{testMsg}</p>}
     </div>
   );
 }

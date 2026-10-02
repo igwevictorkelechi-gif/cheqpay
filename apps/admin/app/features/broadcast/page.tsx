@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bell, Send } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
@@ -18,6 +18,30 @@ export default function BroadcastPage() {
   const [audience, setAudience] = useState<Audience>('updates');
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [sentId, setSentId] = useState<string | null>(null);
+  const [stats, setStats] = useState<{ accepted: number; delivered: number; opened: number } | null>(null);
+
+  // After a send, watch phones report back for a couple of minutes. "Accepted"
+  // is Apple/Google taking it; "shown" is the phone actually displaying it.
+  useEffect(() => {
+    if (!sentId) return;
+    let stop = false;
+    let n = 0;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/broadcast/${sentId}`, { cache: 'no-store' });
+        if (res.ok && !stop) setStats(await res.json());
+      } catch {
+        /* keep the last numbers */
+      }
+      if (!stop && ++n < 40) timer = setTimeout(tick, n < 10 ? 3000 : 6000);
+    };
+    let timer = setTimeout(tick, 1500);
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [sentId]);
 
   const valid = title.trim().length >= 3 && body.trim().length >= 3 && (!url || /^\/(?!\/|\\)/.test(url));
 
@@ -26,6 +50,8 @@ export default function BroadcastPage() {
     if (!confirm(`Send "${title.trim()}" to every user who allows ${audience === 'updates' ? 'news' : 'promotions'}?`)) return;
     setSending(true);
     setResult(null);
+    setSentId(null);
+    setStats(null);
     try {
       const res = await fetch('/api/broadcast', {
         method: 'POST',
@@ -39,7 +65,11 @@ export default function BroadcastPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to send');
-      setResult({ kind: 'ok', text: `Sent to ${data.sent} device${data.sent === 1 ? '' : 's'}.` });
+      setResult({
+        kind: 'ok',
+        text: `Accepted for ${data.sent} device${data.sent === 1 ? '' : 's'} by Apple/Google. Waiting for phones to confirm they showed it…`,
+      });
+      if (data.id) setSentId(data.id);
       setTitle('');
       setBody('');
       setUrl('');
@@ -108,6 +138,25 @@ export default function BroadcastPage() {
           </div>
           {result && (
             <p className={`text-sm ${result.kind === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{result.text}</p>
+          )}
+          {stats && (
+            <div className="grid grid-cols-3 gap-2 rounded-lg bg-gray-50 p-3 text-center text-sm">
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.accepted}</p>
+                <p className="text-gray-600">Accepted</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-green-700">{stats.delivered}</p>
+                <p className="text-gray-600">Shown on phone</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-brand-600">{stats.opened}</p>
+                <p className="text-gray-600">Tapped</p>
+              </div>
+              <p className="col-span-3 mt-1 text-xs text-gray-500">
+                Phones still on the old app version don&apos;t report back until they open CheqPay once.
+              </p>
+            </div>
           )}
           <button
             onClick={send}

@@ -5,7 +5,8 @@
 // — the activate handler deletes every cache whose key is not the current
 // CACHE. Without the bump those users keep being served the bad shell.
 // v3: adds push notifications (no change to what is cached).
-const CACHE = "cheqpay-shell-v3";
+// v4: every notification alerts (own tag + renotify) and reports back.
+const CACHE = "cheqpay-shell-v4";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.add("/")));
@@ -65,6 +66,29 @@ function safePath(url, category) {
   return MONEY.has(category) ? "/transactions/" : "/";
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Tell the API this notification reached the phone ("delivered") or was
+// tapped ("opened"), so the admin sees more than "Apple accepted it". Only to
+// the address the API itself put in the payload, and only over https.
+// Best-effort: it never holds up or blocks the notification.
+async function receipt(info, event) {
+  try {
+    if (!info || !UUID.test(info.id) || typeof info.receipt !== "string") return;
+    if (!/^https:\/\/[^/]+\/api\/push\/web\/receipt$/.test(info.receipt)) return;
+    const sub = await self.registration.pushManager.getSubscription();
+    if (!sub) return;
+    await fetch(info.receipt, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: info.id, endpoint: sub.endpoint, event }),
+      keepalive: true,
+    });
+  } catch {
+    /* receipts are a nice-to-have */
+  }
+}
+
 self.addEventListener("push", (event) => {
   let msg = {};
   try {
@@ -73,20 +97,30 @@ self.addEventListener("push", (event) => {
     msg = { title: "CheqPay", body: event.data ? event.data.text() : "" };
   }
   const title = typeof msg.title === "string" && msg.title ? msg.title : "CheqPay";
+  const info = { id: msg.id, receipt: msg.receipt };
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body: typeof msg.body === "string" ? msg.body : "",
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      tag: msg.category || "cheqpay",
-      data: { url: safePath(msg.url, msg.category) },
-    })
+    Promise.all([
+      self.registration.showNotification(title, {
+        body: typeof msg.body === "string" ? msg.body : "",
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        // A tag of its own: a notification that shares a tag with one already
+        // in Notification Center silently replaces it — no banner, no sound —
+        // which is how every "Rate" after the first went unseen.
+        tag: typeof msg.id === "string" ? msg.id : "cheqpay-" + Date.now(),
+        renotify: true,
+        data: { url: safePath(msg.url, msg.category), info },
+      }),
+      receipt(info, "delivered"),
+    ])
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = new URL(safePath(event.notification.data && event.notification.data.url), self.location.origin).href;
+  const data = event.notification.data || {};
+  const target = new URL(safePath(data.url), self.location.origin).href;
+  void receipt(data.info, "opened");
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
       for (const w of wins) {

@@ -25,14 +25,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.actor.mockResolvedValue({ email: "admin@cheqpay.com", role: "super" });
   h.otp.mockResolvedValue(undefined);
-  h.broadcast.mockResolvedValue(42);
+  h.broadcast.mockResolvedValue({ id: "b1", browsers: 40, apps: 2 });
 });
 
 describe("admin broadcast", () => {
   it("sends, audits, and reports the reach", async () => {
     const res = await call({ title: "New: USD cards", body: "Get a dollar card in minutes.", url: "/cards", category: "updates" });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ sent: 42 });
+    expect(await res.json()).toEqual({ sent: 42, id: "b1", browsers: 40, apps: 2 });
     expect(h.broadcast).toHaveBeenCalledWith(expect.objectContaining({ category: "updates", url: "/cards" }));
     expect(h.record).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ action: "admin.broadcast.sent" }));
   });

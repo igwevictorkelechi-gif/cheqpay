@@ -365,7 +365,18 @@ export const webPushSubscriptionSchema = z.object({
 });
 export type WebPushSubscriptionInput = z.infer<typeof webPushSubscriptionSchema>;
 
-export const webPushUnsubscribeSchema = z.object({ endpoint: z.string().url().max(1000) });
+export const webPushUnsubscribeSchema = z.object({
+  endpoint: z.string().url().max(1000),
+  /** The subscription's auth secret: lets a browser whose session just ended remove itself. */
+  auth: z.string().min(8).max(100).optional(),
+});
+
+/** A browser reporting that a notification arrived or was tapped. */
+export const webPushReceiptSchema = z.object({
+  id: z.string().uuid(),
+  endpoint: z.string().url().max(1000),
+  event: z.enum(["delivered", "opened"]),
+});
 
 /** Admin: a notification to everyone who opted into the category. */
 export const broadcastSchema = z.object({
