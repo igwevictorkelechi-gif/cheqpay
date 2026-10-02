@@ -11,6 +11,7 @@
 // Off entirely until VAPID keys are configured. Never throws: a notification
 // is a side effect and must not break the request that triggered it.
 
+import { randomUUID } from "node:crypto";
 import webpush from "web-push";
 import { prisma } from "@cheqpay/db";
 import { getEnv } from "./env";
@@ -23,6 +24,14 @@ export interface WebPushMessage {
   /** A path on the site to open when the notification is tapped. */
   url?: string;
   data?: Record<string, unknown>;
+  /** Set by the sender for a broadcast, so every browser reports on the same id. */
+  id?: string;
+}
+
+/** What a send did: how many browsers the push services accepted it for, under which id. */
+export interface WebPushResult {
+  id: string;
+  accepted: number;
 }
 
 interface SubscriptionRow {
@@ -51,6 +60,25 @@ export function ensureWebPushTable(): Promise<void> {
       await prisma.$executeRawUnsafe(
         `CREATE INDEX IF NOT EXISTS web_push_subscriptions_user_idx ON web_push_subscriptions(user_id)`
       );
+      // One row per notification sent, and one receipt per browser that
+      // reported back. "Accepted" by Apple or Google only means the push
+      // service took it; the receipts say whether the phone actually showed it.
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS web_push_messages (
+          id uuid PRIMARY KEY,
+          kind text NOT NULL,
+          title text NOT NULL,
+          accepted integer NOT NULL DEFAULT 0,
+          created_at timestamptz NOT NULL DEFAULT now()
+        )`);
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS web_push_receipts (
+          message_id uuid NOT NULL REFERENCES web_push_messages(id) ON DELETE CASCADE,
+          subscription_id uuid NOT NULL REFERENCES web_push_subscriptions(id) ON DELETE CASCADE,
+          delivered_at timestamptz,
+          opened_at timestamptz,
+          PRIMARY KEY (message_id, subscription_id)
+        )`);
     })().catch((err) => {
       tableReady = null;
       throw err;
@@ -109,14 +137,94 @@ export async function removeSubscription(userId: string, endpoint: string): Prom
   );
 }
 
-function payload(msg: WebPushMessage): string {
+/**
+ * Remove a subscription without a login, for a browser whose session has just
+ * ended. It must prove it holds the subscription: the auth secret only that
+ * browser and we know.
+ */
+export async function removeSubscriptionBySecret(endpoint: string, auth: string): Promise<number> {
+  await ensureWebPushTable();
+  return prisma.$executeRawUnsafe(
+    `DELETE FROM web_push_subscriptions WHERE endpoint = $1 AND auth = $2`,
+    endpoint,
+    auth
+  );
+}
+
+/** Where browsers report that a notification arrived or was tapped. */
+function receiptUrl(): string | null {
+  const explicit = process.env.PUBLIC_API_URL?.replace(/\/$/, "");
+  if (explicit) return `${explicit}/api/push/web/receipt`;
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  return vercel ? `https://${vercel}/api/push/web/receipt` : null;
+}
+
+function payload(msg: WebPushMessage, id: string): string {
   return JSON.stringify({
+    id,
     title: msg.title,
     body: msg.body,
     url: msg.url ?? null,
     category: msg.category,
     data: msg.data ?? {},
+    receipt: receiptUrl(),
   });
+}
+
+async function recordMessage(id: string, kind: string, title: string, accepted: number): Promise<void> {
+  await prisma
+    .$executeRawUnsafe(
+      `INSERT INTO web_push_messages (id, kind, title, accepted) VALUES ($1::uuid, $2, $3, $4)
+       ON CONFLICT (id) DO UPDATE SET accepted = web_push_messages.accepted + EXCLUDED.accepted`,
+      id,
+      kind,
+      title.slice(0, 200),
+      accepted
+    )
+    .catch((err) => console.error("[webpush] record message", err));
+}
+
+/**
+ * A browser reports that a notification arrived ("delivered") or was tapped
+ * ("opened"). Only counts for a subscription and message we know. Returns
+ * whether it was recorded.
+ */
+export async function recordReceipt(
+  messageId: string,
+  endpoint: string,
+  event: "delivered" | "opened"
+): Promise<boolean> {
+  await ensureWebPushTable();
+  const col = event === "opened" ? "opened_at" : "delivered_at";
+  const n = await prisma.$executeRawUnsafe(
+    `INSERT INTO web_push_receipts (message_id, subscription_id, ${col})
+     SELECT m.id, s.id, now() FROM web_push_messages m, web_push_subscriptions s
+      WHERE m.id = $1::uuid AND s.endpoint = $2
+     ON CONFLICT (message_id, subscription_id) DO UPDATE SET ${col} = COALESCE(web_push_receipts.${col}, now())`,
+    messageId,
+    endpoint
+  );
+  return n > 0;
+}
+
+/** How a notification did: accepted by the push services, shown on a device, tapped. */
+export async function messageStats(
+  id: string
+): Promise<{ id: string; title: string; accepted: number; delivered: number; opened: number } | null> {
+  await ensureWebPushTable();
+  const rows = await prisma.$queryRawUnsafe<
+    { id: string; title: string; accepted: number; delivered: bigint; opened: bigint }[]
+  >(
+    `SELECT m.id::text, m.title, m.accepted,
+            count(r.delivered_at) AS delivered, count(r.opened_at) AS opened
+       FROM web_push_messages m LEFT JOIN web_push_receipts r ON r.message_id = m.id
+      WHERE m.id = $1::uuid GROUP BY m.id`,
+    id
+  );
+  const r = rows[0];
+  return r
+    ? { id: r.id, title: r.title, accepted: r.accepted, delivered: Number(r.delivered), opened: Number(r.opened) }
+    : null;
 }
 
 /**
@@ -134,7 +242,9 @@ async function deliver(rows: SubscriptionRow[], body: string): Promise<number> {
         await webpush.sendNotification(
           { endpoint: r.endpoint, keys: { p256dh: r.p256dh, auth: r.auth } },
           body,
-          { TTL: 24 * 60 * 60, urgency: "normal" }
+          // "high": shown straight away. On "normal", Android in Doze and
+          // iPhones in Low Power Mode can sit on it for a long time.
+          { TTL: 24 * 60 * 60, urgency: "high" }
         );
         sent += 1;
         ok.push(r.id);
@@ -172,7 +282,11 @@ export async function sendWebPush(userId: string, msg: WebPushMessage): Promise<
       `SELECT id, user_id, endpoint, p256dh, auth FROM web_push_subscriptions WHERE user_id = $1::uuid`,
       userId
     );
-    return rows.length ? await deliver(rows, payload(msg)) : 0;
+    if (!rows.length) return 0;
+    const id = msg.id ?? randomUUID();
+    const sent = await deliver(rows, payload(msg, id));
+    await recordMessage(id, "user", msg.title, sent);
+    return sent;
   } catch (err) {
     console.error("[webpush] error", err);
     return 0;
@@ -180,9 +294,10 @@ export async function sendWebPush(userId: string, msg: WebPushMessage): Promise<
 }
 
 /** Notify every subscribed browser whose owner allows this category. */
-export async function broadcastWebPush(msg: WebPushMessage): Promise<number> {
+export async function broadcastWebPush(msg: WebPushMessage): Promise<WebPushResult> {
+  const id = msg.id ?? randomUUID();
   try {
-    if (!configure()) return 0;
+    if (!configure()) return { id, accepted: 0 };
     await ensureWebPushTable();
     const rows = await prisma.$queryRawUnsafe<(SubscriptionRow & { prefs: unknown })[]>(
       `SELECT s.id, s.user_id, s.endpoint, s.p256dh, s.auth, u.notification_prefs AS prefs
@@ -190,14 +305,17 @@ export async function broadcastWebPush(msg: WebPushMessage): Promise<number> {
         WHERE u.status = 'ACTIVE'`
     );
     const allowed = rows.filter((r) => resolvePrefs(r.prefs)[msg.category]);
-    const body = payload(msg);
+    const body = payload(msg, id);
+    // Recorded first, so a phone that reports back fast finds the message.
+    await recordMessage(id, "broadcast", msg.title, 0);
     let sent = 0;
     for (let i = 0; i < allowed.length; i += 100) {
       sent += await deliver(allowed.slice(i, i + 100), body);
     }
-    return sent;
+    await recordMessage(id, "broadcast", msg.title, sent);
+    return { id, accepted: sent };
   } catch (err) {
     console.error("[webpush] broadcast error", err);
-    return 0;
+    return { id, accepted: 0 };
   }
 }

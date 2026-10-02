@@ -23,16 +23,38 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // token that stopped working, another tab signing out — wipe what this browser
 // cached about the user and stop its notifications, so the next person to use
 // this device never sees their balance, history, deposit address or alerts.
+// When someone signs in (or comes back signed in), keep this browser's
+// notifications going for them if they've allowed them before.
 if (typeof window !== "undefined") {
-  supabase.auth.onAuthStateChange((event) => {
+  supabase.auth.onAuthStateChange((event, session) => {
+    if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
+      // Loaded lazily: the push helpers use the API client, which uses this file.
+      void import("@/lib/webPush").then((m) => m.resyncPush()).catch(() => undefined);
+      return;
+    }
     if (event !== "SIGNED_OUT") return;
     clearUserCaches();
-    // Stop this browser receiving the signed-out user's notifications. The
-    // server drops the subscription the next time it tries to use it.
+    void import("@/lib/webPush").then((m) => m.resetPushResync()).catch(() => undefined);
+    // Stop this browser receiving the signed-out user's notifications, and tell
+    // the API so it stops counting it. The session is already gone, so the
+    // browser proves it owns the subscription with its auth secret instead.
     void navigator.serviceWorker
       ?.getRegistration()
       .then((reg) => reg?.pushManager.getSubscription())
-      .then((sub) => sub?.unsubscribe())
+      .then(async (sub) => {
+        if (!sub) return;
+        const auth = sub.toJSON().keys?.auth;
+        if (auth) {
+          const { API_BASE } = await import("@/services/api");
+          await fetch(`${API_BASE}/api/push/web/unsubscribe`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: sub.endpoint, auth }),
+            keepalive: true,
+          }).catch(() => undefined);
+        }
+        await sub.unsubscribe();
+      })
       .catch(() => undefined);
   });
 }

@@ -21,21 +21,25 @@ export async function POST(req: Request) {
     await enforceRateLimit("admin-broadcast", 1, 60_000);
     const msg = broadcastSchema.parse(await req.json());
 
-    const sent = await broadcastPush({
+    const result = await broadcastPush({
       title: msg.title,
       body: msg.body,
       category: msg.category,
       url: msg.url,
       data: msg.url ? { url: msg.url } : {},
     });
+    // "Sent" = accepted by Apple/Google/Expo. Whether phones showed it comes
+    // back as receipts, read from GET /api/admin/broadcast/:id.
+    const sent = result.browsers + result.apps;
 
     await recordAdminAction(req, actor, {
       action: "admin.broadcast.sent",
       summary: `Broadcast "${msg.title}" (${msg.category}) to ${sent} device(s)`,
       resourceType: "Broadcast",
-      details: { ...msg, sent },
+      resourceId: result.id,
+      details: { ...msg, sent, browsers: result.browsers, apps: result.apps, id: result.id },
     });
-    return jsonOk({ sent });
+    return jsonOk({ sent, id: result.id, browsers: result.browsers, apps: result.apps });
   } catch (err) {
     return toErrorResponse(err);
   }

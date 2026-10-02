@@ -637,6 +637,10 @@ export const api = {
     return apiFetch("/api/push/web/subscribe", { method: "POST", body: JSON.stringify(sub) });
   },
 
+  testWebPush(): Promise<{ sent: number }> {
+    return apiFetch("/api/push/web/test", { method: "POST" });
+  },
+
   unsubscribeWebPush(endpoint: string): Promise<{ removed: number }> {
     return apiFetch("/api/push/web/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) });
   },
