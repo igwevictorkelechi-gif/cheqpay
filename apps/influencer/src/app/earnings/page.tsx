@@ -6,7 +6,7 @@ import Shell from "@/components/Shell";
 import { api, APP_URL, type Earning } from "@/lib/api";
 
 const KIND: Record<Earning["kind"], string> = { COMMISSION: "Commission", TASK: "Task reward", BASIC_BONUS: "Referral bonus", WELCOME_BONUS: "Welcome bonus" };
-const TXN: Record<string, string> = { DEPOSIT: "deposit", WITHDRAWAL: "withdrawal", CONVERT: "conversion", BILL: "bill payment", BUY: "crypto buy", SELL: "crypto sell", CARD_FUND: "card top-up" };
+const TXN: Record<string, string> = { DEPOSIT: "deposit", WITHDRAWAL: "withdrawal", CONVERT: "conversion", BILL: "bill payment", BUY: "crypto buy", SELL: "crypto sell", CARD_FUND: "card top-up", CARD_ISSUE: "new card", CARD_WITHDRAW: "card withdrawal", TRANSFER_OUT: "transfer", GADGET_PURCHASE: "gadget order", TICKET_PURCHASE: "ticket purchase", GIFTCARD_SELL: "gift card trade", GIFTCARD_BUY: "gift card purchase" };
 
 export default function EarningsPage() {
   const [list, setList] = useState<Earning[] | null>(null);

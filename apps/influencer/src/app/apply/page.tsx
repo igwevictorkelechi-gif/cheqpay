@@ -100,15 +100,17 @@ export default function ApplyPage() {
             <label className="label">Your social accounts</label>
             <div className="space-y-2">
               {socials.map((s, i) => (
-                <div key={i} className="grid grid-cols-[1fr_1.4fr_1fr_auto] gap-2">
+                <div key={i} className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2 sm:grid-cols-[1fr_1.4fr_1fr_auto]">
                   <select className="input !px-3" value={s.platform} onChange={(e) => setSocials(socials.map((x, j) => (j === i ? { ...x, platform: e.target.value } : x)))}>
                     {PLATFORMS.map((p) => <option key={p}>{p}</option>)}
                   </select>
                   <input className="input" placeholder="@handle or link" value={s.handle} onChange={(e) => setSocials(socials.map((x, j) => (j === i ? { ...x, handle: e.target.value } : x)))} />
-                  <input className="input" inputMode="numeric" placeholder="Followers" value={s.followers || ""} onChange={(e) => setSocials(socials.map((x, j) => (j === i ? { ...x, followers: Number(e.target.value.replace(/\D/g, "")) || 0 } : x)))} />
-                  <button type="button" onClick={() => setSocials(socials.filter((_, j) => j !== i))} disabled={socials.length === 1} className="flex w-11 items-center justify-center rounded-2xl border border-border text-muted disabled:opacity-30" aria-label="Remove">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="col-span-2 flex gap-2 sm:contents">
+                    <input className="input min-w-0 flex-1" inputMode="numeric" placeholder="Followers" value={s.followers || ""} onChange={(e) => setSocials(socials.map((x, j) => (j === i ? { ...x, followers: Number(e.target.value.replace(/\D/g, "")) || 0 } : x)))} />
+                    <button type="button" onClick={() => setSocials(socials.filter((_, j) => j !== i))} disabled={socials.length === 1} className="flex w-11 shrink-0 items-center justify-center rounded-2xl border border-border text-muted disabled:opacity-30" aria-label="Remove">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
