@@ -64,7 +64,7 @@ export default function DashboardPage() {
             ].map(({ Icon, label, value }) => (
               <div key={label} className="card">
                 <Icon className="h-5 w-5 text-gold" />
-                <p className="mt-3 break-words text-xl font-extrabold md:text-2xl">{value}</p>
+                <p className={`mt-3 break-words font-extrabold md:text-2xl ${value.length > 13 ? "text-sm tracking-tight" : value.length > 10 ? "text-lg" : "text-xl"}`}>{value}</p>
                 <p className="text-sm text-muted">{label}</p>
               </div>
             ))}
