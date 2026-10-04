@@ -22,6 +22,7 @@ export const ALL_ON: FeatureFlags = {
   // New and off by default: stay hidden until the server says they're on.
   gift_cards_sell: false,
   gift_cards_buy: false,
+  referrals: false,
 };
 
 /**

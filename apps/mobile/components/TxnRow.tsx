@@ -20,6 +20,7 @@ export function txnIcon(type: LedgerTransaction['type']): {
       return { name: 'flash', color: '#FBBF24', bg: 'rgba(251,191,36,0.15)' };
     case 'CASHBACK':
     case 'GIFTCARD_SELL':
+    case 'REFERRAL_REWARD':
       return { name: 'gift', color: '#34C759', bg: 'rgba(52,199,89,0.15)' };
     case 'GIFTCARD_BUY':
       return { name: 'gift', color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' };
@@ -62,6 +63,8 @@ export function txnTitle(t: LedgerTransaction): string {
       return 'Virtual card';
     case 'GIFTCARD_SELL':
       return 'Gift card sold';
+    case 'REFERRAL_REWARD':
+      return 'Referral reward';
     case 'GIFTCARD_BUY':
       return 'Gift card';
     case 'GADGET_PURCHASE':
@@ -93,6 +96,7 @@ export function txnAmount(t: LedgerTransaction): { text: string; positive: boole
   if (t.type === 'CARD_WITHDRAW') return { text: `+${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
   if (t.type === 'CARD_ISSUE') return { text: `-${fmt(t.feeFormatted)} ${t.asset}`, positive: false };
   if (t.type === 'BILL') return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
+  if (t.type === 'REFERRAL_REWARD') return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   if (t.type === 'GIFTCARD_SELL') return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   if (t.type === 'GIFTCARD_BUY' || t.type === 'GADGET_PURCHASE' || t.type === 'TICKET_PURCHASE')
     return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };

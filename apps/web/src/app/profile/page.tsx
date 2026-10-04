@@ -25,7 +25,7 @@ type Item = {
   subtitle: string;
   href?: string;
   /** When set, this entry is hidden while the admin feature flag is off. */
-  feature?: "virtual_cards";
+  feature?: "virtual_cards" | "referrals";
 };
 
 const items: Item[] = [
@@ -44,6 +44,12 @@ const items: Item[] = [
     subtitle: "USD cards for online payments",
     href: "/cards",
     feature: "virtual_cards",
+  },
+  {
+    title: "Refer & earn",
+    subtitle: "Invite friends and earn when they join",
+    href: "/refer",
+    feature: "referrals",
   },
   {
     title: "Security",

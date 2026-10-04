@@ -92,6 +92,29 @@
         "vitest": "^1.6.0",
       },
     },
+    "apps/influencer": {
+      "name": "@cheqpay/influencer",
+      "version": "1.0.0",
+      "dependencies": {
+        "@supabase/supabase-js": "^2.38.0",
+        "autoprefixer": "^10.4.16",
+        "lucide-react": "^0.263.1",
+        "next": "^15.0.0",
+        "postcss": "^8.4.31",
+        "qrcode.react": "^4.2.0",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "tailwindcss": "^3.3.0",
+        "typescript": "^5.3.2",
+      },
+      "devDependencies": {
+        "@types/node": "^20.8.0",
+        "@types/react": "^18.2.0",
+        "@types/react-dom": "^18.2.0",
+        "eslint": "^8.54.0",
+        "eslint-config-next": "^15.0.0",
+      },
+    },
     "apps/mobile": {
       "name": "@cheqpay/mobile",
       "version": "1.0.0",
@@ -495,6 +518,8 @@
     "@cheqpay/api": ["@cheqpay/api@workspace:apps/api"],
 
     "@cheqpay/db": ["@cheqpay/db@workspace:packages/db"],
+
+    "@cheqpay/influencer": ["@cheqpay/influencer@workspace:apps/influencer"],
 
     "@cheqpay/mobile": ["@cheqpay/mobile@workspace:apps/mobile"],
 
@@ -3359,6 +3384,8 @@
     "@babel/template/@babel/types": ["@babel/types@7.29.0", "", { "dependencies": { "@babel/helper-string-parser": "^7.27.1", "@babel/helper-validator-identifier": "^7.28.5" } }, "sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A=="],
 
     "@babel/traverse/@babel/types": ["@babel/types@7.29.0", "", { "dependencies": { "@babel/helper-string-parser": "^7.27.1", "@babel/helper-validator-identifier": "^7.28.5" } }, "sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A=="],
+
+    "@cheqpay/influencer/lucide-react": ["lucide-react@0.263.1", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0" } }, "sha512-keqxAx97PlaEN89PXZ6ki1N8nRjGWtDa4021GFYLNj0RgruM5odbpl8GHTExj0hhPq3sF6Up0gnxt6TSHu+ovw=="],
 
     "@cheqpay/web/lucide-react": ["lucide-react@0.263.1", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0" } }, "sha512-keqxAx97PlaEN89PXZ6ki1N8nRjGWtDa4021GFYLNj0RgruM5odbpl8GHTExj0hhPq3sF6Up0gnxt6TSHu+ovw=="],
 

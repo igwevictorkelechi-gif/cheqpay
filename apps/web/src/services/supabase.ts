@@ -30,6 +30,17 @@ if (typeof window !== "undefined") {
     if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
       // Loaded lazily: the push helpers use the API client, which uses this file.
       void import("@/lib/webPush").then((m) => m.resyncPush()).catch(() => undefined);
+      // A referral code typed (or brought in by a link) at sign-up is applied
+      // once the new account can call the API. Attempted once either way: a
+      // code that doesn't fit can still be entered later in Refer & earn.
+      let ref: string | null = null;
+      try {
+        ref = localStorage.getItem("cheqpay:ref");
+        if (ref) localStorage.removeItem("cheqpay:ref");
+      } catch {
+        /* storage unavailable */
+      }
+      if (ref) void import("@/services/api").then(({ api }) => api.applyReferral(ref!)).catch(() => undefined);
       return;
     }
     if (event !== "SIGNED_OUT") return;

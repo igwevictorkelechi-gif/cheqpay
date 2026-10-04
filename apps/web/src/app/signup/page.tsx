@@ -1,14 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "@/components/AuthLayout";
 import { authService } from "@/services/auth";
 
+const REF_KEY = "cheqpay:ref";
+
 export default function SignupPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ fullName: "", email: "", phone: "" });
+  const [form, setForm] = useState({ fullName: "", email: "", phone: "", referral: "" });
+
+  // A referral link lands here as /signup/?ref=CODE. Pre-fill it, and keep it
+  // for after the email code is confirmed (it's applied on first sign-in).
+  useEffect(() => {
+    let ref = "";
+    try {
+      ref = new URLSearchParams(window.location.search).get("ref") ?? localStorage.getItem(REF_KEY) ?? "";
+    } catch {
+      /* storage unavailable */
+    }
+    ref = ref.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+    if (ref) setForm((f) => ({ ...f, referral: ref }));
+  }, []);
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLocalLoading] = useState(false);
@@ -35,6 +50,13 @@ export default function SignupPage() {
 
     setLocalLoading(true);
     try {
+      const ref = form.referral.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      try {
+        if (ref.length >= 4) localStorage.setItem(REF_KEY, ref);
+        else localStorage.removeItem(REF_KEY);
+      } catch {
+        /* storage unavailable — the code can still be added later in Refer & earn */
+      }
       const email = form.email.trim().toLowerCase();
       await authService.sendEmailOtp(email, {
         create: true,
@@ -107,6 +129,21 @@ export default function SignupPage() {
               className="input"
               disabled={loading}
               autoComplete="tel"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="referral" className="label">Referral code (optional)</label>
+            <input
+              id="referral"
+              type="text"
+              name="referral"
+              value={form.referral}
+              onChange={(e) => setForm({ ...form, referral: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 20) })}
+              placeholder="e.g. TOLU10"
+              className="input font-mono uppercase"
+              disabled={loading}
+              autoComplete="off"
             />
           </div>
 
