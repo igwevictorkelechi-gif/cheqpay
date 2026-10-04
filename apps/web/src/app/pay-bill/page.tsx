@@ -13,11 +13,13 @@ import {
   Ticket,
   Laptop,
   CalendarDays,
+  Gift,
   type LucideIcon,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { TopBar, Card, useToast } from "@/components/MobileUI";
 import { useAuthStore } from "@/store";
+import { useFeatures } from "@/lib/useFeatures";
 
 type Service = {
   label: string;
@@ -35,6 +37,7 @@ const services: Service[] = [
   { label: "Cable TV", icon: Tv, color: "#EC4899", route: "/pay-bill/cabletv", badge: "New" },
   { label: "Gadgets", icon: Laptop, color: "#0EA5A0", route: "/gadgets", badge: "New" },
   { label: "Events", icon: CalendarDays, color: "#7C3AED", route: "/events", badge: "New" },
+  { label: "Gift cards", icon: Gift, color: "#F59E0B", route: "/gift-cards", badge: "New" },
   { label: "Vouchers", icon: Ticket, color: "#6E6880" },
 ];
 
@@ -42,6 +45,9 @@ export default function PayBillPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const toast = useToast();
+  const features = useFeatures();
+  // Gift cards only shows once the admin has switched selling on.
+  const shown = services.filter((s) => s.route !== "/gift-cards" || features.gift_cards_sell);
 
   return (
     <AppShell>
@@ -74,7 +80,7 @@ export default function PayBillPage() {
           </div>
 
           <div className="flex flex-wrap justify-between">
-            {services.map((service) => {
+            {shown.map((service) => {
               const Icon = service.icon;
               return (
                 <button

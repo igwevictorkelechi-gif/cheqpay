@@ -8,7 +8,7 @@ import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
   Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search,
-  ShieldAlert, Monitor, Ban, Package, ShoppingBag, Ticket, CalendarDays, ScanLine, type LucideIcon,
+  ShieldAlert, Monitor, Ban, Package, ShoppingBag, Ticket, CalendarDays, ScanLine, Gift, Percent, type LucideIcon,
 } from 'lucide-react';
 import { subAdminAccess, SUB_ADMIN_PASSWORD_PAGE, type AdminRole } from '@/lib/adminAuth';
 
@@ -74,6 +74,14 @@ const categories: Category[] = [
       { label: 'Catalog', href: '/gadgets', icon: Package },
       { label: 'Orders', href: '/gadgets/orders', icon: ShoppingBag },
       { label: 'Discount Codes', href: '/gadgets/discounts', icon: Ticket },
+    ],
+  },
+  {
+    label: 'Gift Cards',
+    icon: Gift,
+    items: [
+      { label: 'Trades', href: '/gift-cards', icon: Gift },
+      { label: 'Rates', href: '/gift-cards/rates', icon: Percent },
     ],
   },
   {
