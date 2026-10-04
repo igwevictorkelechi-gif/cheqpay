@@ -277,7 +277,11 @@ export type LedgerTxType =
   | 'TRANSFER_IN'
   | 'CARD_FUND'
   | 'CARD_WITHDRAW'
-  | 'CARD_ISSUE';
+  | 'CARD_ISSUE'
+  | 'GADGET_PURCHASE'
+  | 'TICKET_PURCHASE'
+  | 'GIFTCARD_SELL'
+  | 'GIFTCARD_BUY';
 export type LedgerTxStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
 export interface LedgerTransaction {
   id: string;
@@ -331,6 +335,53 @@ export interface GadgetDelivery {
 }
 export type GadgetOrderStatus =
   | 'PAID' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'REFUNDED';
+export type GiftCardType = 'PHYSICAL' | 'ECODE';
+export type GiftCardTradeStatus = 'SUBMITTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED';
+
+export interface GiftCardRate {
+  id: string;
+  country: string;
+  countryName: string;
+  cardType: GiftCardType;
+  currency: string;
+  symbol: string;
+  rateMinor: string;
+  rateFormatted: string;
+  minValue: number;
+  maxValue: number;
+  active: boolean;
+}
+
+export interface GiftCardBrand {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  active: boolean;
+  rates: GiftCardRate[];
+}
+
+export interface GiftCardTrade {
+  id: string;
+  brandName: string;
+  country: string;
+  countryName: string;
+  cardType: GiftCardType;
+  currency: string;
+  faceValue: number;
+  faceValueFormatted: string;
+  rateFormatted: string;
+  payoutMinor: string;
+  payoutFormatted: string;
+  status: GiftCardTradeStatus;
+  rejectReason: string | null;
+  hasCode: boolean;
+  photos: number;
+  note: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
 export interface GadgetOrder {
   id: string;
   productName: string;
@@ -872,6 +923,29 @@ export const api = {
   },
 
   /** Admin feature switches — used to hide disabled features in the UI. */
+  getGiftCardRates(): Promise<{ brands: GiftCardBrand[] }> {
+    return apiFetch('/api/giftcards/sell/rates');
+  },
+
+  uploadGiftCardPhoto(image: string, contentType: 'image/jpeg' | 'image/png'): Promise<{ id: string }> {
+    return apiFetch('/api/giftcards/sell/files', { method: 'POST', body: JSON.stringify({ image, contentType }) });
+  },
+
+  submitGiftCardTrade(
+    input: { rateId: string; faceValue: number; code?: string; pin?: string; fileIds: string[]; note?: string },
+    key: string,
+  ): Promise<{ trade: GiftCardTrade }> {
+    return apiFetch('/api/giftcards/sell/trades', {
+      method: 'POST',
+      headers: { 'idempotency-key': key },
+      body: JSON.stringify(input),
+    });
+  },
+
+  getGiftCardTrades(): Promise<{ trades: GiftCardTrade[] }> {
+    return apiFetch('/api/giftcards/sell/trades');
+  },
+
   getFeatures(): Promise<{ features: FeatureFlags }> {
     return apiFetch('/api/features');
   },
@@ -1028,6 +1102,8 @@ export interface FeatureFlags {
   p2p_transfers: boolean;
   gadgets: boolean;
   events: boolean;
+  gift_cards_sell: boolean;
+  gift_cards_buy: boolean;
 }
 
 export interface CardTransaction {

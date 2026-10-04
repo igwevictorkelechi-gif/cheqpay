@@ -69,6 +69,8 @@ enum TransactionType {
   CARD_ISSUE // USD paid for a new virtual card (the price is the row's fee)
   GADGET_PURCHASE // NGN spent buying a gadget from the in-app store
   TICKET_PURCHASE // NGN spent buying event tickets
+  GIFTCARD_SELL // NGN credited for a gift card the user traded in (admin-approved)
+  GIFTCARD_BUY // NGN spent buying a digital gift card
 }
 
 enum TicketStatus {

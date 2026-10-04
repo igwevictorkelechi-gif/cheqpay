@@ -3,6 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store';
 import { colors, TopBar, Card } from '@/components/brand';
+import { useFeatures } from '@/lib/useFeatures';
 
 type Service = {
   label: string;
@@ -20,6 +21,7 @@ const services: Service[] = [
   { label: 'Food delivery', emoji: '🛵', badge: 'New', route: '/(app)/bill/food' },
   { label: 'Gadgets', emoji: '💻', badge: 'New', route: '/(app)/gadgets' },
   { label: 'Events', emoji: '🎫', badge: 'New', route: '/(app)/events' },
+  { label: 'Gift cards', emoji: '🎁', badge: 'New', route: '/(app)/gift-cards' },
   { label: 'Vouchers', emoji: '🎟️' },
 ];
 
@@ -52,6 +54,9 @@ function ServiceTile({ service }: { service: Service }) {
 export default function PayBillScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
+  const features = useFeatures();
+  // Gift cards only shows once the admin has switched selling on.
+  const shown = services.filter((s) => s.route !== '/(app)/gift-cards' || features.gift_cards_sell);
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
@@ -86,7 +91,7 @@ export default function PayBillScreen() {
             </View>
 
             <View className="flex-row flex-wrap justify-between">
-              {services.map((service) => (
+              {shown.map((service) => (
                 <ServiceTile key={service.label} service={service} />
               ))}
             </View>

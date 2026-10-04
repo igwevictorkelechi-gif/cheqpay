@@ -13,6 +13,9 @@ export const ALL_ON: FeatureFlags = {
   p2p_transfers: true,
   gadgets: true,
   events: true,
+  // New and off by default: stay hidden until the server says they're on.
+  gift_cards_sell: false,
+  gift_cards_buy: false,
 };
 
 /** Admin feature switches for hiding disabled features in the app UI. */

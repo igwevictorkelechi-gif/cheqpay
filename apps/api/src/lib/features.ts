@@ -18,6 +18,8 @@ export const FEATURE_DEFS = [
   { key: "p2p_transfers", label: "User transfers", description: "Send Naira or crypto to another CheqPay user" },
   { key: "gadgets", label: "Gadget store", description: "Buy gadgets, paid from the NGN balance and fulfilled by us" },
   { key: "events", label: "Event tickets", description: "Buy tickets to events & concerts, paid from the NGN balance" },
+  { key: "gift_cards_sell", label: "Sell gift cards", description: "Trade gift cards for Naira — reviewed by an admin, paid at the rates you set" },
+  { key: "gift_cards_buy", label: "Buy gift cards", description: "Buy digital gift cards with Naira (needs the gift card supplier set up)" },
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_DEFS)[number]["key"];
@@ -67,6 +69,10 @@ const DEFAULT_OFF: readonly FeatureKey[] = [
   // Event tickets ship OFF until there are events to sell. Turn on from the
   // admin dashboard once events + tiers are created.
   "events",
+  // Gift cards ship OFF: selling needs rates set and someone reviewing the
+  // queue; buying needs the supplier account funded.
+  "gift_cards_sell",
+  "gift_cards_buy",
 ];
 
 const DEFAULTS: Record<FeatureKey, boolean> = Object.fromEntries(
