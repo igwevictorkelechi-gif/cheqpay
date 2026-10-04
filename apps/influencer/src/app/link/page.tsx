@@ -42,12 +42,12 @@ export default function LinkPage() {
         <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>
       ) : (
         <div className="grid gap-5 md:grid-cols-[1fr_320px]">
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
             <div className="card">
               <p className="font-bold">Your tracking link</p>
               <p className="mt-1 text-sm text-muted">Every click is counted, and everyone who signs up through it is yours.</p>
               <div className="mt-4 flex gap-2">
-                <input readOnly value={d.link} className="input font-mono text-sm" />
+                <input readOnly value={d.link} className="input min-w-0 flex-1 font-mono text-sm" />
                 <button onClick={() => copy("link", d.link)} className="btn !px-4">{copied === "link" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
                 <button
                   onClick={() => (navigator.share ? navigator.share({ title: "Join CheqPay", url: d.link }).catch(() => undefined) : copy("link", d.link))}
@@ -65,7 +65,7 @@ export default function LinkPage() {
               <div className="mt-3 space-y-3">
                 {CAPTIONS(d.code, d.link).map((c, i) => (
                   <div key={i} className="flex items-start gap-3 rounded-2xl bg-circle p-4">
-                    <p className="flex-1 text-sm leading-relaxed">{c}</p>
+                    <p className="min-w-0 flex-1 text-sm leading-relaxed [overflow-wrap:anywhere]">{c}</p>
                     <button onClick={() => copy(`c${i}`, c)} className="shrink-0 text-muted hover:text-ink" aria-label="Copy caption">
                       {copied === `c${i}` ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
                     </button>
