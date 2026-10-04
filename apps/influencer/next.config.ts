@@ -1,21 +1,14 @@
 import type { NextConfig } from "next";
 
+// Built as plain files (out/) for upload to the influencer.mycheqpay.com
+// subdomain on the same kind of host as mycheqpay.com. Security headers and
+// the /r/CODE rewrite live in public/.htaccess, since an export can't set them.
 const nextConfig: NextConfig = {
+  output: "export",
+  trailingSlash: true,
+  images: { unoptimized: true },
   reactStrictMode: true,
   poweredByHeader: false,
-  async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
-        ],
-      },
-    ];
-  },
 };
 
 export default nextConfig;
