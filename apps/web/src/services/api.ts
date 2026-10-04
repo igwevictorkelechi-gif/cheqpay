@@ -217,7 +217,8 @@ export type LedgerTxType =
   | "GADGET_PURCHASE"
   | "TICKET_PURCHASE"
   | "GIFTCARD_SELL"
-  | "GIFTCARD_BUY";
+  | "GIFTCARD_BUY"
+  | "REFERRAL_REWARD";
 export type LedgerTxStatus =
   | "PENDING"
   | "PROCESSING"
@@ -882,6 +883,14 @@ export const api = {
     return apiFetch("/api/giftcards/sell/trades");
   },
 
+  getMyReferral(): Promise<MyReferral> {
+    return apiFetch("/api/referrals/me");
+  },
+
+  applyReferral(code: string): Promise<{ referrerName: string }> {
+    return apiFetch("/api/referrals/apply", { method: "POST", body: JSON.stringify({ code }) });
+  },
+
   getFeatures(): Promise<{ features: FeatureFlags }> {
     return apiFetch("/api/features");
   },
@@ -1212,6 +1221,37 @@ export interface GiftCardTrade {
   reviewedAt: string | null;
 }
 
+export interface ReferralEarning {
+  id: string;
+  kind: "COMMISSION" | "BASIC_BONUS" | "WELCOME_BONUS" | "TASK";
+  amountMinor: string;
+  amountFormatted: string;
+  status: "HELD" | "PAID" | "VOID";
+  note: string | null;
+  releaseAt: string;
+  paidAt: string | null;
+  voidReason: string | null;
+  createdAt: string;
+}
+
+export interface MyReferral {
+  code: string;
+  kind: "BASIC" | "INFLUENCER";
+  link: string;
+  active: boolean;
+  basicBonusFormatted: string;
+  welcomeBonusFormatted: string | null;
+  qualifyMinFormatted: string;
+  holdHours: number;
+  counts: { signedUp: number; qualified: number };
+  totals: { heldFormatted: string; paidFormatted: string; lifetimeFormatted: string; thisMonthFormatted: string };
+  earnings: ReferralEarning[];
+  referredBy: string | null;
+  canApply: boolean;
+  application: { status: string; reason: string | null } | null;
+  portalUrl: string;
+}
+
 export interface FeatureFlags {
   ngn_deposits: boolean;
   ngn_withdrawals: boolean;
@@ -1225,6 +1265,7 @@ export interface FeatureFlags {
   events: boolean;
   gift_cards_sell: boolean;
   gift_cards_buy: boolean;
+  referrals: boolean;
 }
 
 export interface CardTransaction {

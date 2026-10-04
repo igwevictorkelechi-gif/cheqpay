@@ -281,7 +281,8 @@ export type LedgerTxType =
   | 'GADGET_PURCHASE'
   | 'TICKET_PURCHASE'
   | 'GIFTCARD_SELL'
-  | 'GIFTCARD_BUY';
+  | 'GIFTCARD_BUY'
+  | 'REFERRAL_REWARD';
 export type LedgerTxStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
 export interface LedgerTransaction {
   id: string;
@@ -380,6 +381,33 @@ export interface GiftCardTrade {
   note: string | null;
   createdAt: string;
   reviewedAt: string | null;
+}
+
+export interface ReferralEarning {
+  id: string;
+  kind: 'COMMISSION' | 'BASIC_BONUS' | 'WELCOME_BONUS' | 'TASK';
+  amountFormatted: string;
+  status: 'HELD' | 'PAID' | 'VOID';
+  note: string | null;
+  releaseAt: string;
+  voidReason: string | null;
+  createdAt: string;
+}
+
+export interface MyReferral {
+  code: string;
+  kind: 'BASIC' | 'INFLUENCER';
+  link: string;
+  basicBonusFormatted: string;
+  qualifyMinFormatted: string;
+  holdHours: number;
+  counts: { signedUp: number; qualified: number };
+  totals: { heldFormatted: string; paidFormatted: string; lifetimeFormatted: string };
+  earnings: ReferralEarning[];
+  referredBy: string | null;
+  canApply: boolean;
+  application: { status: string; reason: string | null } | null;
+  portalUrl: string;
 }
 
 export interface GadgetOrder {
@@ -946,6 +974,14 @@ export const api = {
     return apiFetch('/api/giftcards/sell/trades');
   },
 
+  getMyReferral(): Promise<MyReferral> {
+    return apiFetch('/api/referrals/me');
+  },
+
+  applyReferral(code: string): Promise<{ referrerName: string }> {
+    return apiFetch('/api/referrals/apply', { method: 'POST', body: JSON.stringify({ code }) });
+  },
+
   getFeatures(): Promise<{ features: FeatureFlags }> {
     return apiFetch('/api/features');
   },
@@ -1104,6 +1140,7 @@ export interface FeatureFlags {
   events: boolean;
   gift_cards_sell: boolean;
   gift_cards_buy: boolean;
+  referrals: boolean;
 }
 
 export interface CardTransaction {

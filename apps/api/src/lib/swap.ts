@@ -407,6 +407,12 @@ export async function executeSwap(params: {
     await ensureUsdAsset();
   }
 
+  const spreadBps = await getSwapSpreadBps();
+  const spreadMinor =
+    spreadBps > 0 && spreadBps < 10_000
+      ? (quote.amountOut * BigInt(Math.trunc(spreadBps))) / BigInt(10_000 - Math.trunc(spreadBps))
+      : 0n;
+
   const result = await prisma.$transaction(async (db) => {
     // Consume the quote (first writer wins).
     const consumed = await db.quote.updateMany({
@@ -458,6 +464,12 @@ export async function executeSwap(params: {
           amountIn: quote.amountIn.toString(),
           amountOut: quote.amountOut.toString(),
           rate: quote.rate.toString(),
+          // Revenue: our spread, backed out of the quoted net, in minor units
+          // of toAsset — the same fields the FX path records. Read by revenue
+          // reports and influencer commission; balances don't use it.
+          spreadMinor: spreadMinor.toString(),
+          spreadAsset: quote.toAsset,
+          spreadBps,
         },
       },
     });

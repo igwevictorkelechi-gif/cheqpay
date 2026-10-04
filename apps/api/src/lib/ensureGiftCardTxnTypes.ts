@@ -1,7 +1,7 @@
 import { prisma } from "@cheqpay/db";
 
 /**
- * Add GIFTCARD_SELL and GIFTCARD_BUY to the TransactionType enum.
+ * Add GIFTCARD_SELL, GIFTCARD_BUY and REFERRAL_REWARD to the TransactionType enum.
  *
  * They ship in the schema, but migrations are not applied on deploy here (see
  * ensureGadgetTxnType), so the values are added lazily and idempotently before
@@ -16,6 +16,7 @@ export function ensureGiftCardTxnTypes(): Promise<void> {
     ensured = (async () => {
       await prisma.$executeRawUnsafe(`ALTER TYPE "TransactionType" ADD VALUE IF NOT EXISTS 'GIFTCARD_SELL'`);
       await prisma.$executeRawUnsafe(`ALTER TYPE "TransactionType" ADD VALUE IF NOT EXISTS 'GIFTCARD_BUY'`);
+      await prisma.$executeRawUnsafe(`ALTER TYPE "TransactionType" ADD VALUE IF NOT EXISTS 'REFERRAL_REWARD'`);
     })().catch((err) => {
       ensured = null;
       throw err;

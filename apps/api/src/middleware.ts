@@ -14,6 +14,7 @@ const DEFAULT_ORIGINS = [
   "https://mycheqpay.com",
   "https://www.mycheqpay.com",
   "https://cheqpay.vercel.app",
+  "https://influencer.mycheqpay.com",
 ];
 
 export function allowedOrigins(env: Record<string, string | undefined> = process.env): Set<string> {

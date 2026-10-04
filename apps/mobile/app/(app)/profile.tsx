@@ -10,7 +10,7 @@ import { api, getAccessToken } from '@/services/api';
 import { tierInfo } from '@/lib/tier';
 import { useFeatures } from '@/lib/useFeatures';
 
-type Item = { title: string; subtitle: string; route?: string; feature?: 'virtual_cards' };
+type Item = { title: string; subtitle: string; route?: string; feature?: 'virtual_cards' | 'referrals' };
 
 const items: Item[] = [
   {
@@ -20,6 +20,7 @@ const items: Item[] = [
   },
   { title: 'Connected bank accounts', subtitle: 'Bank accounts saved for withdrawals', route: '/(app)/bank-accounts' },
   { title: 'Virtual cards', subtitle: 'USD cards for online payments', route: '/(app)/cards', feature: 'virtual_cards' },
+  { title: 'Refer & earn', subtitle: 'Invite friends and earn when they join', route: '/(app)/refer', feature: 'referrals' },
   { title: 'Security', subtitle: '2FA, app lock, passcode, biometrics, instant withdrawal', route: '/(app)/security' },
   { title: 'Preferences', subtitle: 'Notifications, display currency & app themes', route: '/(app)/preferences' },
   { title: 'About us', subtitle: 'FAQs, privacy policy, our blog, contact us', route: '/(app)/settings' },

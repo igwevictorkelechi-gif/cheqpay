@@ -71,6 +71,7 @@ enum TransactionType {
   TICKET_PURCHASE // NGN spent buying event tickets
   GIFTCARD_SELL // NGN credited for a gift card the user traded in (admin-approved)
   GIFTCARD_BUY // NGN spent buying a digital gift card
+  REFERRAL_REWARD // NGN paid for a referral bonus, influencer commission or task
 }
 
 enum TicketStatus {
