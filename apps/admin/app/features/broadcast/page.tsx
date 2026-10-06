@@ -1,10 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell, Send } from 'lucide-react';
+import { Bell, ExternalLink, History, RefreshCw, Send } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
 type Audience = 'updates' | 'promos';
+
+interface SentBroadcast {
+  id: string;
+  sentAt: string;
+  sentBy: string | null;
+  title: string;
+  body: string;
+  category: string;
+  url: string | null;
+  devices: number | null;
+  browsers: number | null;
+  apps: number | null;
+  shown: number | null;
+  tapped: number | null;
+}
 
 /**
  * Send a push notification to every user who allows it — on their phones and
@@ -20,6 +35,36 @@ export default function BroadcastPage() {
   const [result, setResult] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [sentId, setSentId] = useState<string | null>(null);
   const [stats, setStats] = useState<{ accepted: number; delivered: number; opened: number } | null>(null);
+  const [history, setHistory] = useState<SentBroadcast[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  async function loadHistory() {
+    setHistoryError(null);
+    try {
+      const res = await fetch('/api/broadcast', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to load');
+      setHistory(data.broadcasts);
+    } catch (e) {
+      setHistoryError(e instanceof Error ? e.message : 'Failed to load');
+    }
+  }
+  useEffect(() => {
+    void loadHistory();
+  }, []);
+  // Refresh the list as phones report back after a send.
+  useEffect(() => {
+    if (stats) void loadHistory();
+  }, [stats?.delivered, stats?.opened]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function reuse(b: SentBroadcast) {
+    setTitle(b.title);
+    setBody(b.body);
+    setUrl(b.url ?? '');
+    setAudience(b.category === 'promos' ? 'promos' : 'updates');
+    setResult(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   // After a send, watch phones report back for a couple of minutes. "Accepted"
   // is Apple/Google taking it; "shown" is the phone actually displaying it.
@@ -70,6 +115,7 @@ export default function BroadcastPage() {
         text: `Accepted for ${data.sent} device${data.sent === 1 ? '' : 's'} by Apple/Google. Waiting for phones to confirm they showed it…`,
       });
       if (data.id) setSentId(data.id);
+      void loadHistory();
       setTitle('');
       setBody('');
       setUrl('');
@@ -181,6 +227,78 @@ export default function BroadcastPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="mt-10 max-w-4xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-xl font-bold text-gray-900">
+            <History size={20} /> Sent notifications
+          </h2>
+          <button onClick={() => void loadHistory()} className="flex items-center gap-1.5 text-sm font-semibold text-brand-600">
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
+        {historyError ? (
+          <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{historyError}</p>
+        ) : history === null ? (
+          <p className="text-sm text-gray-500">Loading…</p>
+        ) : history.length === 0 ? (
+          <p className="rounded-xl border border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
+            Nothing sent yet.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {history.map((b) => (
+              <div key={b.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-gray-900">{b.title}</p>
+                    <p className="mt-0.5 text-sm text-gray-700">{b.body}</p>
+                    <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                      <span>{new Date(b.sentAt).toLocaleString()}</span>
+                      {b.sentBy && <span>by {b.sentBy}</span>}
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 font-semibold text-gray-600">
+                        {b.category === 'promos' ? 'Promotions' : 'News'}
+                      </span>
+                      {b.url && (
+                        <span className="inline-flex items-center gap-1">
+                          <ExternalLink size={12} /> {b.url}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <button onClick={() => reuse(b)} className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                    Use again
+                  </button>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
+                  <div className="rounded-lg bg-gray-50 p-2">
+                    <p className="text-lg font-bold text-gray-900">{b.devices ?? '—'}</p>
+                    <p className="text-gray-600">Devices</p>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 p-2">
+                    <p className="text-lg font-bold text-gray-900">
+                      {b.apps ?? '—'} <span className="font-normal text-gray-400">/</span> {b.browsers ?? '—'}
+                    </p>
+                    <p className="text-gray-600">Phone app / browsers</p>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 p-2">
+                    <p className="text-lg font-bold text-green-700">{b.shown ?? '—'}</p>
+                    <p className="text-gray-600">Shown</p>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 p-2">
+                    <p className="text-lg font-bold text-brand-600">{b.tapped ?? '—'}</p>
+                    <p className="text-gray-600">Tapped</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <p className="text-xs text-gray-500">
+              “Shown” and “Tapped” are reported by browsers and the installed web app; “—” means that send
+              happened before this was tracked.
+            </p>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

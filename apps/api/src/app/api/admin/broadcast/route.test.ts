@@ -5,6 +5,8 @@ const h = vi.hoisted(() => ({
   otp: vi.fn(),
   record: vi.fn(),
   broadcast: vi.fn(),
+  findMany: vi.fn(),
+  stats: vi.fn(),
 }));
 
 vi.mock("@/lib/adminGuard", () => ({
@@ -14,9 +16,11 @@ vi.mock("@/lib/adminGuard", () => ({
 }));
 vi.mock("@/lib/push", () => ({ broadcastPush: h.broadcast }));
 vi.mock("@/lib/ratelimit", () => ({ enforceRateLimit: vi.fn() }));
+vi.mock("@cheqpay/db", () => ({ prisma: { auditLog: { findMany: h.findMany } } }));
+vi.mock("@/lib/webPush", () => ({ messagesStats: h.stats }));
 
 import { ApiError } from "@/lib/http";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 const call = (body: unknown) =>
   POST(new Request("https://api/x", { method: "POST", body: JSON.stringify(body) }));
@@ -55,5 +59,32 @@ describe("admin broadcast", () => {
   it("only goes to the news or promotions audiences", async () => {
     const res = await call({ title: "Hello there", body: "Body text", category: "security" });
     expect(res.status).toBe(422);
+  });
+});
+
+describe("admin broadcast history", () => {
+  const id1 = "11111111-1111-4111-8111-111111111111";
+  it("lists past sends newest first, with reach and what phones reported", async () => {
+    h.findMany.mockResolvedValue([
+      { id: "a2", createdAt: new Date("2026-10-06T18:11:12Z"), resourceId: id1,
+        details: { actor: "owner@cheqpay.com", title: "Gift cards are here", body: "Sell yours for Naira", category: "updates", url: "/gift-cards", sent: 42, browsers: 40, apps: 2, id: id1 } },
+      { id: "a1", createdAt: new Date("2026-09-25T23:12:50Z"), resourceId: null,
+        details: { actor: "owner@cheqpay.com", title: "Welcome", body: "Old send", category: "promos", sent: 7 } },
+    ]);
+    h.stats.mockResolvedValue(new Map([[id1, { accepted: 40, delivered: 31, opened: 9 }]]));
+    const res = await GET(new Request("https://api/x"));
+    expect(res.status).toBe(200);
+    const { broadcasts } = await res.json();
+    expect(h.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { action: "admin.broadcast.sent" }, orderBy: { createdAt: "desc" } }));
+    expect(h.stats).toHaveBeenCalledWith([id1]);
+    expect(broadcasts[0]).toMatchObject({ title: "Gift cards are here", url: "/gift-cards", devices: 42, browsers: 40, apps: 2, shown: 31, tapped: 9, sentBy: "owner@cheqpay.com" });
+    expect(broadcasts[1]).toMatchObject({ title: "Welcome", category: "promos", devices: 7, browsers: null, shown: null, tapped: null, messageId: null });
+  });
+
+  it("is for super admins only", async () => {
+    h.actor.mockRejectedValue(new ApiError(403, "no", "forbidden"));
+    const res = await GET(new Request("https://api/x"));
+    expect(res.status).toBe(403);
+    expect(h.findMany).not.toHaveBeenCalled();
   });
 });

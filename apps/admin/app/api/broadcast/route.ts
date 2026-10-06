@@ -17,3 +17,13 @@ export async function POST(req: Request) {
   const data = await res.json().catch(() => ({ error: "Bad response from API" }));
   return NextResponse.json(data, { status: res.status });
 }
+
+// The notifications sent so far, newest first.
+export async function GET() {
+  const res = await fetch(`${API_URL}/api/admin/broadcast`, {
+    headers: await adminHeaders(),
+    cache: "no-store",
+  });
+  const data = await res.json().catch(() => ({ error: "Bad response from API" }));
+  return NextResponse.json(data, { status: res.status });
+}
