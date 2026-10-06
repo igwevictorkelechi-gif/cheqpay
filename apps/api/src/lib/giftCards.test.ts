@@ -8,6 +8,12 @@ const h = vi.hoisted(() => ({
   txCreate: vi.fn(),
   audit: vi.fn(),
   notify: vi.fn(),
+  push: vi.fn(),
+  webPush: vi.fn(),
+  email: vi.fn(),
+  emailOn: vi.fn(() => true),
+  webhook: vi.fn(),
+  env: { ADMIN_EMAILS: "Owner@CheqPay.com, ops@cheqpay.com,not-an-email" } as Record<string, string | undefined>,
 }));
 
 vi.mock("@cheqpay/db", () => {
@@ -27,6 +33,11 @@ vi.mock("@cheqpay/db", () => {
   };
 });
 vi.mock("./alerts", () => ({ notifyUser: h.notify }));
+vi.mock("./push", () => ({ sendPush: h.push }));
+vi.mock("./webPush", () => ({ sendWebPush: h.webPush }));
+vi.mock("./email", () => ({ sendEmail: h.email, isEmailConfigured: h.emailOn }));
+vi.mock("./adminAlert", () => ({ notifyAdminAlert: h.webhook }));
+vi.mock("./env", () => ({ getEnv: () => h.env }));
 vi.mock("./pii", () => ({
   encryptPii: (s: string) => `enc(${s})`,
   decryptPii: (s: string) => s.replace(/^enc\((.*)\)$/, "$1"),
@@ -35,6 +46,7 @@ vi.mock("./pii", () => ({
 }));
 
 import {
+  alertAdminsNewGiftCard,
   approveTrade,
   getTradeAdmin,
   payoutMinor,
@@ -180,5 +192,60 @@ describe("gift card trade-in", () => {
     expect(verifyGiftCardFileToken("f1", exp, sig)).toBe(true);
     expect(verifyGiftCardFileToken("f2", exp, sig)).toBe(false);
     expect(verifyGiftCardFileToken("f1", Math.floor(Date.now() / 1000) - 1, sig)).toBe(false);
+  });
+});
+
+describe("alertAdminsNewGiftCard", () => {
+  const trade = {
+    id: "t-1", brandName: "Amazon", countryName: "United States", cardType: "ECODE",
+    faceValueFormatted: "$100", payoutFormatted: "₦125,000.00",
+  } as unknown as Parameters<typeof alertAdminsNewGiftCard>[1];
+
+  beforeEach(() => {
+    for (const f of [h.query, h.push, h.webPush, h.email, h.webhook]) f.mockReset();
+    h.push.mockResolvedValue(1); h.webPush.mockResolvedValue(1); h.email.mockResolvedValue({ id: "e" }); h.webhook.mockResolvedValue(undefined);
+    h.emailOn.mockReturnValue(true);
+    h.query.mockImplementation(async (sql: string, ...args: unknown[]) => {
+      if (sql.includes("FROM admin_accounts")) return [{ email: "ops@cheqpay.com" }, { email: "Reviewer@CheqPay.com" }];
+      if (sql.includes("legal_name FROM app_users")) return [{ email: "tolu@example.com", legal_name: "Tolu Adeyemi" }];
+      if (sql.includes("lower(email) = ANY")) {
+        const wanted = args[0] as string[];
+        return [{ id: "admin-owner", email: "owner@cheqpay.com" }, { id: "admin-rev", email: "reviewer@cheqpay.com" }].filter((u) => wanted.includes(u.email));
+      }
+      return [];
+    });
+  });
+
+  it("pushes, emails and posts the webhook for every admin, once each", async () => {
+    await alertAdminsNewGiftCard("user-1", trade);
+    const lookup = h.query.mock.calls.find(([sql]) => String(sql).includes("lower(email) = ANY"))!;
+    expect(lookup[1]).toEqual(["owner@cheqpay.com", "ops@cheqpay.com", "reviewer@cheqpay.com"]);
+    expect(h.push.mock.calls.map((c) => c[0]).sort()).toEqual(["admin-owner", "admin-rev"]);
+    expect(h.webPush).toHaveBeenCalledTimes(2);
+    const msg = h.push.mock.calls[0][1];
+    expect(msg.title).toBe("New gift card to review");
+    expect(msg.body).toBe("Tolu Adeyemi sent a $100 Amazon (United States, E-code) · pays ₦125,000.00");
+    expect(msg.category).toBe("trades");
+    expect(h.email.mock.calls.map((c) => c[0].to)).toEqual(["owner@cheqpay.com", "ops@cheqpay.com", "reviewer@cheqpay.com"]);
+    expect(h.webhook).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips email when it isn't configured and survives every channel failing", async () => {
+    h.emailOn.mockReturnValue(false);
+    h.push.mockRejectedValue(new Error("expo down"));
+    h.webPush.mockRejectedValue(new Error("vapid"));
+    h.webhook.mockRejectedValue(new Error("hook"));
+    await expect(alertAdminsNewGiftCard("user-1", trade)).resolves.toBeUndefined();
+    expect(h.email).not.toHaveBeenCalled();
+  });
+
+  it("still posts the webhook when there are no admin emails", async () => {
+    h.env.ADMIN_EMAILS = "";
+    h.query.mockImplementation(async (sql: string) => (sql.includes("FROM admin_accounts") ? Promise.reject(new Error("no table")) : []));
+    await alertAdminsNewGiftCard("user-1", trade);
+    expect(h.push).not.toHaveBeenCalled();
+    expect(h.email).not.toHaveBeenCalled();
+    expect(h.webhook).toHaveBeenCalledTimes(1);
+    h.env.ADMIN_EMAILS = "Owner@CheqPay.com, ops@cheqpay.com,not-an-email";
   });
 });
