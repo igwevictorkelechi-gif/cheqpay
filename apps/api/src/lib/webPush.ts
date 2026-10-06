@@ -227,6 +227,24 @@ export async function messageStats(
     : null;
 }
 
+/** messageStats for many notifications at once (the broadcast history list). */
+export async function messagesStats(
+  ids: string[]
+): Promise<Map<string, { accepted: number; delivered: number; opened: number }>> {
+  const out = new Map<string, { accepted: number; delivered: number; opened: number }>();
+  const valid = ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  if (!valid.length) return out;
+  await ensureWebPushTable();
+  const rows = await prisma.$queryRawUnsafe<{ id: string; accepted: number; delivered: bigint; opened: bigint }[]>(
+    `SELECT m.id::text, m.accepted, count(r.delivered_at) AS delivered, count(r.opened_at) AS opened
+       FROM web_push_messages m LEFT JOIN web_push_receipts r ON r.message_id = m.id
+      WHERE m.id = ANY($1::uuid[]) GROUP BY m.id`,
+    valid
+  );
+  for (const r of rows) out.set(r.id, { accepted: r.accepted, delivered: Number(r.delivered), opened: Number(r.opened) });
+  return out;
+}
+
 /**
  * Deliver to a set of subscriptions. A subscription the push service says is
  * gone (404/410 — the user unsubscribed or cleared site data) is deleted, so
