@@ -19,7 +19,6 @@ import { TxnRow } from '@/components/TxnRow';
 import { KycBanner } from '@/components/KycBanner';
 import PromoPopup from '@/components/PromoPopup';
 import { useFeatures } from '@/lib/useFeatures';
-import SponsoredCard from '@/components/SponsoredCard';
 import NearbyStrip from '@/components/NearbyStrip';
 
 export default function HomeScreen() {
@@ -197,7 +196,6 @@ export default function HomeScreen() {
         </ActionRow>
 
         <View className="px-5">
-          <SponsoredCard placement="home" style={{ marginBottom: 16 }} />
         </View>
         <NearbyStrip />
 

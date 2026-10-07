@@ -1,8 +1,8 @@
 // apps/api/src/lib/ads.ts
 //
 // CheqPay Ads: self-serve ad campaigns. A verified user (the advertiser) books
-// days on in-app placements — the home banner, the success screen after a
-// transaction, the Pay bills page — pays for them upfront from their Naira
+// days on in-app placements — the success screen after a transaction and
+// the Pay bills page — pays for them upfront from their Naira
 // balance, and an admin reviews every ad before it runs.
 //
 // Pricing is a fixed price per placement per day, set by admins. Each
@@ -42,11 +42,11 @@ import { cachedSetting, invalidateSetting } from "./settingsCache";
 // ---------------------------------------------------------------------------
 // Vocabulary
 
-export const PLACEMENTS = ["home", "receipt", "paybills"] as const;
+// The home-screen banner was retired: ads no longer show on the home page.
+export const PLACEMENTS = ["receipt", "paybills"] as const;
 export type Placement = (typeof PLACEMENTS)[number];
 
 export const PLACEMENT_LABELS: Record<Placement, string> = {
-  home: "Home screen banner",
   receipt: "After a transaction",
   paybills: "Pay bills page",
 };
@@ -132,8 +132,8 @@ export interface AdsSettings {
 }
 
 export const DEFAULT_ADS_SETTINGS: AdsSettings = {
-  placementPriceMinor: { home: 500_000, receipt: 300_000, paybills: 200_000 },
-  slotsPerDay: { home: 5, receipt: 5, paybills: 5 },
+  placementPriceMinor: { receipt: 300_000, paybills: 200_000 },
+  slotsPerDay: { receipt: 5, paybills: 5 },
   nearbyPriceMinor: 150_000,
   nearbySlotsPerDay: 20,
   minScreenHours: 4,

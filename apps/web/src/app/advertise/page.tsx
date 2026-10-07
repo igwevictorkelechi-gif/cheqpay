@@ -55,7 +55,7 @@ export default function AdvertisePage() {
   const [imageBusy, setImageBusy] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [cta, setCta] = useState(CTAS[0]);
-  const [placements, setPlacements] = useState<AdPlacement[]>(["home"]);
+  const [placements, setPlacements] = useState<AdPlacement[]>(["receipt"]);
   const [venues, setVenues] = useState<string[]>([]);
   const [venueList, setVenueList] = useState<AdVenueOption[] | null>(null);
   const [venueState, setVenueState] = useState<string>("all");
@@ -231,7 +231,7 @@ export default function AdvertisePage() {
       </div>
       <div className="px-5 pt-3">
         <h1 className="text-2xl font-extrabold text-ink">Advertise on CheqPay</h1>
-        <p className="mt-1 text-sm text-muted">Reach people where they pay — on the home screen, after a payment and on Pay bills. Every ad is reviewed before it runs.</p>
+        <p className="mt-1 text-sm text-muted">Reach people where they pay — after a payment, on Pay bills, on partner screens and through creators. Every ad is reviewed before it runs.</p>
       </div>
 
       {!opts || !t ? (

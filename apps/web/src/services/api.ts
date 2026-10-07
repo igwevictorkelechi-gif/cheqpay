@@ -1302,7 +1302,7 @@ export interface ReferralEarning {
   createdAt: string;
 }
 
-export type AdPlacement = "home" | "receipt" | "paybills";
+export type AdPlacement = "receipt" | "paybills";
 export interface AdTargeting {
   states: string[];
   radius: { lat: number; lng: number; km: number } | null;
