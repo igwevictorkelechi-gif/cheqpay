@@ -96,6 +96,7 @@ async function ensureSchema(): Promise<void> {
       { ensureTransactionPinColumns },
       { ensureGadgetSchema },
       { ensureEventsSchema },
+      { ensureAdsSchema },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
@@ -104,6 +105,7 @@ async function ensureSchema(): Promise<void> {
       import("@/lib/ensureTransactionPin"),
       import("@/lib/ensureGadgets"),
       import("@/lib/ensureEvents"),
+      import("@/lib/ensureAds"),
     ]);
     await Promise.all([
       ensureRetentionSchema(),
@@ -131,6 +133,9 @@ async function ensureSchema(): Promise<void> {
       // events.category, same hazard: every Event query selects it (storefront,
       // my tickets, checkout, admin). Also creates the event tables if missing.
       ensureEventsSchema(),
+      // ad_campaigns.promoted_venue_id is added to an existing table here, so
+      // it follows the same column-add rule. (Raw-SQL tables; no Prisma model.)
+      ensureAdsSchema(),
     ]);
     // NB: the KYC document TABLE (image bytes) is created lazily by
     // lib/kycDocuments on first use, not here. It is a new table, so it is

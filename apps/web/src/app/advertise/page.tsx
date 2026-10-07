@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, Check, ImagePlus, Loader2, LocateFixed, Megaphone, ShieldCheck, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, ImagePlus, Loader2, LocateFixed, Megaphone, MapPin, ShieldCheck, Tv, Users, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, useToast } from "@/components/MobileUI";
 import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 import { downscaleToBase64 } from "@/lib/image";
 import { useFeatures } from "@/lib/useFeatures";
-import { api, ApiError, type AdOptions, type AdPlacement, type AdQuote, type AdTargeting } from "@/services/api";
+import { api, ApiError, type AdOptions, type AdPlacement, type AdQuote, type AdTargeting, type AdVenueOption } from "@/services/api";
 
 const CTAS = ["Learn more", "Shop now", "Order now", "Visit us", "Book now", "Sign up", "Call now", "Get offer"];
 
@@ -56,6 +56,11 @@ export default function AdvertisePage() {
   const [linkUrl, setLinkUrl] = useState("");
   const [cta, setCta] = useState(CTAS[0]);
   const [placements, setPlacements] = useState<AdPlacement[]>(["home"]);
+  const [venues, setVenues] = useState<string[]>([]);
+  const [venueList, setVenueList] = useState<AdVenueOption[] | null>(null);
+  const [venueState, setVenueState] = useState<string>("all");
+  const [myVenues, setMyVenues] = useState<{ id: string; name: string; city: string }[]>([]);
+  const [nearbyVenueId, setNearbyVenueId] = useState<string | null>(null);
   const [startDay, setStartDay] = useState("");
   const [days, setDays] = useState(7);
   const [t, setT] = useState<AdTargeting | null>(null);
@@ -73,9 +78,21 @@ export default function AdvertisePage() {
         setOpts(o);
         setStartDay(o.today);
         setT(o.defaults);
+        if (o.defaults.states[0]) setVenueState(o.defaults.states[0]);
       })
       .catch((e) => setLoadError(e instanceof ApiError ? e.message : "Couldn't load the ad builder."));
   }, []);
+
+  useEffect(() => {
+    if (!opts) return;
+    api
+      .getAdVenues(venueState === "all" ? null : venueState)
+      .then((r) => {
+        setVenueList(r.venues);
+        setMyVenues(r.myVenues);
+      })
+      .catch(() => setVenueList([]));
+  }, [opts, venueState]);
 
   const adultOnly = opts?.categories.find((c) => c.key === category)?.adultOnly ?? false;
   useEffect(() => {
@@ -84,14 +101,14 @@ export default function AdvertisePage() {
 
   // Price, availability and audience, refreshed as the form changes.
   useEffect(() => {
-    if (!opts || !t || !startDay || !placements.length) {
+    if (!opts || !t || !startDay || (!placements.length && !venues.length && !nearbyVenueId)) {
       setQuote(null);
       return;
     }
     setQuoting(true);
     const id = setTimeout(() => {
       api
-        .quoteAd({ placements, startDay, days, category, targeting: t })
+        .quoteAd({ placements, venues, nearbyVenueId, startDay, days, category, targeting: t })
         .then((q) => {
           setQuote(q);
           setQuoteErr(null);
@@ -103,7 +120,7 @@ export default function AdvertisePage() {
         .finally(() => setQuoting(false));
     }, 450);
     return () => clearTimeout(id);
-  }, [opts, t, startDay, days, placements, category]);
+  }, [opts, t, startDay, days, placements, venues, nearbyVenueId, category]);
 
   async function pickImage(file: File | undefined) {
     if (!file) return;
@@ -156,6 +173,8 @@ export default function AdvertisePage() {
               cta,
               category,
               placements,
+              venues,
+              nearbyVenueId,
               startDay,
               days,
               targeting: t,
@@ -255,7 +274,7 @@ export default function AdvertisePage() {
               <div className="space-y-2">
                 {opts.placements.map((p) => {
                   const on = placements.includes(p.key);
-                  const full = quote?.soldOut.filter((s) => s.placement === p.key).length ?? 0;
+                  const full = quote?.soldOut.filter((s) => s.channel === `placement:${p.key}`).length ?? 0;
                   return (
                     <button key={p.key} type="button" onClick={() => setPlacements(toggle(placements, p.key))} className={`flex w-full items-center gap-3 rounded-2xl border p-4 text-left ${on ? "border-brand bg-brand/10" : "border-border"}`}>
                       <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${on ? "border-brand bg-brand" : "border-border"}`}>{on && <Check className="h-4 w-4 text-white" />}</span>
@@ -267,6 +286,49 @@ export default function AdvertisePage() {
                   );
                 })}
               </div>
+
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <p className="flex items-center gap-2 text-sm font-bold text-ink"><Tv className="h-4 w-4 text-brand-light" /> Screens at partner venues</p>
+                <select value={venueState} onChange={(e) => setVenueState(e.target.value)} className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink" aria-label="Venue state">
+                  <option value="all">All states</option>
+                  {opts.states.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <p className="mt-1 text-xs text-muted">Your ad plays on TVs in gyms, restaurants and stores. You&apos;re only charged for days the screen was on for {opts.minScreenHours}+ hours.</p>
+              <div className="mt-3 space-y-2">
+                {venueList === null ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted" />
+                ) : venueList.length === 0 ? (
+                  <p className="rounded-2xl bg-circle px-4 py-3 text-sm text-muted">No partner screens {venueState === "all" ? "yet" : `in ${venueState} yet`}.</p>
+                ) : (
+                  venueList.map((v) => {
+                    const on = venues.includes(v.id);
+                    const full = quote?.soldOut.filter((s) => s.channel === `venue:${v.id}`).length ?? 0;
+                    return (
+                      <button key={v.id} type="button" onClick={() => setVenues(toggle(venues, v.id))} className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left ${on ? "border-brand bg-brand/10" : "border-border"}`}>
+                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${on ? "border-brand bg-brand" : "border-border"}`}>{on && <Check className="h-4 w-4 text-white" />}</span>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {v.photo ? <img src={v.photo} alt="" className="h-10 w-14 shrink-0 rounded-lg object-cover" /> : <span className="flex h-10 w-14 shrink-0 items-center justify-center rounded-lg bg-circle"><Tv className="h-4 w-4 text-muted" /></span>}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-bold text-ink">{v.name}</span>
+                          <span className="block text-xs text-muted">{v.categoryLabel} · {v.city || v.state} · {v.perDayFormatted} a day{v.online ? " · ● on now" : ""}{on && full ? ` · fully booked on ${full} day${full === 1 ? "" : "s"}` : ""}</span>
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {myVenues.length > 0 && (
+                <div className="mt-5">
+                  <p className="flex items-center gap-2 text-sm font-bold text-ink"><MapPin className="h-4 w-4 text-brand-light" /> Feature my venue in Nearby</p>
+                  <p className="mt-1 text-xs text-muted">Your place is pinned at the top of &quot;Places near you&quot; with this ad, for people nearby. {opts.nearby.perDayFormatted} a day.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Chip on={!nearbyVenueId} onClick={() => setNearbyVenueId(null)}>Don&apos;t feature</Chip>
+                    {myVenues.map((v) => <Chip key={v.id} on={nearbyVenueId === v.id} onClick={() => setNearbyVenueId(v.id)}>{v.name}</Chip>)}
+                  </div>
+                </div>
+              )}
             </Card>
 
             {/* 3. When */}
@@ -286,7 +348,7 @@ export default function AdvertisePage() {
             {/* 4. Who */}
             <Card>
               <p className="mb-1 text-xs font-bold uppercase tracking-[0.2em] text-muted">4 · Who sees it</p>
-              <p className="mb-3 text-xs text-muted">Sensible defaults are set. Narrow it to reach the people most likely to buy.</p>
+              <p className="mb-3 text-xs text-muted">Sensible defaults are set. Narrow it to reach the people most likely to buy. (Venue screens show to everyone at the venue; time of day still applies.)</p>
 
               <p className="mb-2 text-sm font-bold text-ink">Location</p>
               <div className="mb-2 flex flex-wrap gap-2">
@@ -376,8 +438,8 @@ export default function AdvertisePage() {
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand/15 text-brand-light"><Users className="h-5 w-5" /></span>
                 <div>
-                  <p className="text-lg font-extrabold text-ink">{quote ? `≈ ${quote.audience.toLocaleString("en-NG")} people` : "—"}</p>
-                  <p className="text-xs text-muted">match your targeting today</p>
+                  <p className="text-lg font-extrabold text-ink">{quote ? (quote.audience === null ? "People at the venues" : `≈ ${quote.audience.toLocaleString("en-NG")} people`) : "—"}</p>
+                  <p className="text-xs text-muted">{quote?.audience === null ? "Screens and Nearby reach whoever is there" : "match your targeting in the app today"}</p>
                 </div>
                 {quoting && <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted" />}
               </div>

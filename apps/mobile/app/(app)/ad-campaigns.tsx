@@ -85,7 +85,7 @@ export default function AdCampaignsScreen() {
                   <Image alt="" source={{ uri: c.image }} style={{ width: 104, height: 56, borderRadius: 12 }} />
                   <View className="flex-1 ml-3">
                     <Text numberOfLines={1} className="text-ink dark:text-ink-dark font-bold">{c.headline}</Text>
-                    <Text className="text-muted dark:text-muted-dark text-xs">{pretty(c.startDay)} → {pretty(c.endDay)} · {c.placements.length} place{c.placements.length === 1 ? '' : 's'}</Text>
+                    <Text className="text-muted dark:text-muted-dark text-xs">{pretty(c.startDay)} → {pretty(c.endDay)} · {c.breakdown.length} place{c.breakdown.length === 1 ? '' : 's'}</Text>
                     <Text style={{ color: st.color }} className="text-xs font-semibold mt-1">{st.label}</Text>
                   </View>
                 </View>

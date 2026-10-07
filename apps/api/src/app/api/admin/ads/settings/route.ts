@@ -9,6 +9,9 @@ const perPlacement = <T extends z.ZodTypeAny>(v: T) => z.object(Object.fromEntri
 const schema = z.object({
   price: perPlacement(z.number().min(0).max(100_000_000)),
   slots: perPlacement(z.number().int().min(0).max(50)),
+  nearbyPrice: z.number().min(0).max(100_000_000),
+  nearbySlots: z.number().int().min(0).max(200),
+  minScreenHours: z.number().min(0).max(24),
   maxDays: z.number().int().min(1).max(365),
   minAudience: z.number().int().min(1).max(1_000_000),
   defaultFrequencyCap: z.number().int().min(1).max(10),
@@ -19,6 +22,9 @@ function view(s: AdsSettings) {
   return {
     price: Object.fromEntries(PLACEMENTS.map((p) => [p, s.placementPriceMinor[p] / 100])),
     slots: s.slotsPerDay,
+    nearbyPrice: s.nearbyPriceMinor / 100,
+    nearbySlots: s.nearbySlotsPerDay,
+    minScreenHours: s.minScreenHours,
     maxDays: s.maxDays,
     minAudience: s.minAudience,
     defaultFrequencyCap: s.defaultFrequencyCap,
@@ -45,6 +51,9 @@ export async function POST(req: Request) {
       {
         placementPriceMinor: Object.fromEntries(PLACEMENTS.map((p) => [p, Math.round(b.price[p] * 100)])) as Record<Placement, number>,
         slotsPerDay: b.slots,
+        nearbyPriceMinor: Math.round(b.nearbyPrice * 100),
+        nearbySlotsPerDay: b.nearbySlots,
+        minScreenHours: b.minScreenHours,
         maxDays: b.maxDays,
         minAudience: b.minAudience,
         defaultFrequencyCap: Math.min(b.defaultFrequencyCap, b.maxFrequencyCap),

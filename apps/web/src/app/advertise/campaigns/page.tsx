@@ -93,7 +93,7 @@ export default function MyCampaignsPage() {
                   <img src={c.image} alt="" className="h-16 w-28 shrink-0 rounded-xl object-cover" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-bold text-ink">{c.headline}</p>
-                    <p className="text-xs text-muted">{pretty(c.startDay)} → {pretty(c.endDay)} · {c.placements.length} place{c.placements.length === 1 ? "" : "s"}</p>
+                    <p className="text-xs text-muted">{pretty(c.startDay)} → {pretty(c.endDay)} · {c.breakdown.length} place{c.breakdown.length === 1 ? "" : "s"}</p>
                     <span className={`mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}>{st.label}</span>
                   </div>
                 </div>

@@ -33,6 +33,8 @@ export async function GET(req: Request) {
       dayparts: Object.entries(DAYPARTS).map(([key, d]) => ({ key, label: d.label })),
       platforms: PLATFORMS,
       states: NIGERIAN_STATES,
+      nearby: { perDayMinor: String(s.nearbyPriceMinor), perDayFormatted: formatNairaMinor(BigInt(s.nearbyPriceMinor)) },
+      minScreenHours: s.minScreenHours,
       maxDays: s.maxDays,
       minAudience: s.minAudience,
       maxFrequencyCap: s.maxFrequencyCap,
