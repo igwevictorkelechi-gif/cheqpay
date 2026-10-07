@@ -60,6 +60,24 @@ export default function BillServicePage() {
         setConfig(c);
         setCashback(cb);
         if (c) setBillerId(c.billers.find((b) => !b.comingSoon)?.id ?? "");
+        // "Pay again" from the Pay bills screen: prefill biller, customer and
+        // amount/plan. Anything no longer offered is ignored; review + PIN still apply.
+        if (c && typeof window !== "undefined") {
+          const q = new URLSearchParams(window.location.search);
+          const b = c.billers.find((x) => x.id === q.get("biller") && !x.comingSoon);
+          if (b) setBillerId(b.id);
+          const cust = q.get("customer");
+          if (cust) setCustomer(cust.slice(0, 40));
+          if (c.variableAmount) {
+            const amt = q.get("amount");
+            if (amt && /^\d+(\.\d{1,2})?$/.test(amt)) setAmount(amt);
+          } else if (b) {
+            const plan =
+              c.plans.find((p) => p.billerId === b.id && p.id === q.get("plan")) ??
+              c.plans.find((p) => p.billerId === b.id && p.name === q.get("planName"));
+            if (plan) setPlanId(plan.id);
+          }
+        }
         const token = await getAccessToken();
         if (token) {
           await api.ensureProvisioned();

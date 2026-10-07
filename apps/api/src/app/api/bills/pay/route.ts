@@ -58,6 +58,7 @@ export async function POST(req: Request) {
     // charged exactly what the provider quoted and we buy exactly what they saw.
     let amount: string;
     let planName: string | null = null;
+    let planId: string | null = null;
     let planCode: string | undefined;
     if (config.variableAmount) {
       if (!body.amount) throw new ApiError(422, "Amount is required", "no_amount");
@@ -70,6 +71,7 @@ export async function POST(req: Request) {
       }
       amount = plan.amount;
       planName = plan.name;
+      planId = plan.id;
       planCode = plan.providerCode;
     }
 
@@ -136,6 +138,8 @@ export async function POST(req: Request) {
             billerName: biller.name,
             customer: body.customer,
             planName,
+            // Lets "Pay again" reselect the same plan.
+            planId,
           },
         },
       });
@@ -190,6 +194,8 @@ export async function POST(req: Request) {
             billerName: biller.name,
             customer: body.customer,
             planName,
+            // Lets "Pay again" reselect the same plan.
+            planId,
             providerRef: result.providerRef,
             token: result.token ?? null,
           },
