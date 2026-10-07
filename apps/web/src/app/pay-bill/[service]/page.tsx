@@ -22,6 +22,7 @@ import DataPlanGrid from "@/components/DataPlanGrid";
 import { SuccessAnimation } from "@/components/Lottie";
 import { invalidateMoneyCaches } from "@/lib/cache";
 import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
+import SponsoredCard from "@/components/SponsoredCard";
 
 type Stage = "form" | "review" | "done";
 
@@ -468,6 +469,7 @@ export default function BillServicePage() {
               Ref: {providerRef}
             </p>
           )}
+          <SponsoredCard placement="receipt" className="mt-6 w-full text-left" />
           <button
             onClick={() => router.push("/pay-bill")}
             className="mt-8 w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"

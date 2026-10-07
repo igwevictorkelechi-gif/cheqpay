@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Zap,
   Gift,
+  Megaphone,
 } from "lucide-react";
 import type { LedgerTransaction } from "@/services/api";
 
@@ -23,7 +24,11 @@ export function txnIcon(type: LedgerTransaction["type"]) {
     case "CASHBACK":
     case "GIFTCARD_SELL":
     case "REFERRAL_REWARD":
+    case "AD_REFUND":
+    case "AD_PAYOUT":
       return { Icon: Gift, color: "#34C759", bg: "rgba(52,199,89,0.15)" };
+    case "AD_PURCHASE":
+      return { Icon: Megaphone, color: "#E8628C", bg: "rgba(232,98,140,0.15)" };
     case "GIFTCARD_BUY":
       return { Icon: Gift, color: "#F59E0B", bg: "rgba(245,158,11,0.15)" };
     case "TRANSFER_IN":
@@ -69,6 +74,12 @@ export function txnTitle(t: LedgerTransaction): string {
       return "Gift card sold";
     case "REFERRAL_REWARD":
       return "Referral reward";
+    case "AD_PURCHASE":
+      return "Ad campaign";
+    case "AD_REFUND":
+      return "Ad refund";
+    case "AD_PAYOUT":
+      return "Screen ad earnings";
     case "GIFTCARD_BUY":
       return "Gift card";
     case "GADGET_PURCHASE":
@@ -104,6 +115,8 @@ export function txnAmount(t: LedgerTransaction): { text: string; positive: boole
   if (t.type === "CARD_ISSUE") return { text: `-${fmt(t.feeFormatted)} ${t.asset}`, positive: false };
   if (t.type === "BILL")
     return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
+  if (t.type === "AD_REFUND" || t.type === "AD_PAYOUT") return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
+  if (t.type === "AD_PURCHASE") return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
   if (t.type === "REFERRAL_REWARD") return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   if (t.type === "GIFTCARD_SELL") return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   if (t.type === "GIFTCARD_BUY" || t.type === "GADGET_PURCHASE" || t.type === "TICKET_PURCHASE")

@@ -72,6 +72,9 @@ enum TransactionType {
   GIFTCARD_SELL // NGN credited for a gift card the user traded in (admin-approved)
   GIFTCARD_BUY // NGN spent buying a digital gift card
   REFERRAL_REWARD // NGN paid for a referral bonus, influencer commission or task
+  AD_PURCHASE // NGN paid for an ad campaign (booked days, influencer budget)
+  AD_REFUND // NGN returned for ad days not run (rejected, cancelled, screen offline)
+  AD_PAYOUT // NGN paid to a partner venue for showing ads on its screen
 }
 
 enum TicketStatus {

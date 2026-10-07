@@ -282,7 +282,10 @@ export type LedgerTxType =
   | 'TICKET_PURCHASE'
   | 'GIFTCARD_SELL'
   | 'GIFTCARD_BUY'
-  | 'REFERRAL_REWARD';
+  | 'REFERRAL_REWARD'
+  | 'AD_PURCHASE'
+  | 'AD_REFUND'
+  | 'AD_PAYOUT';
 export type LedgerTxStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
 export interface LedgerTransaction {
   id: string;
@@ -392,6 +395,109 @@ export interface ReferralEarning {
   releaseAt: string;
   voidReason: string | null;
   createdAt: string;
+}
+
+export type AdPlacement = 'home' | 'receipt' | 'paybills';
+export interface AdTargeting {
+  states: string[];
+  radius: { lat: number; lng: number; km: number } | null;
+  ageMin: number;
+  ageMax: number;
+  segments: string[];
+  platforms: string[];
+  newUsersOnly: boolean;
+  dayparts: string[];
+  frequencyCap: number;
+}
+export interface AdOptions {
+  today: string;
+  canAdvertise: boolean;
+  placements: { key: AdPlacement; label: string; perDayMinor: string; perDayFormatted: string; slotsPerDay: number }[];
+  categories: { key: string; label: string; adultOnly: boolean }[];
+  segments: { key: string; label: string }[];
+  dayparts: { key: string; label: string }[];
+  platforms: string[];
+  states: string[];
+  maxDays: number;
+  minAudience: number;
+  maxFrequencyCap: number;
+  defaults: AdTargeting;
+}
+export interface AdQuoteInput {
+  placements: AdPlacement[];
+  startDay: string;
+  days: number;
+  category: string;
+  targeting: AdTargeting;
+}
+export interface AdCampaignInput extends AdQuoteInput {
+  businessName: string;
+  headline: string;
+  body: string;
+  image: string;
+  linkUrl?: string | null;
+  cta?: string;
+}
+export interface AdQuoteLine {
+  channel: string;
+  label: string;
+  perDayMinor: string;
+  days: number;
+  totalMinor: string;
+  totalFormatted: string;
+}
+export interface AdQuote {
+  lines: AdQuoteLine[];
+  totalMinor: string;
+  totalFormatted: string;
+  availability: Record<AdPlacement, { day: string; free: number }[]>;
+  soldOut: { placement: AdPlacement; day: string }[];
+  audience: number;
+  minAudience: number;
+  audienceOk: boolean;
+}
+export interface AdCampaign {
+  id: string;
+  businessName: string;
+  headline: string;
+  body: string;
+  image: string;
+  linkUrl: string | null;
+  cta: string;
+  category: string;
+  categoryLabel: string;
+  targeting: AdTargeting;
+  startDay: string;
+  endDay: string;
+  days: number;
+  status: 'PENDING_REVIEW' | 'APPROVED' | 'LIVE' | 'ENDED' | 'REJECTED' | 'CANCELLED';
+  reason: string | null;
+  placements: AdPlacement[];
+  paidFormatted: string;
+  refundedFormatted: string;
+  breakdown: AdQuoteLine[];
+  createdAt: string;
+  stats: {
+    views: number;
+    clicks: number;
+    byChannel: { channel: string; label: string; views: number; clicks: number }[];
+    byDay: { day: string; views: number; clicks: number }[];
+  };
+}
+export interface ServedAd {
+  campaignId: string;
+  channel: string;
+  businessName: string;
+  headline: string;
+  body: string;
+  image: string;
+  linkUrl: string | null;
+  cta: string;
+  why: string[];
+}
+export interface AdPrefs {
+  personalised: boolean;
+  mutedCategories: string[];
 }
 
 export interface MyReferral {
@@ -974,6 +1080,47 @@ export const api = {
     return apiFetch('/api/giftcards/sell/trades');
   },
 
+  // ---- CheqPay Ads ----
+  getAdOptions(): Promise<AdOptions> {
+    return apiFetch('/api/ads/options');
+  },
+
+  quoteAd(input: AdQuoteInput): Promise<AdQuote> {
+    return apiFetch('/api/ads/quote', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  createAdCampaign(input: AdCampaignInput, pin?: string): Promise<{ campaign: AdCampaign }> {
+    return apiFetch('/api/ads/campaigns', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: { 'idempotency-key': idemKey(), ...pinHeader(pin) },
+    });
+  },
+
+  getMyAdCampaigns(): Promise<{ campaigns: AdCampaign[] }> {
+    return apiFetch('/api/ads/campaigns');
+  },
+
+  cancelAdCampaign(id: string): Promise<{ campaign: AdCampaign }> {
+    return apiFetch(`/api/ads/campaigns/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+  },
+
+  serveAd(placement: AdPlacement, platform: 'ios' | 'android'): Promise<{ ad: ServedAd | null }> {
+    return apiFetch(`/api/ads/serve?placement=${placement}&platform=${platform}`);
+  },
+
+  adEvent(campaignId: string, channel: string, kind: 'view' | 'click'): Promise<{ counted: boolean }> {
+    return apiFetch('/api/ads/event', { method: 'POST', body: JSON.stringify({ campaignId, channel, kind }) });
+  },
+
+  getAdPrefs(): Promise<{ prefs: AdPrefs; categories: { key: string; label: string }[] }> {
+    return apiFetch('/api/ads/prefs');
+  },
+
+  setAdPrefs(prefs: AdPrefs): Promise<{ prefs: AdPrefs }> {
+    return apiFetch('/api/ads/prefs', { method: 'POST', body: JSON.stringify(prefs) });
+  },
+
   getMyReferral(): Promise<MyReferral> {
     return apiFetch('/api/referrals/me');
   },
@@ -1141,6 +1288,7 @@ export interface FeatureFlags {
   gift_cards_sell: boolean;
   gift_cards_buy: boolean;
   referrals: boolean;
+  ads: boolean;
 }
 
 export interface CardTransaction {

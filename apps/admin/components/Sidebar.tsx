@@ -87,6 +87,14 @@ const categories: Category[] = [
     ],
   },
   {
+    label: 'Ads',
+    icon: Megaphone,
+    items: [
+      { label: 'Campaigns', href: '/ads', icon: Monitor },
+      { label: 'Prices & settings', href: '/ads/settings', icon: Settings },
+    ],
+  },
+  {
     label: 'Gift Cards',
     icon: Gift,
     items: [

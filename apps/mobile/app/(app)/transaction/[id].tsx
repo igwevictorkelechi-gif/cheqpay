@@ -7,6 +7,7 @@ import { colors } from '@/components/brand';
 import { txnIcon, txnTitle, txnAmount, fmt } from '@/components/TxnRow';
 import { shareReceipt } from '@/lib/receipt';
 import { api, getAccessToken, type LedgerTransaction } from '@/services/api';
+import SponsoredCard from '@/components/SponsoredCard';
 
 const STATUS_COLOR: Record<string, string> = {
   COMPLETED: '#34C759',
@@ -145,6 +146,7 @@ export default function TransactionDetailScreen() {
               <Ionicons name="share-outline" size={20} color="#FFFFFF" />
               <Text className="text-white text-base font-bold ml-2">Share receipt</Text>
             </TouchableOpacity>
+            <SponsoredCard placement="receipt" style={{ marginTop: 24 }} />
           </>
         )}
       </ScrollView>

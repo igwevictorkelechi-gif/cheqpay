@@ -25,16 +25,12 @@
 
 import { randomUUID } from "node:crypto";
 import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
-import { notifyAdminAlert } from "./adminAlert";
+import { notifyAdmins } from "./adminNotify";
 import { notifyUser } from "./alerts";
-import { isEmailConfigured, sendEmail } from "./email";
-import { getEnv } from "./env";
 import { ensureGiftCardTxnTypes } from "./ensureGiftCardTxnTypes";
 import { ApiError } from "./http";
 import { formatNairaMinor } from "./money";
 import { decryptPii, encryptPii, fingerprintMatches, fingerprintPii } from "./pii";
-import { sendPush } from "./push";
-import { sendWebPush } from "./webPush";
 
 export const CARD_TYPES = ["PHYSICAL", "ECODE"] as const;
 export type CardType = (typeof CARD_TYPES)[number];
@@ -520,30 +516,9 @@ export async function submitTrade(input: SubmitTradeInput): Promise<TradeView> {
   return trade;
 }
 
-const MAX_ADMIN_RECIPIENTS = 10;
-
-/** Everyone who reviews gift cards: the owners in ADMIN_EMAILS plus every sub admin account. */
-async function giftCardAdminEmails(): Promise<string[]> {
-  const fromEnv = (getEnv().ADMIN_EMAILS ?? "").split(",");
-  let subAdmins: { email: string }[] = [];
-  try {
-    subAdmins = await prisma.$queryRawUnsafe<{ email: string }[]>(`SELECT email FROM admin_accounts`);
-  } catch {
-    // admin_accounts is created on first sub-admin login; none yet is fine.
-  }
-  const all = [...fromEnv, ...subAdmins.map((a) => a.email)]
-    .map((e) => e.trim().toLowerCase())
-    .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
-  return [...new Set(all)].slice(0, MAX_ADMIN_RECIPIENTS);
-}
-
-const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-
 /**
- * Tell the review team a card is waiting: a push to each admin's own CheqPay
- * app/browser (when their admin email has a CheqPay account), an email, and the
- * ops webhook if one is set. Best effort — never throws, never delays the user.
+ * Tell the review team a card is waiting (push to each admin's own CheqPay
+ * app/browser, email, ops webhook). Best effort — never throws, never delays the user.
  */
 export async function alertAdminsNewGiftCard(userId: string, trade: TradeView): Promise<void> {
   const [sender] = await prisma.$queryRawUnsafe<{ email: string | null; legal_name: string | null }[]>(
@@ -552,28 +527,15 @@ export async function alertAdminsNewGiftCard(userId: string, trade: TradeView): 
   const who = sender?.legal_name || sender?.email || "A user";
   const card = `${trade.brandName} (${trade.countryName}, ${trade.cardType === "ECODE" ? "E-code" : "Physical"})`;
   const title = "New gift card to review";
-  const body = `${who} sent a ${trade.faceValueFormatted} ${card} · pays ${trade.payoutFormatted}`;
-
-  const emails = await giftCardAdminEmails();
-  if (emails.length) {
-    const admins = await prisma.$queryRawUnsafe<{ id: string }[]>(
-      `SELECT id::text FROM app_users WHERE lower(email) = ANY($1::text[])`, emails,
-    ).catch(() => []);
-    const push = { title, body, category: "trades" as const, data: { giftCardTradeId: trade.id, kind: "admin_giftcard_review" } };
-    await Promise.all(admins.flatMap((a) => [sendPush(a.id, push).catch(() => 0), sendWebPush(a.id, push).catch(() => 0)]));
-
-    if (isEmailConfigured()) {
-      const rows: [string, string][] = [["From", who], ["Card", card], ["Value", trade.faceValueFormatted], ["Pays", trade.payoutFormatted]];
-      const html =
-        `<p><strong>${escapeHtml(title)}</strong></p>` +
-        `<table cellpadding="4">${rows.map(([k, v]) => `<tr><td style="color:#666">${k}</td><td><strong>${escapeHtml(v)}</strong></td></tr>`).join("")}</table>` +
-        `<p>Open the admin dashboard → Gift cards to review it.</p>`;
-      for (const to of emails) {
-        await sendEmail({ to, subject: `${title}: ${trade.faceValueFormatted} ${trade.brandName}`, html }).catch(() => undefined);
-      }
-    }
-  }
-  await notifyAdminAlert(`🎁 ${title} — ${body}`, { trade: trade.id, brand: trade.brandName, value: trade.faceValueFormatted, payout: trade.payoutFormatted }).catch(() => undefined);
+  await notifyAdmins({
+    title,
+    body: `${who} sent a ${trade.faceValueFormatted} ${card} · pays ${trade.payoutFormatted}`,
+    rows: [["From", who], ["Card", card], ["Value", trade.faceValueFormatted], ["Pays", trade.payoutFormatted]],
+    where: "Gift cards",
+    emailSubject: `${title}: ${trade.faceValueFormatted} ${trade.brandName}`,
+    data: { giftCardTradeId: trade.id, kind: "admin_giftcard_review" },
+    icon: "🎁",
+  });
 }
 
 export async function listUserTrades(userId: string): Promise<TradeView[]> {

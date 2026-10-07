@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/components/brand';
 import { SuccessAnimation } from '@/components/Lottie';
+import SponsoredCard from '@/components/SponsoredCard';
 
 function CoinBadge({ symbol, size = 36 }: { symbol: string; size?: number }) {
   const map: Record<string, { bg: string; glyph: string }> = {
@@ -62,6 +63,8 @@ export default function SwapSuccessScreen() {
           </View>
         </View>
       </View>
+
+      <SponsoredCard placement="receipt" style={{ marginBottom: 16 }} />
 
       {/* Actions */}
       <View>

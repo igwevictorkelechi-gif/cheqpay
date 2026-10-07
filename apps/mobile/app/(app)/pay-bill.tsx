@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useAuthStore } from '@/store';
 import { colors, TopBar, Card } from '@/components/brand';
 import { useFeatures } from '@/lib/useFeatures';
+import SponsoredCard from '@/components/SponsoredCard';
 
 type Service = {
   label: string;
@@ -22,6 +23,7 @@ const services: Service[] = [
   { label: 'Gadgets', emoji: '💻', badge: 'New', route: '/(app)/gadgets' },
   { label: 'Events', emoji: '🎫', badge: 'New', route: '/(app)/events' },
   { label: 'Gift cards', emoji: '🎁', badge: 'New', route: '/(app)/gift-cards' },
+  { label: 'Advertise', emoji: '📣', badge: 'New', route: '/(app)/advertise' },
   { label: 'Vouchers', emoji: '🎟️' },
 ];
 
@@ -56,7 +58,9 @@ export default function PayBillScreen() {
   const { user } = useAuthStore();
   const features = useFeatures();
   // Gift cards only shows once the admin has switched selling on.
-  const shown = services.filter((s) => s.route !== '/(app)/gift-cards' || features.gift_cards_sell);
+  const shown = services.filter(
+    (s) => (s.route !== '/(app)/gift-cards' || features.gift_cards_sell) && (s.route !== '/(app)/advertise' || features.ads),
+  );
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
@@ -98,6 +102,9 @@ export default function PayBillScreen() {
           </Card>
         </View>
 
+        <View className="px-5 mb-5">
+          <SponsoredCard placement="paybills" />
+        </View>
       </ScrollView>
     </View>
   );

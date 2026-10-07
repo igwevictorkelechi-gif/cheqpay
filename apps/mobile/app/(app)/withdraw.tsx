@@ -19,6 +19,7 @@ import { SuccessAnimation } from '@/components/Lottie';
 import { api, ApiError, type Bank, type Beneficiary } from '@/services/api';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 import { naira, useLimits, withdrawalBreakdown } from '@/lib/fees';
+import SponsoredCard from '@/components/SponsoredCard';
 
 // Amount -> choose/add a verified own-name beneficiary -> payout -> done.
 // Payouts can only go to a bank account in the user's own name (verified at
@@ -204,6 +205,7 @@ export default function WithdrawScreen() {
         <Text className="text-muted dark:text-muted-dark text-sm mt-2 text-center">
           {naira(breakdown.receive)} is on its way to {selected?.accountName} · {selected?.bankName}.
         </Text>
+        <SponsoredCard placement="receipt" style={{ marginTop: 24, width: '100%' }} />
         <TouchableOpacity
           onPress={() => router.replace('/(app)/home')}
           className="rounded-full py-4 items-center mt-8 w-full"

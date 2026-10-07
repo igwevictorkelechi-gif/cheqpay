@@ -34,6 +34,7 @@ import { authService } from "@/services/auth";
 import { useAuthStore, useUIStore } from "@/store";
 import { api, ApiError, type LedgerTransaction } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
+import SponsoredCard from "@/components/SponsoredCard";
 
 const CASH_CACHE = "cheqpay:cash";
 const USD_CACHE = "cheqpay:usd";
@@ -253,6 +254,10 @@ export default function Dashboard() {
           <CircleAction icon={Send} label="Send" onClick={() => router.push("/send-user")} />
         )}
       </ActionRow>
+
+      <div className="px-5">
+        <SponsoredCard placement="home" className="mb-5" />
+      </div>
 
       {/* Cash account — the selected currency only. */}
       <div className="mb-4 px-5">

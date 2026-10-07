@@ -7,6 +7,7 @@ import { colors } from '@/components/brand';
 import { api, ApiError, type BillCashback, type BillServiceConfig } from '@/services/api';
 import DataPlanGrid from '@/components/DataPlanGrid';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
+import SponsoredCard from '@/components/SponsoredCard';
 
 type Stage = 'form' | 'review' | 'done';
 
@@ -515,6 +516,7 @@ export default function BillServiceScreen() {
             {providerRef ? (
               <Text className="text-muted dark:text-muted-dark text-xs mt-3">Ref: {providerRef}</Text>
             ) : null}
+            <SponsoredCard placement="receipt" style={{ marginTop: 24, width: '100%' }} />
             <TouchableOpacity
               onPress={() => router.replace('/(app)/pay-bill')}
               className="rounded-full py-4 items-center mt-8 w-full"

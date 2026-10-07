@@ -7,6 +7,7 @@ import { txnIcon, txnTitle, txnAmount } from "@/components/TxnRow";
 import { shareReceiptImage } from "@/lib/receipt";
 import { api, getAccessToken, type LedgerTransaction } from "@/services/api";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import SponsoredCard from "@/components/SponsoredCard";
 
 const STATUS_COLOR: Record<string, string> = {
   COMPLETED: "#34C759",
@@ -181,6 +182,7 @@ export default function TransactionDetailPage() {
               <Share2 className="h-5 w-5" />
               {sharing ? "Preparing…" : "Share receipt"}
             </button>
+            <SponsoredCard placement="receipt" className="mt-6" />
           </>
         )}
       </div>

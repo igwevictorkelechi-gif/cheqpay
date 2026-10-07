@@ -17,6 +17,7 @@ import { SuccessAnimation } from '@/components/Lottie';
 import { api, ApiError, type Balance } from '@/services/api';
 import { useFeatures } from '@/lib/useFeatures';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
+import SponsoredCard from '@/components/SponsoredCard';
 
 const ASSETS = ['NGN', 'BTC', 'USDT', 'USDC'];
 
@@ -114,6 +115,7 @@ export default function SendToUserScreen() {
             {sent.amount}
             {sent.asset === 'NGN' ? '' : ` ${sent.asset}`} is now in @{sent.to}’s wallet.
           </Text>
+          <SponsoredCard placement="receipt" style={{ marginTop: 24, width: '100%' }} />
         </View>
         <View style={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24 }}>
           <TouchableOpacity

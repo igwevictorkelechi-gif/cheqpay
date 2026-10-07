@@ -6,6 +6,7 @@ import { Check } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { CoinBadge } from "@/components/MobileUI";
 import { takeAfterConvert } from "@/lib/afterConvert";
+import SponsoredCard from "@/components/SponsoredCard";
 
 function SuccessInner() {
   const router = useRouter();
@@ -58,6 +59,10 @@ function SuccessInner() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="mt-2 px-5">
+        <SponsoredCard placement="receipt" className="mb-3" />
       </div>
 
       {/* Actions */}

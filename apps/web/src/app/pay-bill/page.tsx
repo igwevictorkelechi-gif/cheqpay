@@ -14,12 +14,12 @@ import {
   Laptop,
   CalendarDays,
   Gift,
-  type LucideIcon,
-} from "lucide-react";
+  type LucideIcon, Megaphone } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { TopBar, Card, useToast } from "@/components/MobileUI";
 import { useAuthStore } from "@/store";
 import { useFeatures } from "@/lib/useFeatures";
+import SponsoredCard from "@/components/SponsoredCard";
 
 type Service = {
   label: string;
@@ -38,6 +38,7 @@ const services: Service[] = [
   { label: "Gadgets", icon: Laptop, color: "#0EA5A0", route: "/gadgets", badge: "New" },
   { label: "Events", icon: CalendarDays, color: "#7C3AED", route: "/events", badge: "New" },
   { label: "Gift cards", icon: Gift, color: "#F59E0B", route: "/gift-cards", badge: "New" },
+  { label: "Advertise", icon: Megaphone, color: "#E8628C", route: "/advertise", badge: "New" },
   { label: "Vouchers", icon: Ticket, color: "#6E6880" },
 ];
 
@@ -47,7 +48,9 @@ export default function PayBillPage() {
   const toast = useToast();
   const features = useFeatures();
   // Gift cards only shows once the admin has switched selling on.
-  const shown = services.filter((s) => s.route !== "/gift-cards" || features.gift_cards_sell);
+  const shown = services.filter(
+    (s) => (s.route !== "/gift-cards" || features.gift_cards_sell) && (s.route !== "/advertise" || features.ads),
+  );
 
   return (
     <AppShell>
@@ -115,6 +118,10 @@ export default function PayBillPage() {
             })}
           </div>
         </Card>
+      </div>
+
+      <div className="mb-5 px-5">
+        <SponsoredCard placement="paybills" />
       </div>
 
       {toast.node}

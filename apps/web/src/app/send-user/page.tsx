@@ -8,6 +8,7 @@ import { api, ApiError, type Balance } from "@/services/api";
 import { useFeatures } from "@/lib/useFeatures";
 import DesktopSidebar from "@/components/DesktopSidebar";
 import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
+import SponsoredCard from "@/components/SponsoredCard";
 
 type Step = "form" | "done";
 
@@ -112,6 +113,7 @@ export default function SendToUserPage() {
               is now in @{sent.to}’s wallet.
             </p>
           </div>
+          <SponsoredCard placement="receipt" className="mt-8 w-full" />
           <div className="mt-auto w-full pt-6">
             <button
               onClick={() => router.replace("/")}

@@ -11,6 +11,7 @@ import { ASSET_META, CRYPTO_SEND } from '@/lib/assets';
 import { isAddressForNetwork, shortAddress } from '@/lib/address';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 import { cryptoFeeInCoin, dollars, useFees } from '@/lib/fees';
+import SponsoredCard from '@/components/SponsoredCard';
 
 type Sym = 'BTC' | 'USDT' | 'USDC';
 const ASSETS: Sym[] = ['BTC', 'USDT', 'USDC'];
@@ -372,6 +373,7 @@ export default function SendCryptoScreen() {
               {receiveCoin !== null && feeCoin ? receiveCoin : amount} {sym} is on its way to your destination address.
             </Text>
             {txHash ? <Text className="text-muted dark:text-muted-dark text-xs mt-3">Tx: {txHash}</Text> : null}
+            <SponsoredCard placement="receipt" style={{ marginTop: 24, width: '100%' }} />
             <TouchableOpacity onPress={() => router.replace('/(app)/crypto')} className="rounded-full py-4 items-center mt-8 w-full" style={{ backgroundColor: colors.brand }}>
               <Text className="text-white font-bold text-base">Done</Text>
             </TouchableOpacity>
