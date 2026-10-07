@@ -93,7 +93,7 @@ export default function MyCampaignsPage() {
                   <img src={c.image} alt="" className="h-16 w-28 shrink-0 rounded-xl object-cover" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-bold text-ink">{c.headline}</p>
-                    <p className="text-xs text-muted">{pretty(c.startDay)} → {pretty(c.endDay)} · {c.breakdown.length} place{c.breakdown.length === 1 ? "" : "s"}</p>
+                    <p className="text-xs text-muted">{pretty(c.startDay)} → {pretty(c.endDay)} · {c.breakdown.length} channel{c.breakdown.length === 1 ? "" : "s"}</p>
                     <span className={`mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}>{st.label}</span>
                   </div>
                 </div>
@@ -120,6 +120,21 @@ export default function MyCampaignsPage() {
                         <span className="text-ink">{ch.views.toLocaleString("en-NG")} views · {ch.clicks.toLocaleString("en-NG")} taps</span>
                       </div>
                     ))}
+                  </div>
+                )}
+                {c.influencer && (
+                  <div className="mt-3 rounded-2xl bg-circle p-3 text-xs">
+                    <div className="flex justify-between">
+                      <span className="font-semibold text-ink">Influencer posts</span>
+                      <span className="text-ink">{c.influencer.usedPosts} of {c.influencer.maxPosts} approved</span>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border">
+                      <div className="h-full rounded-full bg-brand" style={{ width: `${Math.round((c.influencer.usedPosts / c.influencer.maxPosts) * 100)}%` }} />
+                    </div>
+                    <p className="mt-1.5 text-muted">
+                      {c.influencer.payFormatted} per post to the creator
+                      {c.influencer.refundedPosts > 0 ? ` · ${c.influencer.refundedPosts} unused post${c.influencer.refundedPosts === 1 ? "" : "s"} refunded` : ""}
+                    </p>
                   </div>
                 )}
                 <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-xs text-muted">

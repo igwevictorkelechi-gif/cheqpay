@@ -85,7 +85,7 @@ export default function AdCampaignsScreen() {
                   <Image alt="" source={{ uri: c.image }} style={{ width: 104, height: 56, borderRadius: 12 }} />
                   <View className="flex-1 ml-3">
                     <Text numberOfLines={1} className="text-ink dark:text-ink-dark font-bold">{c.headline}</Text>
-                    <Text className="text-muted dark:text-muted-dark text-xs">{pretty(c.startDay)} → {pretty(c.endDay)} · {c.breakdown.length} place{c.breakdown.length === 1 ? '' : 's'}</Text>
+                    <Text className="text-muted dark:text-muted-dark text-xs">{pretty(c.startDay)} → {pretty(c.endDay)} · {c.breakdown.length} channel{c.breakdown.length === 1 ? '' : 's'}</Text>
                     <Text style={{ color: st.color }} className="text-xs font-semibold mt-1">{st.label}</Text>
                   </View>
                 </View>
@@ -104,6 +104,20 @@ export default function AdCampaignsScreen() {
                     <Text className="text-ink dark:text-ink-dark text-xs">{ch.views.toLocaleString('en-NG')} views · {ch.clicks.toLocaleString('en-NG')} taps</Text>
                   </View>
                 ))}
+                {c.influencer ? (
+                  <View className="rounded-2xl p-3 mt-3" style={{ backgroundColor: colors.circle }}>
+                    <View className="flex-row justify-between">
+                      <Text className="text-ink dark:text-ink-dark text-xs font-semibold">Influencer posts</Text>
+                      <Text className="text-ink dark:text-ink-dark text-xs">{c.influencer.usedPosts} of {c.influencer.maxPosts} approved</Text>
+                    </View>
+                    <View className="rounded-full mt-2 overflow-hidden" style={{ height: 6, backgroundColor: colors.border }}>
+                      <View style={{ height: 6, width: `${Math.round((c.influencer.usedPosts / c.influencer.maxPosts) * 100)}%`, backgroundColor: colors.brand }} />
+                    </View>
+                    <Text className="text-muted dark:text-muted-dark text-xs mt-1.5">
+                      {c.influencer.payFormatted} per post to the creator{c.influencer.refundedPosts > 0 ? ` · ${c.influencer.refundedPosts} unused refunded` : ''}
+                    </Text>
+                  </View>
+                ) : null}
                 <View className="flex-row items-center justify-between mt-3 pt-3" style={{ borderTopWidth: 1, borderColor: colors.border }}>
                   <Text className="text-muted dark:text-muted-dark text-xs">Paid {c.paidFormatted}{/^₦0(\.00)?$/.test(c.refundedFormatted) ? '' : ` · refunded ${c.refundedFormatted}`}</Text>
                   {['PENDING_REVIEW', 'APPROVED', 'LIVE'].includes(c.status) ? (

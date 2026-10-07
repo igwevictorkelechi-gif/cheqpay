@@ -36,6 +36,7 @@ import { ensureAdsSchema } from "./ensureAds";
 import { matchesSignature } from "./fileSignature";
 import { ApiError } from "./http";
 import { formatNairaMinor } from "./money";
+import { ensureReferralSchema } from "./referrals";
 import { cachedSetting, invalidateSetting } from "./settingsCache";
 
 // ---------------------------------------------------------------------------
@@ -117,6 +118,10 @@ export interface AdsSettings {
   nearbySlotsPerDay: number;
   /** A screen-day only counts (and pays the venue) if a screen was online this many hours. */
   minScreenHours: number;
+  /** Influencer posts: CheqPay's fee on top of what the influencer is paid, and the limits. */
+  influencerFeeBps: number;
+  influencerMinPayMinor: number;
+  influencerMaxPosts: number;
   /** Longest campaign, in days. */
   maxDays: number;
   /** Targeting that matches fewer people than this is refused. */
@@ -132,6 +137,9 @@ export const DEFAULT_ADS_SETTINGS: AdsSettings = {
   nearbyPriceMinor: 150_000,
   nearbySlotsPerDay: 20,
   minScreenHours: 4,
+  influencerFeeBps: 2000,
+  influencerMinPayMinor: 200_000,
+  influencerMaxPosts: 100,
   maxDays: 60,
   minAudience: 100,
   defaultFrequencyCap: 3,
@@ -228,6 +236,15 @@ export const quoteSchema = z.object({
   venues: z.array(z.string().uuid()).max(50).default([]),
   /** "Promote my venue in Nearby": one of the advertiser's own venues. */
   nearbyVenueId: z.string().uuid().nullable().default(null),
+  /** Posts by CheqPay influencers: fixed pay per approved post, up to `posts` of them. */
+  influencer: z
+    .object({
+      payPerPostMinor: z.coerce.bigint().positive(),
+      posts: z.number().int().min(1),
+      brief: z.string().trim().min(10).max(1000),
+    })
+    .nullable()
+    .default(null),
   startDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   days: z.number().int().min(1).max(365),
   category: z.enum(Object.keys(AD_CATEGORIES) as [AdCategory, ...AdCategory[]]),
@@ -388,6 +405,8 @@ export interface QuoteLine {
   days: number;
   totalMinor: string;
   totalFormatted: string;
+  /** What `days` counts: days on a channel (default) or influencer posts. */
+  unit?: "day" | "post";
 }
 
 export const channelOf = (p: Placement) => `placement:${p}`;
@@ -401,6 +420,70 @@ export interface PlannedLine extends QuoteLine {
  * Turn what the advertiser picked into priced lines, one per channel. Prices
  * and capacities come from settings and the venue rows, never the caller.
  */
+export const INFLUENCER_CHANNEL = "influencer";
+
+export interface InfluencerInput {
+  payPerPostMinor: bigint;
+  posts: number;
+  brief: string;
+}
+
+export interface PlannedInfluencer {
+  line: QuoteLine;
+  payMinor: bigint;
+  feeMinor: bigint;
+  posts: number;
+  brief: string;
+}
+
+/** Influencer posts: the influencer's pay plus CheqPay's fee, per post, for up to `posts` posts. */
+export function planInfluencer(i: InfluencerInput, s: AdsSettings): PlannedInfluencer {
+  if (i.payPerPostMinor < BigInt(s.influencerMinPayMinor)) {
+    throw new ApiError(422, `Pay influencers at least ${formatNairaMinor(BigInt(s.influencerMinPayMinor))} a post.`, "influencer_pay_too_low");
+  }
+  if (!Number.isInteger(i.posts) || i.posts < 1 || i.posts > s.influencerMaxPosts) {
+    throw new ApiError(422, `Ask for 1 to ${s.influencerMaxPosts} posts.`, "bad_posts");
+  }
+  const brief = i.brief.trim();
+  if (brief.length < 10) throw new ApiError(422, "Tell influencers what to post (at least a sentence).", "brief_required");
+  const feeMinor = (i.payPerPostMinor * BigInt(s.influencerFeeBps) + 9_999n) / 10_000n;
+  const per = i.payPerPostMinor + feeMinor;
+  const total = per * BigInt(i.posts);
+  return {
+    line: {
+      channel: INFLUENCER_CHANNEL,
+      label: `Influencer posts · ${formatNairaMinor(i.payPerPostMinor)} each to the creator`,
+      perDayMinor: per.toString(),
+      days: i.posts,
+      totalMinor: total.toString(),
+      totalFormatted: formatNairaMinor(total),
+      unit: "post",
+    },
+    payMinor: i.payPerPostMinor,
+    feeMinor,
+    posts: i.posts,
+    brief: brief.slice(0, 1000),
+  };
+}
+
+/**
+ * Price everything a campaign books. `lines` are the per-day channels (they
+ * take slots); `influencer` is the post budget, held until posts are approved.
+ */
+export async function planCampaign(input: {
+  placements: Placement[];
+  venues?: string[];
+  nearbyVenueId?: string | null;
+  influencer?: InfluencerInput | null;
+  days: number;
+  userId?: string;
+}): Promise<{ lines: PlannedLine[]; influencer: PlannedInfluencer | null; breakdown: QuoteLine[]; totalMinor: bigint }> {
+  const [{ lines, totalMinor }, s] = await Promise.all([planChannels(input), getAdsSettings()]);
+  const influencer = input.influencer ? planInfluencer(input.influencer, s) : null;
+  const breakdown: QuoteLine[] = [...lines.map(({ capacity: _c, ...l }) => l), ...(influencer ? [influencer.line] : [])];
+  return { lines, influencer, breakdown, totalMinor: totalMinor + (influencer ? BigInt(influencer.line.totalMinor) : 0n) };
+}
+
 export async function planChannels(input: {
   placements: Placement[];
   venues?: string[];
@@ -565,6 +648,8 @@ export interface CampaignView {
   breakdown: QuoteLine[];
   createdAt: string;
   stats: CampaignStats;
+  /** Influencer posts bought with this campaign, if any. */
+  influencer: { maxPosts: number; usedPosts: number; refundedPosts: number; payFormatted: string; brief: string } | null;
 }
 
 function channelLabel(channel: string): string {
@@ -572,7 +657,9 @@ function channelLabel(channel: string): string {
   return PLACEMENT_LABELS[p] ?? channel;
 }
 
-function campaignView(r: CampaignRow, stats: CampaignStats): CampaignView {
+type BudgetView = NonNullable<CampaignView["influencer"]>;
+
+function campaignView(r: CampaignRow, stats: CampaignStats, influencer: BudgetView | null = null): CampaignView {
   return {
     id: r.id,
     businessName: r.business_name,
@@ -595,6 +682,7 @@ function campaignView(r: CampaignRow, stats: CampaignStats): CampaignView {
     breakdown: r.breakdown ?? [],
     createdAt: new Date(r.created_at).toISOString(),
     stats,
+    influencer,
   };
 }
 
@@ -637,14 +725,15 @@ export interface CreateCampaignInput {
   placements: Placement[];
   venues?: string[];
   nearbyVenueId?: string | null;
+  influencer?: InfluencerInput | null;
   startDay: string;
   days: number;
 }
 
 /** Check the inputs that don't need the database. Shared by quote and create. */
-export async function validateCampaignShape(input: Pick<CreateCampaignInput, "placements" | "venues" | "nearbyVenueId" | "startDay" | "days" | "targeting" | "category">): Promise<void> {
+export async function validateCampaignShape(input: Pick<CreateCampaignInput, "placements" | "venues" | "nearbyVenueId" | "influencer" | "startDay" | "days" | "targeting" | "category">): Promise<void> {
   const s = await getAdsSettings();
-  if (!input.placements.length && !(input.venues ?? []).length && !input.nearbyVenueId) throw new ApiError(422, "Choose at least one place for your ad.", "no_placements");
+  if (!input.placements.length && !(input.venues ?? []).length && !input.nearbyVenueId && !input.influencer) throw new ApiError(422, "Choose at least one place for your ad.", "no_placements");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startDay) || input.startDay < lagosDay()) {
     throw new ApiError(422, "Pick a start date from today onwards.", "bad_start");
   }
@@ -673,7 +762,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Campai
   const existing = await prisma.$queryRawUnsafe<CampaignRow[]>(
     `SELECT ${CAMPAIGN_COLS} FROM ad_campaigns WHERE idempotency_key = $1 AND user_id = $2::uuid`, input.idempotencyKey, input.userId,
   );
-  if (existing[0]) return campaignView(existing[0], { views: 0, clicks: 0, byChannel: [], byDay: [] });
+  if (existing[0]) return (await getCampaign(existing[0].id))!;
 
   const user = await prisma.user.findUnique({ where: { id: input.userId }, select: { kycTier: true, status: true } });
   if (!user || user.kycTier < 1) {
@@ -691,7 +780,9 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Campai
   }
 
   const placements = [...new Set(input.placements)];
-  const { lines, totalMinor } = await planChannels({ placements, venues: input.venues, nearbyVenueId: input.nearbyVenueId, days: input.days, userId: input.userId });
+  const { lines, influencer, breakdown, totalMinor } = await planCampaign({
+    placements, venues: input.venues, nearbyVenueId: input.nearbyVenueId, influencer: input.influencer, days: input.days, userId: input.userId,
+  });
   const id = randomUUID();
 
   await prisma.$transaction(async (db) => {
@@ -725,7 +816,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Campai
         amount: totalMinor,
         status: TransactionStatus.COMPLETED,
         idempotencyKey: input.idempotencyKey,
-        metadata: { kind: "ad", campaignId: id, headline: input.headline, days: input.days, channels: lines.map((l) => l.channel) },
+        metadata: { kind: "ad", campaignId: id, headline: input.headline, days: input.days, channels: breakdown.map((l) => l.channel) },
       },
     });
 
@@ -735,9 +826,15 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Campai
        VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::date, $12, $13, $14::jsonb, $15, $16::uuid)`,
       id, input.userId, input.businessName.trim(), input.headline.trim(), input.body.trim(), input.image,
       input.linkUrl || null, (input.cta || "Learn more").trim(), input.category, JSON.stringify(input.targeting),
-      input.startDay, input.days, totalMinor, JSON.stringify(lines.map(({ capacity: _c, ...l }) => l)), input.idempotencyKey,
+      input.startDay, input.days, totalMinor, JSON.stringify(breakdown), input.idempotencyKey,
       input.nearbyVenueId ?? null,
     );
+    if (influencer) {
+      await db.$executeRawUnsafe(
+        `INSERT INTO ad_influencer_budgets (campaign_id, pay_minor, fee_minor, max_posts, brief) VALUES ($1::uuid, $2, $3, $4, $5)`,
+        id, influencer.payMinor, influencer.feeMinor, influencer.posts, influencer.brief,
+      );
+    }
     for (const l of lines) {
       await db.$executeRawUnsafe(
         `INSERT INTO ad_campaign_slots (campaign_id, channel, day, price_minor)
@@ -751,7 +848,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Campai
         action: "ad.campaign.created",
         resourceType: "AdCampaign",
         resourceId: id,
-        details: { channels: lines.map((l) => l.channel), days: input.days, startDay: input.startDay, totalMinor: totalMinor.toString(), category: input.category },
+        details: { channels: breakdown.map((l) => l.channel), influencerPosts: influencer?.posts ?? 0, days: input.days, startDay: input.startDay, totalMinor: totalMinor.toString(), category: input.category },
       },
     });
   });
@@ -785,7 +882,8 @@ export async function getCampaign(id: string): Promise<CampaignView | null> {
   await ensureAdsSchema();
   const rows = await prisma.$queryRawUnsafe<CampaignRow[]>(`SELECT ${CAMPAIGN_COLS} FROM ad_campaigns WHERE id = $1::uuid`, id);
   if (!rows[0]) return null;
-  return campaignView(rows[0], (await statsFor([id])).get(id)!);
+  const [stats, budgets] = await Promise.all([statsFor([id]), budgetsFor([id])]);
+  return campaignView(rows[0], stats.get(id)!, budgets.get(id) ?? null);
 }
 
 export async function listUserCampaigns(userId: string): Promise<CampaignView[]> {
@@ -793,8 +891,8 @@ export async function listUserCampaigns(userId: string): Promise<CampaignView[]>
   const rows = await prisma.$queryRawUnsafe<CampaignRow[]>(
     `SELECT ${CAMPAIGN_COLS} FROM ad_campaigns WHERE user_id = $1::uuid ORDER BY created_at DESC LIMIT 100`, userId,
   );
-  const stats = await statsFor(rows.map((r) => r.id));
-  return rows.map((r) => campaignView(r, stats.get(r.id)!));
+  const [stats, budgets] = await Promise.all([statsFor(rows.map((r) => r.id)), budgetsFor(rows.map((r) => r.id))]);
+  return rows.map((r) => campaignView(r, stats.get(r.id)!, budgets.get(r.id) ?? null));
 }
 
 /**
@@ -838,6 +936,108 @@ export async function refundSlots(campaignId: string, where: string, params: unk
   });
 }
 
+// ---------------------------------------------------------------------------
+// Influencer posts
+
+interface BudgetRow {
+  campaign_id: string;
+  pay_minor: bigint;
+  fee_minor: bigint;
+  max_posts: number;
+  used_posts: number;
+  refunded_posts: number;
+  brief: string;
+  task_id: string | null;
+}
+
+/**
+ * Give back the posts nobody has claimed: max − approved − already refunded −
+ * still waiting for review. Locks the budget row (the same lock an approval
+ * takes), so a post is either paid to an influencer or refunded, never both.
+ * With `close`, the task stops taking new proof first.
+ */
+export async function refundInfluencerPosts(campaignId: string, reason: string, opts: { close?: boolean } = {}): Promise<bigint> {
+  await ensureAdTxnTypes();
+  return prisma.$transaction(async (db) => {
+    const rows = await db.$queryRawUnsafe<(BudgetRow & { user_id: string })[]>(
+      `SELECT b.campaign_id::text, b.pay_minor, b.fee_minor, b.max_posts, b.used_posts, b.refunded_posts, b.brief, b.task_id::text, c.user_id::text
+         FROM ad_influencer_budgets b JOIN ad_campaigns c ON c.id = b.campaign_id WHERE b.campaign_id = $1::uuid FOR UPDATE OF b`,
+      campaignId,
+    );
+    const b = rows[0];
+    if (!b) return 0n;
+    let pending = 0;
+    if (b.task_id) {
+      if (opts.close) await db.$executeRawUnsafe(`UPDATE influencer_tasks SET active = false WHERE id = $1::uuid`, b.task_id);
+      const p = await db.$queryRawUnsafe<{ n: number }[]>(
+        `SELECT count(*)::int AS n FROM task_submissions WHERE task_id = $1::uuid AND status = 'PENDING'`, b.task_id,
+      );
+      pending = p[0]?.n ?? 0;
+    }
+    const posts = b.max_posts - b.used_posts - b.refunded_posts - pending;
+    if (posts <= 0) return 0n;
+    const amount = (BigInt(b.pay_minor) + BigInt(b.fee_minor)) * BigInt(posts);
+    await db.$executeRawUnsafe(`UPDATE ad_influencer_budgets SET refunded_posts = refunded_posts + $2 WHERE campaign_id = $1::uuid`, campaignId, posts);
+    await db.balance.upsert({
+      where: { userId_asset: { userId: b.user_id, asset: Asset.NGN } },
+      update: { available: { increment: amount } },
+      create: { userId: b.user_id, asset: Asset.NGN, available: amount },
+    });
+    await db.transaction.create({
+      data: {
+        userId: b.user_id,
+        type: TransactionType.AD_REFUND,
+        asset: Asset.NGN,
+        amount,
+        status: TransactionStatus.COMPLETED,
+        idempotencyKey: `ad-refund:${campaignId}:${randomUUID()}`,
+        metadata: { kind: "ad_refund", campaignId, reason, influencerPosts: posts },
+      },
+    });
+    await db.$executeRawUnsafe(`UPDATE ad_campaigns SET refunded_minor = refunded_minor + $2, updated_at = now() WHERE id = $1::uuid`, campaignId, amount);
+    return amount;
+  });
+}
+
+/** On approval: publish the brief as a paid task in the influencer portal (once). */
+export async function openInfluencerTask(campaignId: string, admin: string): Promise<string | null> {
+  await ensureReferralSchema();
+  return prisma.$transaction(async (db) => {
+    const rows = await db.$queryRawUnsafe<(BudgetRow & { business_name: string; headline: string; link_url: string | null; start_day: string; days: number })[]>(
+      `SELECT b.campaign_id::text, b.pay_minor, b.max_posts, b.brief, b.task_id::text, c.business_name, c.headline, c.link_url,
+              to_char(c.start_day, 'YYYY-MM-DD') AS start_day, c.days
+         FROM ad_influencer_budgets b JOIN ad_campaigns c ON c.id = b.campaign_id WHERE b.campaign_id = $1::uuid FOR UPDATE OF b`,
+      campaignId,
+    );
+    const b = rows[0];
+    if (!b) return null;
+    if (b.task_id) return b.task_id;
+    const endDay = addDays(b.start_day, b.days - 1);
+    const description = [b.brief, `Ad: "${b.headline}"`, b.link_url ? `Link: ${b.link_url}` : null, `Up to ${b.max_posts} paid post${b.max_posts === 1 ? "" : "s"} — first approved, first paid.`]
+      .filter(Boolean).join("\n\n");
+    const task = await db.$queryRawUnsafe<{ id: string }[]>(
+      `INSERT INTO influencer_tasks (title, description, kind, reward_minor, starts_at, ends_at, active, created_by)
+       VALUES ($1, $2, 'PROOF', $3, now(), $4::timestamptz, true, $5) RETURNING id::text`,
+      `Post for ${b.business_name}`.slice(0, 120), description, b.pay_minor, `${endDay}T23:59:59+01:00`, admin,
+    );
+    await db.$executeRawUnsafe(`UPDATE ad_influencer_budgets SET task_id = $2::uuid WHERE campaign_id = $1::uuid`, campaignId, task[0].id);
+    return task[0].id;
+  });
+}
+
+/** Posts approved and refunded so far, for the advertiser and admin views. */
+async function budgetsFor(ids: string[]): Promise<Map<string, { maxPosts: number; usedPosts: number; refundedPosts: number; payFormatted: string; brief: string }>> {
+  const out = new Map<string, { maxPosts: number; usedPosts: number; refundedPosts: number; payFormatted: string; brief: string }>();
+  if (!ids.length) return out;
+  const rows = await prisma.$queryRawUnsafe<BudgetRow[]>(
+    `SELECT campaign_id::text, pay_minor, max_posts, used_posts, refunded_posts, brief FROM ad_influencer_budgets WHERE campaign_id = ANY($1::uuid[])`, ids,
+  );
+  for (const r of rows) {
+    out.set(r.campaign_id, { maxPosts: r.max_posts, usedPosts: r.used_posts, refundedPosts: r.refunded_posts, payFormatted: formatNairaMinor(BigInt(r.pay_minor)), brief: r.brief });
+  }
+  return out;
+}
+
 /** The advertiser stops their campaign: days that haven't started are refunded. */
 export async function cancelCampaign(userId: string, id: string): Promise<CampaignView> {
   await ensureAdsSchema();
@@ -846,7 +1046,10 @@ export async function cancelCampaign(userId: string, id: string): Promise<Campai
   if (!["PENDING_REVIEW", "APPROVED", "LIVE"].includes(c.status)) throw new ApiError(409, "This campaign has already finished.", "not_cancellable");
   // Not yet running → everything back. Running → today has been shown; the rest comes back.
   const fromDay = c.status === "LIVE" ? addDays(lagosDay(), 1) : "1970-01-01";
-  const amount = await refundSlots(id, `day >= $2::date`, [fromDay], "cancelled", "CANCELLED");
+  const amount =
+    (await refundSlots(id, `day >= $2::date`, [fromDay], "cancelled", "CANCELLED")) +
+    // Posts already approved stay paid; ones waiting for review are settled by the nightly run.
+    (await refundInfluencerPosts(id, "cancelled", { close: true }));
   const view = (await getCampaign(id))!;
   void notifyUser(userId, {
     category: "updates",
@@ -871,8 +1074,8 @@ export async function listCampaignsAdmin(status: CampaignStatus | "ALL"): Promis
       ORDER BY CASE WHEN c.status = 'PENDING_REVIEW' THEN 0 ELSE 1 END, c.created_at DESC LIMIT 200`,
     status,
   );
-  const stats = await statsFor(rows.map((r) => r.id));
-  return rows.map((r) => ({ ...campaignView(r, stats.get(r.id)!), userId: r.user_id, advertiserEmail: r.email, advertiserName: r.legal_name, audience: null }));
+  const [stats, budgets] = await Promise.all([statsFor(rows.map((r) => r.id)), budgetsFor(rows.map((r) => r.id))]);
+  return rows.map((r) => ({ ...campaignView(r, stats.get(r.id)!, budgets.get(r.id) ?? null), userId: r.user_id, advertiserEmail: r.email, advertiserName: r.legal_name, audience: null }));
 }
 
 /**
@@ -893,6 +1096,7 @@ export async function decideCampaign(id: string, approve: boolean, reason: strin
 
   if (approve) {
     const missed = await refundSlots(id, `day < $2::date`, [today], "missed_while_in_review");
+    await openInfluencerTask(id, admin);
     if (flipped[0].start_day <= today) {
       await prisma.$executeRawUnsafe(`UPDATE ad_campaigns SET status = 'LIVE', updated_at = now() WHERE id = $1::uuid AND status = 'APPROVED'`, id);
     }
@@ -907,7 +1111,7 @@ export async function decideCampaign(id: string, approve: boolean, reason: strin
     return view;
   }
 
-  const amount = await refundSlots(id, "true", [], "rejected");
+  const amount = (await refundSlots(id, "true", [], "rejected")) + (await refundInfluencerPosts(id, "rejected", { close: true }));
   const view = (await getCampaign(id))!;
   void notifyUser(userId, {
     category: "updates",
@@ -1093,8 +1297,8 @@ export async function recordAdEvent(userId: string | null, campaignId: string, c
  *   4. refund days of campaigns nobody reviewed before they passed;
  *   5. move campaigns APPROVED → LIVE on their start day, and LIVE → ENDED after their last.
  */
-export async function runAdsDaily(): Promise<{ segments: number; delivered: number; ended: number; started: number; expiredRefunds: number }> {
-  await ensureAdsSchema();
+export async function runAdsDaily(): Promise<{ segments: number; delivered: number; ended: number; started: number; expiredRefunds: number; influencerRefunds: number }> {
+  await Promise.all([ensureAdsSchema(), ensureReferralSchema()]);
   const today = lagosDay();
 
   const segments = await prisma.$executeRawUnsafe(`
@@ -1139,14 +1343,23 @@ export async function runAdsDaily(): Promise<{ segments: number; delivered: numb
   for (const w of waiting) {
     if ((await refundSlots(w.id, `day < $2::date`, [today], "missed_while_in_review")) > 0n) expiredRefunds++;
   }
-  await prisma.$executeRawUnsafe(
+  // Its last day has passed without a review: reject it (every slot was refunded above; posts are refunded below).
+  const lapsed = await prisma.$queryRawUnsafe<{ id: string }[]>(
     `UPDATE ad_campaigns c SET status = 'REJECTED', reason = 'Not reviewed before its last day — fully refunded.', updated_at = now()
-      WHERE c.status = 'PENDING_REVIEW' AND NOT EXISTS (SELECT 1 FROM ad_campaign_slots s WHERE s.campaign_id = c.id AND s.status = 'BOOKED')`,
+      WHERE c.status = 'PENDING_REVIEW'
+        AND NOT EXISTS (SELECT 1 FROM ad_campaign_slots s WHERE s.campaign_id = c.id AND s.status = 'BOOKED')
+        -- influencer-only campaigns have no slots: go by the dates instead
+        AND (EXISTS (SELECT 1 FROM ad_campaign_slots s WHERE s.campaign_id = c.id) OR c.start_day + c.days <= $1::date)
+      RETURNING c.id::text`,
+    today,
   );
+  for (const l of lapsed) if ((await refundInfluencerPosts(l.id, "not_reviewed", { close: true })) > 0n) expiredRefunds++;
 
   const ended = await prisma.$queryRawUnsafe<{ id: string; user_id: string; headline: string }[]>(
     `UPDATE ad_campaigns c SET status = 'ENDED', updated_at = now()
-      WHERE c.status = 'LIVE' AND NOT EXISTS (SELECT 1 FROM ad_campaign_slots s WHERE s.campaign_id = c.id AND s.day >= $1::date AND s.status = 'BOOKED')
+      WHERE c.status = 'LIVE'
+        AND NOT EXISTS (SELECT 1 FROM ad_campaign_slots s WHERE s.campaign_id = c.id AND s.day >= $1::date AND s.status = 'BOOKED')
+        AND (EXISTS (SELECT 1 FROM ad_campaign_slots s WHERE s.campaign_id = c.id) OR c.start_day + c.days <= $1::date)
       RETURNING c.id::text, c.user_id::text, c.headline`,
     today,
   );
@@ -1159,5 +1372,29 @@ export async function runAdsDaily(): Promise<{ segments: number; delivered: numb
       data: { adCampaignId: e.id, url: "/advertise/campaigns/" },
     }).catch(() => undefined);
   }
-  return { segments, delivered, ended: ended.length, started, expiredRefunds };
+
+  // Influencer posts nobody claimed: once the campaign is over, its task has
+  // closed and every submission is reviewed, the rest goes back to the advertiser.
+  let influencerRefunds = 0;
+  const open = await prisma.$queryRawUnsafe<{ id: string; user_id: string; headline: string }[]>(
+    `SELECT c.id::text, c.user_id::text, c.headline FROM ad_influencer_budgets b JOIN ad_campaigns c ON c.id = b.campaign_id
+      LEFT JOIN influencer_tasks t ON t.id = b.task_id
+      WHERE c.status IN ('ENDED', 'CANCELLED', 'REJECTED') AND b.used_posts + b.refunded_posts < b.max_posts
+        AND (t.id IS NULL OR t.ends_at IS NULL OR t.ends_at < now() OR NOT t.active)
+        AND NOT EXISTS (SELECT 1 FROM task_submissions s WHERE s.task_id = b.task_id AND s.status = 'PENDING')`,
+  );
+  for (const o of open) {
+    const amount = await refundInfluencerPosts(o.id, "posts_unused", { close: true });
+    if (amount <= 0n) continue;
+    influencerRefunds++;
+    void notifyUser(o.user_id, {
+      category: "updates",
+      emailKind: "money_in",
+      title: "Unused influencer posts refunded",
+      body: `${formatNairaMinor(amount)} for posts nobody made on "${o.headline}" is back in your balance.`,
+      amount: formatNairaMinor(amount),
+      data: { adCampaignId: o.id, url: "/advertise/campaigns/" },
+    }).catch(() => undefined);
+  }
+  return { segments, delivered, ended: ended.length, started, expiredRefunds, influencerRefunds };
 }

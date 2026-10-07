@@ -11,6 +11,9 @@ interface Settings {
   nearbyPrice: number;
   nearbySlots: number;
   minScreenHours: number;
+  influencerFeePercent: number;
+  influencerMinPay: number;
+  influencerMaxPosts: number;
   maxDays: number;
   minAudience: number;
   defaultFrequencyCap: number;
@@ -86,6 +89,11 @@ export default function AdSettingsPage() {
             <label className="text-xs font-semibold text-gray-600">“Featured in Nearby” price per day (₦)<input value={s.nearbyPrice} onChange={(e) => setS({ ...s, nearbyPrice: num(e.target.value) })} className={input} /><span className="font-normal text-gray-500">Venue owners promoting their own place</span></label>
             <label className="text-xs font-semibold text-gray-600">Featured venues per day<input value={s.nearbySlots} onChange={(e) => setS({ ...s, nearbySlots: Math.round(num(e.target.value)) })} className={input} /></label>
             <label className="text-xs font-semibold text-gray-600">Hours a screen must be on for a day to count<input value={s.minScreenHours} onChange={(e) => setS({ ...s, minScreenHours: num(e.target.value) })} className={input} /><span className="font-normal text-gray-500">Below this the advertiser is refunded that day</span></label>
+          </div>
+          <div className="grid gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm md:grid-cols-3">
+            <label className="text-xs font-semibold text-gray-600">Influencer posts: CheqPay fee (%)<input value={s.influencerFeePercent} onChange={(e) => setS({ ...s, influencerFeePercent: num(e.target.value) })} className={input} /><span className="font-normal text-gray-500">Added on top of what the creator is paid</span></label>
+            <label className="text-xs font-semibold text-gray-600">Lowest pay per post (₦)<input value={s.influencerMinPay} onChange={(e) => setS({ ...s, influencerMinPay: num(e.target.value) })} className={input} /></label>
+            <label className="text-xs font-semibold text-gray-600">Most posts per campaign<input value={s.influencerMaxPosts} onChange={(e) => setS({ ...s, influencerMaxPosts: Math.round(num(e.target.value)) })} className={input} /></label>
           </div>
           <p className="-mt-3 text-xs text-gray-500">Each venue screen&apos;s own price and the owner&apos;s share are set per venue under Ads → Venues & screens.</p>
           <div className="grid gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm md:grid-cols-2">

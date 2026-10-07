@@ -38,6 +38,7 @@ interface Campaign {
   advertiserEmail: string | null;
   advertiserName: string | null;
   stats: { views: number; clicks: number };
+  influencer: { maxPosts: number; usedPosts: number; refundedPosts: number; payFormatted: string; brief: string } | null;
 }
 
 const FILTERS = ['PENDING_REVIEW', 'LIVE', 'APPROVED', 'ENDED', 'REJECTED', 'CANCELLED', 'ALL'] as const;
@@ -164,6 +165,13 @@ export default function AdCampaignsPage() {
                 <p><span className="text-gray-500">When:</span> {c.startDay} → {c.endDay} ({c.days} day{c.days === 1 ? '' : 's'})</p>
                 <p><span className="text-gray-500">Who:</span> {targetingSummary(c.targeting)}</p>
                 <p><span className="text-gray-500">Paid:</span> {c.paidFormatted}{c.refundedFormatted && !/^₦0(\.00)?$/.test(c.refundedFormatted) ? ` · refunded ${c.refundedFormatted}` : ''}</p>
+                {c.influencer && (
+                  <div className="rounded-lg bg-purple-50 px-3 py-2">
+                    <p><span className="text-gray-500">Influencer posts:</span> {c.influencer.maxPosts} × {c.influencer.payFormatted} to the creator · {c.influencer.usedPosts} approved{c.influencer.refundedPosts ? ` · ${c.influencer.refundedPosts} refunded` : ''}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-gray-700"><span className="text-gray-500">Brief:</span> {c.influencer.brief}</p>
+                    {c.status === 'PENDING_REVIEW' && <p className="mt-1 text-xs text-gray-500">Approving publishes this brief as a paid task in the influencer portal. Review proofs under Referrals → Tasks.</p>}
+                  </div>
+                )}
                 {(c.stats.views > 0 || c.status === 'LIVE') && <p><span className="text-gray-500">Results:</span> {c.stats.views.toLocaleString()} views · {c.stats.clicks.toLocaleString()} taps</p>}
                 {c.reason && <p className="text-red-700">Reason: {c.reason}</p>}
                 {c.status === 'PENDING_REVIEW' && (

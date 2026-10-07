@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth";
-import { availability, estimateAudience, getAdsSettings, planChannels, quoteSchema, validateCampaignShape } from "@/lib/ads";
+import { availability, estimateAudience, getAdsSettings, planCampaign, quoteSchema, validateCampaignShape } from "@/lib/ads";
 import { assertFeatureEnabled } from "@/lib/features";
 import { formatNairaMinor } from "@/lib/money";
 import { enforceRateLimit } from "@/lib/ratelimit";
@@ -15,8 +15,8 @@ export async function POST(req: Request) {
     await enforceRateLimit(`ad-quote:${auth.id}`, 60, 60_000);
     const b = quoteSchema.parse(await req.json());
     await validateCampaignShape(b);
-    const [{ lines, totalMinor }, s] = await Promise.all([
-      planChannels({ placements: b.placements, venues: b.venues, nearbyVenueId: b.nearbyVenueId, days: b.days, userId: auth.id }),
+    const [{ lines, breakdown, totalMinor }, s] = await Promise.all([
+      planCampaign({ placements: b.placements, venues: b.venues, nearbyVenueId: b.nearbyVenueId, influencer: b.influencer, days: b.days, userId: auth.id }),
       getAdsSettings(),
     ]);
     const [slots, audience] = await Promise.all([
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     ]);
     const soldOut = lines.flatMap((l) => slots[l.channel].filter((d) => d.free <= 0).map((d) => ({ channel: l.channel, label: l.label, day: d.day })));
     return jsonOk({
-      lines: lines.map(({ capacity: _c, ...l }) => l),
+      lines: breakdown,
       totalMinor: totalMinor.toString(),
       totalFormatted: formatNairaMinor(totalMinor),
       availability: slots,

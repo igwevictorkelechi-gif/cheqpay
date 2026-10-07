@@ -21,6 +21,7 @@
 
 import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { notifyUser } from "./alerts";
+import { ensureAdsSchema } from "./ensureAds";
 import { ensureGiftCardTxnTypes } from "./ensureGiftCardTxnTypes";
 import { ApiError } from "./http";
 import { decimalsFor, formatNairaMinor } from "./money";
@@ -825,6 +826,15 @@ export async function influencerTasks(userId: string) {
   const rewarded = await prisma.$queryRawUnsafe<{ source_key: string; status: string }[]>(
     `SELECT source_key, status FROM referral_earnings WHERE earner_user_id = $1::uuid AND kind = 'TASK'`, userId,
   );
+  // Tasks that came from an advertiser's campaign carry the brand's brief.
+  await ensureAdsSchema();
+  const brands = tasks.length
+    ? await prisma.$queryRawUnsafe<{ task_id: string; business_name: string; headline: string; image: string; link_url: string | null; left: number }[]>(
+        `SELECT b.task_id::text, c.business_name, c.headline, c.image, c.link_url, (b.max_posts - b.used_posts - b.refunded_posts)::int AS left
+           FROM ad_influencer_budgets b JOIN ad_campaigns c ON c.id = b.campaign_id WHERE b.task_id = ANY($1::uuid[])`,
+        tasks.map((t) => t.id),
+      )
+    : [];
   const out = [];
   for (const t of tasks) {
     const progress = t.kind === "AUTO" ? await taskProgress(t, userId, rate) : null;
@@ -836,6 +846,10 @@ export async function influencerTasks(userId: string) {
       submission: subs.find((s) => s.task_id === t.id) ?? null,
       rewarded: done ? done.status : null,
       expired: !!t.ends_at && t.ends_at.getTime() < Date.now(),
+      brand: (() => {
+        const b = brands.find((x) => x.task_id === t.id);
+        return b ? { businessName: b.business_name, headline: b.headline, image: b.image, linkUrl: b.link_url, postsLeft: Math.max(0, b.left) } : null;
+      })(),
     });
   }
   return out;
@@ -848,6 +862,11 @@ export async function submitTaskProof(userId: string, taskId: string, proofUrl: 
   if (!t || !t.active || t.kind !== "PROOF") throw new ApiError(404, "Task not found", "not_found");
   if (t.assigned.length && !t.assigned.includes(userId)) throw new ApiError(404, "Task not found", "not_found");
   if (t.ends_at && t.ends_at.getTime() < Date.now()) throw new ApiError(409, "This task has ended.", "task_ended");
+  await ensureAdsSchema();
+  const full = await prisma.$queryRawUnsafe<{ n: number }[]>(
+    `SELECT count(*)::int AS n FROM ad_influencer_budgets WHERE task_id = $1::uuid AND used_posts + refunded_posts >= max_posts`, taskId,
+  );
+  if (full[0]?.n) throw new ApiError(409, "Every paid post for this campaign has been taken.", "posts_used_up");
   const n = await prisma.$executeRawUnsafe(
     `INSERT INTO task_submissions (task_id, user_id, proof_url, note) VALUES ($1::uuid, $2::uuid, $3, $4)
      ON CONFLICT (task_id, user_id) DO UPDATE SET proof_url = EXCLUDED.proof_url, note = EXCLUDED.note, status = 'PENDING',
@@ -1020,19 +1039,44 @@ export async function listSubmissionsAdmin(status = "PENDING") {
   }));
 }
 
-/** Approve (creates the task reward, paid after the hold) or reject a proof submission. */
+/**
+ * Approve (creates the task reward, paid after the hold) or reject a proof
+ * submission. A task that came from an advertiser's campaign pays from that
+ * campaign's post budget: the approval takes one post under the budget's row
+ * lock, and is refused once every post is used — so a campaign never pays for
+ * more posts than it bought. Those rewards skip the monthly cap (the advertiser
+ * has already paid for them).
+ */
 export async function decideSubmission(id: string, admin: string, approve: boolean, reason?: string): Promise<void> {
-  await ensureReferralSchema();
-  const rows = await prisma.$queryRawUnsafe<{ task_id: string; user_id: string; title: string; reward_minor: bigint }[]>(
-    `UPDATE task_submissions s SET status = $3, reason = $4, reviewed_by = $2, reviewed_at = now()
-       FROM influencer_tasks t WHERE s.id = $1::uuid AND s.status = 'PENDING' AND t.id = s.task_id
-     RETURNING s.task_id::text, s.user_id::text, t.title, t.reward_minor`,
-    id, admin, approve ? "APPROVED" : "REJECTED", approve ? null : (reason ?? "").trim().slice(0, 300) || "Not accepted",
-  );
-  const r = rows[0];
-  if (!r) throw new ApiError(409, "This submission has already been reviewed.", "already_reviewed");
-  if (approve) {
-    await accrue({ earnerId: r.user_id, kind: "TASK", sourceKey: `task:${r.task_id}:${r.user_id}`, amount: r.reward_minor, note: r.title }, await getReferralSettings());
+  await Promise.all([ensureReferralSchema(), ensureAdsSchema()]);
+  const s = await getReferralSettings();
+  const r = await prisma.$transaction(async (db) => {
+    const rows = await db.$queryRawUnsafe<{ task_id: string; user_id: string; title: string; reward_minor: bigint }[]>(
+      `UPDATE task_submissions s SET status = $3, reason = $4, reviewed_by = $2, reviewed_at = now()
+         FROM influencer_tasks t WHERE s.id = $1::uuid AND s.status = 'PENDING' AND t.id = s.task_id
+       RETURNING s.task_id::text, s.user_id::text, t.title, t.reward_minor`,
+      id, admin, approve ? "APPROVED" : "REJECTED", approve ? null : (reason ?? "").trim().slice(0, 300) || "Not accepted",
+    );
+    const row = rows[0];
+    if (!row) throw new ApiError(409, "This submission has already been reviewed.", "already_reviewed");
+    if (!approve) return { ...row, campaign: false };
+    const budget = await db.$queryRawUnsafe<{ campaign_id: string }[]>(
+      `SELECT campaign_id::text FROM ad_influencer_budgets WHERE task_id = $1::uuid FOR UPDATE`, row.task_id,
+    );
+    if (!budget[0]) return { ...row, campaign: false };
+    const took = await db.$executeRawUnsafe(
+      `UPDATE ad_influencer_budgets SET used_posts = used_posts + 1 WHERE task_id = $1::uuid AND used_posts + refunded_posts < max_posts`, row.task_id,
+    );
+    if (!took) throw new ApiError(409, "Every paid post for this campaign has been used. Reject this one instead.", "posts_used_up");
+    await db.$executeRawUnsafe(
+      `INSERT INTO referral_earnings (earner_user_id, kind, source_key, amount_minor, note, release_at)
+       VALUES ($1::uuid, 'TASK', $2, $3, $4, now() + make_interval(hours => $5::int)) ON CONFLICT (source_key) DO NOTHING`,
+      row.user_id, `task:${row.task_id}:${row.user_id}`, row.reward_minor, row.title, s.holdHours,
+    );
+    return { ...row, campaign: true };
+  });
+  if (approve && !r.campaign) {
+    await accrue({ earnerId: r.user_id, kind: "TASK", sourceKey: `task:${r.task_id}:${r.user_id}`, amount: r.reward_minor, note: r.title }, s);
   }
   await notifyUser(r.user_id, {
     category: "updates",
