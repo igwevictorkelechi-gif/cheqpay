@@ -8,6 +8,7 @@ import { api, ApiError, type BillCashback, type BillServiceConfig } from '@/serv
 import DataPlanGrid from '@/components/DataPlanGrid';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 import SponsoredCard from '@/components/SponsoredCard';
+import SaveBillCard from '@/components/SaveBillCard';
 
 type Stage = 'form' | 'review' | 'done';
 
@@ -533,6 +534,14 @@ export default function BillServiceScreen() {
             {providerRef ? (
               <Text className="text-muted dark:text-muted-dark text-xs mt-3">Ref: {providerRef}</Text>
             ) : null}
+            <SaveBillCard
+              service={service}
+              billerId={billerId}
+              customer={customer.trim()}
+              planId={config?.variableAmount ? null : planId || null}
+              amount={config?.variableAmount ? amount : null}
+              style={{ marginTop: 24, width: '100%' }}
+            />
             <SponsoredCard placement="receipt" style={{ marginTop: 24, width: '100%' }} />
             <TouchableOpacity
               onPress={() => router.replace('/(app)/pay-bill')}

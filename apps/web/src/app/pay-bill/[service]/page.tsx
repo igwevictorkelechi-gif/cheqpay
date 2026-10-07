@@ -23,6 +23,7 @@ import { SuccessAnimation } from "@/components/Lottie";
 import { invalidateMoneyCaches } from "@/lib/cache";
 import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
 import SponsoredCard from "@/components/SponsoredCard";
+import SaveBillCard from "@/components/SaveBillCard";
 
 type Stage = "form" | "review" | "done";
 
@@ -487,6 +488,14 @@ export default function BillServicePage() {
               Ref: {providerRef}
             </p>
           )}
+          <SaveBillCard
+            service={service}
+            billerId={billerId}
+            customer={customer.trim()}
+            planId={config?.variableAmount ? null : planId || null}
+            amount={config?.variableAmount ? amount : null}
+            className="mt-6 w-full"
+          />
           <SponsoredCard placement="receipt" className="mt-6 w-full text-left" />
           <button
             onClick={() => router.push("/pay-bill")}

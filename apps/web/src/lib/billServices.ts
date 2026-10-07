@@ -11,7 +11,6 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import type { LedgerTransaction } from "@/services/api";
 
 /** One tile on the Pay bills screen. `bill` tiles earn bill cashback. */
 export interface BillTile {
@@ -74,51 +73,5 @@ export function maskCustomer(c: string): string {
   return v.length <= 7 ? v : `${v.slice(0, 4)}•••${v.slice(-3)}`;
 }
 
-/** "2%", "1.5%" from basis points. */
-export const pctLabel = (bps: number) => `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1).replace(/\.0$/, "")}%`;
-
-export interface RecentBill {
-  service: string;
-  billerId: string | null;
-  billerName: string;
-  customer: string;
-  amount: string;
-  amountFormatted: string;
-  planId: string | null;
-  planName: string | null;
-}
-
-/** The latest completed bill per (service, customer), newest first. */
-export function recentBills(txns: LedgerTransaction[], max = 6): RecentBill[] {
-  const out: RecentBill[] = [];
-  const seen = new Set<string>();
-  for (const t of txns) {
-    if (t.type !== "BILL" || t.status !== "COMPLETED" || !t.service || !t.customer || !tileFor(t.service)) continue;
-    const k = `${t.service}|${t.customer.replace(/\s+/g, "")}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push({
-      service: t.service,
-      billerId: t.billerId ?? null,
-      billerName: t.billerName ?? tileFor(t.service)!.label,
-      customer: t.customer,
-      amount: t.amountFormatted,
-      amountFormatted: `₦${Number(t.amountFormatted).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`,
-      planId: t.planId ?? null,
-      planName: t.planName ?? null,
-    });
-    if (out.length >= max) break;
-  }
-  return out;
-}
-
-/** Link into the service flow with everything prefilled. */
-export function payAgainHref(r: RecentBill, billerId: string | null): string {
-  const q = new URLSearchParams();
-  if (billerId) q.set("biller", billerId);
-  q.set("customer", r.customer);
-  if (r.planId) q.set("plan", r.planId);
-  else if (r.planName) q.set("planName", r.planName);
-  else q.set("amount", String(Number(r.amount)));
-  return `/pay-bill/${r.service}/?${q.toString()}`;
-}
+/** 1 → "1st", 10 → "10th", 22 → "22nd". */
+export const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th"}`;

@@ -1,5 +1,4 @@
 import type { Ionicons } from '@expo/vector-icons';
-import type { LedgerTransaction } from '@/services/api';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -65,52 +64,4 @@ export const tileFor = (service: string | null): BillTile | undefined =>
 export function maskCustomer(c: string): string {
   const v = c.replace(/\s+/g, '');
   return v.length <= 7 ? v : `${v.slice(0, 4)}•••${v.slice(-3)}`;
-}
-
-/** "2%", "1.5%" from basis points. */
-export const pctLabel = (bps: number) => `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1).replace(/\.0$/, '')}%`;
-
-export interface RecentBill {
-  service: string;
-  billerId: string | null;
-  billerName: string;
-  customer: string;
-  amount: string;
-  amountFormatted: string;
-  planId: string | null;
-  planName: string | null;
-}
-
-/** The latest completed bill per (service, customer), newest first. */
-export function recentBills(txns: LedgerTransaction[], max = 6): RecentBill[] {
-  const out: RecentBill[] = [];
-  const seen = new Set<string>();
-  for (const t of txns) {
-    if (t.type !== 'BILL' || t.status !== 'COMPLETED' || !t.service || !t.customer || !tileFor(t.service)) continue;
-    const k = `${t.service}|${t.customer.replace(/\s+/g, '')}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push({
-      service: t.service,
-      billerId: t.billerId ?? null,
-      billerName: t.billerName ?? tileFor(t.service)!.label,
-      customer: t.customer,
-      amount: t.amountFormatted,
-      amountFormatted: `₦${Number(t.amountFormatted).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`,
-      planId: t.planId ?? null,
-      planName: t.planName ?? null,
-    });
-    if (out.length >= max) break;
-  }
-  return out;
-}
-
-/** Route params that open the service flow with everything prefilled. */
-export function payAgainParams(r: RecentBill, billerId: string | null): Record<string, string> {
-  const p: Record<string, string> = { customer: r.customer };
-  if (billerId) p.biller = billerId;
-  if (r.planId) p.plan = r.planId;
-  else if (r.planName) p.planName = r.planName;
-  else p.amount = String(Number(r.amount));
-  return p;
 }

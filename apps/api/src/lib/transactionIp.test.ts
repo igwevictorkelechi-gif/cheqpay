@@ -33,6 +33,15 @@ const MONEY_ROUTES = [
   "app/api/bills/pay/route.ts",
 ];
 
+/**
+ * Where a route hands the money movement to a library, the metadata and audit
+ * writes live there (bills: shared with autopay). The route must still resolve
+ * the caller's IP and pass it in.
+ */
+const IMPLEMENTATION: Record<string, string> = {
+  "app/api/bills/pay/route.ts": "lib/billPay.ts",
+};
+
 function read(rel: string): string {
   return readFileSync(join(API_SRC, rel), "utf8");
 }
@@ -46,16 +55,17 @@ describe("initiating IP is recorded on user-initiated money movements", () => {
   it.each(MONEY_ROUTES)("%s resolves the caller's IP", (rel) => {
     const src = code(read(rel));
     expect(src).toContain("requestContext(req)");
+    if (IMPLEMENTATION[rel]) expect(src).toMatch(/initiatorIp/);
   });
 
   it.each(MONEY_ROUTES)("%s writes that IP into transaction metadata", (rel) => {
-    const src = code(read(rel));
+    const src = code(read(IMPLEMENTATION[rel] ?? rel));
     // The metadata object must carry the resolved IP, not merely compute it.
     expect(src).toMatch(/ip:\s*initiatorIp/);
   });
 
   it.each(MONEY_ROUTES)("%s stamps its audit rows with the IP", (rel) => {
-    const src = code(read(rel));
+    const src = code(read(IMPLEMENTATION[rel] ?? rel));
     const auditWrites = (src.match(/auditLog\.create/g) ?? []).length;
     const stamped = (src.match(/ipAddress:\s*initiatorIp/g) ?? []).length;
     // Every audit row this route writes should carry the address, so the trail
