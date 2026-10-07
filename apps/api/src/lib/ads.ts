@@ -32,6 +32,7 @@ import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { notifyAdmins } from "./adminNotify";
 import { notifyUser } from "./alerts";
 import { ensureAdTxnTypes } from "./ensureAdTxnTypes";
+import { ensureAdsSchema } from "./ensureAds";
 import { matchesSignature } from "./fileSignature";
 import { ApiError } from "./http";
 import { formatNairaMinor } from "./money";
@@ -111,6 +112,11 @@ export interface AdsSettings {
   placementPriceMinor: Record<Placement, number>;
   /** How many advertisers share a placement on one day (they rotate). */
   slotsPerDay: Record<Placement, number>;
+  /** "Promote my venue in Nearby": price per day and how many venues share the top spots. */
+  nearbyPriceMinor: number;
+  nearbySlotsPerDay: number;
+  /** A screen-day only counts (and pays the venue) if a screen was online this many hours. */
+  minScreenHours: number;
   /** Longest campaign, in days. */
   maxDays: number;
   /** Targeting that matches fewer people than this is refused. */
@@ -123,6 +129,9 @@ export interface AdsSettings {
 export const DEFAULT_ADS_SETTINGS: AdsSettings = {
   placementPriceMinor: { home: 500_000, receipt: 300_000, paybills: 200_000 },
   slotsPerDay: { home: 5, receipt: 5, paybills: 5 },
+  nearbyPriceMinor: 150_000,
+  nearbySlotsPerDay: 20,
+  minScreenHours: 4,
   maxDays: 60,
   minAudience: 100,
   defaultFrequencyCap: 3,
@@ -165,93 +174,7 @@ export async function setAdsSettings(patch: Partial<AdsSettings>, updatedBy: str
   invalidateSetting(SETTINGS_KEY);
   return next;
 }
-
-// ---------------------------------------------------------------------------
-// Schema
-
-let ensured: Promise<void> | null = null;
-export function ensureAdsSchema(): Promise<void> {
-  if (!ensured) {
-    ensured = (async () => {
-      const stmts = [
-        `CREATE TABLE IF NOT EXISTS ad_campaigns (
-          id uuid PRIMARY KEY,
-          user_id uuid NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
-          business_name text NOT NULL,
-          headline text NOT NULL,
-          body text NOT NULL DEFAULT '',
-          image text NOT NULL,
-          link_url text,
-          cta text NOT NULL DEFAULT 'Learn more',
-          category text NOT NULL,
-          targeting jsonb NOT NULL DEFAULT '{}',
-          start_day date NOT NULL,
-          days integer NOT NULL CHECK (days > 0),
-          status text NOT NULL DEFAULT 'PENDING_REVIEW'
-            CHECK (status IN ('PENDING_REVIEW', 'APPROVED', 'LIVE', 'ENDED', 'REJECTED', 'CANCELLED')),
-          reason text,
-          reviewed_by text,
-          reviewed_at timestamptz,
-          paid_minor bigint NOT NULL,
-          refunded_minor bigint NOT NULL DEFAULT 0,
-          breakdown jsonb NOT NULL DEFAULT '[]',
-          idempotency_key text NOT NULL UNIQUE,
-          created_at timestamptz NOT NULL DEFAULT now(),
-          updated_at timestamptz NOT NULL DEFAULT now()
-        )`,
-        `CREATE INDEX IF NOT EXISTS ad_campaigns_user_idx ON ad_campaigns (user_id, created_at DESC)`,
-        `CREATE INDEX IF NOT EXISTS ad_campaigns_status_idx ON ad_campaigns (status, start_day)`,
-        `CREATE TABLE IF NOT EXISTS ad_campaign_slots (
-          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-          campaign_id uuid NOT NULL REFERENCES ad_campaigns(id) ON DELETE CASCADE,
-          channel text NOT NULL,
-          day date NOT NULL,
-          price_minor bigint NOT NULL,
-          status text NOT NULL DEFAULT 'BOOKED' CHECK (status IN ('BOOKED', 'DELIVERED', 'REFUNDED')),
-          UNIQUE (campaign_id, channel, day)
-        )`,
-        `CREATE INDEX IF NOT EXISTS ad_slots_channel_day_idx ON ad_campaign_slots (channel, day, status)`,
-        `CREATE TABLE IF NOT EXISTS ad_stats (
-          campaign_id uuid NOT NULL REFERENCES ad_campaigns(id) ON DELETE CASCADE,
-          channel text NOT NULL,
-          day date NOT NULL,
-          views integer NOT NULL DEFAULT 0,
-          clicks integer NOT NULL DEFAULT 0,
-          PRIMARY KEY (campaign_id, channel, day)
-        )`,
-        `CREATE TABLE IF NOT EXISTS ad_user_views (
-          campaign_id uuid NOT NULL REFERENCES ad_campaigns(id) ON DELETE CASCADE,
-          user_id uuid NOT NULL,
-          day date NOT NULL,
-          n integer NOT NULL DEFAULT 0,
-          PRIMARY KEY (campaign_id, user_id, day)
-        )`,
-        `CREATE TABLE IF NOT EXISTS user_ad_segments (
-          user_id uuid PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
-          segments text[] NOT NULL DEFAULT '{}',
-          updated_at timestamptz NOT NULL DEFAULT now()
-        )`,
-        `CREATE TABLE IF NOT EXISTS user_ad_prefs (
-          user_id uuid PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
-          personalised boolean NOT NULL DEFAULT true,
-          muted_categories text[] NOT NULL DEFAULT '{}',
-          updated_at timestamptz NOT NULL DEFAULT now()
-        )`,
-        `CREATE TABLE IF NOT EXISTS user_ad_location (
-          user_id uuid PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
-          lat double precision NOT NULL,
-          lng double precision NOT NULL,
-          updated_at timestamptz NOT NULL DEFAULT now()
-        )`,
-      ];
-      for (const s of stmts) await prisma.$executeRawUnsafe(s);
-    })().catch((err) => {
-      ensured = null;
-      throw err;
-    });
-  }
-  return ensured;
-}
+export { ensureAdsSchema };
 
 // ---------------------------------------------------------------------------
 // Dates (Lagos)
@@ -300,7 +223,11 @@ export type Targeting = z.infer<typeof targetingSchema>;
 
 /** What a campaign books: shared by the quote and the purchase routes. */
 export const quoteSchema = z.object({
-  placements: z.array(z.enum(PLACEMENTS)).min(1).max(PLACEMENTS.length),
+  placements: z.array(z.enum(PLACEMENTS)).max(PLACEMENTS.length).default([]),
+  /** Partner venue screens to show on. */
+  venues: z.array(z.string().uuid()).max(50).default([]),
+  /** "Promote my venue in Nearby": one of the advertiser's own venues. */
+  nearbyVenueId: z.string().uuid().nullable().default(null),
   startDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   days: z.number().int().min(1).max(365),
   category: z.enum(Object.keys(AD_CATEGORIES) as [AdCategory, ...AdCategory[]]),
@@ -465,34 +392,80 @@ export interface QuoteLine {
 
 export const channelOf = (p: Placement) => `placement:${p}`;
 
-export async function quoteCampaign(placements: Placement[], days: number): Promise<{ lines: QuoteLine[]; totalMinor: bigint }> {
+export interface PlannedLine extends QuoteLine {
+  /** How many campaigns may book this channel on one day. */
+  capacity: number;
+}
+
+/**
+ * Turn what the advertiser picked into priced lines, one per channel. Prices
+ * and capacities come from settings and the venue rows, never the caller.
+ */
+export async function planChannels(input: {
+  placements: Placement[];
+  venues?: string[];
+  nearbyVenueId?: string | null;
+  days: number;
+  userId?: string;
+}): Promise<{ lines: PlannedLine[]; totalMinor: bigint }> {
   const s = await getAdsSettings();
-  const uniq = [...new Set(placements)];
-  const lines = uniq.map((p) => {
-    const per = BigInt(s.placementPriceMinor[p]);
-    const total = per * BigInt(days);
-    return { channel: channelOf(p), label: PLACEMENT_LABELS[p], perDayMinor: per.toString(), days, totalMinor: total.toString(), totalFormatted: formatNairaMinor(total) };
-  });
+  const line = (channel: string, label: string, per: bigint, capacity: number): PlannedLine => {
+    const total = per * BigInt(input.days);
+    return { channel, label, perDayMinor: per.toString(), days: input.days, totalMinor: total.toString(), totalFormatted: formatNairaMinor(total), capacity };
+  };
+  const lines: PlannedLine[] = [...new Set(input.placements)].map((p) =>
+    line(channelOf(p), PLACEMENT_LABELS[p], BigInt(s.placementPriceMinor[p]), s.slotsPerDay[p]),
+  );
+  const venueIds = [...new Set(input.venues ?? [])];
+  if (venueIds.length) {
+    await ensureAdsSchema();
+    const rows = await prisma.$queryRawUnsafe<{ id: string; name: string; city: string; price_per_day_minor: bigint; max_ads: number }[]>(
+      `SELECT v.id::text, v.name, v.city, v.price_per_day_minor, v.max_ads FROM ad_venues v
+        WHERE v.id = ANY($1::uuid[]) AND v.active AND v.price_per_day_minor > 0
+          AND EXISTS (SELECT 1 FROM ad_screens sc WHERE sc.venue_id = v.id)`,
+      venueIds,
+    );
+    if (rows.length !== venueIds.length) throw new ApiError(422, "One of those screens isn't available any more. Pick again.", "venue_unavailable");
+    for (const v of rows) lines.push(line(`venue:${v.id}`, `Screen · ${v.name}${v.city ? `, ${v.city}` : ""}`, BigInt(v.price_per_day_minor), v.max_ads));
+  }
+  if (input.nearbyVenueId) {
+    await ensureAdsSchema();
+    const own = await prisma.$queryRawUnsafe<{ name: string }[]>(
+      `SELECT name FROM ad_venues WHERE id = $1::uuid AND active AND ($2::uuid IS NULL OR owner_user_id = $2::uuid)`,
+      input.nearbyVenueId, input.userId ?? null,
+    );
+    if (!own[0]) throw new ApiError(403, "You can only promote a venue you own.", "not_venue_owner");
+    lines.push(line(NEARBY_CHANNEL, `Featured in Nearby · ${own[0].name}`, BigInt(s.nearbyPriceMinor), s.nearbySlotsPerDay));
+  }
   return { lines, totalMinor: lines.reduce((a, l) => a + BigInt(l.totalMinor), 0n) };
 }
 
-/** Free slots per placement per day for a date range. */
-export async function availability(startDay: string, days: number): Promise<Record<Placement, { day: string; free: number }[]>> {
+export const NEARBY_CHANNEL = "placement:nearby";
+
+/** Back-compat: price for in-app placements only. */
+export async function quoteCampaign(placements: Placement[], days: number): Promise<{ lines: QuoteLine[]; totalMinor: bigint }> {
+  const { lines, totalMinor } = await planChannels({ placements, days });
+  return { lines: lines.map(({ capacity: _c, ...l }) => l), totalMinor };
+}
+
+/** Free slots per channel per day for a date range. */
+export async function availability(startDay: string, days: number, lines: { channel: string; capacity: number }[]): Promise<Record<string, { day: string; free: number }[]>> {
   await ensureAdsSchema();
-  const s = await getAdsSettings();
   const endDay = addDays(startDay, days - 1);
-  const rows = await prisma.$queryRawUnsafe<{ channel: string; day: string; n: number }[]>(
-    `SELECT channel, to_char(day, 'YYYY-MM-DD') AS day, count(*)::int AS n FROM ad_campaign_slots
-      WHERE status IN ('BOOKED', 'DELIVERED') AND day BETWEEN $1::date AND $2::date AND channel LIKE 'placement:%'
-      GROUP BY channel, day`,
-    startDay, endDay,
-  );
+  const rows = lines.length
+    ? await prisma.$queryRawUnsafe<{ channel: string; day: string; n: number }[]>(
+        `SELECT channel, to_char(day, 'YYYY-MM-DD') AS day, count(*)::int AS n FROM ad_campaign_slots
+          WHERE status IN ('BOOKED', 'DELIVERED') AND day BETWEEN $1::date AND $2::date AND channel = ANY($3::text[])
+          GROUP BY channel, day`,
+        startDay, endDay, lines.map((l) => l.channel),
+      )
+    : [];
   const used = new Map(rows.map((r) => [`${r.channel}|${r.day}`, r.n]));
-  const out = {} as Record<Placement, { day: string; free: number }[]>;
-  for (const p of PLACEMENTS) {
-    out[p] = Array.from({ length: days }, (_, i) => {
+  const out: Record<string, { day: string; free: number }[]> = {};
+  for (const l of lines) {
+    out[l.channel] = Array.from({ length: days }, (_, i) => {
       const day = addDays(startDay, i);
-      return { day, free: Math.max(0, s.slotsPerDay[p] - (used.get(`${channelOf(p)}|${day}`) ?? 0)) };
+      return { day, free: Math.max(0, l.capacity - (used.get(`${l.channel}|${day}`) ?? 0)) };
     });
   }
   return out;
@@ -662,14 +635,16 @@ export interface CreateCampaignInput {
   category: AdCategory;
   targeting: Targeting;
   placements: Placement[];
+  venues?: string[];
+  nearbyVenueId?: string | null;
   startDay: string;
   days: number;
 }
 
 /** Check the inputs that don't need the database. Shared by quote and create. */
-export async function validateCampaignShape(input: Pick<CreateCampaignInput, "placements" | "startDay" | "days" | "targeting" | "category">): Promise<void> {
+export async function validateCampaignShape(input: Pick<CreateCampaignInput, "placements" | "venues" | "nearbyVenueId" | "startDay" | "days" | "targeting" | "category">): Promise<void> {
   const s = await getAdsSettings();
-  if (!input.placements.length) throw new ApiError(422, "Choose at least one place for your ad.", "no_placements");
+  if (!input.placements.length && !(input.venues ?? []).length && !input.nearbyVenueId) throw new ApiError(422, "Choose at least one place for your ad.", "no_placements");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startDay) || input.startDay < lagosDay()) {
     throw new ApiError(422, "Pick a start date from today onwards.", "bad_start");
   }
@@ -709,29 +684,30 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Campai
   assertAdImage(input.image);
   assertAdLink(input.linkUrl);
   const s = await getAdsSettings();
-  const audience = await estimateAudience(input.targeting, input.category);
+  // Audience size only matters for in-app ads; screens and Nearby reach whoever is there.
+  const audience = input.placements.length ? await estimateAudience(input.targeting, input.category) : Infinity;
   if (audience < s.minAudience) {
     throw new ApiError(422, `Your targeting reaches fewer than ${s.minAudience} people. Widen it a little.`, "audience_too_small");
   }
 
   const placements = [...new Set(input.placements)];
-  const { lines, totalMinor } = await quoteCampaign(placements, input.days);
+  const { lines, totalMinor } = await planChannels({ placements, venues: input.venues, nearbyVenueId: input.nearbyVenueId, days: input.days, userId: input.userId });
   const id = randomUUID();
 
   await prisma.$transaction(async (db) => {
     // Lock every channel-day being bought, in a fixed order, then count what's
     // taken. Two people racing for the last slot serialise here; the second sees it gone.
-    const keys = placements.flatMap((p) => Array.from({ length: input.days }, (_, i) => `${channelOf(p)}|${addDays(input.startDay, i)}`)).sort();
+    const keys = lines.flatMap((l) => Array.from({ length: input.days }, (_, i) => `${l.channel}|${addDays(input.startDay, i)}`)).sort();
     for (const k of keys) await db.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtext($1))`, `ad-slot:${k}`);
-    for (const p of placements) {
+    for (const l of lines) {
       const full = await db.$queryRawUnsafe<{ day: string }[]>(
         `SELECT to_char(day, 'YYYY-MM-DD') AS day FROM ad_campaign_slots
           WHERE channel = $1 AND status IN ('BOOKED', 'DELIVERED') AND day BETWEEN $2::date AND $3::date
           GROUP BY day HAVING count(*) >= $4`,
-        channelOf(p), input.startDay, addDays(input.startDay, input.days - 1), s.slotsPerDay[p],
+        l.channel, input.startDay, addDays(input.startDay, input.days - 1), l.capacity,
       );
-      if (full.length) {
-        throw new ApiError(409, `${PLACEMENT_LABELS[p]} is fully booked on ${full.map((f) => f.day).join(", ")}. Pick other dates.`, "sold_out");
+      if (l.capacity <= 0 || full.length) {
+        throw new ApiError(409, `${l.label} is fully booked${full.length ? ` on ${full.map((f) => f.day).join(", ")}` : ""}. Pick other dates.`, "sold_out");
       }
     }
 
@@ -749,17 +725,18 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Campai
         amount: totalMinor,
         status: TransactionStatus.COMPLETED,
         idempotencyKey: input.idempotencyKey,
-        metadata: { kind: "ad", campaignId: id, headline: input.headline, days: input.days, placements },
+        metadata: { kind: "ad", campaignId: id, headline: input.headline, days: input.days, channels: lines.map((l) => l.channel) },
       },
     });
 
     await db.$executeRawUnsafe(
       `INSERT INTO ad_campaigns (id, user_id, business_name, headline, body, image, link_url, cta, category, targeting,
-         start_day, days, paid_minor, breakdown, idempotency_key)
-       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::date, $12, $13, $14::jsonb, $15)`,
+         start_day, days, paid_minor, breakdown, idempotency_key, promoted_venue_id)
+       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::date, $12, $13, $14::jsonb, $15, $16::uuid)`,
       id, input.userId, input.businessName.trim(), input.headline.trim(), input.body.trim(), input.image,
       input.linkUrl || null, (input.cta || "Learn more").trim(), input.category, JSON.stringify(input.targeting),
-      input.startDay, input.days, totalMinor, JSON.stringify(lines), input.idempotencyKey,
+      input.startDay, input.days, totalMinor, JSON.stringify(lines.map(({ capacity: _c, ...l }) => l)), input.idempotencyKey,
+      input.nearbyVenueId ?? null,
     );
     for (const l of lines) {
       await db.$executeRawUnsafe(
@@ -774,7 +751,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Campai
         action: "ad.campaign.created",
         resourceType: "AdCampaign",
         resourceId: id,
-        details: { placements, days: input.days, startDay: input.startDay, totalMinor: totalMinor.toString(), category: input.category },
+        details: { channels: lines.map((l) => l.channel), days: input.days, startDay: input.startDay, totalMinor: totalMinor.toString(), category: input.category },
       },
     });
   });
@@ -825,7 +802,7 @@ export async function listUserCampaigns(userId: string): Promise<CampaignView[]>
  * row, e.g. "day > $2"). Guarded flip + credit + ledger row in one
  * transaction, so a slot is refunded once however often this runs.
  */
-async function refundSlots(campaignId: string, where: string, params: unknown[], reason: string, nextStatus?: CampaignStatus): Promise<bigint> {
+export async function refundSlots(campaignId: string, where: string, params: unknown[], reason: string, nextStatus?: CampaignStatus): Promise<bigint> {
   await ensureAdTxnTypes();
   return prisma.$transaction(async (db) => {
     const owner = await db.$queryRawUnsafe<{ user_id: string }[]>(`SELECT user_id::text FROM ad_campaigns WHERE id = $1::uuid FOR UPDATE`, campaignId);

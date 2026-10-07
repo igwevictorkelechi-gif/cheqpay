@@ -31,6 +31,7 @@ interface Campaign {
   status: 'PENDING_REVIEW' | 'APPROVED' | 'LIVE' | 'ENDED' | 'REJECTED' | 'CANCELLED';
   reason: string | null;
   placements: string[];
+  breakdown: { channel: string; label: string; totalFormatted: string }[];
   paidFormatted: string;
   refundedFormatted: string;
   createdAt: string;
@@ -159,7 +160,7 @@ export default function AdCampaignsPage() {
                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${BADGE[c.status]}`}>{LABEL[c.status] ?? c.status}</span>
                 </div>
                 <p><span className="text-gray-500">Category:</span> {c.categoryLabel}</p>
-                <p><span className="text-gray-500">Where:</span> {c.placements.map((p) => PLACEMENT[p] ?? p).join(', ')}</p>
+                <p><span className="text-gray-500">Where:</span> {c.breakdown.length ? c.breakdown.map((b) => b.label).join(', ') : c.placements.map((p) => PLACEMENT[p] ?? p).join(', ')}</p>
                 <p><span className="text-gray-500">When:</span> {c.startDay} → {c.endDay} ({c.days} day{c.days === 1 ? '' : 's'})</p>
                 <p><span className="text-gray-500">Who:</span> {targetingSummary(c.targeting)}</p>
                 <p><span className="text-gray-500">Paid:</span> {c.paidFormatted}{c.refundedFormatted && !/^₦0(\.00)?$/.test(c.refundedFormatted) ? ` · refunded ${c.refundedFormatted}` : ''}</p>

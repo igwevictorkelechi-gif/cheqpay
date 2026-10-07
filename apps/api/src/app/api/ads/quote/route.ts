@@ -1,12 +1,11 @@
 import { requireUser } from "@/lib/auth";
-import { availability, estimateAudience, getAdsSettings, quoteCampaign, quoteSchema, validateCampaignShape } from "@/lib/ads";
+import { availability, estimateAudience, getAdsSettings, planChannels, quoteSchema, validateCampaignShape } from "@/lib/ads";
 import { assertFeatureEnabled } from "@/lib/features";
 import { formatNairaMinor } from "@/lib/money";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
-
 
 /** Price, free slots per day and how many people the targeting reaches — before paying. */
 export async function POST(req: Request) {
@@ -16,22 +15,24 @@ export async function POST(req: Request) {
     await enforceRateLimit(`ad-quote:${auth.id}`, 60, 60_000);
     const b = quoteSchema.parse(await req.json());
     await validateCampaignShape(b);
-    const [{ lines, totalMinor }, slots, audience, s] = await Promise.all([
-      quoteCampaign(b.placements, b.days),
-      availability(b.startDay, b.days),
-      estimateAudience(b.targeting, b.category),
+    const [{ lines, totalMinor }, s] = await Promise.all([
+      planChannels({ placements: b.placements, venues: b.venues, nearbyVenueId: b.nearbyVenueId, days: b.days, userId: auth.id }),
       getAdsSettings(),
     ]);
-    const soldOut = b.placements.flatMap((p) => slots[p].filter((d) => d.free <= 0).map((d) => ({ placement: p, day: d.day })));
+    const [slots, audience] = await Promise.all([
+      availability(b.startDay, b.days, lines),
+      b.placements.length ? estimateAudience(b.targeting, b.category) : Promise.resolve(null),
+    ]);
+    const soldOut = lines.flatMap((l) => slots[l.channel].filter((d) => d.free <= 0).map((d) => ({ channel: l.channel, label: l.label, day: d.day })));
     return jsonOk({
-      lines,
+      lines: lines.map(({ capacity: _c, ...l }) => l),
       totalMinor: totalMinor.toString(),
       totalFormatted: formatNairaMinor(totalMinor),
       availability: slots,
       soldOut,
       audience,
       minAudience: s.minAudience,
-      audienceOk: audience >= s.minAudience,
+      audienceOk: audience === null || audience >= s.minAudience,
     });
   } catch (err) {
     return toErrorResponse(err);

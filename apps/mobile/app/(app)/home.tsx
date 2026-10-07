@@ -20,6 +20,7 @@ import { KycBanner } from '@/components/KycBanner';
 import PromoPopup from '@/components/PromoPopup';
 import { useFeatures } from '@/lib/useFeatures';
 import SponsoredCard from '@/components/SponsoredCard';
+import NearbyStrip from '@/components/NearbyStrip';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -142,9 +143,6 @@ export default function HomeScreen() {
 
         <KycBanner />
 
-        <View className="px-5">
-          <SponsoredCard placement="home" style={{ marginBottom: 16 }} />
-        </View>
 
         {features.ngn_deposits && value === 0 && txns.length === 0 && (
           <View className="px-5 mb-6">
@@ -197,6 +195,11 @@ export default function HomeScreen() {
             <CircleAction icon="paper-plane" label="Send" onPress={() => router.push('/(app)/send-user')} />
           )}
         </ActionRow>
+
+        <View className="px-5">
+          <SponsoredCard placement="home" style={{ marginBottom: 16 }} />
+        </View>
+        <NearbyStrip />
 
         {/* Cash account — the selected currency only. */}
         <View className="px-5 mb-4">

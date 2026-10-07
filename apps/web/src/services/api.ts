@@ -924,6 +924,25 @@ export const api = {
     return apiFetch("/api/ads/event", { method: "POST", body: JSON.stringify({ campaignId, channel, kind }) });
   },
 
+  getAdVenues(state?: string | null): Promise<{ venues: AdVenueOption[]; myVenues: { id: string; name: string; city: string }[] }> {
+    return apiFetch(`/api/ads/venues${state ? `?state=${encodeURIComponent(state)}` : ""}`);
+  },
+
+  nearbyVenues(opts: { lat?: number; lng?: number; category?: string | null } = {}): Promise<{ venues: NearbyVenue[]; basis: "location" | "state" | "all"; categories: { key: string; label: string }[] }> {
+    const q = new URLSearchParams();
+    if (opts.lat !== undefined && opts.lng !== undefined) {
+      q.set("lat", opts.lat.toFixed(2));
+      q.set("lng", opts.lng.toFixed(2));
+    }
+    if (opts.category) q.set("category", opts.category);
+    const qs = q.toString();
+    return apiFetch(`/api/venues/nearby${qs ? `?${qs}` : ""}`);
+  },
+
+  venueEvent(venueId: string, kind: "view" | "tap", campaignId?: string | null): Promise<{ counted: boolean }> {
+    return apiFetch("/api/venues/event", { method: "POST", body: JSON.stringify({ venueId, kind, campaignId: campaignId ?? null }) });
+  },
+
   getAdPrefs(): Promise<{ prefs: AdPrefs; categories: { key: string; label: string }[] }> {
     return apiFetch("/api/ads/prefs");
   },
@@ -1307,10 +1326,14 @@ export interface AdOptions {
   maxDays: number;
   minAudience: number;
   maxFrequencyCap: number;
+  nearby: { perDayMinor: string; perDayFormatted: string };
+  minScreenHours: number;
   defaults: AdTargeting;
 }
 export interface AdQuoteInput {
   placements: AdPlacement[];
+  venues?: string[];
+  nearbyVenueId?: string | null;
   startDay: string;
   days: number;
   category: string;
@@ -1336,9 +1359,10 @@ export interface AdQuote {
   lines: AdQuoteLine[];
   totalMinor: string;
   totalFormatted: string;
-  availability: Record<AdPlacement, { day: string; free: number }[]>;
-  soldOut: { placement: AdPlacement; day: string }[];
-  audience: number;
+  availability: Record<string, { day: string; free: number }[]>;
+  soldOut: { channel: string; label: string; day: string }[];
+  /** null when the campaign has no in-app placements (screens / Nearby only). */
+  audience: number | null;
   minAudience: number;
   audienceOk: boolean;
 }
@@ -1380,6 +1404,36 @@ export interface ServedAd {
   linkUrl: string | null;
   cta: string;
   why: string[];
+}
+export interface AdVenueOption {
+  id: string;
+  name: string;
+  category: string;
+  categoryLabel: string;
+  city: string;
+  state: string;
+  photo: string | null;
+  perDayMinor: string;
+  perDayFormatted: string;
+  screens: number;
+  online: boolean;
+}
+export interface NearbyVenue {
+  id: string;
+  name: string;
+  category: string;
+  categoryLabel: string;
+  description: string;
+  photo: string | null;
+  address: string;
+  city: string;
+  state: string;
+  distanceKm: number | null;
+  openNow: boolean | null;
+  hours: string | null;
+  mapsUrl: string | null;
+  featured: boolean;
+  offer: { campaignId: string; headline: string; body: string; image: string; linkUrl: string | null; cta: string } | null;
 }
 export interface AdPrefs {
   personalised: boolean;

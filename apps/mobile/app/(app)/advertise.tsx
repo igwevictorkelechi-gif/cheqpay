@@ -7,7 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, Card } from '@/components/brand';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 import { useFeatures } from '@/lib/useFeatures';
-import { api, ApiError, type AdOptions, type AdPlacement, type AdQuote, type AdTargeting } from '@/services/api';
+import { api, ApiError, type AdOptions, type AdPlacement, type AdQuote, type AdTargeting, type AdVenueOption } from '@/services/api';
 
 const CTAS = ['Learn more', 'Shop now', 'Order now', 'Visit us', 'Book now', 'Sign up', 'Call now', 'Get offer'];
 const addDays = (day: string, n: number) => {
@@ -57,6 +57,10 @@ export default function AdvertiseScreen() {
   const [linkUrl, setLinkUrl] = useState('');
   const [cta, setCta] = useState(CTAS[0]);
   const [placements, setPlacements] = useState<AdPlacement[]>(['home']);
+  const [venues, setVenues] = useState<string[]>([]);
+  const [venueList, setVenueList] = useState<AdVenueOption[] | null>(null);
+  const [myVenues, setMyVenues] = useState<{ id: string; name: string; city: string }[]>([]);
+  const [nearbyVenueId, setNearbyVenueId] = useState<string | null>(null);
   const [startOffset, setStartOffset] = useState(0);
   const [days, setDays] = useState(7);
   const [t, setT] = useState<AdTargeting | null>(null);
@@ -70,20 +74,25 @@ export default function AdvertiseScreen() {
     api.getAdOptions().then((o) => { setOpts(o); setT(o.defaults); }).catch((e) => setLoadError(e instanceof ApiError ? e.message : "Couldn't load the ad builder."));
   }, []);
 
+  useEffect(() => {
+    if (!opts) return;
+    api.getAdVenues(null).then((r) => { setVenueList(r.venues); setMyVenues(r.myVenues); }).catch(() => setVenueList([]));
+  }, [opts]);
+
   const startDay = opts ? addDays(opts.today, startOffset) : '';
   const adultOnly = opts?.categories.find((c) => c.key === category)?.adultOnly ?? false;
 
   useEffect(() => {
-    if (!opts || !t || !placements.length) { setQuote(null); return; }
+    if (!opts || !t || (!placements.length && !venues.length && !nearbyVenueId)) { setQuote(null); return; }
     setQuoting(true);
     const id = setTimeout(() => {
-      api.quoteAd({ placements, startDay, days, category, targeting: adultOnly && t.ageMin < 18 ? { ...t, ageMin: 18 } : t })
+      api.quoteAd({ placements, venues, nearbyVenueId, startDay, days, category, targeting: adultOnly && t.ageMin < 18 ? { ...t, ageMin: 18 } : t })
         .then((q) => { setQuote(q); setQuoteErr(null); })
         .catch((e) => { setQuote(null); setQuoteErr(e instanceof ApiError ? e.message : "Couldn't price this campaign."); })
         .finally(() => setQuoting(false));
     }, 450);
     return () => clearTimeout(id);
-  }, [opts, t, startDay, days, placements, category, adultOnly]);
+  }, [opts, t, startDay, days, placements, venues, nearbyVenueId, category, adultOnly]);
 
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -108,7 +117,7 @@ export default function AdvertiseScreen() {
     setFormError(null);
     try {
       await authorize(
-        (pin) => api.createAdCampaign({ businessName: businessName.trim(), headline: headline.trim(), body: body.trim(), image: image!, linkUrl: linkUrl.trim() || null, cta, category, placements, startDay, days, targeting: adultOnly && t.ageMin < 18 ? { ...t, ageMin: 18 } : t }, pin),
+        (pin) => api.createAdCampaign({ businessName: businessName.trim(), headline: headline.trim(), body: body.trim(), image: image!, linkUrl: linkUrl.trim() || null, cta, category, placements, venues, nearbyVenueId, startDay, days, targeting: adultOnly && t.ageMin < 18 ? { ...t, ageMin: 18 } : t }, pin),
         { title: 'Pay for your ad', detail: `${quote.totalFormatted} for ${days} day${days === 1 ? '' : 's'}. Refunded in full if it isn't approved.` },
       );
       router.replace('/(app)/ad-campaigns?new=1' as never);
@@ -182,7 +191,7 @@ export default function AdvertiseScreen() {
               {label('2 · WHERE IT SHOWS')}
               {opts.placements.map((p) => {
                 const on = placements.includes(p.key);
-                const full = quote?.soldOut.filter((s) => s.placement === p.key).length ?? 0;
+                const full = quote?.soldOut.filter((s) => s.channel === `placement:${p.key}`).length ?? 0;
                 return (
                   <TouchableOpacity key={p.key} onPress={() => setPlacements(toggle(placements, p.key))} className="flex-row items-center rounded-2xl p-4 mb-2" style={{ borderWidth: 1, borderColor: on ? colors.brand : colors.border }}>
                     <Ionicons name={on ? 'checkbox' : 'square-outline'} size={22} color={on ? colors.brand : colors.muted} />
@@ -193,6 +202,38 @@ export default function AdvertiseScreen() {
                   </TouchableOpacity>
                 );
               })}
+
+              <Text className="text-ink dark:text-ink-dark font-bold mt-4">📺 Screens at partner venues</Text>
+              <Text className="text-muted dark:text-muted-dark text-xs mt-1 mb-2">Plays on TVs in gyms, restaurants and stores. You only pay for days the screen was on for {opts.minScreenHours}+ hours.</Text>
+              {venueList === null ? (
+                <ActivityIndicator color={colors.brand} />
+              ) : venueList.length === 0 ? (
+                <Text className="text-muted dark:text-muted-dark text-sm">No partner screens yet.</Text>
+              ) : (
+                venueList.map((v) => {
+                  const on = venues.includes(v.id);
+                  return (
+                    <TouchableOpacity key={v.id} onPress={() => setVenues(toggle(venues, v.id))} className="flex-row items-center rounded-2xl p-3 mb-2" style={{ borderWidth: 1, borderColor: on ? colors.brand : colors.border }}>
+                      <Ionicons name={on ? 'checkbox' : 'square-outline'} size={22} color={on ? colors.brand : colors.muted} />
+                      <View className="ml-3 flex-1">
+                        <Text className="text-ink dark:text-ink-dark font-bold" numberOfLines={1}>{v.name}</Text>
+                        <Text className="text-muted dark:text-muted-dark text-xs">{v.categoryLabel} · {v.city || v.state} · {v.perDayFormatted} a day{v.online ? ' · ● on now' : ''}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+
+              {myVenues.length > 0 ? (
+                <>
+                  <Text className="text-ink dark:text-ink-dark font-bold mt-4">📍 Feature my venue in Nearby</Text>
+                  <Text className="text-muted dark:text-muted-dark text-xs mt-1 mb-2">Pinned at the top of &quot;Places near you&quot; for people nearby. {opts.nearby.perDayFormatted} a day.</Text>
+                  <View className="flex-row flex-wrap">
+                    <Chip on={!nearbyVenueId} label="Don't feature" onPress={() => setNearbyVenueId(null)} />
+                    {myVenues.map((v) => <Chip key={v.id} on={nearbyVenueId === v.id} label={v.name} onPress={() => setNearbyVenueId(v.id)} />)}
+                  </View>
+                </>
+              ) : null}
             </Card>
 
             <Card className="mb-4">
@@ -242,8 +283,8 @@ export default function AdvertiseScreen() {
             </Card>
 
             <Card className="mb-4">
-              <Text className="text-ink dark:text-ink-dark text-lg font-extrabold">{quote ? `≈ ${quote.audience.toLocaleString('en-NG')} people` : '—'} {quoting ? '…' : ''}</Text>
-              <Text className="text-muted dark:text-muted-dark text-xs">match your targeting today</Text>
+              <Text className="text-ink dark:text-ink-dark text-lg font-extrabold">{quote ? (quote.audience === null ? 'People at the venues' : `≈ ${quote.audience.toLocaleString('en-NG')} people`) : '—'} {quoting ? '…' : ''}</Text>
+              <Text className="text-muted dark:text-muted-dark text-xs">{quote?.audience === null ? 'Screens and Nearby reach whoever is there' : 'match your targeting in the app today'}</Text>
               {quote && !quote.audienceOk ? <Text className="text-xs mt-2" style={{ color: '#F59E0B' }}>Fewer than {quote.minAudience} people — widen your targeting.</Text> : null}
               {quoteErr ? <Text className="text-xs mt-2" style={{ color: '#F87171' }}>{quoteErr}</Text> : null}
               {quote ? (
