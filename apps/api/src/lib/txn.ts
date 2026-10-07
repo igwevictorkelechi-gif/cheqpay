@@ -15,7 +15,9 @@ export function serializeTransaction(t: Transaction) {
     amountOut?: string;
     kind?: string;
     service?: string;
+    billerId?: string;
     billerName?: string;
+    planId?: string | null;
     planName?: string | null;
     customer?: string;
     token?: string | null;
@@ -47,7 +49,9 @@ export function serializeTransaction(t: Transaction) {
     rate: meta.rate ?? null,
     toAddress: meta.toAddress ?? null,
     service: meta.service ?? null,
+    billerId: meta.billerId ?? null,
     billerName: meta.billerName ?? null,
+    planId: meta.planId ?? null,
     planName: meta.planName ?? null,
     customer: meta.customer ?? null,
     token: meta.token ?? null,

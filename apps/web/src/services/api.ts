@@ -247,7 +247,9 @@ export interface LedgerTransaction {
   rate: string | null;
   toAddress: string | null;
   service: string | null;
+  billerId: string | null;
   billerName: string | null;
+  planId: string | null;
   planName: string | null;
   customer: string | null;
   token: string | null;
@@ -344,7 +346,7 @@ export interface BillCashback {
   maxNgn: number;
 }
 export interface BillServiceConfig {
-  service: "airtime" | "data" | "electricity" | "cabletv" | "betting";
+  service: "airtime" | "data" | "electricity" | "cabletv" | "betting" | "food";
   label: string;
   emoji: string;
   customerLabel: string;

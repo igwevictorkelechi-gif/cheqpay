@@ -21,7 +21,7 @@ function contrast(hex: string): string {
 
 export default function BillServiceScreen() {
   const insets = useSafeAreaInsets();
-  const { service: serviceParam } = useLocalSearchParams<{ service: string }>();
+  const { service: serviceParam, ...prefill } = useLocalSearchParams<{ service: string; biller?: string; customer?: string; amount?: string; plan?: string; planName?: string }>();
   const service = String(serviceParam ?? '').toLowerCase();
 
   const [config, setConfig] = useState<BillServiceConfig | null>(null);
@@ -50,6 +50,21 @@ export default function BillServiceScreen() {
         setConfig(c);
         setCashback(cb);
         if (c) setBillerId(c.billers.find((b) => !b.comingSoon)?.id ?? '');
+        // "Pay again" from Pay bills: prefill biller, customer and amount/plan.
+        // Anything no longer offered is ignored; review + PIN still apply.
+        if (c) {
+          const b = c.billers.find((x) => x.id === prefill.biller && !x.comingSoon);
+          if (b) setBillerId(b.id);
+          if (prefill.customer) setCustomer(String(prefill.customer).slice(0, 40));
+          if (c.variableAmount) {
+            if (prefill.amount && /^\d+(\.\d{1,2})?$/.test(String(prefill.amount))) setAmount(String(prefill.amount));
+          } else if (b) {
+            const plan =
+              c.plans.find((p) => p.billerId === b.id && p.id === prefill.plan) ??
+              c.plans.find((p) => p.billerId === b.id && p.name === prefill.planName);
+            if (plan) setPlanId(plan.id);
+          }
+        }
         await api.ensureProvisioned();
         const { balances } = await api.getBalances();
         setBalance(Number(balances.find((b) => b.asset === 'NGN')?.availableFormatted ?? 0));
@@ -59,6 +74,8 @@ export default function BillServiceScreen() {
         setLoading(false);
       }
     })();
+    // Prefill applies once, when the catalog first loads — not on every param change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [service]);
 
   useEffect(() => {

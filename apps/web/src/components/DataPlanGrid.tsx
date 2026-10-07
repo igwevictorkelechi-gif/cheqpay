@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Grid, LayoutGrid, Info } from "lucide-react";
 import type { BillCashback, BillPlan } from "@/services/api";
 
@@ -83,6 +83,15 @@ export default function DataPlanGrid({
 
   const [tab, setTab] = useState<TabKey>(() => tabs[0]?.key ?? "hot");
   const [dense, setDense] = useState(true);
+  // A plan chosen from outside (e.g. "Pay again") may sit on another tab: show it.
+  useEffect(() => {
+    const p = plans.find((x) => x.id === selectedId);
+    if (p && !matches(p, tab)) {
+      const t = tabs.find((x) => matches(p, x.key));
+      if (t) setTab(t.key);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   const shown = useMemo(
     // The API already returns plans best-value first, so no re-sorting here.
