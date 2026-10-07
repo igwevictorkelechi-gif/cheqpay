@@ -19,6 +19,7 @@ import { TxnRow } from '@/components/TxnRow';
 import { KycBanner } from '@/components/KycBanner';
 import PromoPopup from '@/components/PromoPopup';
 import { useFeatures } from '@/lib/useFeatures';
+import SponsoredCard from '@/components/SponsoredCard';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -140,6 +141,10 @@ export default function HomeScreen() {
         <BalanceBlock label={isUsd ? 'USD Balance' : 'Total Cash Balance'} amount={formattedBalance} />
 
         <KycBanner />
+
+        <View className="px-5">
+          <SponsoredCard placement="home" style={{ marginBottom: 16 }} />
+        </View>
 
         {features.ngn_deposits && value === 0 && txns.length === 0 && (
           <View className="px-5 mb-6">

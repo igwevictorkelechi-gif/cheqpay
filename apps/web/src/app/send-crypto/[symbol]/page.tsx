@@ -18,6 +18,7 @@ import { isAddressForNetwork, shortAddress } from "@/lib/address";
 import DesktopSidebar from "@/components/DesktopSidebar";
 import { cryptoFeeInCoin, dollars, useFees } from "@/lib/fees";
 import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
+import SponsoredCard from "@/components/SponsoredCard";
 
 function CoinIcon({ bg, glyph, size = 40 }: { bg: string; glyph: string; size?: number }) {
   return (
@@ -457,6 +458,7 @@ export default function SendCryptoDetailPage() {
                 Tx: {txHash}
               </p>
             )}
+            <SponsoredCard placement="receipt" className="mt-6 w-full text-left" />
             <button
               onClick={() => router.push("/crypto")}
               className="mt-8 w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"

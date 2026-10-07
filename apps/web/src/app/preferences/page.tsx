@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   ChevronRight,
   LucideIcon,
+  Megaphone,
 } from "lucide-react";
 import DesktopSidebar from "@/components/DesktopSidebar";
 
@@ -52,6 +53,14 @@ const rows: Row[] = [
     title: "App Icon",
     subtitle: "Change CheqPay app icon to your style",
     href: "/app-icon",
+  },
+  {
+    icon: Megaphone,
+    iconColor: "#E8628C",
+    iconBg: "rgba(232,98,140,0.15)",
+    title: "Ads",
+    subtitle: "Personalised ads and the kinds of ads you see",
+    href: "/ad-preferences",
   },
 ];
 

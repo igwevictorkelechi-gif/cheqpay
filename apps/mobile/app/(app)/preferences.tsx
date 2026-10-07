@@ -46,6 +46,14 @@ const rows: Row[] = [
     subtitle: 'Change CheqPay app icon to your style',
     route: '/(app)/app-icon',
   },
+  {
+    icon: 'megaphone',
+    iconColor: '#E8628C',
+    iconBg: 'rgba(232,98,140,0.15)',
+    title: 'Ads',
+    subtitle: 'Personalised ads and the kinds of ads you see',
+    route: '/(app)/ad-preferences',
+  },
 ];
 
 export default function PreferencesScreen() {

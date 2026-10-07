@@ -25,7 +25,7 @@ type Item = {
   subtitle: string;
   href?: string;
   /** When set, this entry is hidden while the admin feature flag is off. */
-  feature?: "virtual_cards" | "referrals";
+  feature?: "virtual_cards" | "referrals" | "ads";
 };
 
 const items: Item[] = [
@@ -50,6 +50,12 @@ const items: Item[] = [
     subtitle: "Invite friends and earn when they join",
     href: "/refer",
     feature: "referrals",
+  },
+  {
+    title: "Advertise on CheqPay",
+    subtitle: "Put your business in front of CheqPay users",
+    href: "/advertise",
+    feature: "ads",
   },
   {
     title: "Security",

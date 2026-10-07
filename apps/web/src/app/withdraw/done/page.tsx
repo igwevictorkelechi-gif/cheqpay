@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SuccessAnimation } from "@/components/Lottie";
 import DesktopSidebar from "@/components/DesktopSidebar";
+import SponsoredCard from "@/components/SponsoredCard";
 
 export default function WithdrawDonePage() {
   const router = useRouter();
@@ -36,6 +37,7 @@ export default function WithdrawDonePage() {
             )}
           </p>
         </div>
+        <SponsoredCard placement="receipt" className="mt-8 w-full" />
 
         <div className="mt-auto w-full pt-6">
           <button

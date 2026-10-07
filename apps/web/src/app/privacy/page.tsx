@@ -77,8 +77,15 @@ export default function PrivacyPage() {
             ["Protecting accounts and the platform: blocking suspicious devices and networks, investigating misuse", "Legitimate interests (security and fraud prevention)"],
             ["Service messages about your account, transactions and security", "Performance of our contract with you"],
             ["Promotional notifications — off unless you turn them on", "Your consent, which you can withdraw in notification settings"],
+            ["Choosing which business ads (marked “Sponsored”) you see, using your state, age band and how you use CheqPay", "Legitimate interests; personalised ads can be turned off at any time in Preferences → Ads"],
+            ["Using your rough location (about 5 km, kept for at most 7 days) to show ads and offers from places near you", "Your consent — only if you allow location, and never while personalised ads are off"],
           ]}
         />
+        <p>
+          Advertisers never receive your name, contact details or transactions. They only see totals for their own
+          ads, such as how many times an ad was viewed or tapped, and an ad can only be aimed at a group of at least
+          100 people.
+        </p>
       </Section>
 
       <Section heading="3. Automated decisions">
