@@ -34,7 +34,6 @@ import { authService } from "@/services/auth";
 import { useAuthStore, useUIStore } from "@/store";
 import { api, ApiError, type LedgerTransaction } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
-import SponsoredCard from "@/components/SponsoredCard";
 import NearbyStrip from "@/components/NearbyStrip";
 
 const CASH_CACHE = "cheqpay:cash";
@@ -257,7 +256,6 @@ export default function Dashboard() {
       </ActionRow>
 
       <div className="px-5">
-        <SponsoredCard placement="home" className="mb-5" />
       </div>
 
       <NearbyStrip />

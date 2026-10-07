@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
-type Placement = 'home' | 'receipt' | 'paybills';
+type Placement = 'receipt' | 'paybills';
 interface Settings {
   price: Record<Placement, number>;
   slots: Record<Placement, number>;
@@ -20,7 +20,6 @@ interface Settings {
   maxFrequencyCap: number;
 }
 const PLACEMENTS: { key: Placement; label: string; hint: string }[] = [
-  { key: 'home', label: 'Home screen banner', hint: 'Below the balance and quick actions' },
   { key: 'receipt', label: 'After a transaction', hint: 'Success screens and receipts' },
   { key: 'paybills', label: 'Pay bills page', hint: 'Under the services grid' },
 ];

@@ -20,7 +20,7 @@ import { ApiError } from "@/lib/http";
 import { POST } from "./route";
 
 const body = {
-  placements: ["home"], startDay: "2030-01-01", days: 2, category: "food", targeting: {},
+  placements: ["receipt"], startDay: "2030-01-01", days: 2, category: "food", targeting: {},
   businessName: "Mama Put", headline: "Best jollof", image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB",
 };
 const call = (b: unknown, key: string | null = "k1") =>
@@ -40,7 +40,7 @@ describe("POST /api/ads/campaigns", () => {
     expect(res.status).toBe(201);
     expect(h.pin).toHaveBeenCalledWith("u1", "1234");
     expect(h.create).toHaveBeenCalledWith(expect.objectContaining({
-      userId: "u1", idempotencyKey: "k1", placements: ["home"],
+      userId: "u1", idempotencyKey: "k1", placements: ["receipt"],
       targeting: expect.objectContaining({ ageMin: 18, ageMax: 65, frequencyCap: 3, states: [] }),
     }));
   });

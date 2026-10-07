@@ -56,7 +56,7 @@ export default function AdvertiseScreen() {
   const [image, setImage] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
   const [cta, setCta] = useState(CTAS[0]);
-  const [placements, setPlacements] = useState<AdPlacement[]>(['home']);
+  const [placements, setPlacements] = useState<AdPlacement[]>(['receipt']);
   const [venues, setVenues] = useState<string[]>([]);
   const [venueList, setVenueList] = useState<AdVenueOption[] | null>(null);
   const [myVenues, setMyVenues] = useState<{ id: string; name: string; city: string }[]>([]);
