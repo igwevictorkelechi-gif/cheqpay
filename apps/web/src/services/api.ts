@@ -345,6 +345,69 @@ export interface BillCashback {
   billBps: number;
   maxNgn: number;
 }
+export type SavedBillState = "paid" | "autopay" | "due" | "topup" | "pay";
+export interface SavedBill {
+  id: string;
+  nickname: string;
+  service: string;
+  serviceLabel: string;
+  billerId: string;
+  billerName: string;
+  customer: string;
+  planId: string | null;
+  planName: string | null;
+  expectedMinor: string | null;
+  expectedFormatted: string | null;
+  state: SavedBillState;
+  detail: string;
+  dueInDays: number | null;
+  autopay: boolean;
+  autopayDay: number | null;
+  autopayNote: string | null;
+  canAutopay: boolean;
+  lastPaidAt: string | null;
+  paidThisMonthFormatted: string | null;
+}
+export interface BillSuggestion {
+  service: string;
+  serviceLabel: string;
+  billerId: string;
+  billerName: string;
+  customer: string;
+  planId: string | null;
+  amountMinor: string;
+  amountFormatted: string;
+  times: number;
+}
+export interface BillsOverview {
+  month: string;
+  monthLabel: string;
+  isCurrentMonth: boolean;
+  months: { key: string; label: string }[];
+  paidMinor: string;
+  paidFormatted: string;
+  cashbackMinor: string;
+  cashbackFormatted: string;
+  stillToSortMinor: string;
+  stillToSortFormatted: string;
+  bills: SavedBill[];
+  suggestions: BillSuggestion[];
+}
+export interface SaveBillInput {
+  service: string;
+  billerId: string;
+  customer: string;
+  nickname: string;
+  planId?: string | null;
+  amount?: string | null;
+}
+export interface SavedBillPatch {
+  nickname?: string;
+  planId?: string | null;
+  amount?: string | null;
+  autopay?: boolean;
+  autopayDay?: number | null;
+}
 export interface BillServiceConfig {
   service: "airtime" | "data" | "electricity" | "cabletv" | "betting" | "food";
   label: string;
@@ -734,6 +797,22 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ fromAsset, toAsset, amount }),
     });
+  },
+
+  getBillsOverview(month?: string): Promise<BillsOverview> {
+    return apiFetch(`/api/bills/saved${month ? `?month=${encodeURIComponent(month)}` : ""}`);
+  },
+
+  saveBill(input: SaveBillInput): Promise<{ id: string }> {
+    return apiFetch("/api/bills/saved", { method: "POST", body: JSON.stringify(input) });
+  },
+
+  updateSavedBill(id: string, patch: SavedBillPatch, pin?: string): Promise<{ ok: true }> {
+    return apiFetch(`/api/bills/saved/${id}`, { method: "PATCH", body: JSON.stringify(patch), headers: pinHeader(pin) });
+  },
+
+  deleteSavedBill(id: string): Promise<{ ok: true }> {
+    return apiFetch(`/api/bills/saved/${id}`, { method: "DELETE" });
   },
 
   getBillCatalog(): Promise<{ services: BillServiceConfig[]; cashback?: BillCashback }> {

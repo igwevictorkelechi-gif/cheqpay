@@ -1,31 +1,16 @@
-import { scrubProviderNames } from "@/lib/publicMessage";
-import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
-import { getBillsProvider } from "@/payments";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
-import { alertOpsOnce } from "@/lib/opsAlert";
-import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { enforceRateLimit } from "@/lib/ratelimit";
-import { awardCashback } from "@/lib/cashback";
-import { getBiller, getServiceConfig } from "@/lib/bills";
-import { getLivePlan } from "@/lib/billCatalog";
-import { billPaySchema } from "@/lib/validation";
-import { notifyUser } from "@/lib/alerts";
-import { BillPaymentError } from "@/payments/types";
-import { feeFromBps, getBillMarginBps } from "@/lib/settings";
 import { requestContext } from "@/lib/requestContext";
 import { readPin, requireTransactionPin } from "@/lib/transactionPin";
-
 import { assertFeatureEnabled } from "@/lib/features";
+import { executeBillPayment } from "@/lib/billPay";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Pay a bill (airtime, data, electricity, cable TV, betting) from the user's
- * NGN balance. Money-safe:
- *   1. resolve biller + amount from the curated catalog
- *   2. atomically debit NGN (refuses overdraw) + record a PROCESSING BILL tx
- *   3. submit to the PSP; on failure, refund and mark FAILED
+ * Pay a bill from the user's NGN balance, authorised by their transaction PIN.
+ * The money movement itself lives in lib/billPay (shared with autopay).
  */
 export async function POST(req: Request) {
   try {
@@ -40,315 +25,23 @@ export async function POST(req: Request) {
     if (!idempotencyKey) {
       throw new ApiError(400, "Missing Idempotency-Key header", "no_idempotency_key");
     }
-
-    const user = await prisma.user.findUnique({ where: { id: auth.id } });
-    if (!user) {
-      throw new ApiError(404, "Profile not provisioned; POST /api/me first", "no_profile");
-    }
-
-    const body = billPaySchema.parse(await req.json());
-    const config = getServiceConfig(body.service);
-    const biller = getBiller(body.service, body.billerId);
-    if (!config || !biller) {
-      throw new ApiError(422, "Unknown service or biller", "bad_biller");
-    }
-
-    // Resolve the amount: variable services take `amount`; fixed take a plan.
-    // Plan price and code come from the provider's live list, so the user is
-    // charged exactly what the provider quoted and we buy exactly what they saw.
-    let amount: string;
-    let planName: string | null = null;
-    let planId: string | null = null;
-    let planCode: string | undefined;
-    if (config.variableAmount) {
-      if (!body.amount) throw new ApiError(422, "Amount is required", "no_amount");
-      amount = body.amount;
-    } else {
-      if (!body.planId) throw new ApiError(422, "Plan is required", "no_plan");
-      const plan = await getLivePlan(body.service, body.planId);
-      if (!plan || plan.billerId !== body.billerId) {
-        throw new ApiError(422, "Unknown plan for this biller", "bad_plan");
-      }
-      amount = plan.amount;
-      planName = plan.name;
-      planId = plan.id;
-      planCode = plan.providerCode;
-    }
-
-    const amountMinor = toMinorUnits(amount, Asset.NGN);
-    if (amountMinor <= 0n) {
-      throw new ApiError(422, "Amount must be positive", "bad_amount");
-    }
-
-    // Resolve the PSP up front (before any debit). A misconfigured provider
-    // throws here, safely, rather than after the user's balance is debited.
-    const psp = getBillsProvider();
-
-    // Billers with no provider identifier (betting, Chowdeck) are "Coming soon"
-    // — refuse before any money moves.
-    if (!biller.mapleradId && psp.name !== "mock") {
-      throw new ApiError(
-        503,
-        `${biller.name} payments are coming soon. Please check back shortly.`,
-        "biller_coming_soon"
-      );
-    }
-
-    // Business profit margin on bills (admin-set bps, default 0): the user is
-    // debited amount + margin; the biller receives the bill amount. Priced per
-    // service, so airtime can sell at face value while data carries a markup.
-    const marginMinor = feeFromBps(amountMinor, await getBillMarginBps(body.service));
-    const totalMinor = amountMinor + marginMinor;
-
-    // Idempotent replay.
-    const existing = await prisma.transaction.findUnique({
-      where: { idempotencyKey },
+    const body = (await req.json()) as Record<string, string | undefined>;
+    const result = await executeBillPayment({
+      userId: auth.id,
+      service: String(body.service ?? ""),
+      billerId: String(body.billerId ?? ""),
+      customer: String(body.customer ?? ""),
+      planId: body.planId,
+      amount: body.amount,
+      idempotencyKey,
+      initiatorIp,
+      // After the replay short-circuit and before the debit, so a wrong PIN
+      // neither charges the user nor burns their key.
+      authorize: () => requireTransactionPin(auth.id, readPin(req)),
     });
-    if (existing) {
-      return jsonOk({ transactionId: existing.id, status: existing.status });
-    }
-
-    // Authorise the purchase. After the replay short-circuit and before the
-    // debit, so a wrong PIN neither charges the user nor burns their key.
-    await requireTransactionPin(auth.id, readPin(req));
-
-    // Atomic debit + record. Rolls back on insufficient funds.
-    const tx = await prisma.$transaction(async (db) => {
-      const debit = await db.balance.updateMany({
-        where: { userId: auth.id, asset: Asset.NGN, available: { gte: totalMinor } },
-        data: { available: { decrement: totalMinor } },
-      });
-      if (debit.count !== 1) {
-        throw new ApiError(422, "Insufficient NGN balance", "insufficient_funds");
-      }
-      return db.transaction.create({
-        data: {
-          userId: auth.id,
-          type: TransactionType.BILL,
-          asset: Asset.NGN,
-          amount: amountMinor,
-          fee: marginMinor,
-          status: TransactionStatus.PROCESSING,
-          idempotencyKey,
-          metadata: {
-            ip: initiatorIp,
-            kind: "bill",
-            service: body.service,
-            billerId: biller.id,
-            billerName: biller.name,
-            customer: body.customer,
-            planName,
-            // Lets "Pay again" reselect the same plan.
-            planId,
-          },
-        },
-      });
-    });
-
-    // What goes to the provider, kept so a failure can be read back exactly.
-    const payIdentifier = biller.mapleradPayId ?? biller.mapleradId;
-    const sent = { identifier: payIdentifier ?? null, planCode: planCode ?? null, amountMinor: amountMinor.toString() };
-
-    // Submit to the PSP. Refund + fail on error.
-    try {
-      const result = await psp.payBill({
-        service: body.service,
-        billerCode: payIdentifier,
-        planCode,
-        customer: body.customer,
-        amount,
-        reference: tx.id,
-      });
-      const status =
-        result.status === "successful"
-          ? TransactionStatus.COMPLETED
-          : result.status === "failed"
-            ? TransactionStatus.FAILED
-            : TransactionStatus.PROCESSING;
-
-      if (status === TransactionStatus.FAILED) {
-        await refund(auth.id, totalMinor, tx.id);
-        await recordBillFailure({
-          userId: auth.id,
-          txId: tx.id,
-          initiatorIp,
-          service: body.service,
-          biller: biller.name,
-          planName,
-          reason: `Provider reported the purchase as failed (ref ${result.providerRef})`,
-          sent,
-        });
-        throw new ApiError(502, "Bill payment was declined; funds refunded", "bill_failed");
-      }
-
-      await prisma.transaction.update({
-        where: { id: tx.id },
-        data: {
-          status,
-          externalRef: result.providerRef,
-          metadata: {
-            ip: initiatorIp,
-            kind: "bill",
-            service: body.service,
-            billerId: biller.id,
-            billerName: biller.name,
-            customer: body.customer,
-            planName,
-            // Lets "Pay again" reselect the same plan.
-            planId,
-            providerRef: result.providerRef,
-            token: result.token ?? null,
-          },
-        },
-      });
-      await prisma.auditLog.create({
-        data: {
-          userId: auth.id,
-          ipAddress: initiatorIp,
-          action: "bill.paid",
-          resourceType: "Transaction",
-          resourceId: tx.id,
-          details: {
-            service: body.service,
-            biller: biller.name,
-            amountMinor: amountMinor.toString(),
-            providerRef: result.providerRef,
-          },
-        },
-      });
-      if (status === TransactionStatus.COMPLETED) {
-        // Earned on the bill face value, not the margin-inclusive total.
-        await awardCashback({
-          userId: auth.id,
-          source: "bill",
-          baseNgnMinor: amountMinor,
-          sourceTransactionId: tx.id,
-        });
-        await notifyUser(auth.id, {
-          category: "bills",
-          title: "Bill paid",
-          body: `${biller.name} — ₦${fromMinorUnits(amountMinor, Asset.NGN)}${
-            body.customer ? ` for ${body.customer}` : ""
-          }.${result.token ? " Your recharge token is below." : ""}`,
-          amount: `₦${fromMinorUnits(amountMinor, Asset.NGN)}`,
-          // A prepaid meter token is the entire point of the email for anyone
-          // who buys electricity, so it gets its own block instead of being
-          // buried in a sentence the way it was.
-          ...(result.token
-            ? { copyable: { label: "Recharge token", value: result.token } }
-            : {}),
-          details: [
-            { label: "Biller", value: biller.name },
-            ...(planName ? [{ label: "Plan", value: planName }] : []),
-            ...(body.customer ? [{ label: config.customerLabel, value: body.customer }] : []),
-            ...(result.providerRef ? [{ label: "Reference", value: result.providerRef }] : []),
-          ],
-          data: { transactionId: tx.id },
-        });
-      }
-
-      return jsonOk({
-        transactionId: tx.id,
-        status: status === TransactionStatus.COMPLETED ? "completed" : "processing",
-        providerRef: result.providerRef,
-        token: result.token ?? null,
-      });
-    } catch (err) {
-      if (err instanceof ApiError) throw err;
-      // Log the real cause (invisible to the client otherwise) and refund.
-      console.error("[bills/pay] provider error", {
-        transactionId: tx.id,
-        service: body.service,
-        billerId: biller.id,
-        provider: psp.name,
-        error: err instanceof Error ? err.message : String(err),
-        providerMessage: err instanceof BillPaymentError ? err.providerMessage : undefined,
-      });
-      await refund(auth.id, totalMinor, tx.id);
-      await recordBillFailure({
-        userId: auth.id,
-        txId: tx.id,
-        initiatorIp,
-        service: body.service,
-        biller: biller.name,
-        planName,
-        reason:
-          err instanceof BillPaymentError
-            ? `HTTP ${err.providerStatus ?? "?"} — ${err.providerMessage ?? err.message}`
-            : err instanceof Error
-              ? err.message
-              : String(err),
-        sent,
-      });
-      // Surface the PSP's own reason so the user knows *why* it failed and that
-      // their money was returned.
-      const reason =
-        err instanceof BillPaymentError && err.providerMessage
-          ? `Bill payment failed: ${scrubProviderNames(err.providerMessage)}. Your funds were refunded.`
-          : "Bill payment could not be processed; funds refunded";
-      throw new ApiError(502, reason, "bill_error");
-    }
+    const { replay: _replay, ...out } = result;
+    return jsonOk(out);
   } catch (err) {
     return toErrorResponse(err);
   }
-}
-
-/**
- * Keep the reason a purchase failed where someone can read it later. Before
- * this, a failed bill kept only its status: the provider's reason went to a
- * function log that expires within a day, so "data never works" could not be
- * diagnosed after the fact. Also tells ops once per hour per service, since a
- * failing service fails for everyone. Never throws.
- */
-async function recordBillFailure(f: {
-  userId: string;
-  txId: string;
-  initiatorIp: string | null;
-  service: string;
-  biller: string;
-  planName: string | null;
-  reason: string;
-  /** The identifier, plan code and amount we sent the provider. */
-  sent?: { identifier: string | null; planCode: string | null; amountMinor: string };
-}): Promise<void> {
-  const reason = f.reason.slice(0, 500);
-  const { initiatorIp } = f;
-  try {
-    const row = await prisma.transaction.findUnique({ where: { id: f.txId }, select: { metadata: true } });
-    const meta = row?.metadata && typeof row.metadata === "object" ? (row.metadata as Record<string, unknown>) : {};
-    await prisma.transaction.update({
-      where: { id: f.txId },
-      data: { metadata: { ...meta, failureReason: reason, ...(f.sent ? { providerRequest: f.sent } : {}) } },
-    });
-    await prisma.auditLog.create({
-      data: {
-        userId: f.userId,
-        ipAddress: initiatorIp,
-        action: "bill.failed",
-        resourceType: "Transaction",
-        resourceId: f.txId,
-        details: { service: f.service, biller: f.biller, planName: f.planName, reason, ...(f.sent ? { sent: f.sent } : {}) },
-      },
-    });
-  } catch (e) {
-    console.error("[bills/pay] could not record failure", e);
-  }
-  await alertOpsOnce(
-    `bill-failed:${f.service}`,
-    `⚠️ ${f.service} purchases are failing (${f.biller}${f.planName ? `, ${f.planName}` : ""}). Customers were refunded. Reason: ${reason}`,
-    { service: f.service, biller: f.biller, reason }
-  );
-}
-
-async function refund(userId: string, amountMinor: bigint, txId: string) {
-  await prisma.$transaction([
-    prisma.balance.update({
-      where: { userId_asset: { userId, asset: Asset.NGN } },
-      data: { available: { increment: amountMinor } },
-    }),
-    prisma.transaction.update({
-      where: { id: txId },
-      data: { status: TransactionStatus.FAILED },
-    }),
-  ]);
 }
