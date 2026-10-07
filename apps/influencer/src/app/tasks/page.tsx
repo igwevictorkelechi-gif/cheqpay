@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock, ListChecks, Loader2 } from "lucide-react";
+import { CheckCircle2, Clock, ExternalLink, ListChecks, Loader2 } from "lucide-react";
 import Shell from "@/components/Shell";
 import { api, ApiError, type Task } from "@/lib/api";
 
@@ -28,10 +28,25 @@ function TaskCard({ t, onDone }: { t: Task; onDone: () => void }) {
 
   return (
     <div className="card">
+      {t.brand && (
+        <div className="-mx-1 -mt-1 mb-4 overflow-hidden rounded-2xl bg-circle">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={t.brand.image} alt={t.brand.headline} className="aspect-[1.91/1] w-full object-cover" />
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+            <span className="font-semibold">Paid post for {t.brand.businessName}</span>
+            <span className={t.brand.postsLeft > 0 ? "text-gold" : "text-muted"}>{t.brand.postsLeft > 0 ? `${t.brand.postsLeft} paid post${t.brand.postsLeft === 1 ? "" : "s"} left` : "All posts taken"}</span>
+          </div>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-lg font-bold">{t.title}</p>
-          {t.description && <p className="mt-1 text-sm text-muted">{t.description}</p>}
+          {t.description && <p className="mt-1 whitespace-pre-wrap break-words text-sm text-muted">{t.description}</p>}
+          {t.brand?.linkUrl && (
+            <a href={t.brand.linkUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-brand-light">
+              Brand link <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          )}
         </div>
         <span className="shrink-0 rounded-full bg-gold/15 px-3 py-1 text-sm font-bold text-gold">{t.rewardFormatted}</span>
       </div>
@@ -49,7 +64,9 @@ function TaskCard({ t, onDone }: { t: Task; onDone: () => void }) {
         </div>
       ) : sub?.status === "PENDING" ? (
         <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-300"><Clock className="h-4 w-4" /> Submitted — we&apos;re checking it</p>
-      ) : t.expired ? null : (
+      ) : t.expired ? null : t.brand && t.brand.postsLeft <= 0 ? (
+        <p className="mt-4 text-sm text-muted">Every paid post for this campaign has been taken. Watch for the next one.</p>
+      ) : (
         <div className="mt-4 space-y-2">
           {sub?.status === "REJECTED" && <p className="rounded-2xl bg-red-500/10 px-4 py-2 text-sm text-red-400">Not approved{sub.reason ? `: ${sub.reason}` : ""}. You can submit again.</p>}
           <input className="input" placeholder="Link to your post, reel or video" value={url} onChange={(e) => setUrl(e.target.value)} />

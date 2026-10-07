@@ -2,7 +2,7 @@ import { prisma } from "@cheqpay/db";
 
 /**
  * Create the CheqPay Ads tables, lazily and idempotently (campaigns, slots,
- * stats, venues, screens, uptime, payouts). They are raw-SQL tables, not
+ * stats, venues, screens, uptime, payouts, influencer budgets). They are raw-SQL tables, not
  * Prisma models, so nothing selects them by default — but this helper also
  * adds ad_campaigns.promoted_venue_id with ALTER TABLE ... ADD COLUMN for
  * databases created before venues shipped, so it is wired into
@@ -139,6 +139,20 @@ export function ensureAdsSchema(): Promise<void> {
           lat double precision NOT NULL,
           lng double precision NOT NULL,
           updated_at timestamptz NOT NULL DEFAULT now()
+        )`,
+        // Influencer posts bought with a campaign: the escrowed budget, what
+        // has been paid out and what has gone back to the advertiser.
+        `CREATE TABLE IF NOT EXISTS ad_influencer_budgets (
+          campaign_id uuid PRIMARY KEY REFERENCES ad_campaigns(id) ON DELETE CASCADE,
+          pay_minor bigint NOT NULL CHECK (pay_minor > 0),
+          fee_minor bigint NOT NULL CHECK (fee_minor >= 0),
+          max_posts integer NOT NULL CHECK (max_posts > 0),
+          used_posts integer NOT NULL DEFAULT 0,
+          refunded_posts integer NOT NULL DEFAULT 0,
+          brief text NOT NULL DEFAULT '',
+          task_id uuid UNIQUE,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          CHECK (used_posts >= 0 AND refunded_posts >= 0 AND used_posts + refunded_posts <= max_posts)
         )`,
       ];
       for (const s of stmts) await prisma.$executeRawUnsafe(s);

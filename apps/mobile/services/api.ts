@@ -423,12 +423,15 @@ export interface AdOptions {
   maxFrequencyCap: number;
   nearby: { perDayMinor: string; perDayFormatted: string };
   minScreenHours: number;
+  influencer: { feePercent: number; minPayMinor: string; minPayFormatted: string; maxPosts: number };
   defaults: AdTargeting;
 }
 export interface AdQuoteInput {
   placements: AdPlacement[];
   venues?: string[];
   nearbyVenueId?: string | null;
+  /** Paid posts by CheqPay influencers: pay per approved post (kobo), how many, and what to post. */
+  influencer?: { payPerPostMinor: string; posts: number; brief: string } | null;
   startDay: string;
   days: number;
   category: string;
@@ -449,6 +452,8 @@ export interface AdQuoteLine {
   days: number;
   totalMinor: string;
   totalFormatted: string;
+  /** What `days` counts: days (default) or influencer posts. */
+  unit?: 'day' | 'post';
 }
 export interface AdQuote {
   lines: AdQuoteLine[];
@@ -488,6 +493,7 @@ export interface AdCampaign {
     byChannel: { channel: string; label: string; views: number; clicks: number }[];
     byDay: { day: string; views: number; clicks: number }[];
   };
+  influencer: { maxPosts: number; usedPosts: number; refundedPosts: number; payFormatted: string; brief: string } | null;
 }
 export interface ServedAd {
   campaignId: string;

@@ -35,6 +35,12 @@ export async function GET(req: Request) {
       states: NIGERIAN_STATES,
       nearby: { perDayMinor: String(s.nearbyPriceMinor), perDayFormatted: formatNairaMinor(BigInt(s.nearbyPriceMinor)) },
       minScreenHours: s.minScreenHours,
+      influencer: {
+        feePercent: s.influencerFeeBps / 100,
+        minPayMinor: String(s.influencerMinPayMinor),
+        minPayFormatted: formatNairaMinor(BigInt(s.influencerMinPayMinor)),
+        maxPosts: s.influencerMaxPosts,
+      },
       maxDays: s.maxDays,
       minAudience: s.minAudience,
       maxFrequencyCap: s.maxFrequencyCap,

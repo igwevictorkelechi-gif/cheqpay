@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, Check, ImagePlus, Loader2, LocateFixed, Megaphone, MapPin, ShieldCheck, Tv, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, ImagePlus, Loader2, LocateFixed, Megaphone, MapPin, ShieldCheck, Sparkles, Tv, Users, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, useToast } from "@/components/MobileUI";
 import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinProvider";
@@ -61,6 +61,10 @@ export default function AdvertisePage() {
   const [venueState, setVenueState] = useState<string>("all");
   const [myVenues, setMyVenues] = useState<{ id: string; name: string; city: string }[]>([]);
   const [nearbyVenueId, setNearbyVenueId] = useState<string | null>(null);
+  const [infOn, setInfOn] = useState(false);
+  const [infPay, setInfPay] = useState("5000");
+  const [infPosts, setInfPosts] = useState(5);
+  const [infBrief, setInfBrief] = useState("");
   const [startDay, setStartDay] = useState("");
   const [days, setDays] = useState(7);
   const [t, setT] = useState<AdTargeting | null>(null);
@@ -99,16 +103,24 @@ export default function AdvertisePage() {
     if (adultOnly && t && t.ageMin < 18) setT({ ...t, ageMin: 18 });
   }, [adultOnly, t]);
 
+  // Influencer posts, once the advertiser has filled them in properly.
+  const infPayMinor = Math.round(Number(infPay.replace(/[^\d.]/g, "") || 0) * 100);
+  const infValid = infOn && !!opts && infPayMinor >= Number(opts.influencer.minPayMinor) && infPosts >= 1 && infPosts <= opts.influencer.maxPosts && infBrief.trim().length >= 10;
+  const influencer = useMemo(
+    () => (infValid ? { payPerPostMinor: String(infPayMinor), posts: infPosts, brief: infBrief.trim() } : null),
+    [infValid, infPayMinor, infPosts, infBrief],
+  );
+
   // Price, availability and audience, refreshed as the form changes.
   useEffect(() => {
-    if (!opts || !t || !startDay || (!placements.length && !venues.length && !nearbyVenueId)) {
+    if (!opts || !t || !startDay || (!placements.length && !venues.length && !nearbyVenueId && !influencer)) {
       setQuote(null);
       return;
     }
     setQuoting(true);
     const id = setTimeout(() => {
       api
-        .quoteAd({ placements, venues, nearbyVenueId, startDay, days, category, targeting: t })
+        .quoteAd({ placements, venues, nearbyVenueId, influencer, startDay, days, category, targeting: t })
         .then((q) => {
           setQuote(q);
           setQuoteErr(null);
@@ -120,7 +132,7 @@ export default function AdvertisePage() {
         .finally(() => setQuoting(false));
     }, 450);
     return () => clearTimeout(id);
-  }, [opts, t, startDay, days, placements, venues, nearbyVenueId, category]);
+  }, [opts, t, startDay, days, placements, venues, nearbyVenueId, influencer, category]);
 
   async function pickImage(file: File | undefined) {
     if (!file) return;
@@ -155,7 +167,7 @@ export default function AdvertisePage() {
   const toggle = <K,>(list: K[], v: K) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   const linkOk = !linkUrl || /^https:\/\/[^\s/]+\.[^\s]+/.test(linkUrl.trim());
   const ready =
-    !!quote && quote.audienceOk && quote.soldOut.length === 0 && businessName.trim().length >= 2 && headline.trim().length >= 3 && !!image && linkOk;
+    !!quote && quote.audienceOk && quote.soldOut.length === 0 && businessName.trim().length >= 2 && headline.trim().length >= 3 && !!image && linkOk && (!infOn || infValid);
 
   async function pay() {
     if (!ready || !t || !quote) return;
@@ -175,6 +187,7 @@ export default function AdvertisePage() {
               placements,
               venues,
               nearbyVenueId,
+              influencer,
               startDay,
               days,
               targeting: t,
@@ -329,6 +342,34 @@ export default function AdvertisePage() {
                   </div>
                 </div>
               )}
+              <div className="mt-5 border-t border-border pt-4">
+                <button type="button" onClick={() => setInfOn(!infOn)} className="flex w-full items-center justify-between gap-3 text-left">
+                  <span>
+                    <span className="flex items-center gap-2 text-sm font-bold text-ink"><Sparkles className="h-4 w-4 text-brand-light" /> Influencer posts</span>
+                    <span className="mt-0.5 block text-xs text-muted">CheqPay creators post about you on their socials. You only pay for posts we approve — unused posts are refunded.</span>
+                  </span>
+                  <span className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition ${infOn ? "bg-brand" : "bg-border"}`}>
+                    <span className={`h-5 w-5 rounded-full bg-white transition ${infOn ? "translate-x-5" : ""}`} />
+                  </span>
+                </button>
+                {infOn && (
+                  <div className="mt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="text-xs font-semibold text-muted">Pay per post (₦)
+                        <input inputMode="numeric" value={infPay} onChange={(e) => setInfPay(e.target.value.replace(/[^\d]/g, ""))} className={`${input} mt-1`} />
+                      </label>
+                      <label className="text-xs font-semibold text-muted">Number of posts
+                        <input inputMode="numeric" value={infPosts || ""} onChange={(e) => setInfPosts(Math.min(opts.influencer.maxPosts, Number(e.target.value.replace(/[^\d]/g, "") || 0)))} className={`${input} mt-1`} />
+                      </label>
+                    </div>
+                    {infPayMinor > 0 && infPayMinor < Number(opts.influencer.minPayMinor) && <p className="text-xs text-amber-400">Pay at least {opts.influencer.minPayFormatted} a post.</p>}
+                    <label className="block text-xs font-semibold text-muted">What should they post?
+                      <textarea value={infBrief} onChange={(e) => setInfBrief(e.target.value.slice(0, 1000))} rows={3} placeholder="e.g. Show our jollof in a short video, mention 20% off this week and tag @mamaput" className={`${input} mt-1 resize-none`} />
+                    </label>
+                    <p className="text-xs text-muted">Creators see your brief and ad image. Each approved post pays the creator your amount; CheqPay adds {opts.influencer.feePercent}% on top.</p>
+                  </div>
+                )}
+              </div>
             </Card>
 
             {/* 3. When */}
@@ -438,8 +479,8 @@ export default function AdvertisePage() {
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand/15 text-brand-light"><Users className="h-5 w-5" /></span>
                 <div>
-                  <p className="text-lg font-extrabold text-ink">{quote ? (quote.audience === null ? "People at the venues" : `≈ ${quote.audience.toLocaleString("en-NG")} people`) : "—"}</p>
-                  <p className="text-xs text-muted">{quote?.audience === null ? "Screens and Nearby reach whoever is there" : "match your targeting in the app today"}</p>
+                  <p className="text-lg font-extrabold text-ink">{quote ? (quote.audience === null ? (venues.length || nearbyVenueId ? "People at the venues" : "Creators' followers") : `≈ ${quote.audience.toLocaleString("en-NG")} people`) : "—"}</p>
+                  <p className="text-xs text-muted">{quote?.audience === null ? (venues.length || nearbyVenueId ? "Screens and Nearby reach whoever is there" : "Influencer posts reach each creator's audience") : "match your targeting in the app today"}</p>
                 </div>
                 {quoting && <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted" />}
               </div>
@@ -449,7 +490,7 @@ export default function AdvertisePage() {
                 <div className="mt-4 space-y-2 border-t border-border pt-3 text-sm">
                   {quote.lines.map((l) => (
                     <div key={l.channel} className="flex justify-between gap-3">
-                      <span className="text-muted">{l.label} × {l.days}d</span>
+                      <span className="text-muted">{l.label} × {l.days}{l.unit === "post" ? ` post${l.days === 1 ? "" : "s"}` : "d"}</span>
                       <span className="font-semibold text-ink">{l.totalFormatted}</span>
                     </div>
                   ))}
@@ -467,7 +508,7 @@ export default function AdvertisePage() {
                 {paying && <Loader2 className="h-4 w-4 animate-spin" />}
                 {quote ? `Pay ${quote.totalFormatted} & send for review` : "Pay & send for review"}
               </button>
-              {!ready && quote && <p className="mt-1.5 text-center text-xs text-muted">{!image ? "Add an image to continue" : headline.trim().length < 3 ? "Add a headline to continue" : businessName.trim().length < 2 ? "Add your business name to continue" : !linkOk ? "Fix the link" : ""}</p>}
+              {!ready && quote && <p className="mt-1.5 text-center text-xs text-muted">{!image ? "Add an image to continue" : headline.trim().length < 3 ? "Add a headline to continue" : businessName.trim().length < 2 ? "Add your business name to continue" : !linkOk ? "Fix the link" : infOn && !infValid ? "Finish the influencer posts (pay, number and what to post)" : ""}</p>}
             </div>
           </div>
 

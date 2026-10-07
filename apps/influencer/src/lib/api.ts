@@ -51,6 +51,8 @@ export interface Task {
   id: string; title: string; description: string; kind: "AUTO" | "PROOF"; metricLabel: string | null; target: string | null;
   targetFormatted: string | null; rewardFormatted: string; endsAt: string | null; progress: string | null; progressFormatted: string | null;
   submission: { status: string; reason: string | null; proof_url: string | null } | null; rewarded: string | null; expired: boolean;
+  /** Set when an advertiser bought this task with their campaign: their ad, link and how many paid posts are left. */
+  brand: { businessName: string; headline: string; image: string; linkUrl: string | null; postsLeft: number } | null;
 }
 
 export const api = {

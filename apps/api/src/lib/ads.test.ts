@@ -11,6 +11,7 @@ vi.mock("./adminNotify", () => ({ notifyAdmins: vi.fn() }));
 vi.mock("./settingsCache", () => ({ cachedSetting: (_k: string, load: () => unknown) => load(), invalidateSetting: vi.fn() }));
 
 import {
+  DEFAULT_ADS_SETTINGS,
   addDays,
   assertAdImage,
   assertAdLink,
@@ -18,6 +19,7 @@ import {
   distanceKm,
   lagosDay,
   matchTargeting,
+  planInfluencer,
   rankCampaigns,
   relevanceScore,
   roundCoord,
@@ -156,5 +158,23 @@ describe("helpers", () => {
     expect(() => assertAdLink(null)).not.toThrow();
     expect(() => assertAdLink("http://shop.example.com")).toThrow();
     expect(() => assertAdLink("javascript:alert(1)")).toThrow();
+  });
+});
+
+describe("influencer posts", () => {
+  const S = DEFAULT_ADS_SETTINGS; // 20% fee, ₦2,000 minimum, 100 posts max
+  const brief = "Show the serum in your morning routine.";
+
+  it("charges pay + fee per post, fee rounded up to the kobo", () => {
+    const p = planInfluencer({ payPerPostMinor: 500_000n, posts: 4, brief }, S);
+    expect(p.feeMinor).toBe(100_000n);
+    expect(p.line).toMatchObject({ channel: "influencer", perDayMinor: "600000", days: 4, totalMinor: "2400000", unit: "post" });
+    expect(planInfluencer({ payPerPostMinor: 200_001n, posts: 1, brief }, S).feeMinor).toBe(40_001n);
+  });
+
+  it("refuses pay below the minimum, too many posts and an empty brief", () => {
+    expect(() => planInfluencer({ payPerPostMinor: 199_999n, posts: 1, brief }, S)).toThrow(/at least/);
+    expect(() => planInfluencer({ payPerPostMinor: 500_000n, posts: 101, brief }, S)).toThrow(/1 to 100/);
+    expect(() => planInfluencer({ payPerPostMinor: 500_000n, posts: 1, brief: "  hi  " }, S)).toThrow(/what to post/);
   });
 });
