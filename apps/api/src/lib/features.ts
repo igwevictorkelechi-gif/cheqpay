@@ -22,6 +22,7 @@ export const FEATURE_DEFS = [
   { key: "gift_cards_buy", label: "Buy gift cards", description: "Buy digital gift cards with Naira (needs the gift card supplier set up)" },
   { key: "referrals", label: "Referrals & influencers", description: "Refer & earn in the app, and the influencer portal at influencer.mycheqpay.com" },
   { key: "ads", label: "CheqPay Ads", description: "Businesses buy ads shown in the app (home, after a payment, Pay bills); every ad is reviewed first" },
+  { key: "developer_api", label: "Developer API", description: "The public API and developer portal at developers.mycheqpay.com (sandbox and live). Live access still needs an approved business and a paid plan" },
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_DEFS)[number]["key"];
@@ -79,6 +80,10 @@ const DEFAULT_OFF: readonly FeatureKey[] = [
   "referrals",
   // Ads ship OFF until prices are set and someone is reviewing the queue.
   "ads",
+  // The developer API ships OFF: turning it on opens the sandbox to everyone
+  // and live mode to the businesses you approve. Review plan prices and limits
+  // in admin first.
+  "developer_api",
 ];
 
 const DEFAULTS: Record<FeatureKey, boolean> = Object.fromEntries(

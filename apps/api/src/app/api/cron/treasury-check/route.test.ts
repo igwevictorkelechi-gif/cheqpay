@@ -4,6 +4,7 @@ const h = vi.hoisted(() => ({
   groupBy: vi.fn(),
   getWallets: vi.fn(),
   alert: vi.fn(),
+  devTotals: vi.fn(),
   env: { CRON_SECRET: "cron-secret-123" } as Record<string, string | undefined>,
 }));
 
@@ -14,6 +15,7 @@ vi.mock("@cheqpay/db", () => ({
 vi.mock("@/lib/env", () => ({ getEnv: () => h.env }));
 vi.mock("@/lib/maplerad/wallets", () => ({ getWallets: h.getWallets }));
 vi.mock("@/lib/adminAlert", () => ({ notifyAdminAlert: h.alert }));
+vi.mock("@/lib/devapi/ledger", () => ({ liveTotals: h.devTotals }));
 
 import { GET } from "./route";
 
@@ -29,6 +31,7 @@ beforeEach(() => {
     { asset: "USD", _sum: { available: 16_701n, locked: 0n } },
     { asset: "NGN", _sum: { available: 50_000_00n, locked: 0n } },
   ]);
+  h.devTotals.mockResolvedValue({ NGN: 0n, USD: 0n });
 });
 
 describe("treasury check", () => {
@@ -47,6 +50,24 @@ describe("treasury check", () => {
     const body = await (await call()).json();
     expect(body.alerted).toBe(false);
     expect(h.alert).not.toHaveBeenCalled();
+  });
+
+  it("counts developers' live wallets as owed too", async () => {
+    // Users hold $167.01 and the pool $200: covered, until developers' $50 is added.
+    h.getWallets.mockResolvedValue([wallet("USD", 20_000), wallet("NGN", 90_000_00)]);
+    h.devTotals.mockResolvedValue({ NGN: 0n, USD: 5_000n });
+    const body = await (await call()).json();
+    const usd = body.report.find((r: { currency: string }) => r.currency === "USD");
+    expect(usd.developerMinor).toBe("5000");
+    expect(usd.shortMinor).toBe("1701");
+    expect(body.alerted).toBe(true);
+  });
+
+  it("still runs when the developer tables don't exist yet", async () => {
+    h.getWallets.mockResolvedValue([wallet("USD", 20_000), wallet("NGN", 90_000_00)]);
+    h.devTotals.mockRejectedValue(new Error('relation "dev_wallets" does not exist'));
+    const body = await (await call()).json();
+    expect(body.alerted).toBe(false);
   });
 
   it("refuses without the cron secret", async () => {

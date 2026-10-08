@@ -10,7 +10,8 @@
     "apps/influencer",
     "apps/api",
     "packages/shared",
-    "packages/db"
+    "packages/db",
+    "packages/devapi"
   ],
   "scripts": {
     "dev": "turbo run dev --parallel",

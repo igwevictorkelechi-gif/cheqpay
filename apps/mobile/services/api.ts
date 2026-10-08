@@ -348,7 +348,9 @@ export type LedgerTxType =
   | 'REFERRAL_REWARD'
   | 'AD_PURCHASE'
   | 'AD_REFUND'
-  | 'AD_PAYOUT';
+  | 'AD_PAYOUT'
+  | 'DEV_WALLET_FUND'
+  | 'DEV_WALLET_WITHDRAW';
 export type LedgerTxStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
 export interface LedgerTransaction {
   id: string;

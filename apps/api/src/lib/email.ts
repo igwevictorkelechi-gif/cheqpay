@@ -42,6 +42,8 @@ export async function sendEmail(input: {
   subject: string;
   html: string;
   attachments?: EmailAttachment[];
+  /** Where replies go, when not the sender (developer emails reply to dev@). */
+  replyTo?: string;
 }): Promise<{ id: string }> {
   assertEmailConfigured();
 
@@ -58,6 +60,7 @@ export async function sendEmail(input: {
         to: [input.to],
         subject: input.subject,
         html: input.html,
+        ...(input.replyTo ? { reply_to: input.replyTo } : {}),
         attachments: input.attachments?.map((a) => ({
           filename: a.filename,
           content: a.content.toString("base64"),

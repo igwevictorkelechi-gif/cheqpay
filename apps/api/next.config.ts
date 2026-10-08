@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   // Compile the workspace TS packages directly (no prebuild step).
-  transpilePackages: ["@cheqpay/db", "@cheqpay/shared"],
+  transpilePackages: ["@cheqpay/db", "@cheqpay/shared", "@cheqpay/devapi"],
 };
 
 export default nextConfig;

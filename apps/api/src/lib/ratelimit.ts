@@ -115,6 +115,39 @@ export async function enforceRateLimit(key: string, limit: number, windowMs: num
   if (shared && shared.count > limit) throw limited(shared.resetAt - Date.now());
 }
 
+export interface RateStanding {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  /** When the current window ends (epoch ms). */
+  resetAt: number;
+}
+
+/**
+ * Count one hit and report where the caller stands, without throwing — for
+ * callers that publish the standing as RateLimit-* headers (the developer API).
+ * Same two layers and the same fail-open rule as enforceRateLimit.
+ */
+export async function checkRateLimit(key: string, limit: number, windowMs: number): Promise<RateStanding> {
+  const local = rateLimit(key, limit, windowMs);
+  if (!local.allowed) {
+    return { allowed: false, limit, remaining: 0, resetAt: Date.now() + local.retryAfterMs };
+  }
+  let shared: { count: number; resetAt: number } | null = null;
+  try {
+    shared = await sharedHit(key, windowMs);
+  } catch (err) {
+    console.warn("[ratelimit] shared store unavailable; using per-instance limit", String(err));
+  }
+  if (!shared) return { allowed: true, limit, remaining: local.remaining, resetAt: Date.now() + windowMs };
+  return {
+    allowed: shared.count <= limit,
+    limit,
+    remaining: Math.max(0, limit - shared.count),
+    resetAt: shared.resetAt,
+  };
+}
+
 /** Test helper. */
 export function __resetRateLimits(): void {
   store.clear();

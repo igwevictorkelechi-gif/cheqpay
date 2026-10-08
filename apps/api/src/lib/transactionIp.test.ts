@@ -31,6 +31,7 @@ const MONEY_ROUTES = [
   "app/api/withdrawals/ngn/route.ts",
   "app/api/withdrawals/crypto/route.ts",
   "app/api/bills/pay/route.ts",
+  "app/api/developer/wallet/move/route.ts",
 ];
 
 /**
@@ -40,6 +41,7 @@ const MONEY_ROUTES = [
  */
 const IMPLEMENTATION: Record<string, string> = {
   "app/api/bills/pay/route.ts": "lib/billPay.ts",
+  "app/api/developer/wallet/move/route.ts": "lib/devapi/walletMoves.ts",
 };
 
 function read(rel: string): string {

@@ -30,6 +30,11 @@ const MONEY_ROUTES = [
   "cards/[id]/withdraw/route.ts",
   "gadgets/orders/route.ts",
   "events/tickets/route.ts",
+  // Developer platform: paying for a plan, moving money between the app
+  // balance and the developer wallet, and lifting an emergency stop.
+  "developer/subscription/route.ts",
+  "developer/wallet/move/route.ts",
+  "developer/resume/route.ts",
 ];
 
 /**
