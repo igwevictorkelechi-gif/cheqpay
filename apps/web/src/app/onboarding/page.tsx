@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { takeReturnTo } from "@/lib/returnTo";
 import { Loader2 } from "lucide-react";
 import { api, ApiError } from "@/services/api";
 
@@ -73,7 +74,9 @@ export default function OnboardingPage() {
   const [confirm, setConfirm] = useState("");
 
   const kycValid = firstName.trim().length >= 2 && lastName.trim().length >= 2;
-  const finish = () => router.push("/");
+  // Back to where sign-in started (e.g. "Continue with CheqPay" from the
+  // Creators portal), or home.
+  const finish = () => router.push(takeReturnTo() ?? "/");
 
   const submitKyc = async () => {
     if (!kycValid) return;

@@ -556,6 +556,15 @@ function markProvisioned(userId: string): void {
 
 export const api = {
   /**
+   * "Continue with CheqPay": a one-time code that signs this user into one of
+   * our other sites (the Creators portal). Bound to the challenge that site
+   * made, so only the tab that asked can use it.
+   */
+  async ssoHandoff(client: string, challenge: string): Promise<{ code: string; return_url: string }> {
+    return apiFetch("/api/sso/handoff", { method: "POST", body: JSON.stringify({ client, challenge }) });
+  },
+
+  /**
    * Idempotently create the app-side profile + wallets. Call after login.
    * Skipped when it already ran for this user in the last half hour.
    */
