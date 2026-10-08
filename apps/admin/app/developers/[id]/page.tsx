@@ -39,6 +39,18 @@ interface Detail {
   wallets: { id: string; currency: string; available_balance: number; status: string; livemode: boolean }[];
   recent_live_transactions: { id: string; kind: string; status: string; currency: string; amount: number; fee: number; description: string | null; created_at: string }[];
   audit: { actor: string; action: string; ip: string | null; created_at: string }[];
+  customers?: {
+    live: CustomerTally;
+    test: CustomerTally;
+    recent: { id: string; mode: string; name: string; bvn_last4: string; kyc_status: string; kyc_reason: string | null; created_at: string }[];
+  };
+}
+
+interface CustomerTally {
+  pending: number;
+  verified: number;
+  rejected: number;
+  virtual_accounts: number;
 }
 
 const APP_FIELDS: [string, string][] = [
@@ -284,6 +296,40 @@ export default function DeveloperDetailPage() {
               </table>
             )}
           </section>
+
+          {d.customers && (
+            <section className="rounded-xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-3 text-lg font-semibold text-gray-900">Their customers</h2>
+              <div className="mb-3 grid gap-2 text-sm sm:grid-cols-2">
+                {(['live', 'test'] as const).map((m) => (
+                  <p key={m}>
+                    <span className="text-gray-500">{m === 'live' ? 'Live' : 'Test'}:</span> {d.customers![m].verified} verified · {d.customers![m].pending} pending ·{' '}
+                    {d.customers![m].rejected} rejected · {d.customers![m].virtual_accounts} virtual accounts
+                  </p>
+                ))}
+              </div>
+              {d.customers.recent.length === 0 ? (
+                <p className="text-sm text-gray-500">No customers yet.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <tbody>
+                    {d.customers.recent.map((c) => (
+                      <tr key={c.id} className="border-b border-gray-100 last:border-0">
+                        <td className="py-2 text-gray-500">{new Date(c.created_at).toLocaleDateString()}</td>
+                        <td className="py-2">{c.mode === 'live' ? 'Live' : 'Test'}</td>
+                        <td className="py-2">{c.name}</td>
+                        <td className="py-2 text-gray-500">BVN …{c.bvn_last4}</td>
+                        <td className={`py-2 ${c.kyc_status === 'rejected' ? 'text-red-700' : c.kyc_status === 'pending' ? 'text-amber-700' : 'text-green-700'}`}>
+                          {c.kyc_status}
+                          {c.kyc_reason ? ` (${c.kyc_reason.replace(/_/g, ' ')})` : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
+          )}
 
           <section className="rounded-xl border border-gray-200 bg-white p-5">
             <h2 className="mb-3 text-lg font-semibold text-gray-900">Security log</h2>

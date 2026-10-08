@@ -211,6 +211,43 @@ export async function applyLegs(
   return after;
 }
 
+/**
+ * Lock several wallets in id order before a movement that calls applyLegs more
+ * than once (a conversion touches an NGN and a USD wallet, and applyLegs takes
+ * one currency at a time). Locking them all up front, in the same global order
+ * applyLegs uses, is what keeps two opposite conversions from deadlocking.
+ */
+export async function lockWallets(db: Prisma.TransactionClient, walletIds: string[]): Promise<void> {
+  for (const id of [...new Set(walletIds)].sort()) {
+    await db.$queryRawUnsafe(`SELECT 1 FROM dev_wallets WHERE id = $1::uuid FOR NO KEY UPDATE`, id);
+  }
+}
+
+/** A customer's wallet in one currency, if they have one (they do once verified). */
+export async function getCustomerWallet(db: Db, customerId: string, currency: Currency): Promise<WalletRow | null> {
+  const rows = await db.$queryRawUnsafe<WalletRow[]>(
+    `SELECT * FROM dev_wallets WHERE customer_id = $1::uuid AND currency = $2`,
+    customerId,
+    currency,
+  );
+  return rows[0] ?? null;
+}
+
+/** Open a verified customer's NGN and USD wallets (idempotent). */
+export async function ensureCustomerWallets(db: Db, accountId: string, mode: Mode, customerId: string): Promise<void> {
+  for (const currency of CURRENCIES) {
+    await db.$executeRawUnsafe(
+      `INSERT INTO dev_wallets (id, account_id, mode, customer_id, currency) VALUES ($1::uuid, $2::uuid, $3, $4::uuid, $5)
+       ON CONFLICT (customer_id, currency) WHERE customer_id IS NOT NULL DO NOTHING`,
+      randomUUID(),
+      accountId,
+      mode,
+      customerId,
+      currency,
+    );
+  }
+}
+
 /** A wallet's statement, newest first, paged by entry id. */
 export async function listEntries(walletId: string, opts: { limit: number; before?: bigint | null }): Promise<LedgerEntryRow[]> {
   return prisma.$queryRawUnsafe<LedgerEntryRow[]>(

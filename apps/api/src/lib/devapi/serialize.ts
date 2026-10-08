@@ -57,6 +57,8 @@ export function walletObject(w: WalletRow) {
 const DETAIL_FIELDS: Partial<Record<DevTransactionRow["kind"], readonly string[]>> = {
   wallet_move: ["direction"],
   subscription: ["plan_id", "from_plan_id", "prorated", "period_start", "period_end", "renewal"],
+  deposit: ["virtual_account_id", "payer"],
+  conversion: ["quote_id", "to_currency", "converted_amount", "fx_fee", "rate"],
 };
 
 export function transactionObject(t: DevTransactionRow) {

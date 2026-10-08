@@ -15,6 +15,7 @@ import { Asset } from "@cheqpay/db";
 import { verifyTransaction, type VerifiedTransaction } from "./transactions";
 import { prismaLedgerPort } from "../mapleradCollections";
 import { creditCryptoCollection, isCryptoCollection } from "./cryptoCollection";
+import { settleDevCollection } from "../devapi/deposits";
 import type { CreditResult } from "./deposits";
 import type { CollectionEventData } from "./types";
 
@@ -111,7 +112,13 @@ export async function settleCollectionById(transactionId: string): Promise<Credi
     customerId: tx.customer?.id,
     currency: tx.currency,
   });
-  if (!match) return { outcome: "unmatched", amount: tx.amount };
+  if (!match) {
+    // Not an app user's account. It may be a virtual account a developer
+    // opened for one of their customers (the developer API); that path has its
+    // own exactly-once credit. Only after both miss is the money unmatched.
+    const dev = await settleDevCollection(tx);
+    return dev ?? { outcome: "unmatched", amount: tx.amount };
+  }
 
   await prismaLedgerPort.creditUser({
     userId: match.userId,

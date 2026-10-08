@@ -68,7 +68,7 @@ export async function adminListAccounts(status: AccountStatus | null) {
 export async function adminAccountDetail(id: string) {
   const account = await getAccount(id);
   if (!account) return null;
-  const [owner, sub, keys, audit, wallets, txs, limits] = await Promise.all([
+  const [owner, sub, keys, audit, wallets, txs, limits, kycCounts, vaCounts, recentCustomers] = await Promise.all([
     prisma.user.findUnique({ where: { id: account.owner_user_id }, select: { email: true, kycTier: true, legalName: true, status: true } }),
     getSubscription(id),
     listApiKeys(id),
@@ -79,8 +79,30 @@ export async function adminAccountDetail(id: string) {
       id,
     ),
     getDevLimits(),
+    prisma.$queryRawUnsafe<{ mode: string; kyc_status: string; n: number }[]>(
+      `SELECT mode, kyc_status, count(*)::int AS n FROM dev_customers WHERE account_id = $1::uuid GROUP BY mode, kyc_status`,
+      id,
+    ),
+    prisma.$queryRawUnsafe<{ mode: string; n: number }[]>(
+      `SELECT mode, count(*)::int AS n FROM dev_virtual_accounts WHERE account_id = $1::uuid AND status = 'active' GROUP BY mode`,
+      id,
+    ),
+    // Names and status only: identity numbers stay encrypted and never reach the admin app.
+    prisma.$queryRawUnsafe<
+      { id: string; mode: string; first_name: string; last_name: string; bvn_last4: string; kyc_status: string; kyc_reason: string | null; created_at: Date }[]
+    >(
+      `SELECT id, mode, first_name, last_name, bvn_last4, kyc_status, kyc_reason, created_at FROM dev_customers
+        WHERE account_id = $1::uuid ORDER BY (mode = 'live') DESC, created_at DESC LIMIT 25`,
+      id,
+    ),
   ]);
   const active = keys.filter((k) => keyIsActive(k));
+  const tally = (mode: string) => ({
+    pending: kycCounts.find((c) => c.mode === mode && c.kyc_status === "pending")?.n ?? 0,
+    verified: kycCounts.find((c) => c.mode === mode && c.kyc_status === "verified")?.n ?? 0,
+    rejected: kycCounts.find((c) => c.mode === mode && c.kyc_status === "rejected")?.n ?? 0,
+    virtual_accounts: vaCounts.find((c) => c.mode === mode)?.n ?? 0,
+  });
   return {
     id: account.id,
     account: dashboardAccountView(account),
@@ -100,6 +122,19 @@ export async function adminAccountDetail(id: string) {
     wallets: wallets.map(walletObject),
     recent_live_transactions: txs.map(transactionObject),
     audit: audit.map((a) => ({ actor: a.actor, action: a.action, ip: a.ip, details: a.details, created_at: a.created_at.toISOString() })),
+    customers: {
+      live: tally("live"),
+      test: tally("test"),
+      recent: recentCustomers.map((c) => ({
+        id: toPublicId("customer", c.id),
+        mode: c.mode,
+        name: `${c.first_name} ${c.last_name}`,
+        bvn_last4: c.bvn_last4,
+        kyc_status: c.kyc_status,
+        kyc_reason: c.kyc_reason,
+        created_at: c.created_at.toISOString(),
+      })),
+    },
   };
 }
 

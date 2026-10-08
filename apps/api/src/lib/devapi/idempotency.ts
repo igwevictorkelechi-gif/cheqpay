@@ -18,7 +18,14 @@ import { createHash } from "node:crypto";
 import { prisma, type Prisma } from "@cheqpay/db";
 import { ApiError } from "../http";
 import { ensureDevApiSchema } from "./ensureDevApi";
+import type { HandlerResult } from "./handler";
 import type { Mode } from "./types";
+
+/**
+ * A claim whose request never finished (the server died mid-request) stops
+ * blocking its key after this long, so the client can retry with the same key.
+ */
+const STALE_CLAIM_MS = 10 * 60_000;
 
 export const IDEMPOTENCY_KEY = /^[A-Za-z0-9_\-:.]{1,255}$/;
 
@@ -60,9 +67,9 @@ export async function claimIdempotencyKey(
   if (inserted.length) return { state: "fresh" };
 
   const rows = await prisma.$queryRawUnsafe<
-    { request_hash: string; resource_type: string | null; resource_id: string | null; status_code: number | null }[]
+    { request_hash: string; resource_type: string | null; resource_id: string | null; status_code: number | null; created_at: Date }[]
   >(
-    `SELECT request_hash, resource_type, resource_id, status_code FROM dev_idempotency_keys
+    `SELECT request_hash, resource_type, resource_id, status_code, created_at FROM dev_idempotency_keys
       WHERE account_id = $1::uuid AND mode = $2 AND key = $3`,
     scope.accountId,
     scope.mode,
@@ -74,6 +81,16 @@ export async function claimIdempotencyKey(
     throw new ApiError(409, "This Idempotency-Key was already used with a different request.", "idempotency_key_reused");
   }
   if (row.status_code === null) {
+    if (Date.now() - row.created_at.getTime() > STALE_CLAIM_MS) {
+      const freed = await prisma.$executeRawUnsafe(
+        `DELETE FROM dev_idempotency_keys WHERE account_id = $1::uuid AND mode = $2 AND key = $3 AND status_code IS NULL AND created_at = $4`,
+        scope.accountId,
+        scope.mode,
+        key,
+        row.created_at,
+      );
+      if (freed) return claimIdempotencyKey(scope, key, hash, route);
+    }
     throw new ApiError(409, "A request with this Idempotency-Key is still being processed. Retry shortly.", "idempotency_in_progress");
   }
   return { state: "replay", resourceType: row.resource_type, resourceId: row.resource_id, statusCode: row.status_code };
@@ -106,4 +123,55 @@ export async function releaseIdempotencyKey(scope: { accountId: string; mode: Mo
     scope.mode,
     key,
   );
+}
+
+export type CompleteFn = (
+  db: Prisma.TransactionClient,
+  resourceType: string,
+  resourceId: string,
+  statusCode: number,
+) => Promise<void>;
+
+/**
+ * Run a POST exactly once per Idempotency-Key.
+ *
+ * `work` receives `complete`, which it calls inside the database transaction
+ * that creates its resource — so the key's record and the resource commit
+ * together. If `work` fails before that commit, the key is released and the
+ * client may retry with it. A repeat of a finished request gets `replay` for
+ * the resource it created, with the original status and an
+ * `Idempotent-Replayed: true` header.
+ *
+ * `hashInput` is what makes two requests "the same" (normally the body).
+ */
+export async function runIdempotent(
+  ctx: { scope: { accountId: string; mode: Mode }; idempotencyKey: string | null; path: string },
+  hashInput: unknown,
+  handlers: {
+    /** Leave `status` unset to answer with the original request's status. */
+    replay: (resourceId: string) => Promise<HandlerResult>;
+    work: (complete: CompleteFn) => Promise<HandlerResult>;
+  },
+): Promise<HandlerResult> {
+  const key = ctx.idempotencyKey;
+  if (!key) throw new ApiError(400, "POST requests need an Idempotency-Key header.", "idempotency_key_required");
+  const claim = await claimIdempotencyKey(ctx.scope, key, requestHash(ctx.path, hashInput), ctx.path);
+  if (claim.state === "replay") {
+    if (!claim.resourceId) {
+      throw new ApiError(409, "A request with this Idempotency-Key is still being processed. Retry shortly.", "idempotency_in_progress");
+    }
+    // The original status, unless the replay states the resource's current
+    // one (a conversion first answered 202 may have settled since).
+    const res = await handlers.replay(claim.resourceId);
+    return { ...res, status: res.status ?? claim.statusCode ?? 200, headers: { ...(res.headers ?? {}), "idempotent-replayed": "true" } };
+  }
+  try {
+    return await handlers.work((db, resourceType, resourceId, statusCode) =>
+      completeIdempotencyKey(db, ctx.scope, key, { resourceType, resourceId, statusCode }),
+    );
+  } catch (err) {
+    // Only frees a key whose request never committed (status_code still NULL).
+    await releaseIdempotencyKey(ctx.scope, key).catch(() => undefined);
+    throw err;
+  }
 }
