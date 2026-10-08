@@ -71,6 +71,8 @@ export interface ApiContext<B = unknown> {
   query: URLSearchParams;
   method: string;
   path: string;
+  /** The raw request, for routes that read their own body (file uploads). */
+  request: Request;
 }
 
 export interface RouteOptions<S extends ZodTypeAny | undefined> {
@@ -84,6 +86,8 @@ export interface RouteOptions<S extends ZodTypeAny | undefined> {
   maxBodyBytes?: number;
   /** Test helpers: 404 for live keys. */
   testOnly?: boolean;
+  /** The handler reads the body itself (multipart uploads); the gate only checks its declared size. */
+  rawBody?: boolean;
 }
 
 export interface HandlerResult {
@@ -304,7 +308,11 @@ export function withApi<S extends ZodTypeAny | undefined = undefined>(
       }
 
       let body: unknown = undefined;
-      if (method === "POST" || method === "PATCH" || method === "PUT") {
+      if (opts.rawBody) {
+        if (Number(req.headers.get("content-length") ?? "0") > (opts.maxBodyBytes ?? DEFAULT_MAX_BODY)) {
+          throw new V1Error(413, `The request body is larger than ${Math.round((opts.maxBodyBytes ?? DEFAULT_MAX_BODY) / 1024)} KB.`, "body_too_large");
+        }
+      } else if (method === "POST" || method === "PATCH" || method === "PUT") {
         const { raw } = await readJsonBody(req, opts.maxBodyBytes ?? DEFAULT_MAX_BODY);
         loggedBody = redactForLog(raw, opts.logFields ?? []);
         body = opts.body ? opts.body.parse(raw) : raw;
@@ -332,6 +340,7 @@ export function withApi<S extends ZodTypeAny | undefined = undefined>(
         query: url.searchParams,
         method,
         path: url.pathname,
+        request: req,
       };
       const result = await handler(ctx as ApiContext<S extends ZodTypeAny ? z.infer<S> : undefined>, params);
       status = result.status ?? 200;
@@ -376,6 +385,8 @@ export function withApi<S extends ZodTypeAny | undefined = undefined>(
             entry.body ? JSON.stringify(entry.body) : null,
           );
           if (keyId && !entry.authFailure) await touchKey(keyId, ip);
+          // Due webhook retries and verifications ride on API traffic (at most once a minute).
+          if (!entry.authFailure) await (await import("./jobs")).maybeRunJobs();
         });
       }
     }

@@ -128,6 +128,71 @@ export const ERROR_CODES = {
     type: "invalid_request_error",
     description: "The amount is over a per-transaction, daily or balance limit on your account.",
   },
+  customer_exists: {
+    status: 409,
+    type: "invalid_request_error",
+    description: "A customer with this BVN already exists in this mode. Each person is one customer; the message names the existing one.",
+  },
+  customer_locked: {
+    status: 409,
+    type: "invalid_request_error",
+    description: "This customer is verified or being verified, so their identity can't change. Only `metadata` can be updated.",
+  },
+  kyc_required: {
+    status: 409,
+    type: "invalid_request_error",
+    description: "The customer must pass identity verification first.",
+  },
+  invalid_file: {
+    status: 400,
+    type: "invalid_request_error",
+    description: "The file doesn't exist in this mode, isn't an identity document, or is already attached to another customer.",
+  },
+  file_type_mismatch: {
+    status: 400,
+    type: "invalid_request_error",
+    description: "The file's contents don't match its declared type.",
+  },
+  plan_limit_reached: {
+    status: 403,
+    type: "permission_error",
+    description: "Your plan's limit for this kind of object is reached. Upgrade your plan to create more.",
+  },
+  duplicate_reference: {
+    status: 409,
+    type: "invalid_request_error",
+    description: "Another object in this mode already uses this `reference`. References are unique per mode.",
+  },
+  currency_mismatch: {
+    status: 400,
+    type: "invalid_request_error",
+    description: "A wallet holds a different currency from the one this operation needs.",
+  },
+  wallet_frozen: {
+    status: 403,
+    type: "permission_error",
+    description: "The wallet is frozen. It can receive money but not send it.",
+  },
+  quote_expired: {
+    status: 410,
+    type: "invalid_request_error",
+    description: "The quote is more than 45 seconds old. Request a new one.",
+  },
+  quote_used: {
+    status: 409,
+    type: "invalid_request_error",
+    description: "The quote has already been used. Each quote converts once.",
+  },
+  virtual_account_in_progress: {
+    status: 409,
+    type: "invalid_request_error",
+    description: "A virtual account is already being opened for this customer. Retry in a few seconds.",
+  },
+  service_unavailable: {
+    status: 503,
+    type: "api_error",
+    description: "A partner service didn't respond and nothing was changed. Retry shortly.",
+  },
   internal_error: {
     status: 500,
     type: "api_error",

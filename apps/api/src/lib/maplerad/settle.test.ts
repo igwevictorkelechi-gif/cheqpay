@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   hasProcessed: vi.fn(),
   findUserByAccount: vi.fn(),
   creditUser: vi.fn(),
+  settleDevCollection: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -22,6 +23,7 @@ vi.mock("@cheqpay/db", () => ({
   },
 }));
 vi.mock("./transactions", () => ({ verifyTransaction: h.verifyTransaction }));
+vi.mock("../devapi/deposits", () => ({ settleDevCollection: h.settleDevCollection }));
 vi.mock("../mapleradCollections", () => ({
   prismaLedgerPort: {
     hasProcessed: h.hasProcessed,
@@ -52,6 +54,7 @@ beforeEach(() => {
   h.hasProcessed.mockResolvedValue(false);
   h.findUserByAccount.mockResolvedValue({ userId: "user-1" });
   h.creditUser.mockResolvedValue(undefined);
+  h.settleDevCollection.mockResolvedValue(null);
 });
 
 describe("classifyVerified", () => {
@@ -112,6 +115,23 @@ describe("settleCollectionById", () => {
     const res = await settleCollectionById("abc");
     expect(h.creditUser).not.toHaveBeenCalled();
     expect(res.outcome).toBe("unmatched");
+  });
+
+  it("offers an unowned deposit to developer virtual accounts before calling it unmatched", async () => {
+    h.verifyTransaction.mockResolvedValue(tx({ id: "abc" }));
+    h.findUserByAccount.mockResolvedValue(null);
+    h.settleDevCollection.mockResolvedValue({ outcome: "credited", amount: 100000000 });
+    const res = await settleCollectionById("abc");
+    expect(h.settleDevCollection).toHaveBeenCalledWith(expect.objectContaining({ id: "abc", amount: 100000000 }));
+    expect(h.creditUser).not.toHaveBeenCalled();
+    expect(res.outcome).toBe("credited");
+  });
+
+  it("never offers an app user's deposit to the developer path", async () => {
+    h.verifyTransaction.mockResolvedValue(tx({ id: "abc" }));
+    await settleCollectionById("abc");
+    expect(h.creditUser).toHaveBeenCalledOnce();
+    expect(h.settleDevCollection).not.toHaveBeenCalled();
   });
 
   it("ignores a non-creditable transaction before touching the ledger", async () => {

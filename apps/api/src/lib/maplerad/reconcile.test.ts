@@ -30,6 +30,8 @@ vi.mock("./transactions", () => ({
   getCustomerTransactions: h.getCustomerTransactions,
   verifyTransaction: h.verifyTransaction,
 }));
+// A deposit no app user owns is offered to developer virtual accounts; none here.
+vi.mock("../devapi/deposits", () => ({ settleDevCollection: async () => null }));
 vi.mock("../mapleradCollections", () => ({
   prismaLedgerPort: {
     hasProcessed: h.hasProcessed,
