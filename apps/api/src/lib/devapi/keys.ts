@@ -65,7 +65,7 @@ export function parseAllowedIps(input: unknown): string[] {
     if (!entry) {
       throw new ApiError(
         400,
-        `Not a valid IP address or range: ${String(raw).slice(0, 60)}. Ranges may be no wider than /16 (IPv4) or /32 (IPv6).`,
+        `Not a valid IP address or range: ${String(raw).slice(0, 60)}. Ranges may be no wider than /16 (IPv4) or /32 (IPv6), and IPv4 addresses must be written as IPv4.`,
         "validation_error",
       );
     }

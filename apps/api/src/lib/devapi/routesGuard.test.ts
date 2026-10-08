@@ -74,6 +74,18 @@ describe("every /v1 route is gated and documented", () => {
     }
   }
 
+  it("no API route lives in a folder the repository ignores", () => {
+    // .gitignore drops any directory with these names, wherever it is: a route
+    // under one works locally and is silently missing from the deploy (that
+    // happened to /api/developer/logs). Keep in step with the root .gitignore.
+    const IGNORED = new Set(["logs", "dist", "build", "coverage", "node_modules", "ios", "android", ".next", ".expo", ".vercel", ".supabase", ".jest", ".idea", ".vscode"]);
+    const APP = join(__dirname, "..", "..", "app");
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((e) => (statSync(join(dir, e)).isDirectory() ? [join(dir, e), ...walk(join(dir, e))] : []));
+    const bad = walk(APP).filter((d) => IGNORED.has(d.split(/[\\/]/).pop()!));
+    expect(bad.map((d) => relative(APP, d))).toEqual([]);
+  });
+
   it("the reference describes no route that doesn't exist", () => {
     const real = new Set(routes.flatMap(({ rel, src }) =>
       METHODS.filter((m) => new RegExp(`export\\s+const\\s+${m}\\s*=\\s*withApi\\(`).test(src)).map((m) => `${m.toLowerCase()} ${specPath(rel)}`),

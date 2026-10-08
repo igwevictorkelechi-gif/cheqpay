@@ -283,7 +283,8 @@ export async function adminAccountAction(accountId: string, a: AdminAccountActio
       );
       break;
     case "revoke_keys":
-      await revokeAllKeys(accountId, `revoked by CheqPay (${adminEmail})`, a.mode);
+      // The developer sees the reason; which admin did it stays in the audit log.
+      await revokeAllKeys(accountId, "revoked by CheqPay", a.mode);
       rows = [account];
       break;
     case "require_ip_allowlist":
@@ -329,9 +330,13 @@ export async function adminAccountAction(accountId: string, a: AdminAccountActio
  */
 export async function emergencyStop(account: AccountRow, actor: Actor): Promise<{ keysRevoked: number }> {
   const keysRevoked = await revokeAllKeys(account.id, "emergency stop", "live");
+  // Only an unfrozen account becomes owner-frozen. A freeze CheqPay (or the
+  // system) already placed stays exactly as it is: if pressing stop could
+  // relabel it as the owner's, the owner could then lift it with "resume" and
+  // move held money out from under an investigation.
   await prisma.$executeRawUnsafe(
     `UPDATE dev_accounts SET frozen = true, frozen_reason = 'Emergency stop pressed by the owner', frozen_by = 'owner', updated_at = now()
-      WHERE id = $1::uuid`,
+      WHERE id = $1::uuid AND frozen = false`,
     account.id,
   );
   invalidateKeyCache();

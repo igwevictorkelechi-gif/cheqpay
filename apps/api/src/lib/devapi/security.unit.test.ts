@@ -81,6 +81,18 @@ describe("API keys", () => {
     expect(() => parseAllowedIps(Array.from({ length: 21 }, (_, i) => `203.0.113.${i}`))).toThrow(ApiError);
   });
 
+  it("refuse IPv6 entries that would match IPv4 clients through the mapped block", () => {
+    // Node checks an IPv4 client against IPv6 rules as ::ffff:a.b.c.d, so each
+    // of these would have quietly matched every (or a whole range of) IPv4 address.
+    for (const bad of ["::/32", "::/80", "::ffff:0:0/96", "0:0:0:0:0:ffff::/80", "::ffff:808:0/112", "::ffff:808:808"]) {
+      expect(() => parseAllowedIps([bad]), bad).toThrow(ApiError);
+    }
+    expect(parseAllowedIps(["2001:db8::/32", "2606:4700::1111", "0:0:1::/48"])).toEqual(["2001:db8::/32", "2606:4700::1111", "0:0:1::/48"]);
+    // An accepted IPv6 range never matches an IPv4 client.
+    const v6 = parseAllowedIps(["2001:db8::/32", "0:0:1::/48"]);
+    for (const ip of ["8.8.8.8", "0.0.0.1", "203.0.113.9"]) expect(ipAllowed(ip, v6), ip).toBe(false);
+  });
+
   it("need an allowlist when live and able to reveal card details, or when the account requires one", () => {
     expect(liveKeyProblem({ require_ip_allowlist: false }, ["cards:details"], [])).toMatch(/allowlist/);
     expect(liveKeyProblem({ require_ip_allowlist: false }, ["cards:details"], ["203.0.113.7"])).toBeNull();

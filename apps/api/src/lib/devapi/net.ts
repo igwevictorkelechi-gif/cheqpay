@@ -43,11 +43,45 @@ function familyOf(ip: string): Family {
   return isIP(ip) === 6 ? "ipv6" : "ipv4";
 }
 
+/** An IPv6 address as a 128-bit number. `ip` must already be a valid IPv6 address. */
+export function ipv6ToBigInt(ip: string): bigint {
+  let s = ip;
+  const v4 = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(s);
+  if (v4) {
+    const [a, b, c, d] = v4.slice(1).map(Number);
+    s = `${s.slice(0, v4.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  let groups: string[];
+  if (s.includes("::")) {
+    const [head, tail] = s.split("::");
+    const h = head ? head.split(":") : [];
+    const t = tail ? tail.split(":") : [];
+    groups = [...h, ...Array(8 - h.length - t.length).fill("0"), ...t];
+  } else {
+    groups = s.split(":");
+  }
+  return groups.reduce((acc, g) => (acc << 16n) | BigInt(parseInt(g || "0", 16)), 0n);
+}
+
+const MAPPED_V4 = 0xffffn << 32n; // ::ffff:0:0/96
+
+/**
+ * Does an IPv6 range overlap the IPv4-mapped block? Node's BlockList checks an
+ * IPv4 client against IPv6 rules as ::ffff:a.b.c.d, so an IPv6 entry such as
+ * ::/32 or ::ffff:0:0/96 would quietly match every IPv4 address there is.
+ */
+export function overlapsIpv4Mapped(ip: string, prefix: number): boolean {
+  const shift = 128n - BigInt(Math.min(prefix, 96));
+  return ipv6ToBigInt(ip) >> shift === MAPPED_V4 >> shift;
+}
+
 /**
  * A valid allowlist entry ("203.0.113.7", "203.0.113.0/24", "2001:db8::/48")
  * in canonical form, or null. Over-broad ranges are refused: an allowlist of
  * 0.0.0.0/0 is no allowlist at all, so anything wider than /16 (IPv4) or /32
- * (IPv6) is rejected.
+ * (IPv6) is rejected — and so is any IPv6 entry that reaches into the
+ * IPv4-mapped block, which would otherwise match IPv4 addresses wholesale.
+ * IPv4 addresses must be written as IPv4.
  */
 export function parseAllowEntry(raw: string): string | null {
   const [addrPart, prefixPart, extra] = raw.trim().split("/");
@@ -55,13 +89,16 @@ export function parseAllowEntry(raw: string): string | null {
   const ip = normalizeIp(addrPart);
   if (!ip) return null;
   const fam = familyOf(ip);
-  if (prefixPart === undefined) return ip;
-  if (!/^\d{1,3}$/.test(prefixPart)) return null;
-  const prefix = Number(prefixPart);
-  const max = fam === "ipv4" ? 32 : 128;
-  const min = fam === "ipv4" ? 16 : 32;
-  if (prefix > max || prefix < min) return null;
-  return `${ip}/${prefix}`;
+  let prefix = fam === "ipv4" ? 32 : 128;
+  if (prefixPart !== undefined) {
+    if (!/^\d{1,3}$/.test(prefixPart)) return null;
+    prefix = Number(prefixPart);
+    const max = fam === "ipv4" ? 32 : 128;
+    const min = fam === "ipv4" ? 16 : 32;
+    if (prefix > max || prefix < min) return null;
+  }
+  if (fam === "ipv6" && overlapsIpv4Mapped(ip, prefix)) return null;
+  return prefixPart === undefined ? ip : `${ip}/${prefix}`;
 }
 
 /** Does `ip` fall inside any allowlist entry? Entries are assumed already parsed. */

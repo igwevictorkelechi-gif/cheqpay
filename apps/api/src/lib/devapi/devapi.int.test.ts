@@ -492,6 +492,29 @@ describe.skipIf(!RUN)("developer platform against Postgres", () => {
       expect((await json(res)).code).toBe("frozen_by_cheqpay");
       await adminAccountAction(acct.id, { action: "unfreeze" }, "admin@cheqpay.test");
     });
+
+    it("an emergency stop can't relabel CheqPay's freeze as the owner's (and so lift it)", async () => {
+      await adminAccountAction(acct.id, { action: "freeze", reason: "Unusual activity under review" }, "admin@cheqpay.test");
+      acct = await reload(acct.id);
+      await emergencyStop(acct, { userId: owner.id, ip: IP, userAgent: null });
+      const after = await reload(acct.id);
+      expect(after).toMatchObject({ frozen: true, frozen_by: "admin", frozen_reason: "Unusual activity under review" });
+      const res = await resumeRoute(dashboard("/api/developer/resume", {}, { "x-transaction-pin": PIN }));
+      expect((await json(res)).code).toBe("frozen_by_cheqpay");
+      // …and money still can't leave.
+      const out = await moveRoute(dashboard("/api/developer/wallet/move", { direction: "out", currency: "NGN", amount: "1" }, { "idempotency-key": `mv-${tag}-frozen`, "x-transaction-pin": PIN }));
+      expect((await json(out)).code).toBe("account_frozen");
+      await adminAccountAction(acct.id, { action: "unfreeze" }, "admin@cheqpay.test");
+      acct = await reload(acct.id);
+    });
+
+    it("never shows developers which admin acted", async () => {
+      const k = await createApiKey(acct, { mode: "test", label: "to be revoked by CheqPay" });
+      await adminAccountAction(acct.id, { action: "revoke_keys", mode: "test" }, "admin@cheqpay.test");
+      const rows = await prisma.$queryRawUnsafe<{ revoked_reason: string }[]>(`SELECT revoked_reason FROM dev_api_keys WHERE id = $1::uuid`, k.key.id);
+      expect(rows[0].revoked_reason).toBe("revoked by CheqPay");
+      testKey = (await createApiKey(acct, { mode: "test", label: "server again" })).secret;
+    });
   });
 
   describe("what never leaves the server", () => {
