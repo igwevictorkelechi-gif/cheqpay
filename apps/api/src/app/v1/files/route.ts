@@ -26,7 +26,7 @@ export const POST = withApi({ scope: "files:write", rawBody: true, maxBodyBytes:
   }
   const sha256 = createHash("sha256").update(upload.bytes).digest("hex");
   return runIdempotent(ctx, { purpose: upload.purpose, content_type: upload.contentType, sha256 }, {
-    replay: async (id) => ({ status: 201, body: fileObject((await getDevFileMeta(ctx.scope, id))!) }),
+    replay: async (id) => ({ body: fileObject((await getDevFileMeta(ctx.scope, id))!) }),
     work: async (complete) => {
       const id = await prisma.$transaction(async (db) => {
         const fileId = await storeDevFile(

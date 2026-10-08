@@ -114,7 +114,7 @@ export async function createQuote(ctx: ApiContext<z.infer<typeof quoteSchema>>):
   const b = ctx.body;
   const amount = BigInt(b.amount);
   return runIdempotent(ctx, b, {
-    replay: async (id) => ({ status: 201, body: quoteObject((await getQuote(ctx.scope, id))!) }),
+    replay: async (id) => ({ body: quoteObject((await getQuote(ctx.scope, id))!) }),
     work: async (complete) => {
       let grossOut: bigint;
       let providerRef: string | null = null;
@@ -157,7 +157,7 @@ export async function createQuote(ctx: ApiContext<z.infer<typeof quoteSchema>>):
         const rows = await db.$queryRawUnsafe<FxQuoteRow[]>(
           `INSERT INTO dev_fx_quotes (id, account_id, mode, from_currency, to_currency, amount_minor, gross_out_minor, fee_minor,
              net_out_minor, rate, margin_bps, provider_ref, expires_at)
-           VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11, $12, now() + make_interval(secs => $13))
+           VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11, $12, now() + make_interval(secs => $13::int))
            RETURNING *`,
           id,
           ctx.scope.accountId,
@@ -265,7 +265,7 @@ export async function createConversion(ctx: ApiContext<z.infer<typeof conversion
           return id;
         }, MONEY_TX);
       } catch (err) {
-        if (uniqueViolation(err) === "dev_transactions_reference_uidx") {
+        if (uniqueViolation(err)?.includes("reference")) {
           throw new V1Error(409, "Another transaction already uses this reference.", "duplicate_reference", "reference");
         }
         throw err;

@@ -26,7 +26,7 @@ export const POST = withApi(
   async (ctx, params) => {
     const id = resolveId("virtual_account", params.id, "id", "virtual account");
     return runIdempotent(ctx, { id, ...ctx.body }, {
-      replay: async (txId) => ({ status: 201, body: transactionObject((await getTransaction(prisma, ctx.scope, txId))!) }),
+      replay: async (txId) => ({ body: transactionObject((await getTransaction(prisma, ctx.scope, txId))!) }),
       work: async (complete) => {
         const tx = await simulateDeposit(ctx.scope, id, BigInt(ctx.body.amount), { name: ctx.body.sender_name }, (db, txId) =>
           complete(db, "transaction", txId, 201),

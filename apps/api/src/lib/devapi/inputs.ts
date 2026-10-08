@@ -50,11 +50,16 @@ export function resolveId(kind: IdKind, value: unknown, param: string, what: str
   return id;
 }
 
-/** Whether a Postgres error is a unique violation, and on which constraint/index. */
-export function uniqueViolation(err: unknown): string | null {
+/**
+ * If a database error is a unique violation, the columns of the key that
+ * clashed (e.g. ["account_id", "mode", "reference"]); otherwise null. Postgres
+ * names the key's columns in the error detail, which is what reaches us
+ * through raw queries (the constraint's own name doesn't).
+ */
+export function uniqueViolation(err: unknown): string[] | null {
   const e = err as { code?: string; meta?: { code?: string; message?: string }; message?: string } | null;
-  const pgCode = e?.meta?.code ?? (e?.code === "23505" ? "23505" : null);
-  const text = `${e?.meta?.message ?? ""} ${e?.message ?? ""}`;
-  if (pgCode !== "23505" && !/duplicate key value violates unique constraint/.test(text)) return null;
-  return /unique constraint "([^"]+)"/.exec(text)?.[1] ?? "unknown";
+  const isUnique = e?.meta?.code === "23505" || e?.code === "23505" || /\b23505\b/.test(e?.message ?? "");
+  if (!isUnique) return null;
+  const cols = /Key \(([^)]+)\)=/.exec(`${e?.meta?.message ?? ""} ${e?.message ?? ""}`)?.[1];
+  return cols ? cols.split(",").map((c) => c.trim()) : [];
 }

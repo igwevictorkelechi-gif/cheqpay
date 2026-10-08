@@ -38,7 +38,7 @@ export async function createTransfer(ctx: ApiContext<z.infer<typeof transferSche
   const amount = BigInt(b.amount);
 
   return runIdempotent(ctx, b, {
-    replay: async (id) => ({ status: 201, body: transactionObject((await getTransaction(prisma, ctx.scope, id))!) }),
+    replay: async (id) => ({ body: transactionObject((await getTransaction(prisma, ctx.scope, id))!) }),
     work: async (complete) => {
       const [from, to] = await Promise.all([getWallet(prisma, ctx.scope, fromId), getWallet(prisma, ctx.scope, toId)]);
       if (!from) throw new V1Error(404, "No such wallet.", "not_found", "from_wallet_id");
@@ -82,7 +82,7 @@ export async function createTransfer(ctx: ApiContext<z.infer<typeof transferSche
           return id;
         }, MONEY_TX);
       } catch (err) {
-        if (uniqueViolation(err) === "dev_transactions_reference_uidx") {
+        if (uniqueViolation(err)?.includes("reference")) {
           throw new V1Error(409, "Another transaction already uses this reference.", "duplicate_reference", "reference");
         }
         throw err;

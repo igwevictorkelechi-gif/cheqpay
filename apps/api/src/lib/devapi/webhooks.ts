@@ -404,7 +404,7 @@ async function finishDelivery(
   const rows = await prisma.$queryRawUnsafe<DeliveryRow[]>(
     `UPDATE dev_webhook_deliveries SET status = $2, attempts = $3, last_status_code = $4, last_error = $5,
         last_attempt_at = now(), locked_until = NULL,
-        next_attempt_at = CASE WHEN $2 = 'pending' THEN now() + make_interval(secs => $6) ELSE NULL END,
+        next_attempt_at = CASE WHEN $2 = 'pending' THEN now() + make_interval(secs => $6::int) ELSE NULL END,
         delivered_at = CASE WHEN $2 = 'succeeded' THEN now() ELSE delivered_at END
       WHERE id = $1::uuid RETURNING *`,
     d.id,

@@ -307,7 +307,7 @@ export async function createCustomer(ctx: ApiContext<CreateBody>): Promise<Handl
   }
 
   return runIdempotent(ctx, b, {
-    replay: async (id) => ({ status: 201, body: customerObject((await getCustomer(ctx.scope, id))!) }),
+    replay: async (id) => ({ body: customerObject((await getCustomer(ctx.scope, id))!) }),
     work: async (complete) => {
       await assertIdentityFile(ctx.scope, frontId, "identity.document_front", null);
       if (backId) await assertIdentityFile(ctx.scope, backId, "identity.document_back", null);
@@ -357,8 +357,9 @@ export async function createCustomer(ctx: ApiContext<CreateBody>): Promise<Handl
 }
 
 async function throwForUniqueViolation(err: unknown, scope: Scope, fingerprint: string): Promise<void> {
-  const which = uniqueViolation(err);
-  if (which === "dev_customers_bvn_uidx") {
+  const cols = uniqueViolation(err);
+  if (!cols) return;
+  if (cols.includes("bvn_fingerprint")) {
     const rows = await prisma.$queryRawUnsafe<{ id: string }[]>(
       `SELECT id FROM dev_customers WHERE account_id = $1::uuid AND mode = $2 AND bvn_fingerprint = $3`,
       scope.accountId,
@@ -368,10 +369,10 @@ async function throwForUniqueViolation(err: unknown, scope: Scope, fingerprint: 
     const existing = rows[0] ? ` (${toPublicId("customer", rows[0].id)})` : "";
     throw new V1Error(409, `A customer with this BVN already exists${existing}. Each person is one customer.`, "customer_exists", "bvn");
   }
-  if (which === "dev_customers_reference_uidx") {
+  if (cols.includes("reference")) {
     throw new V1Error(409, "Another customer already uses this reference.", "duplicate_reference", "reference");
   }
-  if (which === "dev_customers_front_file_uidx") {
+  if (cols.includes("id_front_file_id")) {
     throw new V1Error(400, "That document is already attached to another customer.", "invalid_file", "identity.document_front");
   }
 }
@@ -538,7 +539,7 @@ async function verifySandbox(c: CustomerRow): Promise<CustomerRow> {
   if (bvn === SANDBOX_BVN.rejected) return finishRejected(c, "identity_mismatch");
   if (bvn === SANDBOX_BVN.pending && c.kyc_attempts < 2) {
     const rows = await prisma.$queryRawUnsafe<CustomerRow[]>(
-      `UPDATE dev_customers SET kyc_next_attempt_at = now() + make_interval(secs => $2) WHERE id = $1::uuid RETURNING *`,
+      `UPDATE dev_customers SET kyc_next_attempt_at = now() + make_interval(secs => $2::int) WHERE id = $1::uuid RETURNING *`,
       c.id,
       SANDBOX_PENDING_MS / 1000,
     );
@@ -707,7 +708,7 @@ async function scheduleRetry(c: CustomerRow, why: string): Promise<CustomerRow> 
   }
   console.warn("[devapi] verification will be retried", { customer: c.id, attempt: c.kyc_attempts, in_minutes: minutes, why: scrubSensitive(why).slice(0, 200) });
   const rows = await prisma.$queryRawUnsafe<CustomerRow[]>(
-    `UPDATE dev_customers SET kyc_next_attempt_at = now() + make_interval(mins => $2), updated_at = now()
+    `UPDATE dev_customers SET kyc_next_attempt_at = now() + make_interval(mins => $2::int), updated_at = now()
       WHERE id = $1::uuid AND kyc_status = 'pending' RETURNING *`,
     c.id,
     minutes,

@@ -145,7 +145,7 @@ export async function createVirtualAccount(ctx: ApiContext<z.infer<typeof virtua
   const customerId = resolveId("customer", ctx.body.customer_id, "customer_id", "customer");
 
   return runIdempotent(ctx, ctx.body, {
-    replay: async (id) => ({ status: 201, body: virtualAccountObject((await getVirtualAccount(ctx.scope, id))!) }),
+    replay: async (id) => ({ body: virtualAccountObject((await getVirtualAccount(ctx.scope, id))!) }),
     work: async (complete) => {
       const customer = await getCustomer(ctx.scope, customerId);
       if (!customer) throw new V1Error(404, "No such customer.", "not_found", "customer_id");
@@ -205,11 +205,11 @@ export async function createVirtualAccount(ctx: ApiContext<z.infer<typeof virtua
           JSON.stringify(ctx.body.metadata ?? {}),
         );
       } catch (err) {
-        const which = uniqueViolation(err);
-        if (which === "dev_virtual_accounts_reference_uidx") {
+        const cols = uniqueViolation(err) ?? [];
+        if (cols.includes("reference")) {
           throw new V1Error(409, "Another virtual account already uses this reference.", "duplicate_reference", "reference");
         }
-        if (which === "dev_virtual_accounts_customer_uidx") {
+        if (cols.includes("customer_id")) {
           throw new V1Error(409, "A virtual account is already being opened for this customer. Retry in a few seconds.", "virtual_account_in_progress", "customer_id");
         }
         throw err;

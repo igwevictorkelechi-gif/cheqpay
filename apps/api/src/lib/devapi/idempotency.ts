@@ -148,6 +148,7 @@ export async function runIdempotent(
   ctx: { scope: { accountId: string; mode: Mode }; idempotencyKey: string | null; path: string },
   hashInput: unknown,
   handlers: {
+    /** Leave `status` unset to answer with the original request's status. */
     replay: (resourceId: string) => Promise<HandlerResult>;
     work: (complete: CompleteFn) => Promise<HandlerResult>;
   },
@@ -159,8 +160,10 @@ export async function runIdempotent(
     if (!claim.resourceId) {
       throw new ApiError(409, "A request with this Idempotency-Key is still being processed. Retry shortly.", "idempotency_in_progress");
     }
+    // The original status, unless the replay states the resource's current
+    // one (a conversion first answered 202 may have settled since).
     const res = await handlers.replay(claim.resourceId);
-    return { ...res, status: claim.statusCode ?? res.status, headers: { ...(res.headers ?? {}), "idempotent-replayed": "true" } };
+    return { ...res, status: res.status ?? claim.statusCode ?? 200, headers: { ...(res.headers ?? {}), "idempotent-replayed": "true" } };
   }
   try {
     return await handlers.work((db, resourceType, resourceId, statusCode) =>
