@@ -75,6 +75,8 @@ enum TransactionType {
   AD_PURCHASE // NGN paid for an ad campaign (booked days, influencer budget)
   AD_REFUND // NGN returned for ad days not run (rejected, cancelled, screen offline)
   AD_PAYOUT // NGN paid to a partner venue for showing ads on its screen
+  DEV_WALLET_FUND // NGN/USD moved from the in-app balance into the owner's developer (API) main wallet
+  DEV_WALLET_WITHDRAW // NGN/USD moved from the developer main wallet back to the in-app balance
 }
 
 enum TicketStatus {

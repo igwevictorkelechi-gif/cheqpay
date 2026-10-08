@@ -97,6 +97,7 @@ async function ensureSchema(): Promise<void> {
       { ensureGadgetSchema },
       { ensureEventsSchema },
       { ensureAdsSchema },
+      { ensureDevApiSchema },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
@@ -106,6 +107,7 @@ async function ensureSchema(): Promise<void> {
       import("@/lib/ensureGadgets"),
       import("@/lib/ensureEvents"),
       import("@/lib/ensureAds"),
+      import("@/lib/devapi/ensureDevApi"),
     ]);
     await Promise.all([
       ensureRetentionSchema(),
@@ -136,6 +138,10 @@ async function ensureSchema(): Promise<void> {
       // ad_campaigns.promoted_venue_id is added to an existing table here, so
       // it follows the same column-add rule. (Raw-SQL tables; no Prisma model.)
       ensureAdsSchema(),
+      // The developer platform's tables (raw SQL). New tables only today, but
+      // booted here so the ledger triggers exist before the first API call and
+      // any later column on them is covered by the same rule.
+      ensureDevApiSchema(),
     ]);
     // NB: the KYC document TABLE (image bytes) is created lazily by
     // lib/kycDocuments on first use, not here. It is a new table, so it is

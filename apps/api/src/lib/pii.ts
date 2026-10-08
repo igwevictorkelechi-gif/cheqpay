@@ -106,6 +106,32 @@ export function decryptPii(encoded: string): string {
 }
 
 /**
+ * Encrypt raw bytes (an uploaded document) with the same key and cipher.
+ * Output is binary: a version byte, the 12-byte IV, the 16-byte tag, then the
+ * ciphertext — compact enough to store a document in a bytea column without
+ * the double base64 that `encryptPii` on a base64 string would cost.
+ */
+const BYTES_VERSION = 1;
+export function encryptPiiBytes(plain: Buffer): Buffer {
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv(ALGO, key(), iv);
+  const ct = Buffer.concat([cipher.update(plain), cipher.final()]);
+  return Buffer.concat([Buffer.from([BYTES_VERSION]), iv, cipher.getAuthTag(), ct]);
+}
+
+/** Reverse of `encryptPiiBytes`. Throws on any tampering (GCM authenticates). */
+export function decryptPiiBytes(sealed: Buffer): Buffer {
+  if (sealed.length < 1 + IV_BYTES + 16 || sealed[0] !== BYTES_VERSION) {
+    throw new Error("Unrecognized ciphertext format");
+  }
+  const iv = sealed.subarray(1, 1 + IV_BYTES);
+  const tag = sealed.subarray(1 + IV_BYTES, 1 + IV_BYTES + 16);
+  const decipher = createDecipheriv(ALGO, key(), iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(sealed.subarray(1 + IV_BYTES + 16)), decipher.final()]);
+}
+
+/**
  * Deterministic, searchable fingerprint. Same input always yields the same
  * output, so it can be indexed and matched — which plain encryption cannot,
  * because a fresh IV makes every ciphertext different.

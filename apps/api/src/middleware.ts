@@ -15,6 +15,9 @@ const DEFAULT_ORIGINS = [
   "https://www.mycheqpay.com",
   "https://cheqpay.vercel.app",
   "https://influencer.mycheqpay.com",
+  // The developer portal's dashboard (signed in with the owner's session; the
+  // public /v1 API itself sends no CORS headers and refuses browsers).
+  "https://developers.mycheqpay.com",
 ];
 
 export function allowedOrigins(env: Record<string, string | undefined> = process.env): Set<string> {

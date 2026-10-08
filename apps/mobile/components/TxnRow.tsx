@@ -29,8 +29,10 @@ export function txnIcon(type: LedgerTransaction['type']): {
     case 'GIFTCARD_BUY':
       return { name: 'gift', color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' };
     case 'TRANSFER_IN':
+    case 'DEV_WALLET_WITHDRAW':
       return { name: 'arrow-down', color: '#34C759', bg: 'rgba(52,199,89,0.15)' };
     case 'TRANSFER_OUT':
+    case 'DEV_WALLET_FUND':
       return { name: 'arrow-up', color: '#FF6B6B', bg: 'rgba(255,107,107,0.15)' };
     default:
       return { name: 'swap-horizontal', color: '#A78BFA', bg: 'rgba(167,139,250,0.15)' };
@@ -81,6 +83,10 @@ export function txnTitle(t: LedgerTransaction): string {
       return 'Gadget order';
     case 'TICKET_PURCHASE':
       return 'Event tickets';
+    case 'DEV_WALLET_FUND':
+      return 'To developer wallet';
+    case 'DEV_WALLET_WITHDRAW':
+      return 'From developer wallet';
     default:
       return t.type;
   }
@@ -113,8 +119,9 @@ export function txnAmount(t: LedgerTransaction): { text: string; positive: boole
   if (t.type === 'GIFTCARD_BUY' || t.type === 'GADGET_PURCHASE' || t.type === 'TICKET_PURCHASE')
     return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
   if (t.type === 'CASHBACK') return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
-  if (t.type === 'TRANSFER_IN')
+  if (t.type === 'TRANSFER_IN' || t.type === 'DEV_WALLET_WITHDRAW')
     return { text: `+${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
+  if (t.type === 'DEV_WALLET_FUND') return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
   if (t.type === 'TRANSFER_OUT')
     return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
   if (t.toAsset && t.toFormatted) return { text: `+${fmt(t.toFormatted)} ${t.toAsset}`, positive: true };
