@@ -111,43 +111,50 @@ async function ensureSchema(): Promise<void> {
       import("@/lib/devapi/ensureDevApi"),
       import("@/lib/ensureReferrals"),
     ]);
-    await Promise.all([
-      ensureRetentionSchema(),
-      ensureActivitySchema(),
+    // One at a time: each helper takes a table lock, and run in parallel they
+    // opened a dozen connections per cold start — during a deploy, across many
+    // instances, that exhausted the database pooler (EMAXCONN).
+    const helpers: (() => Promise<void>)[] = [
+      () => ensureRetentionSchema(),
+      () => ensureActivitySchema(),
       // Quote.provider_ref, same select-all hazard: every Quote query selects it.
-      ensureQuoteProviderRef(),
+      () => ensureQuoteProviderRef(),
       // maplerad_tier + the address columns. Omitting this is what broke the
       // admin user list, KYC and virtual accounts in production: the columns
       // were only created on KYC submission, but every User query selected them,
       // so KYC itself failed before it could create them. Nothing that adds a
       // column to an existing model may be left out of this list.
-      ensureMapleradSchema(),
+      () => ensureMapleradSchema(),
       // The government-ID columns, same hazard: every User query selects them.
-      ensureKycDocSchema(),
+      () => ensureKycDocSchema(),
       // The transaction-PIN columns, same hazard again: the moment they joined
       // the User model every User query began selecting them, so creating them
       // on first PIN use would take out login, KYC and every balance read —
       // including the request that would have created them.
-      ensureTransactionPinColumns(),
+      () => ensureTransactionPinColumns(),
       // gadget_products.specs is added to an existing table by this helper, so
       // it must run at boot: the moment `specs` joined the GadgetProduct model
       // every gadget_products query began selecting it. (It also creates the
       // gadget tables, which is harmless to do at boot.)
-      ensureGadgetSchema(),
+      () => ensureGadgetSchema(),
       // events.category, same hazard: every Event query selects it (storefront,
       // my tickets, checkout, admin). Also creates the event tables if missing.
-      ensureEventsSchema(),
+      () => ensureEventsSchema(),
       // ad_campaigns.promoted_venue_id is added to an existing table here, so
       // it follows the same column-add rule. (Raw-SQL tables; no Prisma model.)
-      ensureAdsSchema(),
+      () => ensureAdsSchema(),
       // The developer platform's tables (raw SQL). New tables only today, but
       // booted here so the ledger triggers exist before the first API call and
       // any later column on them is covered by the same rule.
-      ensureDevApiSchema(),
+      () => ensureDevApiSchema(),
       // Referral and creator-program tables (raw SQL). The creator application
       // gained columns and a NEEDS_INFO status, so it follows the column-add rule.
-      ensureReferralSchema(),
-    ]);
+      () => ensureReferralSchema(),
+    ];
+    const version = deployVersion();
+    if (version && (await schemaAlreadyApplied(version))) return;
+    for (const run of helpers) await run();
+    if (version) await markSchemaApplied(version);
     // NB: the KYC document TABLE (image bytes) is created lazily by
     // lib/kycDocuments on first use, not here. It is a new table, so it is
     // select-all-safe, and that module reaches node:crypto — which the Edge
@@ -156,6 +163,37 @@ async function ensureSchema(): Promise<void> {
   } catch (err) {
     console.error("[bootstrap] schema preparation failed; will retry on next start", err);
   }
+}
+
+/**
+ * This build's identity. The schema helpers only need to run once per deploy:
+ * the first instance applies them and records the version, later instances
+ * (and the burst of them a deploy starts) skip straight to serving. Null when
+ * running outside the host (local dev), where they simply always run.
+ */
+function deployVersion(): string | null {
+  return process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || null;
+}
+
+async function schemaAlreadyApplied(version: string): Promise<boolean> {
+  const { prisma } = await import("@cheqpay/db");
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ n: number }[]>(
+      `SELECT count(*)::int AS n FROM schema_boot WHERE version = $1`,
+      version,
+    );
+    return rows[0]?.n > 0;
+  } catch {
+    return false; // table not there yet: run the helpers, which is always safe
+  }
+}
+
+async function markSchemaApplied(version: string): Promise<void> {
+  const { prisma } = await import("@cheqpay/db");
+  await prisma.$executeRawUnsafe(
+    `CREATE TABLE IF NOT EXISTS schema_boot (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`,
+  );
+  await prisma.$executeRawUnsafe(`INSERT INTO schema_boot (version) VALUES ($1) ON CONFLICT DO NOTHING`, version);
 }
 
 // Report uncaught errors thrown while handling a request (Next 15 hook).

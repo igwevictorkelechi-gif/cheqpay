@@ -33,7 +33,7 @@ export { ensureReferralSchema };
 
 export const APPLY_WINDOW_DAYS = 7;
 export const WEB_ORIGIN = "https://mycheqpay.com";
-export const PORTAL_ORIGIN = "https://influencer.mycheqpay.com";
+export const PORTAL_ORIGIN = "https://creator.mycheqpay.com";
 
 // ---------------------------------------------------------------------------
 // Settings

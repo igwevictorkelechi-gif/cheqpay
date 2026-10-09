@@ -1,4 +1,4 @@
-# CheqPay Creators (influencer.mycheqpay.com) — Apache/LiteSpeed configuration.
+# CheqPay Creators (creator.mycheqpay.com) — Apache/LiteSpeed configuration.
 # Copied into the export automatically; upload the contents of out/ to the
 # subdomain's document root. Plain files only: the pages talk to the CheqPay
 # API over HTTPS from the browser.

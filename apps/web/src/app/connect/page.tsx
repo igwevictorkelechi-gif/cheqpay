@@ -22,8 +22,8 @@ import { rememberReturnTo } from "@/lib/returnTo";
 const CLIENTS: Record<string, { name: string; origin: string; cancel: string; blurb: string }> = {
   creators: {
     name: "CheqPay Creators",
-    origin: "https://influencer.mycheqpay.com",
-    cancel: "https://influencer.mycheqpay.com/login/",
+    origin: "https://creator.mycheqpay.com",
+    cancel: "https://creator.mycheqpay.com/login/",
     blurb: "Your creator dashboard, referral link and earnings.",
   },
 };

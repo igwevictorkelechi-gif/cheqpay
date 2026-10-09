@@ -34,7 +34,7 @@ describe("referral maths", () => {
   });
 
   it("points influencer links at the tracking portal and basic links at sign-up", () => {
-    expect(shareLink({ code: "TOLU10", kind: "INFLUENCER" })).toBe("https://influencer.mycheqpay.com/r/TOLU10");
+    expect(shareLink({ code: "TOLU10", kind: "INFLUENCER" })).toBe("https://creator.mycheqpay.com/r/TOLU10");
     expect(shareLink({ code: "ADA123", kind: "BASIC" })).toBe("https://mycheqpay.com/signup/?ref=ADA123");
   });
 });

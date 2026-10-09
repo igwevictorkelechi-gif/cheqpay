@@ -20,7 +20,7 @@ export const FEATURE_DEFS = [
   { key: "events", label: "Event tickets", description: "Buy tickets to events & concerts, paid from the NGN balance" },
   { key: "gift_cards_sell", label: "Sell gift cards", description: "Trade gift cards for Naira — reviewed by an admin, paid at the rates you set" },
   { key: "gift_cards_buy", label: "Buy gift cards", description: "Buy digital gift cards with Naira (needs the gift card supplier set up)" },
-  { key: "referrals", label: "Referrals & influencers", description: "Refer & earn in the app, and the influencer portal at influencer.mycheqpay.com" },
+  { key: "referrals", label: "Referrals & influencers", description: "Refer & earn in the app, and the influencer portal at creator.mycheqpay.com" },
   { key: "ads", label: "CheqPay Ads", description: "Businesses buy ads shown in the app (home, after a payment, Pay bills); every ad is reviewed first" },
   { key: "developer_api", label: "Developer API", description: "The public API and developer portal at developers.mycheqpay.com (sandbox and live). Live access still needs an approved business and a paid plan" },
 ] as const;
