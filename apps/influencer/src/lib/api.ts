@@ -4,7 +4,7 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://cheqpay-admi
 export const APP_URL = "https://mycheqpay.com";
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string, public code?: string) {
+  constructor(public status: number, message: string, public code?: string, public path?: (string | number)[]) {
     super(message);
   }
 }
@@ -27,15 +27,33 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
       await supabase.auth.signOut().catch(() => undefined);
       window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
     }
-    throw new ApiError(res.status, body?.error || res.statusText, body?.code);
+    // Validation errors carry the field and a sentence we wrote for people.
+    const issue = body?.issues?.[0] as { message?: string; path?: (string | number)[] } | undefined;
+    const message = issue?.message && !/^(Required|Invalid|Expected)/.test(issue.message) ? issue.message : body?.error || res.statusText;
+    throw new ApiError(res.status, message, body?.code, issue?.path);
   }
   return body as T;
 }
 
-export interface Social { platform: string; handle: string; followers: number }
+export interface Social { platform: string; handle: string; followers: string | number; url?: string | null }
+export type ApplicationStatus = "PENDING" | "NEEDS_INFO" | "APPROVED" | "REJECTED";
 export interface Application {
-  id: string; fullName: string; phone: string; socials: Social[]; niche: string; location: string; why: string;
-  preferredCode: string | null; status: "PENDING" | "APPROVED" | "REJECTED"; reason: string | null; createdAt: string;
+  id: string; fullName: string; phone: string; socials: Social[]; niches: string[]; audienceLocation: string; avgViews: string | null;
+  sampleLinks: string[]; bio: string; priorBrands: string; why: string; preferredCode: string | null; status: ApplicationStatus;
+  reason: string | null; requestNote: string | null; reapplyAfter: string | null; submissions: number; reviewedAt: string | null;
+  createdAt: string; updatedAt: string;
+}
+export interface ApplicationState {
+  isInfluencer: boolean;
+  me: { email: string; kycTier: number; verified: boolean; legalName: string | null; hasPhone: boolean; code: string | null };
+  canSubmit: boolean;
+  application: Application | null;
+}
+export interface ApplyInput {
+  phone?: string;
+  socials: { platform: string; handle: string; followers: string; url?: string }[];
+  niches: string[]; audienceLocation: string; avgViews: string; sampleLinks: string[];
+  bio: string; priorBrands: string; why: string; preferredCode?: string; agreeTerms: true;
 }
 export interface Totals { heldFormatted: string; paidFormatted: string; lifetimeFormatted: string; thisMonthFormatted: string }
 export interface Dashboard {
@@ -56,9 +74,10 @@ export interface Task {
 }
 
 export const api = {
-  application: () => apiFetch<{ isInfluencer: boolean; application: Application | null }>("/api/influencer/application"),
-  apply: (input: { fullName: string; phone: string; socials: Social[]; niche: string; location: string; why: string; preferredCode?: string }) =>
-    apiFetch<{ isInfluencer: boolean; application: Application | null }>("/api/influencer/application", { method: "POST", body: JSON.stringify(input) }),
+  application: () => apiFetch<ApplicationState>("/api/influencer/application"),
+  apply: (input: ApplyInput) => apiFetch<ApplicationState>("/api/influencer/application", { method: "POST", body: JSON.stringify(input) }),
+  codeAvailable: (code: string) =>
+    apiFetch<{ code: string | null; available: boolean; reason?: string }>(`/api/influencer/code-available?code=${encodeURIComponent(code)}`),
   dashboard: () => apiFetch<Dashboard>("/api/influencer/dashboard"),
   earnings: () => apiFetch<{ earnings: Earning[] }>("/api/influencer/earnings"),
   tasks: () => apiFetch<{ tasks: Task[] }>("/api/influencer/tasks"),

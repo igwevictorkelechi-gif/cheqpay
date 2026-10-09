@@ -92,7 +92,7 @@ body {
   }
   .link { @apply font-medium text-brand-light hover:underline; }
   .chip {
-    @apply inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-circle px-4 text-[15px] font-medium text-ink transition
+    @apply inline-flex min-h-[40px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-circle px-4 text-[15px] font-medium text-ink transition
       active:scale-[0.97];
   }
   .chip-on { @apply bg-brand text-white; }

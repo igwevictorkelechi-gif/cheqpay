@@ -98,6 +98,7 @@ async function ensureSchema(): Promise<void> {
       { ensureEventsSchema },
       { ensureAdsSchema },
       { ensureDevApiSchema },
+      { ensureReferralSchema },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
@@ -108,6 +109,7 @@ async function ensureSchema(): Promise<void> {
       import("@/lib/ensureEvents"),
       import("@/lib/ensureAds"),
       import("@/lib/devapi/ensureDevApi"),
+      import("@/lib/ensureReferrals"),
     ]);
     await Promise.all([
       ensureRetentionSchema(),
@@ -142,6 +144,9 @@ async function ensureSchema(): Promise<void> {
       // booted here so the ledger triggers exist before the first API call and
       // any later column on them is covered by the same rule.
       ensureDevApiSchema(),
+      // Referral and creator-program tables (raw SQL). The creator application
+      // gained columns and a NEEDS_INFO status, so it follows the column-add rule.
+      ensureReferralSchema(),
     ]);
     // NB: the KYC document TABLE (image bytes) is created lazily by
     // lib/kycDocuments on first use, not here. It is a new table, so it is

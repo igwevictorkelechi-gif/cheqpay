@@ -1,63 +1,55 @@
 import Link from "next/link";
 import { BadgePercent, ListChecks, Link2, Wallet } from "lucide-react";
+import ApplyButton from "@/components/ApplyButton";
 import Logo from "@/components/Logo";
 
 const STEPS = [
-  { Icon: Link2, title: "Share your link", body: "Get your own code and tracking link. Share it in your posts, stories, bio and videos." },
-  { Icon: BadgePercent, title: "Earn on every transaction", body: "When your audience joins CheqPay with your link, you earn a share of what we make on their transactions — not just once, but for months." },
-  { Icon: ListChecks, title: "Complete tasks for bonuses", body: "Hit sign-up targets, create content for campaigns and get paid extra for each task you complete." },
-  { Icon: Wallet, title: "Get paid into CheqPay", body: "Earnings land in your CheqPay Naira balance. Withdraw to your bank any time." },
+  { Icon: Link2, title: "Share your link", body: "Your own code and link for posts, stories, bio and videos." },
+  { Icon: BadgePercent, title: "Earn on every transaction", body: "A share of what we make each time your audience sends, pays bills or converts — for months, not once." },
+  { Icon: ListChecks, title: "Paid brand tasks", body: "Hit sign-up targets and post for brands on CheqPay to earn extra." },
+  { Icon: Wallet, title: "Paid into CheqPay", body: "Earnings land in your CheqPay wallet. Withdraw to your bank any time." },
 ];
 
 export default function Landing() {
   return (
-    <div className="mx-auto max-w-6xl px-4">
+    <div className="mx-auto max-w-5xl px-5">
       <header className="flex items-center justify-between py-5">
         <Logo />
-        <Link href="/login" className="btn-ghost !px-5 !py-2 text-sm">Sign in</Link>
+        <Link href="/login" className="btn-ghost !h-10 !px-4 text-[15px]">Sign in</Link>
       </header>
 
-      <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#2a2142] via-[#1a1530] to-[#0E0C14] px-6 py-16 text-center md:py-24">
-        <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-brand/40 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-gold/20 blur-3xl" />
-        <p className="relative text-xs font-bold uppercase tracking-[0.3em] text-gold">The CheqPay influencer program</p>
-        <h1 className="relative mx-auto mt-4 max-w-3xl text-4xl font-extrabold leading-tight tracking-tight md:text-6xl">
-          Your audience moves money. <span className="text-gold">Get paid for it.</span>
+      <section className="appear pb-16 pt-14 text-center md:pt-24">
+        <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-brand-light">CheqPay Creators</p>
+        <h1 className="mx-auto mt-4 max-w-3xl text-[40px] font-bold leading-[1.05] tracking-[-0.03em] md:text-[64px]">
+          Your audience moves money.{" "}
+          <span className="bg-gradient-to-r from-brand-light to-gold bg-clip-text text-transparent">Get paid for it.</span>
         </h1>
-        <p className="relative mx-auto mt-5 max-w-xl text-muted md:text-lg">
-          Share CheqPay with your followers and earn on every transaction they make — sending money, paying bills, converting, trading crypto.
+        <p className="mx-auto mt-5 max-w-xl text-[19px] leading-snug text-muted">
+          Share CheqPay with your followers and earn on every transaction they make.
         </p>
-        <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Link href="/apply" className="btn w-full !py-4 text-base sm:w-auto">Apply to join</Link>
-          <Link href="/login" className="btn-ghost w-full !py-4 text-base sm:w-auto">I&apos;m already in</Link>
+        <div className="mx-auto mt-9 flex max-w-sm flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center">
+          <ApplyButton className="btn sm:min-w-[200px]">Apply with CheqPay</ApplyButton>
+          <Link href="/login" className="btn-tinted sm:min-w-[200px]">I&apos;m already a creator</Link>
         </div>
+        <p className="footnote mt-4">Use your CheqPay account. New to CheqPay? You can create one on the way.</p>
       </section>
 
-      <section className="grid gap-4 py-14 md:grid-cols-4">
-        {STEPS.map(({ Icon, title, body }, i) => (
+      <section className="grid gap-3 pb-16 sm:grid-cols-2 md:grid-cols-4">
+        {STEPS.map(({ Icon, title, body }) => (
           <div key={title} className="card">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gold/15 text-gold"><Icon className="h-5 w-5" /></span>
-            <p className="mt-4 text-xs font-bold text-muted">STEP {i + 1}</p>
-            <p className="mt-1 text-lg font-bold">{title}</p>
-            <p className="mt-2 text-sm leading-relaxed text-muted">{body}</p>
+            <span className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-brand/12 text-brand-light"><Icon className="h-6 w-6" /></span>
+            <p className="headline mt-4">{title}</p>
+            <p className="subhead mt-1 leading-snug">{body}</p>
           </div>
         ))}
       </section>
 
-      <section className="card mb-14 flex flex-col items-center justify-between gap-4 text-center md:flex-row md:text-left">
-        <div>
-          <p className="text-xl font-extrabold">Need a CheqPay account first?</p>
-          <p className="mt-1 text-sm text-muted">You sign in here with your CheqPay account — your earnings are paid into it.</p>
-        </div>
-        <a href="https://mycheqpay.com/signup/" className="btn">Create an account</a>
-      </section>
-
-      <footer className="flex flex-col items-center justify-between gap-2 border-t border-border py-8 text-sm text-muted md:flex-row">
+      <footer className="flex flex-col items-center justify-between gap-3 border-t border-border/70 py-8 text-[13px] text-muted md:flex-row">
         <p>© {new Date().getFullYear()} CheqPay</p>
-        <div className="flex gap-4">
+        <div className="flex gap-5">
           <a href="https://mycheqpay.com/terms/" className="hover:text-ink">Terms</a>
           <a href="https://mycheqpay.com/privacy/" className="hover:text-ink">Privacy</a>
-          <a href="mailto:support@mycheqpay.com" className="hover:text-ink">support@mycheqpay.com</a>
+          <a href="mailto:support@mycheqpay.com" className="hover:text-ink">Support</a>
         </div>
       </footer>
     </div>
