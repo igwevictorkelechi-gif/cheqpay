@@ -50,6 +50,12 @@ export interface Biller {
    * for the next provider whose ids really do split.
    */
   mapleradPayId?: string;
+  /**
+   * The vtu.ng service_id, used when BILLS_PROVIDER=vtung. Electricity adds
+   * the meter type after a colon ("ikeja-electric:prepaid"), which vtu.ng
+   * takes as variation_id. Unset → "Coming soon" on vtu.ng.
+   */
+  vtuId?: string;
 }
 
 export interface BillPlan {
@@ -102,10 +108,10 @@ export interface ServiceConfig {
  * change here plus the fallback in payments/maplerad.ts.
  */
 const AIRTIME_NETWORKS: Biller[] = [
-  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", mapleradId: "mtn-ng" },
-  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", mapleradId: "airtel-ng" },
-  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", mapleradId: "glo-ng" },
-  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", mapleradId: "9mobile-ng" },
+  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", mapleradId: "mtn-ng", vtuId: "mtn" },
+  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", mapleradId: "airtel-ng", vtuId: "airtel" },
+  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", mapleradId: "glo-ng", vtuId: "glo" },
+  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", mapleradId: "9mobile-ng", vtuId: "9mobile" },
 ];
 
 /**
@@ -117,10 +123,10 @@ const AIRTIME_NETWORKS: Biller[] = [
  * while `airtel-data-ng` gets past the identifier check. See Biller.mapleradPayId.
  */
 const DATA_NETWORKS: Biller[] = [
-  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", mapleradId: "mtn-data-ng" },
-  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", mapleradId: "airtel-data-ng" },
-  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", mapleradId: "glo-data-ng" },
-  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", mapleradId: "9mobile-data-ng" },
+  { id: "mtn", name: "MTN", short: "MTN", color: "#FFCC00", mapleradId: "mtn-data-ng", vtuId: "mtn" },
+  { id: "airtel", name: "Airtel", short: "Airtel", color: "#E40000", mapleradId: "airtel-data-ng", vtuId: "airtel" },
+  { id: "glo", name: "Glo", short: "Glo", color: "#4CA838", mapleradId: "glo-data-ng", vtuId: "glo" },
+  { id: "9mobile", name: "9mobile", short: "9mobile", color: "#006F46", mapleradId: "9mobile-data-ng", vtuId: "9mobile" },
 ];
 
 /**
@@ -148,26 +154,26 @@ function mockDataPlans(billerId: string): BillPlan[] {
  * Maplerad also carries Enugu, Benin, Aba, Jos and Kaduna if we want to add them.
  */
 const DISCOS: Biller[] = [
-  { id: "ikedc-prepaid", name: "Ikeja Electric — Prepaid", short: "IKEDC", color: "#C8102E", mapleradId: "ikeja-electricity-prepaid-ng" },
-  { id: "ikedc-postpaid", name: "Ikeja Electric — Postpaid", short: "IKEDC", color: "#C8102E", mapleradId: "ikeja-electricity-postpaid-ng" },
-  { id: "ekedc-prepaid", name: "Eko Electric — Prepaid", short: "EKEDC", color: "#0033A0", mapleradId: "eko-electricity-prepaid-ng" },
-  { id: "ekedc-postpaid", name: "Eko Electric — Postpaid", short: "EKEDC", color: "#0033A0", mapleradId: "eko-electricity-postpaid-ng" },
-  { id: "aedc-prepaid", name: "Abuja Electric — Prepaid", short: "AEDC", color: "#0066B3", mapleradId: "abuja-electric-prepaid-ng" },
-  { id: "aedc-postpaid", name: "Abuja Electric — Postpaid", short: "AEDC", color: "#0066B3", mapleradId: "abuja-electric-postpaid-ng" },
-  { id: "phed-prepaid", name: "Port Harcourt Electric — Prepaid", short: "PHED", color: "#00833E", mapleradId: "portharcourt-electric-prepaid-ng" },
-  { id: "phed-postpaid", name: "Port Harcourt Electric — Postpaid", short: "PHED", color: "#00833E", mapleradId: "portharcourt-electric-postpaid-ng" },
+  { id: "ikedc-prepaid", name: "Ikeja Electric — Prepaid", short: "IKEDC", color: "#C8102E", mapleradId: "ikeja-electricity-prepaid-ng", vtuId: "ikeja-electric:prepaid" },
+  { id: "ikedc-postpaid", name: "Ikeja Electric — Postpaid", short: "IKEDC", color: "#C8102E", mapleradId: "ikeja-electricity-postpaid-ng", vtuId: "ikeja-electric:postpaid" },
+  { id: "ekedc-prepaid", name: "Eko Electric — Prepaid", short: "EKEDC", color: "#0033A0", mapleradId: "eko-electricity-prepaid-ng", vtuId: "eko-electric:prepaid" },
+  { id: "ekedc-postpaid", name: "Eko Electric — Postpaid", short: "EKEDC", color: "#0033A0", mapleradId: "eko-electricity-postpaid-ng", vtuId: "eko-electric:postpaid" },
+  { id: "aedc-prepaid", name: "Abuja Electric — Prepaid", short: "AEDC", color: "#0066B3", mapleradId: "abuja-electric-prepaid-ng", vtuId: "abuja-electric:prepaid" },
+  { id: "aedc-postpaid", name: "Abuja Electric — Postpaid", short: "AEDC", color: "#0066B3", mapleradId: "abuja-electric-postpaid-ng", vtuId: "abuja-electric:postpaid" },
+  { id: "phed-prepaid", name: "Port Harcourt Electric — Prepaid", short: "PHED", color: "#00833E", mapleradId: "portharcourt-electric-prepaid-ng", vtuId: "portharcourt-electric:prepaid" },
+  { id: "phed-postpaid", name: "Port Harcourt Electric — Postpaid", short: "PHED", color: "#00833E", mapleradId: "portharcourt-electric-postpaid-ng", vtuId: "portharcourt-electric:postpaid" },
   // Kano's disco is KEDCO — the old brand-matching looked for "kano" and would
   // never have found it.
-  { id: "kedco-prepaid", name: "Kano Electric — Prepaid", short: "KEDCO", color: "#1A8A3B", mapleradId: "kedco-electricity-prepaid-ng" },
-  { id: "kedco-postpaid", name: "Kano Electric — Postpaid", short: "KEDCO", color: "#1A8A3B", mapleradId: "kedco-electricity-postpaid-ng" },
-  { id: "ibedc-prepaid", name: "Ibadan Electric — Prepaid", short: "IBEDC", color: "#E2231A", mapleradId: "ibadan-electricity-prepaid-ng" },
-  { id: "ibedc-postpaid", name: "Ibadan Electric — Postpaid", short: "IBEDC", color: "#E2231A", mapleradId: "ibadan-electricity-postpaid-ng" },
+  { id: "kedco-prepaid", name: "Kano Electric — Prepaid", short: "KEDCO", color: "#1A8A3B", mapleradId: "kedco-electricity-prepaid-ng", vtuId: "kano-electric:prepaid" },
+  { id: "kedco-postpaid", name: "Kano Electric — Postpaid", short: "KEDCO", color: "#1A8A3B", mapleradId: "kedco-electricity-postpaid-ng", vtuId: "kano-electric:postpaid" },
+  { id: "ibedc-prepaid", name: "Ibadan Electric — Prepaid", short: "IBEDC", color: "#E2231A", mapleradId: "ibadan-electricity-prepaid-ng", vtuId: "ibadan-electric:prepaid" },
+  { id: "ibedc-postpaid", name: "Ibadan Electric — Postpaid", short: "IBEDC", color: "#E2231A", mapleradId: "ibadan-electricity-postpaid-ng", vtuId: "ibadan-electric:postpaid" },
 ];
 
 const CABLE: Biller[] = [
-  { id: "dstv", name: "DStv", short: "DStv", color: "#0072CE", mapleradId: "dstv-ng" },
-  { id: "gotv", name: "GOtv", short: "GOtv", color: "#74AA50", mapleradId: "gotv-ng" },
-  { id: "startimes", name: "StarTimes", short: "StarTimes", color: "#E60012", mapleradId: "startimes-ng" },
+  { id: "dstv", name: "DStv", short: "DStv", color: "#0072CE", mapleradId: "dstv-ng", vtuId: "dstv" },
+  { id: "gotv", name: "GOtv", short: "GOtv", color: "#74AA50", mapleradId: "gotv-ng", vtuId: "gotv" },
+  { id: "startimes", name: "StarTimes", short: "StarTimes", color: "#E60012", mapleradId: "startimes-ng", vtuId: "startimes" },
 ];
 
 /** MOCK-ONLY cable plans — see mockDataPlans. Invented prices, dev rendering only. */
@@ -287,6 +293,17 @@ export const BILL_CATALOG: ServiceConfig[] = [
 
 export function getServiceConfig(service: string): ServiceConfig | undefined {
   return BILL_CATALOG.find((s) => s.service === service);
+}
+
+/**
+ * The identifier to send the active bills provider for this biller, or
+ * undefined if that provider doesn't carry it (→ "Coming soon"). One place, so
+ * the catalog, validation and purchase can never disagree about which id goes
+ * to which provider.
+ */
+export function providerBillerCode(biller: Biller, provider: string, purpose: "pay" | "list" = "pay"): string | undefined {
+  if (provider === "vtung") return biller.vtuId;
+  return purpose === "pay" ? (biller.mapleradPayId ?? biller.mapleradId) : biller.mapleradId;
 }
 
 export function getBiller(service: string, billerId: string): Biller | undefined {

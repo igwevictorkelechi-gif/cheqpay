@@ -5,7 +5,7 @@ import { ApiError } from "@/lib/http";
 import { alertOpsOnce } from "@/lib/opsAlert";
 import { toMinorUnits, fromMinorUnits } from "@/lib/money";
 import { awardCashback } from "@/lib/cashback";
-import { getBiller, getServiceConfig } from "@/lib/bills";
+import { getBiller, getServiceConfig, providerBillerCode } from "@/lib/bills";
 import { getLivePlan } from "@/lib/billCatalog";
 import { billPaySchema } from "@/lib/validation";
 import { notifyUser } from "@/lib/alerts";
@@ -93,7 +93,8 @@ export async function executeBillPayment(input: BillPayInput): Promise<BillPayRe
 
   // Billers with no provider identifier (betting, Chowdeck) are "Coming soon"
   // — refuse before any money moves.
-  if (!biller.mapleradId && psp.name !== "mock") {
+  const payIdentifier = providerBillerCode(biller, psp.name, "pay");
+  if (!payIdentifier && psp.name !== "mock") {
     throw new ApiError(
       503,
       `${biller.name} payments are coming soon. Please check back shortly.`,
@@ -141,6 +142,7 @@ export async function executeBillPayment(input: BillPayInput): Promise<BillPayRe
         metadata: {
           ip: initiatorIp,
           kind: "bill",
+          billsProvider: psp.name,
           ...(autopay ? { autopay: true, savedBillId: input.savedBillId ?? null } : {}),
           service: body.service,
           billerId: biller.id,
@@ -155,7 +157,6 @@ export async function executeBillPayment(input: BillPayInput): Promise<BillPayRe
   });
 
   // What goes to the provider, kept so a failure can be read back exactly.
-  const payIdentifier = biller.mapleradPayId ?? biller.mapleradId;
   const sent = { identifier: payIdentifier ?? null, planCode: planCode ?? null, amountMinor: amountMinor.toString() };
 
   // Submit to the PSP. Refund + fail on error.
@@ -198,6 +199,7 @@ export async function executeBillPayment(input: BillPayInput): Promise<BillPayRe
         metadata: {
           ip: initiatorIp,
           kind: "bill",
+          billsProvider: psp.name,
           ...(autopay ? { autopay: true, savedBillId: input.savedBillId ?? null } : {}),
           service: body.service,
           billerId: biller.id,

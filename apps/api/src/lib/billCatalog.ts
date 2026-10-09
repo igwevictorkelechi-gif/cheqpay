@@ -1,6 +1,6 @@
 import { getBillsProvider } from "@/payments";
 import type { BillPlan, ServiceConfig } from "./bills";
-import { BILL_CATALOG } from "./bills";
+import { BILL_CATALOG, providerBillerCode } from "./bills";
 
 /**
  * The bill catalog, with data bundles and cable bouquets fetched live from the
@@ -70,12 +70,10 @@ async function build(): Promise<ServiceConfig[]> {
 
       const perBiller = await Promise.all(
         svc.billers.map(async (biller) => {
-          if (!biller.mapleradId) return [];
+          const code = providerBillerCode(biller, psp.name, "list");
+          if (!code) return [];
           try {
-            const plans = await psp.listBillPlans!(
-              svc.service as "data" | "cabletv",
-              biller.mapleradId
-            );
+            const plans = await psp.listBillPlans!(svc.service as "data" | "cabletv", code);
             return plans.map<BillPlan>((p) => ({
               // Namespaced by biller so ids stay unique across the service.
               id: `${biller.id}:${p.code}`,

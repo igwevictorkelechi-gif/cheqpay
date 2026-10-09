@@ -1,9 +1,12 @@
+import { after } from "next/server";
 import { prisma } from "@cheqpay/db";
+import { maybeSweepVtuBills } from "@/lib/billReconcile";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { getBillCatalog } from "@/lib/billCatalog";
 import { getCashbackConfig } from "@/lib/settings";
 import { valueDataPlans, type ValuedPlan } from "@/lib/dataPlanValue";
-import type { BillPlan } from "@/lib/bills";
+import { providerBillerCode, type BillPlan } from "@/lib/bills";
+import { getBillsProvider } from "@/payments";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +21,10 @@ export async function GET() {
     const assets = await prisma.billerAsset.findMany();
     const logoById = new Map(assets.map((a) => [a.billerId, a.logo]));
 
+    // Settle vtu.ng bills whose webhook never came, off the request path.
+    after(() => maybeSweepVtuBills() ?? undefined);
     const catalog = await getBillCatalog();
+    const provider = getBillsProvider().name;
 
     // Strip provider-internal biller/plan codes from the public payload.
     const services = catalog.map((s) => ({
@@ -36,7 +42,7 @@ export async function GET() {
         color: b.color,
         logo: logoById.get(b.id) ?? b.logo ?? null,
         // No provider biller code -> shown as "Coming soon" in the apps.
-        comingSoon: !b.mapleradId,
+        comingSoon: !providerBillerCode(b, provider, "pay"),
       })),
       plans: (s.service === "data" ? rankPerBiller(s.plans) : s.plans).map((p) => {
         const v = p as Partial<ValuedPlan>;

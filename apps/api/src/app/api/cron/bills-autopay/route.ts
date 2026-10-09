@@ -1,6 +1,7 @@
 import { cronRefusal } from "@/lib/cronAuth";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { runBillAutopay } from "@/lib/savedBills";
+import { sweepVtuBills } from "@/lib/billReconcile";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -10,7 +11,8 @@ export async function GET(req: Request) {
   try {
     const refused = cronRefusal(req);
     if (refused) return refused;
-    return jsonOk({ ran: true, ...(await runBillAutopay()) });
+    const vtuSweep = await sweepVtuBills({ limit: 500 });
+    return jsonOk({ ran: true, ...(await runBillAutopay()), vtuSweep });
   } catch (err) {
     return toErrorResponse(err);
   }

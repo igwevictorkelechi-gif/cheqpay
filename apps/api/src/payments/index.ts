@@ -2,6 +2,7 @@ import { assertNotMockInProduction, assertProviderConfigured, getEnv } from "@/l
 import type { PaymentProvider } from "./types";
 import { MockPaymentProvider } from "./mock";
 import { MapleradProvider } from "./maplerad";
+import { VtuNgProvider, type BillQueryResult } from "./vtung";
 
 export * from "./types";
 
@@ -47,12 +48,38 @@ export function getPaymentProvider(): PaymentProvider {
   return cached;
 }
 
+/** What bills need from a provider — the NGN rail and vtu.ng both offer it. */
+export type BillsProvider = Pick<PaymentProvider, "name" | "validateBillCustomer" | "payBill" | "listBillPlans"> & {
+  /** Ask what became of a purchase, by our reference. Providers without one omit it. */
+  queryBill?(reference: string): Promise<BillQueryResult>;
+};
+
+let cachedVtu: VtuNgProvider | null = null;
+
+/** vtu.ng when its login is configured, else null. */
+export function vtuNgIfConfigured(): VtuNgProvider | null {
+  const env = getEnv();
+  if (!env.VTU_NG_USERNAME || !env.VTU_NG_PASSWORD) return null;
+  cachedVtu ??= new VtuNgProvider(env.VTU_NG_USERNAME, env.VTU_NG_PASSWORD);
+  return cachedVtu;
+}
+
 /**
- * The bills rail. Maplerad covers every bill service we actually sell (airtime,
- * data, electricity, cable TV), so bills run on the same rail as everything
- * else. Betting and food have no Maplerad biller and are marked "coming soon"
- * in the catalog, so they never get here.
+ * The bills rail (airtime, data, electricity, cable TV). BILLS_PROVIDER=vtung
+ * sends new purchases to vtu.ng; otherwise they stay on the NGN rail. Betting
+ * and food have no biller and are "coming soon", so they never get here.
  */
-export function getBillsProvider(): PaymentProvider {
+export function getBillsProvider(): BillsProvider {
+  if (getEnv().BILLS_PROVIDER === "vtung") {
+    const vtu = vtuNgIfConfigured();
+    if (!vtu) throw new Error("BILLS_PROVIDER=vtung requires VTU_NG_USERNAME and VTU_NG_PASSWORD");
+    return vtu;
+  }
+  return getPaymentProvider();
+}
+
+/** The provider a past bill was bought on, so we ask the right one about it. */
+export function billsProviderNamed(name: string | null | undefined): BillsProvider | null {
+  if (name === "vtung") return vtuNgIfConfigured();
   return getPaymentProvider();
 }

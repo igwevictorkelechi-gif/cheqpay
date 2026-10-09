@@ -47,6 +47,7 @@ export function billOutcomeFrom(event: string, status?: string): BillOutcome {
 export async function settleBillByProviderRef(
   providerRef: string,
   outcome: BillOutcome,
+  extra: { token?: string | null } = {},
 ): Promise<BillSettlementResult> {
   if (!providerRef) return { outcome: "ignored", reason: "no provider reference" };
   if (outcome === "pending") return { outcome: "ignored", reason: "still pending" };
@@ -66,9 +67,13 @@ export async function settleBillByProviderRef(
   if (outcome === "successful") {
     // Guarded on PROCESSING so two deliveries cannot both "win" and pay
     // cashback twice.
+    // A prepaid token that only arrives with the settlement (electricity
+    // bought while the disco was slow) is kept with the bill and sent below.
+    const token = extra.token?.trim() || null;
+    const meta = tx.metadata && typeof tx.metadata === "object" ? (tx.metadata as Record<string, unknown>) : {};
     const moved = await prisma.transaction.updateMany({
       where: { id: tx.id, status: TransactionStatus.PROCESSING },
-      data: { status: TransactionStatus.COMPLETED },
+      data: { status: TransactionStatus.COMPLETED, ...(token && !meta.token ? { metadata: { ...meta, token } } : {}) },
     });
     if (moved.count !== 1) return { outcome: "duplicate", transactionId: tx.id };
 
@@ -85,7 +90,8 @@ export async function settleBillByProviderRef(
     await notifyUser(tx.userId, {
       category: "bills",
       title: "Bill paid",
-      body: `${name} — ₦${fromMinorUnits(amountMinor, Asset.NGN)} went through.`,
+      body: `${name} — ₦${fromMinorUnits(amountMinor, Asset.NGN)} went through.${token ? " Your recharge token is below." : ""}`,
+      ...(token ? { copyable: { label: "Recharge token", value: token } } : {}),
       data: { transactionId: tx.id },
     }).catch(() => undefined);
 
