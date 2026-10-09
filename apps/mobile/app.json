@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "CheqPay",
-    "slug": "cheqpay",
+    "slug": "cheqpsy-",
+    "owner": "boliempire",
     "version": "1.0.0",
     "scheme": "cheqpay",
     "orientation": "portrait",
