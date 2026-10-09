@@ -26,7 +26,7 @@ import { getEnv } from "./env";
 
 /** The sites that may sign users in this way, and the only place each may send them back to. */
 export const SSO_CLIENTS = {
-  creators: { name: "CheqPay Creators", returnUrl: "https://influencer.mycheqpay.com/auth/callback/" },
+  creators: { name: "CheqPay Creators", returnUrl: "https://creator.mycheqpay.com/auth/callback/" },
 } as const;
 export type SsoClient = keyof typeof SSO_CLIENTS;
 

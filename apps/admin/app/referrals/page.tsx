@@ -16,7 +16,7 @@ const LABEL: Record<(typeof FILTERS)[number], string> = {
 };
 
 /**
- * Creator applications from influencer.mycheqpay.com. Open one to vet the
+ * Creator applications from creator.mycheqpay.com. Open one to vet the
  * person behind it and approve, ask for more, or reject.
  */
 export default function ApplicationsPage() {
@@ -52,7 +52,7 @@ export default function ApplicationsPage() {
     <DashboardLayout>
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Creator applications</h1>
-        <p className="mt-2 text-gray-600">From influencer.mycheqpay.com. Turn the program on under Features → Referrals &amp; influencers.</p>
+        <p className="mt-2 text-gray-600">From creator.mycheqpay.com. Turn the program on under Features → Referrals &amp; influencers.</p>
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {FILTERS.map((f) => (

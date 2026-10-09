@@ -4,11 +4,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "CheqPay Creators — earn with CheqPay",
   description: "Join the CheqPay influencer program. Share your link, and earn on every transaction your audience makes.",
-  metadataBase: new URL("https://influencer.mycheqpay.com"),
+  metadataBase: new URL("https://creator.mycheqpay.com"),
   openGraph: {
     title: "CheqPay Creators",
     description: "Share your link. Earn on every transaction your audience makes.",
-    url: "https://influencer.mycheqpay.com",
+    url: "https://creator.mycheqpay.com",
     siteName: "CheqPay Creators",
     images: ["/icon.png"],
   },

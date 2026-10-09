@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { API_BASE, APP_URL } from "@/lib/api";
 
 /**
- * An influencer's tracking link: influencer.mycheqpay.com/r/CODE (served by an
+ * An influencer's tracking link: creator.mycheqpay.com/r/CODE (served by an
  * .htaccess rewrite to this one static page) or /r/?c=CODE. Counts the click
  * from the visitor's own browser — so it's per person, not per server — then
  * sends them to sign up with the code filled in, never waiting more than a moment.

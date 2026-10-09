@@ -658,7 +658,7 @@ function CodeStep({ value, onChange, problem }: { value: string; onChange: (v: s
       <div className="group-list">
         <div className="group-row">
           <Video className="h-5 w-5 shrink-0 text-brand-light" />
-          <p className="min-w-0 flex-1 truncate font-mono text-[15px]">influencer.mycheqpay.com/r/<span className="font-semibold text-brand-light">{value || "YOURCODE"}</span></p>
+          <p className="min-w-0 flex-1 truncate font-mono text-[15px]">creator.mycheqpay.com/r/<span className="font-semibold text-brand-light">{value || "YOURCODE"}</span></p>
         </div>
       </div>
       <p className="footnote mt-3 px-1">Optional. Skip it and we&apos;ll suggest one.</p>

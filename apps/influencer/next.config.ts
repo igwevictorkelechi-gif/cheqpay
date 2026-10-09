@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-// Built as plain files (out/) for upload to the influencer.mycheqpay.com
+// Built as plain files (out/) for upload to the creator.mycheqpay.com
 // subdomain on the same kind of host as mycheqpay.com. Security headers and
 // the /r/CODE rewrite live in public/.htaccess, since an export can't set them.
 const nextConfig: NextConfig = {
