@@ -5,7 +5,7 @@ export default function Logo({ href = "/" }: { href?: string }) {
     <Link href={href} className="flex items-center gap-2.5">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/icon.png" alt="" width={34} height={34} className="rounded-[10px]" />
-      <span className="text-lg font-extrabold tracking-tight">
+      <span className="text-[17px] font-bold tracking-tight">
         Cheq<span className="text-gold">Pay</span> <span className="font-semibold text-muted">Creators</span>
       </span>
     </Link>

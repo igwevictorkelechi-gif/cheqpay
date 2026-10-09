@@ -1,34 +1,117 @@
-@font-face {
-  font-family: "Plus Jakarta Sans";
-  font-style: normal;
-  font-weight: 400 800;
-  font-display: swap;
-  src: url("/fonts/jakarta-latin-v1.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
-    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: "Plus Jakarta Sans";
-  font-style: normal;
-  font-weight: 400 800;
-  font-display: swap;
-  src: url("/fonts/jakarta-latin-ext-v1.woff2") format("woff2");
-  /* U+20A0-20AB carries ₦ (U+20A6). */
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
-    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html { color-scheme: dark; }
-body { background: #0E0C14; color: #F4F2F9; -webkit-font-smoothing: antialiased; }
+/*
+ * CheqPay Creators design system, after Apple's Human Interface Guidelines:
+ * the system font, grouped content on a tinted background, one filled action
+ * per screen, generous spacing, and colours that follow light/dark mode.
+ * Values are space-separated RGB so Tailwind opacity modifiers work.
+ */
+:root {
+  color-scheme: light;
+  --surface: 242 242 247;   /* systemGroupedBackground */
+  --card: 255 255 255;      /* secondarySystemGroupedBackground */
+  --circle: 232 232 237;    /* tertiary fill (inputs, chips) */
+  --border: 216 216 222;    /* hairline separator */
+  --ink: 28 28 30;          /* label */
+  --muted: 110 110 115;     /* secondaryLabel */
+  --brand: 107 91 149;      /* CheqPay purple, the accent */
+  --brand-dark: 87 74 122;
+  --brand-light: 91 75 138; /* accent text on light */
+  --gold: 201 145 44;
+  --good: 52 168 83;
+  --warn: 214 137 16;
+  --bad: 215 58 52;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --surface: 0 0 0;
+    --card: 28 28 30;
+    --circle: 44 44 46;
+    --border: 56 56 58;
+    --ink: 245 245 247;
+    --muted: 152 152 159;
+    --brand: 123 107 170;
+    --brand-dark: 107 91 149;
+    --brand-light: 175 160 220;
+    --gold: 245 201 123;
+    --good: 48 209 88;
+    --warn: 255 179 64;
+    --bad: 255 92 84;
+  }
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: rgb(var(--surface));
+  color: rgb(var(--ink));
+  font-size: 17px;
+  line-height: 1.47;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+::selection { background: rgb(var(--brand) / 0.25); }
 
 @layer components {
-  .input { @apply w-full rounded-2xl border border-border bg-card px-4 py-3 text-ink placeholder-muted outline-none focus:border-brand; }
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand px-6 py-3 font-bold text-white transition hover:bg-brand-dark disabled:opacity-40; }
-  .btn-ghost { @apply inline-flex items-center justify-center gap-2 rounded-full border border-border px-6 py-3 font-bold text-ink transition hover:bg-card; }
-  .card { @apply rounded-3xl border border-border bg-card p-5; }
-  .label { @apply mb-1.5 block text-sm font-semibold text-ink; }
+  /* Type */
+  .title-lg { @apply text-[34px] font-bold leading-[1.12] tracking-[-0.022em] text-ink; }
+  .title { @apply text-[28px] font-bold leading-tight tracking-[-0.02em] text-ink; }
+  .headline { @apply text-[17px] font-semibold text-ink; }
+  .subhead { @apply text-[15px] text-muted; }
+  .footnote { @apply text-[13px] text-muted; }
+  .section-label { @apply mb-2 px-4 text-[13px] font-medium uppercase tracking-[0.04em] text-muted; }
+
+  /* Surfaces */
+  .card { @apply rounded-3xl bg-card p-5 shadow-card ring-1 ring-border/40; }
+  .group-list { @apply overflow-hidden rounded-2xl bg-card shadow-card ring-1 ring-border/40; }
+  .group-row { @apply flex min-h-[52px] items-center gap-3 px-4 py-3; }
+  .group-row + .group-row { @apply border-t border-border/70; }
+
+  /* Controls */
+  .input {
+    @apply h-[52px] w-full rounded-xl bg-circle px-4 text-[17px] text-ink placeholder-muted/80 outline-none ring-0 transition
+      focus:bg-card focus:ring-2 focus:ring-brand/40;
+  }
+  textarea.input { @apply h-auto min-h-[112px] py-3 leading-normal; }
+  .label { @apply mb-1.5 block px-1 text-[13px] font-medium text-muted; }
+  .btn {
+    @apply inline-flex h-[52px] select-none items-center justify-center gap-2 rounded-full bg-brand px-7 text-[17px] font-semibold text-white
+      transition duration-200 ease-spring hover:bg-brand-dark active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100;
+  }
+  .btn-tinted {
+    @apply inline-flex h-[52px] select-none items-center justify-center gap-2 rounded-full bg-brand/12 px-7 text-[17px] font-semibold text-brand-light
+      transition duration-200 ease-spring hover:bg-brand/20 active:scale-[0.98] disabled:opacity-40;
+  }
+  .btn-ghost {
+    @apply inline-flex h-[52px] select-none items-center justify-center gap-2 rounded-full px-6 text-[17px] font-semibold text-brand-light
+      transition hover:bg-circle active:scale-[0.98];
+  }
+  .link { @apply font-medium text-brand-light hover:underline; }
+  .chip {
+    @apply inline-flex min-h-[40px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-circle px-4 text-[15px] font-medium text-ink transition
+      active:scale-[0.97];
+  }
+  .chip-on { @apply bg-brand text-white; }
+  .notice { @apply rounded-2xl px-4 py-3 text-[15px]; }
+  .notice-bad { @apply notice bg-bad/10 text-bad; }
+  .notice-good { @apply notice bg-good/10 text-good; }
+  .notice-warn { @apply notice bg-warn/12 text-warn; }
+
+  /* A screen that slides in */
+  .appear { animation: appear 320ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+}
+
+@keyframes appear {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+:focus-visible { outline: 2px solid rgb(var(--brand)); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

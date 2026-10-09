@@ -1,22 +1,39 @@
 import type { Config } from "tailwindcss";
 
+// Colours are CSS variables (globals.css) so the whole portal follows the
+// device's light or dark appearance, Apple-style. `<alpha-value>` keeps
+// opacity utilities such as bg-card/90 working.
+const v = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
+
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        brand: "#6B5B95",
-        "brand-dark": "#574A7A",
-        "brand-light": "#8A7BB5",
-        gold: "#F5C97B",
-        surface: "#0E0C14",
-        card: "#1A1724",
-        circle: "#262234",
-        border: "#2E2A3D",
-        ink: "#F4F2F9",
-        muted: "#9A93AD",
+        brand: v("brand"),
+        "brand-dark": v("brand-dark"),
+        "brand-light": v("brand-light"),
+        gold: v("gold"),
+        surface: v("surface"),
+        card: v("card"),
+        circle: v("circle"),
+        border: v("border"),
+        ink: v("ink"),
+        muted: v("muted"),
+        good: v("good"),
+        warn: v("warn"),
+        bad: v("bad"),
       },
-      fontFamily: { sans: ['"Plus Jakarta Sans"', "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"] },
+      fontFamily: {
+        sans: ["-apple-system", "BlinkMacSystemFont", '"SF Pro Text"', '"SF Pro Display"', '"Segoe UI"', "Roboto", '"Helvetica Neue"', "Arial", "sans-serif"],
+      },
+      opacity: { 12: "0.12" },
+      borderRadius: { "4xl": "28px" },
+      boxShadow: {
+        card: "0 1px 2px rgb(0 0 0 / 0.04), 0 8px 28px rgb(0 0 0 / 0.06)",
+        float: "0 10px 40px rgb(0 0 0 / 0.18)",
+      },
+      transitionTimingFunction: { spring: "cubic-bezier(0.32, 0.72, 0, 1)" },
     },
   },
   plugins: [],

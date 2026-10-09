@@ -39,39 +39,41 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   }, [session, path, router]);
 
   if (!ok) {
-    return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>;
+    return <div className="flex min-h-[100dvh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted" /></div>;
   }
 
   return (
-    <div className="mx-auto min-h-screen max-w-6xl px-4 pb-28 md:pb-10">
-      <header className="flex items-center justify-between py-5">
-        <Logo href="/dashboard" />
-        <nav className="hidden items-center gap-1 md:flex">
-          {NAV.map(({ href, label }) => (
-            <Link key={href} href={href} className={`rounded-full px-4 py-2 text-sm font-semibold ${path === href ? "bg-card text-ink" : "text-muted hover:text-ink"}`}>
-              {label}
-            </Link>
-          ))}
-        </nav>
-        <div className="flex items-center gap-2">
-          <a href={APP_URL} className="hidden rounded-full border border-border px-4 py-2 text-sm font-semibold text-muted hover:text-ink sm:block">Open CheqPay</a>
-          <button
-            onClick={async () => {
-              await supabase.auth.signOut();
-              router.replace("/");
-            }}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-border text-muted hover:text-ink"
-            aria-label="Sign out"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
+    <div className="min-h-[100dvh] pb-28 md:pb-12">
+      <header className="sticky top-0 z-20 border-b border-border/50 bg-surface/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-5">
+          <Logo href="/dashboard" />
+          <nav className="hidden items-center gap-1 rounded-full bg-circle p-1 md:flex">
+            {NAV.map(({ href, label }) => (
+              <Link key={href} href={href} className={`rounded-full px-4 py-1.5 text-[15px] font-medium transition ${path === href ? "bg-card text-ink shadow-card" : "text-muted hover:text-ink"}`}>
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <div className="flex items-center gap-1">
+            <a href={APP_URL} className="btn-ghost hidden !h-9 !px-4 text-[15px] sm:inline-flex">Open CheqPay</a>
+            <button
+              onClick={async () => {
+                await supabase.auth.signOut();
+                router.replace("/");
+              }}
+              className="flex h-11 w-11 items-center justify-center rounded-full text-muted transition hover:bg-circle hover:text-ink"
+              aria-label="Sign out"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </header>
-      {children}
-      <nav className="fixed inset-x-3 bottom-3 z-20 grid grid-cols-4 rounded-3xl border border-border bg-card/95 p-1.5 backdrop-blur md:hidden">
+      <main className="appear mx-auto max-w-5xl px-5 pt-6">{children}</main>
+      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border/60 bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
         {NAV.map(({ href, label, Icon }) => (
-          <Link key={href} href={href} className={`flex flex-col items-center gap-1 rounded-2xl py-2 text-[11px] font-semibold ${path === href ? "bg-circle text-ink" : "text-muted"}`}>
-            <Icon className="h-5 w-5" />
+          <Link key={href} href={href} aria-current={path === href ? "page" : undefined} className={`flex flex-col items-center gap-0.5 pb-1.5 pt-2 text-[10px] font-medium transition ${path === href ? "text-brand-light" : "text-muted"}`}>
+            <Icon className="h-6 w-6" strokeWidth={path === href ? 2.4 : 1.8} />
             {label}
           </Link>
         ))}

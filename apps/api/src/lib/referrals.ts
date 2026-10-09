@@ -23,10 +23,13 @@ import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { notifyUser } from "./alerts";
 import { ensureAdsSchema } from "./ensureAds";
 import { ensureGiftCardTxnTypes } from "./ensureGiftCardTxnTypes";
+import { ensureReferralSchema } from "./ensureReferrals";
 import { ApiError } from "./http";
 import { decimalsFor, formatNairaMinor } from "./money";
 import { getUsdtNgnRate } from "./settings";
 import { cachedSetting, invalidateSetting } from "./settingsCache";
+
+export { ensureReferralSchema };
 
 export const APPLY_WINDOW_DAYS = 7;
 export const WEB_ORIGIN = "https://mycheqpay.com";
@@ -91,109 +94,7 @@ export async function setReferralSettings(patch: Partial<ReferralSettings>, upda
 // ---------------------------------------------------------------------------
 // Schema
 
-let ensured: Promise<void> | null = null;
-export function ensureReferralSchema(): Promise<void> {
-  if (!ensured) {
-    ensured = (async () => {
-      const stmts = [
-        `CREATE TABLE IF NOT EXISTS referral_codes (
-          user_id uuid PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
-          code text NOT NULL,
-          kind text NOT NULL DEFAULT 'BASIC' CHECK (kind IN ('BASIC', 'INFLUENCER')),
-          commission_bps integer NOT NULL DEFAULT 0 CHECK (commission_bps >= 0 AND commission_bps <= 10000),
-          window_days integer,
-          active boolean NOT NULL DEFAULT true,
-          created_at timestamptz NOT NULL DEFAULT now(),
-          updated_at timestamptz NOT NULL DEFAULT now()
-        )`,
-        `CREATE UNIQUE INDEX IF NOT EXISTS referral_codes_code_idx ON referral_codes (lower(code))`,
-        `CREATE TABLE IF NOT EXISTS referrals (
-          referred_user_id uuid PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
-          referrer_user_id uuid NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
-          code text NOT NULL,
-          status text NOT NULL DEFAULT 'SIGNED_UP' CHECK (status IN ('SIGNED_UP', 'QUALIFIED')),
-          created_at timestamptz NOT NULL DEFAULT now(),
-          qualified_at timestamptz
-        )`,
-        `CREATE INDEX IF NOT EXISTS referrals_referrer_idx ON referrals (referrer_user_id, created_at)`,
-        `CREATE TABLE IF NOT EXISTS referral_earnings (
-          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-          earner_user_id uuid NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
-          kind text NOT NULL CHECK (kind IN ('COMMISSION', 'BASIC_BONUS', 'WELCOME_BONUS', 'TASK')),
-          source_key text NOT NULL UNIQUE,
-          referred_user_id uuid,
-          source_txn_id uuid,
-          amount_minor bigint NOT NULL CHECK (amount_minor > 0),
-          status text NOT NULL DEFAULT 'HELD' CHECK (status IN ('HELD', 'PAID', 'VOID')),
-          note text,
-          release_at timestamptz NOT NULL,
-          paid_at timestamptz,
-          void_reason text,
-          transaction_id uuid,
-          created_at timestamptz NOT NULL DEFAULT now()
-        )`,
-        `CREATE INDEX IF NOT EXISTS referral_earnings_earner_idx ON referral_earnings (earner_user_id, created_at DESC)`,
-        `CREATE INDEX IF NOT EXISTS referral_earnings_release_idx ON referral_earnings (status, release_at)`,
-        `CREATE TABLE IF NOT EXISTS influencer_tasks (
-          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-          title text NOT NULL,
-          description text NOT NULL DEFAULT '',
-          kind text NOT NULL CHECK (kind IN ('AUTO', 'PROOF')),
-          metric text CHECK (metric IN ('signups', 'qualified', 'volume_ngn', 'first_deposits')),
-          target bigint,
-          reward_minor bigint NOT NULL CHECK (reward_minor > 0),
-          starts_at timestamptz NOT NULL DEFAULT now(),
-          ends_at timestamptz,
-          assigned uuid[] NOT NULL DEFAULT '{}',
-          active boolean NOT NULL DEFAULT true,
-          created_by text,
-          created_at timestamptz NOT NULL DEFAULT now()
-        )`,
-        `CREATE TABLE IF NOT EXISTS task_submissions (
-          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-          task_id uuid NOT NULL REFERENCES influencer_tasks(id) ON DELETE CASCADE,
-          user_id uuid NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
-          proof_url text,
-          note text,
-          status text NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')),
-          reason text,
-          reviewed_by text,
-          reviewed_at timestamptz,
-          created_at timestamptz NOT NULL DEFAULT now(),
-          UNIQUE (task_id, user_id)
-        )`,
-        `CREATE TABLE IF NOT EXISTS influencer_applications (
-          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-          user_id uuid NOT NULL UNIQUE REFERENCES app_users(id) ON DELETE CASCADE,
-          full_name text NOT NULL,
-          phone text NOT NULL,
-          socials jsonb NOT NULL DEFAULT '[]',
-          niche text NOT NULL DEFAULT '',
-          location text NOT NULL DEFAULT '',
-          why text NOT NULL DEFAULT '',
-          preferred_code text,
-          status text NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')),
-          reason text,
-          reviewed_by text,
-          reviewed_at timestamptz,
-          created_at timestamptz NOT NULL DEFAULT now(),
-          updated_at timestamptz NOT NULL DEFAULT now()
-        )`,
-        `CREATE TABLE IF NOT EXISTS referral_clicks (
-          code_lower text NOT NULL,
-          day date NOT NULL,
-          clicks integer NOT NULL DEFAULT 0,
-          PRIMARY KEY (code_lower, day)
-        )`,
-      ];
-      for (const s of stmts) await prisma.$executeRawUnsafe(s);
-    })().catch((err) => {
-      ensured = null;
-      throw err;
-    });
-  }
-  return ensured;
-}
+// The tables and their columns: ./ensureReferrals.ts (booted from instrumentation.ts).
 
 // ---------------------------------------------------------------------------
 // Codes
@@ -220,7 +121,7 @@ interface CodeRow {
   active: boolean;
 }
 
-async function codeFor(userId: string): Promise<CodeRow | null> {
+export async function codeFor(userId: string): Promise<CodeRow | null> {
   const rows = await prisma.$queryRawUnsafe<CodeRow[]>(
     `SELECT user_id::text, code, kind, commission_bps, window_days, active FROM referral_codes WHERE user_id = $1::uuid`,
     userId,
@@ -228,7 +129,7 @@ async function codeFor(userId: string): Promise<CodeRow | null> {
   return rows[0] ?? null;
 }
 
-async function codeTaken(code: string, exceptUser?: string): Promise<boolean> {
+export async function codeTaken(code: string, exceptUser?: string): Promise<boolean> {
   const rows = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
     `SELECT count(*) AS n FROM referral_codes WHERE lower(code) = lower($1) ${exceptUser ? "AND user_id <> $2::uuid" : ""}`,
     code,
@@ -723,47 +624,7 @@ export async function getMyReferral(userId: string) {
 // ---------------------------------------------------------------------------
 // Influencer portal
 
-export interface Social { platform: string; handle: string; followers: number }
-export interface ApplicationInput {
-  fullName: string; phone: string; socials: Social[]; niche: string; location: string; why: string; preferredCode?: string;
-}
-
-export async function getApplication(userId: string) {
-  await ensureReferralSchema();
-  const rows = await prisma.$queryRawUnsafe<{ id: string; full_name: string; phone: string; socials: Social[]; niche: string; location: string; why: string; preferred_code: string | null; status: string; reason: string | null; created_at: Date }[]>(
-    `SELECT id::text, full_name, phone, socials, niche, location, why, preferred_code, status, reason, created_at FROM influencer_applications WHERE user_id = $1::uuid`, userId,
-  );
-  const code = await codeFor(userId);
-  const a = rows[0];
-  return {
-    isInfluencer: code?.kind === "INFLUENCER" && code.active,
-    application: a
-      ? { id: a.id, fullName: a.full_name, phone: a.phone, socials: a.socials, niche: a.niche, location: a.location, why: a.why, preferredCode: a.preferred_code, status: a.status, reason: a.reason, createdAt: a.created_at.toISOString() }
-      : null,
-  };
-}
-
-/** Apply (or re-apply after a rejection) to the influencer program. */
-export async function submitApplication(userId: string, input: ApplicationInput): Promise<void> {
-  await ensureReferralSchema();
-  const code = await codeFor(userId);
-  if (code?.kind === "INFLUENCER") throw new ApiError(409, "You're already in the influencer program.", "already_influencer");
-  const preferred = input.preferredCode ? normalizeCode(input.preferredCode) : null;
-  if (input.preferredCode && !preferred) throw new ApiError(422, "Codes are 4–16 letters or numbers.", "bad_code");
-  const socials = input.socials.filter((x) => x.handle.trim()).slice(0, 8);
-  if (!socials.length) throw new ApiError(422, "Add at least one social account.", "no_socials");
-  const n = await prisma.$executeRawUnsafe(
-    `INSERT INTO influencer_applications (user_id, full_name, phone, socials, niche, location, why, preferred_code)
-     VALUES ($1::uuid, $2, $3, $4::jsonb, $5, $6, $7, $8)
-     ON CONFLICT (user_id) DO UPDATE SET full_name = EXCLUDED.full_name, phone = EXCLUDED.phone, socials = EXCLUDED.socials,
-       niche = EXCLUDED.niche, location = EXCLUDED.location, why = EXCLUDED.why, preferred_code = EXCLUDED.preferred_code,
-       status = 'PENDING', reason = NULL, reviewed_by = NULL, reviewed_at = NULL, updated_at = now()
-     WHERE influencer_applications.status <> 'PENDING'`,
-    userId, input.fullName.trim().slice(0, 120), input.phone.trim().slice(0, 40), JSON.stringify(socials),
-    input.niche.trim().slice(0, 120), input.location.trim().slice(0, 120), input.why.trim().slice(0, 1000), preferred,
-  );
-  if (!n) throw new ApiError(409, "Your application is already being reviewed.", "already_applied");
-}
+// Applications live in ./creatorApplications.ts.
 
 async function requireInfluencer(userId: string): Promise<CodeRow> {
   await ensureReferralSchema();
@@ -928,60 +789,6 @@ export async function upsertInfluencer(input: { user: string; code: string; comm
     user.id, code, bps, input.windowDays, input.active,
   );
   return user.id;
-}
-
-export async function listApplicationsAdmin(status = "PENDING") {
-  await ensureReferralSchema();
-  const rows = await prisma.$queryRawUnsafe<{ id: string; user_id: string; email: string; kyc_tier: number; full_name: string; phone: string; socials: Social[]; niche: string; location: string; why: string; preferred_code: string | null; status: string; reason: string | null; reviewed_by: string | null; created_at: Date }[]>(
-    `SELECT a.id::text, a.user_id::text, u.email, u.kyc_tier, a.full_name, a.phone, a.socials, a.niche, a.location, a.why, a.preferred_code,
-            a.status, a.reason, a.reviewed_by, a.created_at
-       FROM influencer_applications a JOIN app_users u ON u.id = a.user_id
-      WHERE ($1 = 'ALL' OR a.status = $1) ORDER BY a.created_at ${status === "PENDING" ? "ASC" : "DESC"} LIMIT 300`,
-    status,
-  );
-  return rows.map((a) => ({
-    id: a.id, userId: a.user_id, email: a.email, kycTier: a.kyc_tier, fullName: a.full_name, phone: a.phone, socials: a.socials,
-    niche: a.niche, location: a.location, why: a.why, preferredCode: a.preferred_code, status: a.status, reason: a.reason,
-    reviewedBy: a.reviewed_by, createdAt: a.created_at.toISOString(),
-  }));
-}
-
-export async function decideApplication(
-  id: string,
-  admin: string,
-  d: { approve: true; code: string; commissionPercent: number; windowDays: number | null } | { approve: false; reason: string },
-): Promise<{ userId: string }> {
-  await ensureReferralSchema();
-  const rows = await prisma.$queryRawUnsafe<{ user_id: string; email: string }[]>(
-    `SELECT a.user_id::text, u.email FROM influencer_applications a JOIN app_users u ON u.id = a.user_id WHERE a.id = $1::uuid AND a.status = 'PENDING'`, id,
-  );
-  const a = rows[0];
-  if (!a) throw new ApiError(409, "This application has already been decided.", "already_decided");
-  if (d.approve) {
-    await upsertInfluencer({ user: a.email, code: d.code, commissionPercent: d.commissionPercent, windowDays: d.windowDays, active: true });
-    await prisma.$executeRawUnsafe(
-      `UPDATE influencer_applications SET status = 'APPROVED', reviewed_by = $2, reviewed_at = now() WHERE id = $1::uuid`, id, admin,
-    );
-    await notifyUser(a.user_id, {
-      category: "updates",
-      title: "You're in! 🎉",
-      body: `Welcome to the CheqPay influencer program. Your code is ${normalizeCode(d.code)} — open your dashboard at influencer.mycheqpay.com.`,
-      data: { url: PORTAL_ORIGIN },
-    }).catch(() => undefined);
-  } else {
-    const why = d.reason.trim().slice(0, 300);
-    if (!why) throw new ApiError(422, "Give a reason.", "reason_required");
-    await prisma.$executeRawUnsafe(
-      `UPDATE influencer_applications SET status = 'REJECTED', reason = $3, reviewed_by = $2, reviewed_at = now() WHERE id = $1::uuid`, id, admin, why,
-    );
-    await notifyUser(a.user_id, {
-      category: "updates",
-      title: "About your influencer application",
-      body: `We can't add you to the influencer program right now: ${why}`,
-      data: { url: `${PORTAL_ORIGIN}/apply` },
-    }).catch(() => undefined);
-  }
-  return { userId: a.user_id };
 }
 
 export async function listTasksAdmin() {

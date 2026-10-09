@@ -10,7 +10,8 @@ import { rememberReturnTo } from "@/lib/returnTo";
 // visitors and the dashboard to signed-in ones — the page itself chooses.
 // Listing it here is what stops this guard blanking the homepage, which is
 // what left out/index.html with nothing for search engines to index.
-const PUBLIC_EXACT = new Set(["/", "/login", "/signup", "/verify-otp", "/welcome"]);
+// "/connect" handles signed-out visitors itself (sign in, then come back).
+const PUBLIC_EXACT = new Set(["/", "/login", "/signup", "/verify-otp", "/welcome", "/connect"]);
 const PUBLIC_PREFIX = ["/legal", "/privacy", "/terms", "/about", "/support", "/faq", "/contact", "/pricing", "/screen"];
 
 /** Where a signed-out visitor to the app root is sent. */
