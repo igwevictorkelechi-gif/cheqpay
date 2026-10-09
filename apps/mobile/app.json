@@ -11,7 +11,7 @@
       "policy": "sdkVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/your-eas-project-id",
+      "url": "https://u.expo.dev/d687cf5e-de27-4ba0-8dfe-77506f45addf",
       "fallbackToCacheTimeout": 0
     },
     "splash": {
@@ -91,7 +91,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "your-eas-project-id"
+        "projectId": "d687cf5e-de27-4ba0-8dfe-77506f45addf"
       }
     }
   }
