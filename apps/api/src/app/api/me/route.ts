@@ -4,7 +4,7 @@ import { Prisma, prisma } from "@cheqpay/db";
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { getTierLimits } from "@/lib/kyc";
-import { getEnv } from "@/lib/env";
+import { supabaseAdminConfig } from "@/lib/supabaseAdmin";
 import { profileUpdateSchema } from "@/lib/validation";
 import { assignUsernameIfMissing, ensureUsernameCaseIndex } from "@/lib/username";
 import { closeAccountWithRetention } from "@/lib/retention";
@@ -222,14 +222,15 @@ export async function DELETE(req: Request) {
  * told their account was deleted while they could still sign straight back in.
  */
 async function deleteSupabaseAuthUser(userId: string): Promise<void> {
-  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = getEnv();
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  const admin = supabaseAdminConfig();
+  if (!admin) {
     throw new ApiError(
       503,
       "Account closure is temporarily unavailable. Please contact support.",
       "auth_admin_not_configured"
     );
   }
+  const { url: SUPABASE_URL, key: SUPABASE_SERVICE_ROLE_KEY } = admin;
 
   let res: Response;
   try {

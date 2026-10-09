@@ -52,14 +52,20 @@ export async function finishCheqPaySignIn(code: string | null, state: string | n
   if (!code || !state || !saved.verifier || saved.state !== state || typeof saved.at !== "number" || Date.now() - saved.at > MAX_AGE_MS) {
     throw new SignInError("This sign-in didn't start here, or took too long. Please try again.");
   }
-  const res = await fetch(`${API_BASE}/api/sso/exchange`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client: "creators", code, verifier: saved.verifier }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/sso/exchange`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ client: "creators", code, verifier: saved.verifier }),
+    });
+  } catch {
+    throw new SignInError("Can't reach CheqPay right now. Check your connection and try again.");
+  }
   const body = (await res.json().catch(() => null)) as { token_hash?: string; error?: string } | null;
+  // The API's own messages are written for people; show them as they are.
   if (!res.ok || !body?.token_hash) throw new SignInError(body?.error ?? "We couldn't sign you in. Please try again.");
   const { error } = await supabase.auth.verifyOtp({ token_hash: body.token_hash, type: "magiclink" });
-  if (error) throw new SignInError("We couldn't sign you in. Please try again.");
+  if (error) throw new SignInError("This sign-in link expired before it could be used. Tap Try again.");
   return safeNext(saved.next);
 }
