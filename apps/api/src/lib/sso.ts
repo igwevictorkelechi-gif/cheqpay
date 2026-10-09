@@ -22,7 +22,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { UserStatus, prisma } from "@cheqpay/db";
 import { ApiError } from "./http";
-import { getEnv } from "./env";
+import { supabaseAdminConfig } from "./supabaseAdmin";
 
 /** The sites that may sign users in this way, and the only place each may send them back to. */
 export const SSO_CLIENTS = {
@@ -146,10 +146,9 @@ export async function redeemHandoff(input: {
  * link). Nothing is emailed: the admin endpoint only generates the link.
  */
 export async function mintSignInToken(email: string): Promise<string> {
-  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = getEnv();
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    throw new ApiError(503, "Signing in with CheqPay is unavailable right now.", "sso_not_configured");
-  }
+  const admin = supabaseAdminConfig();
+  if (!admin) throw new ApiError(503, "Signing in with CheqPay is unavailable right now.", "sso_not_configured");
+  const { url: SUPABASE_URL, key: SUPABASE_SERVICE_ROLE_KEY } = admin;
   let res: Response;
   try {
     res = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
@@ -162,7 +161,8 @@ export async function mintSignInToken(email: string): Promise<string> {
       body: JSON.stringify({ type: "magiclink", email }),
       signal: AbortSignal.timeout(10_000),
     });
-  } catch {
+  } catch (err) {
+    console.error("[sso] generate_link request failed", err instanceof Error ? err.message : err);
     throw new ApiError(502, "Couldn't finish signing you in. Please try again.", "sso_failed");
   }
   const body = (await res.json().catch(() => null)) as { hashed_token?: string; properties?: { hashed_token?: string } } | null;

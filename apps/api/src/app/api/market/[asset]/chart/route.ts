@@ -25,8 +25,16 @@ export async function GET(
       throw new ApiError(422, `Invalid range: ${rangeParam}`, "bad_range");
     }
 
-    const candles = await getPriceFeed().getCandles(asset as Asset, rangeParam as ChartRange);
-    return jsonOk({ asset, range: rangeParam, candles });
+    // A market-data outage (or a rejected data key) shouldn't turn the asset
+    // page into an error: answer with an empty series and let the chart say
+    // it's unavailable.
+    try {
+      const candles = await getPriceFeed().getCandles(asset as Asset, rangeParam as ChartRange);
+      return jsonOk({ asset, range: rangeParam, candles });
+    } catch (err) {
+      console.warn("[market] chart unavailable", asset, rangeParam, err instanceof Error ? err.message : err);
+      return jsonOk({ asset, range: rangeParam, candles: [], unavailable: true });
+    }
   } catch (err) {
     return toErrorResponse(err);
   }
