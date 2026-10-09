@@ -158,6 +158,13 @@ const envSchema = z.object({
   // and banks. "mock" (the default) keeps dev and tests free of external calls.
   PAYMENT_PROVIDER: providerEnum("PAYMENT_PROVIDER", ["mock", "maplerad"], "mock"),
   MAPLERAD_SECRET_KEY: z.string().optional(),
+  // Bills (airtime, data, electricity, cable TV). "vtung" sends them to vtu.ng;
+  // "default" keeps them on PAYMENT_PROVIDER. Credentials are the vtu.ng
+  // account login; the PIN signs vtu.ng's webhooks.
+  BILLS_PROVIDER: providerEnum("BILLS_PROVIDER", ["default", "vtung"], "default"),
+  VTU_NG_USERNAME: z.string().optional(),
+  VTU_NG_PASSWORD: z.string().optional(),
+  VTU_NG_PIN: z.string().optional(),
   MAPLERAD_BASE_URL: z.string().url().default("https://api.maplerad.com/v1"),
   // Svix signing secret — verifies inbound Maplerad webhooks (payout settlement
   // today; deposits once Maplerad enables collections).

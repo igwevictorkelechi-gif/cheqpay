@@ -30,6 +30,7 @@ import { Prisma, TransactionStatus, TransactionType, prisma } from "@cheqpay/db"
 import { verifyTransaction } from "./maplerad/transactions";
 import { describeProviderError } from "./mapleradCustomer";
 import { billOutcomeFrom, settleBillByProviderRef, type BillOutcome } from "./billSettlement";
+import { billsProviderNamed } from "@/payments";
 
 export interface StuckBill {
   transactionId: string;
@@ -42,13 +43,18 @@ export interface StuckBill {
   createdAt: string;
   /** What the provider says became of it: SUCCESS / FAILED / still pending. */
   providerStatus: string | null;
-  /** Where that answer came from: a live verify, or the stored signed webhook. */
-  evidence: "verify" | "webhook" | null;
+  /** Where that answer came from: a live verify or requery, or the stored signed webhook. */
+  evidence: "verify" | "requery" | "webhook" | null;
   /** How it would be settled: completed, or failed-and-refunded. Null if not yet. */
   resolution: "complete" | "refund" | null;
   /** Why it cannot be settled from here (when it cannot). */
   reason?: string;
+  /** A prepaid token the provider reported with the outcome. */
+  token?: string | null;
 }
+
+/** A vtu.ng order that still can't be found after this long never happened. */
+const NOT_FOUND_AFTER_MS = 30 * 60_000;
 
 export interface BillReconcileResult {
   ok: true;
@@ -133,6 +139,35 @@ async function checkOne(row: {
     return { ...base, reason: "no provider reference: the purchase was never accepted" };
   }
 
+  // Bills bought on vtu.ng are asked about there, by our own request_id.
+  if (readMeta(row.metadata, "billsProvider") === "vtung") {
+    const provider = billsProviderNamed("vtung");
+    if (!provider?.queryBill) return { ...base, reason: "vtu.ng is not configured" };
+    try {
+      const q = await provider.queryBill(ref);
+      const ageMs = Date.now() - row.createdAt.getTime();
+      if (q.status === "not_found") {
+        // No such order there: nothing was delivered. Safe to refund once it's
+        // clearly not just in flight.
+        return ageMs > NOT_FOUND_AFTER_MS
+          ? { ...base, providerStatus: "not found", evidence: "requery", resolution: "refund" }
+          : { ...base, providerStatus: "not found", evidence: "requery", reason: "not visible at the provider yet" };
+      }
+      if (q.status === "pending") {
+        return { ...base, providerStatus: q.providerStatus, evidence: "requery", reason: "the provider still reports it pending" };
+      }
+      return {
+        ...base,
+        providerStatus: q.providerStatus,
+        evidence: "requery",
+        token: q.token ?? null,
+        resolution: q.status === "successful" ? "complete" : "refund",
+      };
+    } catch (err) {
+      return { ...base, reason: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
   let outcome: BillOutcome;
   let status: string | null = null;
   let evidence: "verify" | "webhook";
@@ -212,10 +247,10 @@ export async function settleStuckBills(
   let settled = 0;
   for (const item of targets) {
     if (!item.providerRef) continue;
-    const res = await settleBillByProviderRef(
-      item.providerRef,
-      item.resolution === "complete" ? "successful" : "failed",
-    );
+    const outcome = item.resolution === "complete" ? "successful" : "failed";
+    const res = item.token
+      ? await settleBillByProviderRef(item.providerRef, outcome, { token: item.token })
+      : await settleBillByProviderRef(item.providerRef, outcome);
     if (res.outcome === "completed" || res.outcome === "refunded") {
       settled += 1;
       item.resolution = null;
@@ -227,4 +262,46 @@ export async function settleStuckBills(
   }
 
   return { ...preview, summary: summarise(preview.items, settled) };
+}
+
+/**
+ * Settle every vtu.ng bill still processing after a few minutes — the safety
+ * net for a webhook that never came. Runs from the daily cron and, throttled,
+ * whenever someone opens the bills screen. Never throws.
+ */
+export async function sweepVtuBills(opts: { olderThanMs?: number; limit?: number } = {}): Promise<{ checked: number; settled: number }> {
+  try {
+    const rows = await prisma.transaction.findMany({
+      where: {
+        type: TransactionType.BILL,
+        status: TransactionStatus.PROCESSING,
+        createdAt: { lt: new Date(Date.now() - (opts.olderThanMs ?? 5 * 60_000)) },
+        metadata: { path: ["billsProvider"], equals: "vtung" } as Prisma.JsonFilter,
+      },
+      select: { id: true, amount: true, externalRef: true, metadata: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+      take: opts.limit ?? 50,
+    });
+    let settled = 0;
+    for (const row of rows) {
+      const item = await checkOne(row);
+      if (!item.resolution || !item.providerRef) continue;
+      const res = await settleBillByProviderRef(item.providerRef, item.resolution === "complete" ? "successful" : "failed", {
+        token: item.token ?? null,
+      });
+      if (res.outcome === "completed" || res.outcome === "refunded") settled += 1;
+    }
+    return { checked: rows.length, settled };
+  } catch (err) {
+    console.error("[bills] vtu.ng sweep failed", err);
+    return { checked: 0, settled: 0 };
+  }
+}
+
+let lastSweep = 0;
+/** sweepVtuBills at most every five minutes per instance. */
+export function maybeSweepVtuBills(): Promise<unknown> | null {
+  if (Date.now() - lastSweep < 5 * 60_000) return null;
+  lastSweep = Date.now();
+  return sweepVtuBills();
 }

@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { getBillsProvider } from "@/payments";
 import { enforceRateLimit } from "@/lib/ratelimit";
-import { getBiller, getServiceConfig } from "@/lib/bills";
+import { getBiller, getServiceConfig, providerBillerCode } from "@/lib/bills";
 import { billValidateSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +20,9 @@ export async function POST(req: Request) {
       throw new ApiError(422, "Unknown service or biller", "bad_biller");
     }
 
-    const result = await getBillsProvider().validateBillCustomer({
-      billerCode: biller.mapleradId,
+    const psp = getBillsProvider();
+    const result = await psp.validateBillCustomer({
+      billerCode: providerBillerCode(biller, psp.name, "pay"),
       customer: body.customer,
     });
     if (!result.valid) {

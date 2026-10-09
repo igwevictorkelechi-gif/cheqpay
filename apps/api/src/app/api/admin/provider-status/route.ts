@@ -36,9 +36,18 @@ export async function GET(req: Request) {
         webhookConfigured: has("MAPLERAD_WEBHOOK_SECRET"),
       },
       bills: {
-        // Bills run on the same rail as everything else (Maplerad).
-        provider: env.PAYMENT_PROVIDER,
-        configured: has("MAPLERAD_SECRET_KEY"),
+        // BILLS_PROVIDER=vtung moves bills to vtu.ng; otherwise they ride the NGN rail.
+        provider: env.BILLS_PROVIDER === "vtung" ? "vtung" : env.PAYMENT_PROVIDER,
+        configured:
+          env.BILLS_PROVIDER === "vtung"
+            ? has("VTU_NG_USERNAME") && has("VTU_NG_PASSWORD")
+            : has("MAPLERAD_SECRET_KEY"),
+        vtung: {
+          loginConfigured: has("VTU_NG_USERNAME") && has("VTU_NG_PASSWORD"),
+          webhookConfigured: has("VTU_NG_PIN"),
+          webhookUrl: "/api/webhooks/vtung",
+          checkWith: "/api/admin/bills/vtung",
+        },
       },
       // NGN deposits are wired end to end (collection account at KYC approval,
       // credit on the collection webhook). Whether they actually work depends on
