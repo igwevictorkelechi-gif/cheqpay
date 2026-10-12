@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   txn: vi.fn(),
   awardCashback: vi.fn(),
   notifyUser: vi.fn(),
+  settleApiBill: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -27,6 +28,7 @@ vi.mock("@cheqpay/db", () => ({
 }));
 vi.mock("./cashback", () => ({ awardCashback: h.awardCashback }));
 vi.mock("./alerts", () => ({ notifyUser: h.notifyUser }));
+vi.mock("./devapi/bills", () => ({ settleApiBill: h.settleApiBill }));
 
 import { billOutcomeFrom, settleBillByProviderRef } from "./billSettlement";
 
@@ -104,9 +106,23 @@ describe("settleBillByProviderRef", () => {
 
   it("reports an unplaceable reference rather than guessing", async () => {
     h.findFirst.mockResolvedValue(null);
+    h.settleApiBill.mockResolvedValue(null);
     expect(await settleBillByProviderRef("nope", "successful")).toMatchObject({
       outcome: "unmatched",
     });
+  });
+
+  it("offers a reference no app bill owns to the developer API, and only then", async () => {
+    h.findFirst.mockResolvedValue(null);
+    h.settleApiBill.mockResolvedValue({ outcome: "refunded", transactionId: "dev-tx" });
+    expect(await settleBillByProviderRef("dev-ref", "failed", { token: null })).toEqual({ outcome: "refunded", transactionId: "dev-tx" });
+    expect(h.settleApiBill).toHaveBeenCalledWith("dev-ref", "failed", { token: null });
+
+    h.settleApiBill.mockClear();
+    h.findFirst.mockResolvedValue(row);
+    h.updateMany.mockResolvedValue({ count: 1 });
+    await settleBillByProviderRef("ref-1", "successful");
+    expect(h.settleApiBill).not.toHaveBeenCalled();
   });
 
   it("ignores a pending event and an empty reference without touching money", async () => {

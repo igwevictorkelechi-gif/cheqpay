@@ -18,6 +18,7 @@ import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { awardCashback } from "./cashback";
 import { notifyUser } from "./alerts";
 import { fromMinorUnits } from "./money";
+import { settleApiBill } from "./devapi/bills";
 
 export type BillOutcome = "successful" | "failed" | "pending";
 
@@ -56,7 +57,12 @@ export async function settleBillByProviderRef(
     where: { type: TransactionType.BILL, externalRef: providerRef },
     select: { id: true, userId: true, amount: true, fee: true, status: true, metadata: true },
   });
-  if (!tx) return { outcome: "unmatched", reason: "no bill for this provider reference" };
+  if (!tx) {
+    // Not an app user's bill: it may be one a developer paid through the API.
+    const dev = await settleApiBill(providerRef, outcome, extra);
+    if (dev) return dev;
+    return { outcome: "unmatched", reason: "no bill for this provider reference" };
+  }
   if (tx.status !== TransactionStatus.PROCESSING) {
     return { outcome: "duplicate", transactionId: tx.id };
   }

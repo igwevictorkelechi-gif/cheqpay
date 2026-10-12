@@ -188,6 +188,16 @@ export const ERROR_CODES = {
     type: "invalid_request_error",
     description: "A virtual account is already being opened for this customer. Retry in a few seconds.",
   },
+  biller_unavailable: {
+    status: 503,
+    type: "api_error",
+    description: "This biller can't be paid right now. GET /bills/services shows which billers are available.",
+  },
+  price_changed: {
+    status: 409,
+    type: "invalid_request_error",
+    description: "The plan's price changed since you listed it. List plans again and send the new amount.",
+  },
   service_unavailable: {
     status: 503,
     type: "api_error",

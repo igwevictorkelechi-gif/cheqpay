@@ -1,7 +1,7 @@
 // apps/api/src/lib/devapi/jobs.ts
 //
-// Work that can't wait for the daily cron: webhook retries and verifications
-// that have come due. Run at most once a minute, from API traffic (after the
+// Work that can't wait for the daily cron: webhook retries, verifications
+// that have come due, and live bills still pending at the provider. Run at most once a minute, from API traffic (after the
 // response), on whichever instance takes the lease first. On a quiet day the
 // daily cron still sweeps everything.
 
@@ -9,6 +9,7 @@ import { prisma } from "@cheqpay/db";
 import { ensureDevApiSchema } from "./ensureDevApi";
 import { sweepDueDeliveries } from "./webhooks";
 import { retryDueVerifications } from "./customers";
+import { sweepPendingApiBills } from "./bills";
 
 let lastTried = 0;
 
@@ -24,6 +25,7 @@ export async function maybeRunJobs(): Promise<void> {
   if (!lease.length) return;
   await sweepDueDeliveries({ limit: 100, budgetMs: 20_000 });
   await retryDueVerifications(10);
+  await sweepPendingApiBills({ limit: 10 });
 }
 
 /** Test hook. */

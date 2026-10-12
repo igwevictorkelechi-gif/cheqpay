@@ -59,6 +59,7 @@ const DETAIL_FIELDS: Partial<Record<DevTransactionRow["kind"], readonly string[]
   subscription: ["plan_id", "from_plan_id", "prorated", "period_start", "period_end", "renewal"],
   deposit: ["virtual_account_id", "payer"],
   conversion: ["quote_id", "to_currency", "converted_amount", "fx_fee", "rate"],
+  bill_payment: ["service", "biller_id", "biller_name", "customer", "plan_id", "plan_name", "token"],
 };
 
 export function transactionObject(t: DevTransactionRow) {
