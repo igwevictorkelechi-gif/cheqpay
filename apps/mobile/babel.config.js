@@ -3,7 +3,8 @@ module.exports = function (api) {
   return {
     presets: ['babel-preset-expo'],
     plugins: [
-      'nativewind/babel',
+      // rem 15, as the website uses on phones (globals.css), so Tailwind sizes match.
+      ['nativewind/babel', { rem: 15 }],
       'react-native-reanimated/plugin',
     ],
   };

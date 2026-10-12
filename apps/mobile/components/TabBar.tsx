@@ -115,7 +115,9 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
 const makeStyles = () =>
   StyleSheet.create({
   wrap: {
-    backgroundColor: 'transparent',
+    // The bar sits below the screens, not over them, so its strip must be the
+    // screen colour; transparent showed the navigator's white backdrop.
+    backgroundColor: colors.surface,
     paddingHorizontal: 22,
     paddingTop: 10,
   },

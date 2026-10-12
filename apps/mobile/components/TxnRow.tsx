@@ -128,14 +128,38 @@ export function txnAmount(t: LedgerTransaction): { text: string; positive: boole
   return { text: `${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
 }
 
+const STATUS: Record<string, { label: string; color: string; bg: string }> = {
+  COMPLETED: { label: 'Completed', color: '#4ADE80', bg: 'rgba(34,197,94,0.15)' },
+  PROCESSING: { label: 'Processing', color: '#FBBF24', bg: 'rgba(245,158,11,0.15)' },
+  PENDING: { label: 'Pending', color: '#FBBF24', bg: 'rgba(245,158,11,0.15)' },
+  FAILED: { label: 'Failed', color: '#F87171', bg: 'rgba(239,68,68,0.15)' },
+  REVERSED: { label: 'Reversed', color: '#F87171', bg: 'rgba(239,68,68,0.15)' },
+};
+
+/** The small coloured status pill next to the date (as on the website). */
+export function TxnStatusBadge({ status }: { status: LedgerTransaction['status'] }) {
+  const s = STATUS[status] ?? { label: status, color: colors.muted, bg: 'rgba(255,255,255,0.10)' };
+  return (
+    <View style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: s.bg }}>
+      <Text style={{ fontSize: 11, fontWeight: '600', color: s.color }}>{s.label}</Text>
+    </View>
+  );
+}
+
+/**
+ * One transaction row, padded to sit edge to edge in a rounded list card, the
+ * same as the website's history, home and crypto lists.
+ */
 export function TxnRow({
   t,
   divider,
   onPress,
+  showStatus = true,
 }: {
   t: LedgerTransaction;
   divider?: boolean;
   onPress?: () => void;
+  showStatus?: boolean;
 }) {
   const ic = txnIcon(t.type);
   const amt = txnAmount(t);
@@ -146,7 +170,7 @@ export function TxnRow({
     <Container
       onPress={onPress}
       activeOpacity={0.7}
-      className="flex-row items-center py-3"
+      className="flex-row items-center px-4 py-4"
       style={divider ? { borderTopWidth: 1, borderTopColor: colors.border } : undefined}
     >
       <View
@@ -159,13 +183,23 @@ export function TxnRow({
         <Text className="text-ink dark:text-ink-dark font-bold" numberOfLines={1}>
           {txnTitle(t)}
         </Text>
-        <Text className="text-muted dark:text-muted-dark text-xs mt-0.5">
-          {new Date(t.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}
-        </Text>
+        <View className="flex-row items-center mt-0.5" style={{ gap: 8 }}>
+          <Text className="text-muted dark:text-muted-dark text-xs">
+            {new Date(t.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}
+          </Text>
+          {showStatus && <TxnStatusBadge status={t.status} />}
+        </View>
       </View>
-      <Text className="font-bold" style={{ color: amt.positive ? colors.positive : colors.ink }}>
-        {amt.text}
-      </Text>
+      <View className="items-end ml-2">
+        <Text className="font-bold" style={{ color: amt.positive ? '#4ADE80' : colors.ink, fontVariant: ['tabular-nums'] }}>
+          {amt.text}
+        </Text>
+        {t.type === 'CONVERT' && t.fromFormatted ? (
+          <Text className="text-muted dark:text-muted-dark text-xs">
+            -{Number(t.fromFormatted).toLocaleString('en-US', { maximumFractionDigits: 8 })} {t.fromAsset}
+          </Text>
+        ) : null}
+      </View>
     </Container>
   );
 }

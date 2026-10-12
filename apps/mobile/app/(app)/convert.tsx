@@ -232,15 +232,27 @@ export default function ConvertScreen() {
           {rateLine}
         </Text>
 
-        <View className="flex-row flex-wrap px-5 mt-3" style={{ gap: 12 }}>
-          {keys.map((key) => (
-            <TouchableOpacity key={key} onPress={() => press(key)} className="bg-card dark:bg-card-dark rounded-2xl items-center justify-center" style={{ width: '31.5%', height: 56 }} activeOpacity={0.7}>
-              {key === 'del' ? (
-                <Ionicons name="backspace-outline" size={22} color={colors.ink} />
-              ) : (
-                <Text className="text-ink dark:text-ink-dark text-xl font-semibold">{key}</Text>
-              )}
-            </TouchableOpacity>
+        {/* Rows of three with flexible keys: percentage widths plus a fixed gap
+            overflowed narrow phones and wrapped the pad into two columns. */}
+        <View className="px-5 mt-3" style={{ gap: 10 }}>
+          {[0, 3, 6, 9].map((start) => (
+            <View key={start} className="flex-row" style={{ gap: 10 }}>
+              {keys.slice(start, start + 3).map((key) => (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => press(key)}
+                  className="bg-card dark:bg-card-dark rounded-2xl items-center justify-center"
+                  style={{ flex: 1, height: 52 }}
+                  activeOpacity={0.7}
+                >
+                  {key === 'del' ? (
+                    <Ionicons name="backspace-outline" size={22} color={colors.ink} />
+                  ) : (
+                    <Text className="text-ink dark:text-ink-dark text-xl font-semibold">{key}</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
           ))}
         </View>
 
