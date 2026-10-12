@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Activity, Globe2, Layers, Minus, Plus, Radio, Users, Wallet } from 'lucide-react';
@@ -142,7 +142,9 @@ export default function LiveMapPage() {
         <div className="relative h-[68vh] min-h-[420px] overflow-hidden rounded-2xl border border-gray-200 bg-[#0b0a10]">
           {/* (MapLibre sets its own container to position: relative, hence the wrapper.) */}
           <div className="absolute inset-0">
-            <LiveGlobe ref={globe} cells={data?.cells ?? []} layers={layers} className="h-full w-full" />
+            <MapBoundary>
+              <LiveGlobe ref={globe} cells={data?.cells ?? []} layers={layers} className="h-full w-full" />
+            </MapBoundary>
           </div>
 
           {/* Zoom and quick places */}
@@ -285,4 +287,27 @@ function Toggle({ on, onChange, children }: { on: boolean; onChange: (v: boolean
       <span className="flex items-center gap-2">{children}</span>
     </label>
   );
+}
+
+/** Keeps a map failure inside the map's box: the feed and numbers carry on. */
+class MapBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  state = { error: null as string | null };
+  static getDerivedStateFromError(err: unknown) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+  componentDidCatch(err: unknown) {
+    console.error('[live-map] map crashed', err);
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="flex h-full items-center justify-center p-6 text-center text-sm text-gray-400">
+        <div>
+          <p className="font-semibold text-white">The map couldn&apos;t load.</p>
+          <p className="mt-1">Live transactions and numbers still update alongside. Reload the page to try again.</p>
+          <p className="mt-2 text-[11px] opacity-60">{this.state.error}</p>
+        </div>
+      </div>
+    );
+  }
 }

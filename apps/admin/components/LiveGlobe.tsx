@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import maplibregl, { type GeoJSONSource, type Map as MLMap, type StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { KIND_COLORS } from './kindColors';
@@ -45,7 +45,8 @@ export interface LiveGlobeHandle {
   ping: (p: GlobePing) => void;
 }
 
-const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
+/** Tried in order: the dark map, then the standard one, then a plain sphere. */
+const STYLE_URLS = ['https://tiles.openfreemap.org/styles/dark', 'https://tiles.openfreemap.org/styles/liberty'];
 const FALLBACK_STYLE: StyleSpecification = {
   version: 8,
   sources: {},
@@ -94,6 +95,7 @@ const LiveGlobe = forwardRef<LiveGlobeHandle, {
   const raf = useRef<number | null>(null);
   /** The idle spin; stops for good at the first touch or programmatic move. */
   const spinning = useRef(interactive);
+  const [failed, setFailed] = useState<string | null>(null);
   const latest = useRef({ cells, layers });
   latest.current = { cells, layers };
 
@@ -136,34 +138,61 @@ const LiveGlobe = forwardRef<LiveGlobeHandle, {
 
   useEffect(() => {
     if (!box.current) return;
-    const m = new maplibregl.Map({
-      container: box.current,
-      style: STYLE_URL,
-      center: [8, 9],
-      zoom: 1.6,
-      interactive,
-      attributionControl: { compact: true },
-      maxZoom: 14,
-    });
+    // Without WebGL (old browsers, some locked-down or low-power devices) the
+    // map can't start. Say so in the map's box instead of taking the page down.
+    let m: MLMap;
+    try {
+      m = new maplibregl.Map({
+        container: box.current,
+        style: STYLE_URLS[0],
+        center: [8, 9],
+        zoom: 1.6,
+        interactive,
+        attributionControl: { compact: true },
+        maxZoom: 14,
+      });
+    } catch (err) {
+      console.error('[live-map] map failed to start', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setFailed(/webgl/i.test(msg) ? 'WebGL is turned off or unavailable in this browser.' : msg.slice(0, 160));
+      return;
+    }
     map.current = m;
 
-    // Tiles unreachable: switch to the plain sphere rather than a blank box.
+    // A style that won't load moves on to the next one, and finally to the
+    // plain sphere, so the box is never left blank.
     let styled = false;
-    const fallback = window.setTimeout(() => {
-      if (!styled) m.setStyle(FALLBACK_STYLE);
+    let attempt = 0;
+    const nextStyle = () => {
+      attempt += 1;
+      m.setStyle(attempt < STYLE_URLS.length ? STYLE_URLS[attempt] : FALLBACK_STYLE);
+    };
+    let fallback = window.setTimeout(function giveUp() {
+      if (styled) return;
+      nextStyle();
+      if (attempt < STYLE_URLS.length) fallback = window.setTimeout(giveUp, 8000);
     }, 8000);
     m.on('error', (e) => {
-      if (!styled && /style|fetch|Failed/i.test(String(e?.error?.message ?? ''))) {
-        styled = true;
-        m.setStyle(FALLBACK_STYLE);
-      }
+      if (styled || attempt >= STYLE_URLS.length) return;
+      if (/style|fetch|Failed|404|403/i.test(String(e?.error?.message ?? ''))) nextStyle();
     });
 
     m.on('style.load', () => {
       styled = true;
       window.clearTimeout(fallback);
-      m.setProjection({ type: 'globe' });
-      install(m);
+      try {
+        m.setProjection({ type: 'globe' });
+      } catch (err) {
+        // Older GPUs: stay on the flat map rather than fail.
+        console.warn('[live-map] globe projection unavailable', err);
+      }
+      try {
+        install(m);
+      } catch (err) {
+        console.error('[live-map] layers failed', err);
+        setFailed(err instanceof Error ? err.message : String(err));
+        return;
+      }
       ready.current = true;
       sync();
       startAnimating();
@@ -311,7 +340,20 @@ const LiveGlobe = forwardRef<LiveGlobeHandle, {
     sync();
   }, [cells, layers]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <div ref={box} className={className} style={{ background: '#0b0a10' }} />;
+  return (
+    <div className={className} style={{ position: 'relative', background: '#0b0a10' }}>
+      <div ref={box} style={{ position: 'absolute', inset: 0 }} />
+      {failed && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', color: '#c4bfd3', fontSize: 14 }}>
+          <div>
+            <p style={{ fontWeight: 600, color: '#fff' }}>The 3D map couldn&apos;t start in this browser.</p>
+            <p style={{ marginTop: 6 }}>Live transactions and numbers still update alongside. Try Chrome or Safari with hardware acceleration on.</p>
+            <p style={{ marginTop: 8, fontSize: 11, opacity: 0.6 }}>{failed}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 });
 
 function escapeHtml(s: string): string {
