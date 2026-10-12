@@ -2,7 +2,7 @@
 //
 // The developer platform's daily job: renew plans, prove every wallet balance
 // against its ledger (freezing any that don't add up), catch deposits whose
-// webhook never came, retry verifications and webhook deliveries, erase old
+// webhook never came, settle bills still pending at the provider, retry verifications and webhook deliveries, erase old
 // sandbox personal data, and prune old logs and events.
 
 import { alertOpsOnce } from "../opsAlert";
@@ -14,6 +14,7 @@ import { reconcileLiveDeposits } from "./deposits";
 import { retryDueVerifications, scrubOldSandboxData } from "./customers";
 import { sweepDueDeliveries } from "./webhooks";
 import { pruneEvents } from "./events";
+import { sweepPendingApiBills } from "./bills";
 
 export async function runDevelopersDaily(now: Date = new Date()) {
   await ensureDevApiSchema();
@@ -39,6 +40,7 @@ export async function runDevelopersDaily(now: Date = new Date()) {
     }
   };
   const deposits = await step("deposit reconciliation", () => reconcileLiveDeposits(50));
+  const bills = await step("pending bill requery", () => sweepPendingApiBills({ limit: 200 }));
   const verifications = await step("verification retries", () => retryDueVerifications(100));
   const webhooks = await step("webhook retries", () => sweepDueDeliveries({ limit: 2_000, budgetMs: 120_000 }));
   const scrubbed = await step("sandbox scrub", () => scrubOldSandboxData());
@@ -48,6 +50,7 @@ export async function runDevelopersDaily(now: Date = new Date()) {
     renewals,
     reconciliation: { mismatches: mismatches.length, frozen },
     deposits,
+    bills,
     verifications,
     webhooks,
     scrubbed,

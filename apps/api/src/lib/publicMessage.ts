@@ -6,12 +6,12 @@
 // full text still goes to the logs and the audit trail for the team.
 
 const PROVIDER_NAMES =
-  /\b(maplerad|supabase|vercel|tatum|binance|dojah|flutterwave|paystack|sentry|resend)\b/gi;
+  /\b(maplerad|vtu\.ng|vtung|supabase|vercel|tatum|binance|dojah|flutterwave|paystack|sentry|resend)\b/gi;
 
 /** The same text with any provider name replaced by a neutral phrase. */
 export function scrubProviderNames(text: string): string {
   return text
-    .replace(new RegExp(`\\s*(via|through|by|from|at|with)\\s+${PROVIDER_NAMES.source}`, "gi"), "")
+    .replace(new RegExp(`\\s*(via|through|by|from|at|with|on)\\s+${PROVIDER_NAMES.source}`, "gi"), "")
     .replace(PROVIDER_NAMES, "our provider")
     .trim();
 }

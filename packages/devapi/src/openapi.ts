@@ -142,6 +142,7 @@ export const openapiDocument = {
     { name: "Virtual accounts", description: "Dedicated NGN bank account numbers for verified customers." },
     { name: "Transfers", description: "Moving money between your own wallets." },
     { name: "Conversions", description: "Converting between NGN and USD wallets." },
+    { name: "Bills", description: "Airtime, data, electricity and cable TV, paid from your NGN wallets." },
     { name: "Events", description: "Everything that happened, as delivered to your webhooks." },
     { name: "Test helpers", description: "Sandbox-only tools. Live keys get 404." },
   ],
@@ -409,6 +410,99 @@ export const openapiDocument = {
         },
       }),
     },
+    "/bills/services": {
+      get: op({
+        id: "listBillServices",
+        tag: "Bills",
+        scope: "bills:read",
+        summary: "List bill services",
+        description:
+          "The services you can pay (airtime, data, electricity, cable TV) and their billers. `amount_type` says whether you send an `amount` or a `plan_id`. In live mode `available: false` means a biller can't be paid right now.",
+        response: { description: "Every service, with its billers.", schema: listOf("BillService") },
+      }),
+    },
+    "/bills/plans": {
+      get: op({
+        id: "listBillPlans",
+        tag: "Bills",
+        scope: "bills:read",
+        summary: "List plans",
+        description: "The data bundles or TV bouquets a biller sells today, with their prices. Live plans come straight from the biller, so prices can change; send the `amount` you saw with your payment to be told if one did.",
+        parameters: [
+          { name: "service", in: "query", required: true, schema: { type: "string", enum: ["data", "cabletv"] } },
+          { name: "biller_id", in: "query", required: true, schema: { type: "string" } },
+        ],
+        response: { description: "The biller's plans.", schema: listOf("BillPlan") },
+        errors: { "400": "service isn't data or cabletv (`validation_error`).", "404": "No such biller (`not_found`)." },
+      }),
+    },
+    "/bills/validate": {
+      post: op({
+        id: "validateBillCustomer",
+        tag: "Bills",
+        scope: "bills:write",
+        summary: "Validate a customer",
+        description:
+          "Check a meter, smartcard or phone number with the biller before paying, and get the name it's registered to. Moves no money. Recommended for electricity and cable TV. Sandbox: numbers ending in 0000 are invalid.",
+        parameters: [idempotencyHeader],
+        body: ref("BillValidate"),
+        response: { description: "Whether the biller recognises the customer.", schema: ref("BillCustomerValidation") },
+        errors: { "404": "No such biller (`not_found`).", "503": "The biller can't be reached (`service_unavailable`) or paid right now (`biller_unavailable`)." },
+      }),
+    },
+    "/bills/payments": {
+      get: op({
+        id: "listBillPayments",
+        tag: "Bills",
+        scope: "bills:read",
+        summary: "List bill payments",
+        description: "Your bill payments in the key's mode, newest first. Each is a transaction of kind `bill_payment`.",
+        parameters: [
+          { name: "status", in: "query", schema: ref("TransactionStatus") },
+          { name: "wallet_id", in: "query", schema: { type: "string" } },
+          { name: "customer_id", in: "query", schema: { type: "string" } },
+          { name: "reference", in: "query", schema: { type: "string" } },
+          ...pageParams,
+        ],
+        response: { description: "A page of bill payments.", schema: listOf("Transaction") },
+      }),
+      post: op({
+        id: "createBillPayment",
+        tag: "Bills",
+        scope: "bills:write",
+        money: true,
+        summary: "Pay a bill",
+        description:
+          "Pay a bill from an NGN wallet: your main wallet unless you send `wallet_id` (a customer's wallet works too). The wallet is debited the amount plus your plan's bill fee. " +
+          "Answers 201 when the payment settled at once: `successful`, or `failed` with the amount and fee returned to the wallet. Answers 202 with a `pending` payment while the biller confirms; you then receive `bill_payment.successful` or `bill_payment.failed`. " +
+          "Prepaid electricity tokens are in `details.token`. Live payments count toward your daily outflow limit. " +
+          "Sandbox: customer numbers ending in 0000 fail, ending in 1111 stay pending (settle them with the test helper), anything else succeeds.",
+        parameters: [idempotencyHeader],
+        body: ref("BillPaymentCreate"),
+        response: { status: "201", description: "The settled payment (successful or failed and refunded).", schema: ref("Transaction") },
+        alsoReturns: { "202": "Still confirming with the biller; watch for bill_payment.successful or bill_payment.failed." },
+        errors: {
+          "400": "A field is wrong for this service (`validation_error`), or the wallet doesn't hold NGN (`currency_mismatch`).",
+          "403": "The wallet is frozen (`wallet_frozen`) or money movement is paused on your account (`account_frozen`).",
+          "404": "No such biller, plan or wallet (`not_found`).",
+          "409": "The plan's price changed (`price_changed`), or the reference is taken (`duplicate_reference`).",
+          "422": "Not enough in the wallet (`insufficient_funds`), or over a limit (`limit_exceeded`).",
+          "503": "This biller can't be paid right now (`biller_unavailable`), or bill payments are paused (`feature_disabled`, `service_unavailable`).",
+        },
+      }),
+    },
+    "/bills/payments/{id}": {
+      get: op({
+        id: "getBillPayment",
+        tag: "Bills",
+        scope: "bills:read",
+        summary: "Retrieve a bill payment",
+        description: "One bill payment, with its current status and, once delivered, any token.",
+        parameters: [idParam("txn", "bill payment")],
+        response: { description: "The bill payment.", schema: ref("Transaction") },
+        errors: { "404": "No such bill payment (`not_found`)." },
+      }),
+    },
     "/events": {
       get: op({
         id: "listEvents",
@@ -449,6 +543,25 @@ export const openapiDocument = {
         },
         response: { status: "201", description: "The deposit transaction.", schema: ref("Transaction") },
         errors: { "404": "No such test virtual account (`not_found`)." },
+      }),
+    },
+    "/test_helpers/bill_payments/{id}/settle": {
+      post: op({
+        id: "settleTestBillPayment",
+        tag: "Test helpers",
+        scope: "bills:write",
+        summary: "Settle a pending bill payment",
+        description:
+          "Test mode only: settle a pending sandbox bill payment (one whose customer number ends in 1111) as `successful` or `failed`. Failing it refunds the amount and fee. Sends the matching event. A payment that already settled is returned unchanged. Live keys get 404.",
+        parameters: [idParam("txn", "bill payment"), idempotencyHeader],
+        body: {
+          type: "object",
+          required: ["outcome"],
+          additionalProperties: false,
+          properties: { outcome: { type: "string", enum: ["successful", "failed"] } },
+        },
+        response: { description: "The bill payment.", schema: ref("Transaction") },
+        errors: { "404": "No such test bill payment (`not_found`)." },
       }),
     },
   },
@@ -698,6 +811,74 @@ export const openapiDocument = {
           from_wallet_id: { type: "string" },
           to_wallet_id: { type: "string" },
           amount: money("How much to move."),
+          reference,
+          description: { type: "string", maxLength: 200 },
+          metadata,
+        },
+      },
+      BillService: {
+        type: "object",
+        properties: {
+          object: { type: "string", const: "bill_service" },
+          id: { type: "string", enum: ["airtime", "data", "electricity", "cabletv"] },
+          name: { type: "string" },
+          customer_label: { type: "string", description: "What the customer number is: a phone, meter or smartcard number." },
+          amount_type: { type: "string", enum: ["amount", "plan"], description: "Send `amount` (airtime, electricity) or `plan_id` (data, cable TV)." },
+          requires_validation: { type: "boolean", description: "Validate the customer first; the biller may refuse unknown numbers." },
+          billers: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: { id: { type: "string", example: "mtn" }, name: { type: "string" }, available: { type: "boolean" } },
+            },
+          },
+        },
+      },
+      BillPlan: {
+        type: "object",
+        properties: {
+          object: { type: "string", const: "bill_plan" },
+          id: { type: "string", description: "Send as `plan_id`." },
+          biller_id: { type: "string" },
+          name: { type: "string", example: "1GB · 30 days" },
+          amount: money("The plan's price."),
+          currency: { type: "string", const: "NGN" },
+          data: { type: ["string", "null"], example: "1GB" },
+          validity: { type: ["string", "null"], example: "30 days" },
+        },
+      },
+      BillValidate: {
+        type: "object",
+        required: ["service", "biller_id", "customer"],
+        additionalProperties: false,
+        properties: {
+          service: { type: "string", enum: ["airtime", "data", "electricity", "cabletv"] },
+          biller_id: { type: "string" },
+          customer: { type: "string", maxLength: 30, description: "Phone number (airtime, data) or meter / smartcard number." },
+        },
+      },
+      BillCustomerValidation: {
+        type: "object",
+        properties: {
+          object: { type: "string", const: "bill_customer_validation" },
+          service: { type: "string" },
+          biller_id: { type: "string" },
+          customer: { type: "string", description: "The number as it will be sent to the biller." },
+          valid: { type: "boolean" },
+          customer_name: { type: ["string", "null"], description: "The name the biller has for this customer, when it gives one." },
+        },
+      },
+      BillPaymentCreate: {
+        type: "object",
+        required: ["service", "biller_id", "customer"],
+        additionalProperties: false,
+        properties: {
+          service: { type: "string", enum: ["airtime", "data", "electricity", "cabletv"] },
+          biller_id: { type: "string", example: "mtn" },
+          customer: { type: "string", maxLength: 30, description: "Nigerian phone number (airtime, data) or meter / smartcard number." },
+          plan_id: { type: "string", description: "Data and cable TV: a plan id from GET /bills/plans." },
+          amount: money("Airtime and electricity: how much, in whole naira (a multiple of 100 kobo). With a plan: optional, the price you expect; a different current price is refused with `price_changed`."),
+          wallet_id: { type: "string", description: "An NGN wallet to pay from. Defaults to your main NGN wallet." },
           reference,
           description: { type: "string", maxLength: 200 },
           metadata,

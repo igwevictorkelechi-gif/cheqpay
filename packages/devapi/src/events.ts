@@ -43,6 +43,16 @@ export const EVENT_TYPES = [
     description: "A currency conversion was refused and the source wallet was refunded in full.",
   },
   {
+    type: "bill_payment.successful",
+    object: "transaction",
+    description: "A bill payment was delivered. For prepaid electricity, `details.token` holds the meter token.",
+  },
+  {
+    type: "bill_payment.failed",
+    object: "transaction",
+    description: "A bill payment didn't go through. The amount and the fee were returned to the wallet it was paid from.",
+  },
+  {
     type: "ping",
     object: "ping",
     description: "Sent only when you press \"Send test event\" on an endpoint in your dashboard.",
