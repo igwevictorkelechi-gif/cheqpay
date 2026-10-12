@@ -106,3 +106,51 @@ function safePath(req: Request): string {
     return "";
   }
 }
+
+/** Roughly where a request came from, as the hosting edge reports it. */
+export interface ClientGeo {
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  lat: number | null;
+  lon: number | null;
+}
+
+/** Two decimals is about a kilometre: city-level, never a street address. */
+function coarse(v: string | null): number | null {
+  if (!v) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || Math.abs(n) > 180) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function decoded(v: string | null, max: number): string | null {
+  if (!v) return null;
+  try {
+    return decodeURIComponent(v).trim().slice(0, max) || null;
+  } catch {
+    return v.trim().slice(0, max) || null;
+  }
+}
+
+/**
+ * The caller's approximate location, from the geo headers the platform adds
+ * to every request (Vercel's `x-vercel-ip-*`, Cloudflare's `cf-ipcountry`).
+ * The client cannot set these through the edge. Everything is null when the
+ * headers are absent (local dev, other hosts). Coordinates are rounded so the
+ * admin map can show where users are without pinpointing anyone.
+ */
+export function clientGeo(req: Request): ClientGeo {
+  const h = (name: string) => req.headers.get(name);
+  const country = (h("x-vercel-ip-country") ?? h("cf-ipcountry"))?.trim().toUpperCase().slice(0, 2) || null;
+  const lat = coarse(h("x-vercel-ip-latitude"));
+  const lon = coarse(h("x-vercel-ip-longitude"));
+  const bothCoords = lat !== null && lon !== null && Math.abs(lat) <= 90;
+  return {
+    country: country && /^[A-Z]{2}$/.test(country) && country !== "XX" ? country : null,
+    region: decoded(h("x-vercel-ip-country-region"), 40),
+    city: decoded(h("x-vercel-ip-city"), 80),
+    lat: bothCoords ? lat : null,
+    lon: bothCoords ? lon : null,
+  };
+}

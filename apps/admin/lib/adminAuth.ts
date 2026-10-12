@@ -33,8 +33,8 @@ export const SESSION_MAX_AGE_S = 60 * 60 * 8;
 // Super-Admin-only until someone decides otherwise. The backend enforces the
 // same list on its side.
 export const SUB_ADMIN_PASSWORD_PAGE = "/account/password";
-const SUB_ADMIN_PAGES = ["/", "/dashboard", "/analytics", SUB_ADMIN_PASSWORD_PAGE];
-const SUB_ADMIN_READ_APIS = ["/api/analytics", "/api/transactions"];
+const SUB_ADMIN_PAGES = ["/", "/dashboard", "/analytics", "/live-map", SUB_ADMIN_PASSWORD_PAGE];
+const SUB_ADMIN_READ_APIS = ["/api/analytics", "/api/transactions", "/api/live-map"];
 const SUB_ADMIN_ALWAYS_APIS = ["/api/auth", "/api/account/password"];
 
 export type SubAdminDecision = "allow" | "change_password" | "denied";

@@ -6,7 +6,7 @@
  * Checked by requireAdmin on every call as well as in the dashboard middleware, so a mistake in one
  * of the ~45 dashboard proxies can't widen what a sub admin sees.
  */
-const SUB_ADMIN_READ_PATHS = ["/api/admin/analytics", "/api/admin/transactions"];
+const SUB_ADMIN_READ_PATHS = ["/api/admin/analytics", "/api/admin/transactions", "/api/admin/live-map"];
 const SUB_ADMIN_PASSWORD_PATH = "/api/admin/me/password";
 
 export function subAdminMayCall(method: string, pathname: string, mustChange: boolean): boolean {

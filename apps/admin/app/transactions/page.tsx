@@ -72,6 +72,14 @@ function titleCase(s: string): string {
 export default function TransactionsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [query, setQuery] = useState('');
+  // `?search=` pre-fills the search (the live map links here with a transaction id).
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get('search');
+    if (s) {
+      setSearchTerm(s);
+      setQuery(s);
+    }
+  }, []);
   const [filterType, setFilterType] = useState('all');
   const [page, setPage] = useState(1);
   const [txs, setTxs] = useState<AdminTx[]>([]);

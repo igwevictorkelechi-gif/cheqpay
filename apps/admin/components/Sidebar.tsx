@@ -8,8 +8,7 @@ import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
   Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search,
-  ShieldAlert, Monitor, Ban, Package, ShoppingBag, Ticket, CalendarDays, ScanLine, Gift, Percent, ListChecks, Code2, SlidersHorizontal, type LucideIcon,
-} from 'lucide-react';
+  ShieldAlert, Monitor, Ban, Package, ShoppingBag, Ticket, CalendarDays, ScanLine, Gift, Percent, ListChecks, Code2, SlidersHorizontal, Globe2, type LucideIcon } from 'lucide-react';
 import { subAdminAccess, SUB_ADMIN_PASSWORD_PAGE, type AdminRole } from '@/lib/adminAuth';
 
 type Item = { label: string; href: string; icon: LucideIcon };
@@ -22,6 +21,7 @@ const categories: Category[] = [
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutGrid },
       { label: 'Analytics', href: '/analytics', icon: BarChart3 },
+      { label: 'Live map', href: '/live-map', icon: Globe2 },
     ],
   },
   {

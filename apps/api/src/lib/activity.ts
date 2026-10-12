@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { prisma } from "@cheqpay/db";
-import { requestContext } from "./requestContext";
+import { clientGeo, requestContext } from "./requestContext";
 
 /**
  * Records where each account is being used from.
@@ -89,6 +89,24 @@ async function recordActivity(req: Request, userId: string): Promise<void> {
       lastAction: ctx.path,
     },
   });
+
+  // Approximate location for the admin live map. Raw SQL: the columns are
+  // created lazily below and are deliberately not in the Prisma model, so no
+  // other query depends on them existing yet. Only written when the edge
+  // reported coordinates, so a request without geo headers never erases a
+  // known location.
+  const geo = clientGeo(req);
+  if (geo.lat !== null && geo.lon !== null) {
+    await prisma.$executeRaw`
+      UPDATE app_users
+         SET geo_country = ${geo.country}, geo_region = ${geo.region}, geo_city = ${geo.city},
+             geo_lat = ${geo.lat}, geo_lon = ${geo.lon}, geo_at = now()
+       WHERE id = ${userId}::uuid`;
+    await prisma.$executeRaw`
+      UPDATE user_sessions
+         SET country = ${geo.country}, city = ${geo.city}, lat = ${geo.lat}, lon = ${geo.lon}
+       WHERE user_id = ${userId}::uuid AND ip_address = ${ip} AND user_agent = ${ua}`;
+  }
 }
 
 /**
@@ -110,7 +128,13 @@ export function ensureActivitySchema(): Promise<void> {
           ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP,
           ADD COLUMN IF NOT EXISTS last_ip TEXT,
           ADD COLUMN IF NOT EXISTS last_device TEXT,
-          ADD COLUMN IF NOT EXISTS last_action TEXT`);
+          ADD COLUMN IF NOT EXISTS last_action TEXT,
+          ADD COLUMN IF NOT EXISTS geo_country TEXT,
+          ADD COLUMN IF NOT EXISTS geo_region TEXT,
+          ADD COLUMN IF NOT EXISTS geo_city TEXT,
+          ADD COLUMN IF NOT EXISTS geo_lat DOUBLE PRECISION,
+          ADD COLUMN IF NOT EXISTS geo_lon DOUBLE PRECISION,
+          ADD COLUMN IF NOT EXISTS geo_at TIMESTAMP`);
       await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS user_sessions (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -123,6 +147,12 @@ export function ensureActivitySchema(): Promise<void> {
           first_seen_at TIMESTAMP NOT NULL DEFAULT now(),
           last_seen_at TIMESTAMP NOT NULL DEFAULT now()
         )`);
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE user_sessions
+          ADD COLUMN IF NOT EXISTS country TEXT,
+          ADD COLUMN IF NOT EXISTS city TEXT,
+          ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION,
+          ADD COLUMN IF NOT EXISTS lon DOUBLE PRECISION`);
       await prisma.$executeRawUnsafe(
         `CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_identity_key
          ON user_sessions (user_id, ip_address, user_agent)`
