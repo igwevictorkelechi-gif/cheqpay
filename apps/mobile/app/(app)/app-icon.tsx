@@ -3,12 +3,24 @@ import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import {
-  setAlternateAppIcon,
-  getAppIconName,
-  supportsAlternateIcons,
-} from 'expo-alternate-app-icons';
 import { colors } from '@/components/brand';
+
+// Loaded lazily: the native module isn't linked on every build (Android
+// excludes it), and a missing module must not crash app start.
+type IconsModule = typeof import('expo-alternate-app-icons');
+let icons: IconsModule | null = null;
+try {
+  icons = require('expo-alternate-app-icons') as IconsModule;
+} catch {
+  icons = null;
+}
+const supportsAlternateIcons = (() => {
+  try {
+    return !!icons?.supportsAlternateIcons;
+  } catch {
+    return false;
+  }
+})();
 
 // `iconName` maps to the alternate icon declared in app.json (null = default).
 type IconOption = { key: string; iconName: string | null; label: string; bg: string; fg: string };
@@ -22,7 +34,7 @@ const iconOptions: IconOption[] = [
 
 function currentKey(): string {
   try {
-    const name = getAppIconName();
+    const name = icons ? icons.getAppIconName() : null;
     return iconOptions.find((o) => o.iconName === name)?.key ?? 'default';
   } catch {
     return 'default';
@@ -35,17 +47,17 @@ export default function AppIconScreen() {
 
   const choose = async (opt: IconOption) => {
     if (opt.key === selected) return;
-    if (!supportsAlternateIcons) {
+    if (!icons || !supportsAlternateIcons) {
       Alert.alert(
         'Not available',
-        'Changing the app icon needs the full CheqPay build. It isn’t supported in Expo Go.'
+        'Changing the app icon isn’t available on this device yet.'
       );
       return;
     }
     const prev = selected;
     setSelected(opt.key); // optimistic
     try {
-      await setAlternateAppIcon(opt.iconName);
+      await icons.setAlternateAppIcon(opt.iconName);
     } catch {
       setSelected(prev);
       Alert.alert('Could not change icon', 'Please try again.');
