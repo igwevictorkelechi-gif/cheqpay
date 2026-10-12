@@ -188,6 +188,11 @@ export const ERROR_CODES = {
     type: "invalid_request_error",
     description: "A virtual account is already being opened for this customer. Retry in a few seconds.",
   },
+  card_not_active: {
+    status: 409,
+    type: "invalid_request_error",
+    description: "The card is still being issued, was never issued, or is frozen.",
+  },
   biller_unavailable: {
     status: 503,
     type: "api_error",

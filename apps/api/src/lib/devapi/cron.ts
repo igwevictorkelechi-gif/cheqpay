@@ -15,6 +15,7 @@ import { retryDueVerifications, scrubOldSandboxData } from "./customers";
 import { sweepDueDeliveries } from "./webhooks";
 import { pruneEvents } from "./events";
 import { sweepPendingApiBills } from "./bills";
+import { sweepPendingCards } from "./cards";
 
 export async function runDevelopersDaily(now: Date = new Date()) {
   await ensureDevApiSchema();
@@ -41,6 +42,7 @@ export async function runDevelopersDaily(now: Date = new Date()) {
   };
   const deposits = await step("deposit reconciliation", () => reconcileLiveDeposits(50));
   const bills = await step("pending bill requery", () => sweepPendingApiBills({ limit: 200 }));
+  const cards = await step("pending card check", () => sweepPendingCards({ limit: 200 }));
   const verifications = await step("verification retries", () => retryDueVerifications(100));
   const webhooks = await step("webhook retries", () => sweepDueDeliveries({ limit: 2_000, budgetMs: 120_000 }));
   const scrubbed = await step("sandbox scrub", () => scrubOldSandboxData());
@@ -51,6 +53,7 @@ export async function runDevelopersDaily(now: Date = new Date()) {
     reconciliation: { mismatches: mismatches.length, frozen },
     deposits,
     bills,
+    cards,
     verifications,
     webhooks,
     scrubbed,

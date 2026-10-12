@@ -33,7 +33,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       amount: body.amount,
       idempotencyKey,
     });
-    return jsonOk(res);
+    // feeCents is a bigint, which JSON can't carry: send it as a string.
+    return jsonOk({ ...res, feeCents: res.feeCents === undefined ? undefined : res.feeCents.toString() });
   } catch (err) {
     return toErrorResponse(err);
   }

@@ -1,6 +1,7 @@
 import { prisma } from "@cheqpay/db";
 import type { CardStorePort, IssuingEventData } from "./maplerad/issuing";
 import { refundCardIssueFee } from "./cardFunding";
+import { finalizeDevCard } from "./devapi/cards";
 
 /**
  * Card issuing is gated on Maplerad being configured (the same secret key the
@@ -26,7 +27,7 @@ export const cardStore: CardStorePort = {
   async finalizeCard({ reference, cardId, status, raw }) {
     const data = raw as IssuingEventData & { masked_pan?: string; brand?: string };
     const success = status.toUpperCase() === "SUCCESS" || status.toUpperCase() === "SUCCESSFUL";
-    await prisma.card
+    const matched = await prisma.card
       .updateMany({
         where: { reference },
         data: {
@@ -40,7 +41,16 @@ export const cardStore: CardStorePort = {
         // Never 500 the webhook over a reconciliation miss — Maplerad would
         // retry forever. Log loudly so a stuck pending card is visible.
         console.error("[cards] finalizeCard failed", { reference, error: String(err) });
+        return null;
       });
+
+    // No app card has this reference: it may be one a developer issued through the API.
+    if (matched && matched.count === 0) {
+      await finalizeDevCard({ reference, cardId, status, raw: data as Record<string, unknown> }).catch((err) => {
+        console.error("[cards] developer card finalize failed", { reference, error: String(err) });
+      });
+      return;
+    }
 
     // Maplerad said no: the card will never exist, so its price goes back.
     // Only on an explicit failure — an unknown or pending status keeps the charge.
