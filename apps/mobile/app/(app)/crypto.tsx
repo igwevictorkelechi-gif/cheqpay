@@ -12,6 +12,7 @@ import {
   CircleAction,
   Card,
   SectionHeader,
+  ListCard,
 } from '@/components/brand';
 import { TxnRow } from '@/components/TxnRow';
 import { useFeatures } from '@/lib/useFeatures';
@@ -163,11 +164,17 @@ export default function CryptoScreen() {
               </Text>
             </Card>
           ) : (
-            <Card>
+            <ListCard>
               {txns.slice(0, 6).map((t, i) => (
-                <TxnRow key={t.id} t={t} divider={i > 0} />
+                <TxnRow
+                  key={t.id}
+                  t={t}
+                  showStatus={false}
+                  divider={i > 0}
+                  onPress={() => router.push(`/(app)/transaction/${t.id}`)}
+                />
               ))}
-            </Card>
+            </ListCard>
           )}
         </View>
       </ScrollView>

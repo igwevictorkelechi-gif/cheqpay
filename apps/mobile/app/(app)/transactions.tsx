@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, FlatList, RefreshControl } from 'react-native';
+import { View, Text, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -51,7 +51,14 @@ export default function TransactionsScreen() {
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surface, paddingTop: insets.top }}>
       <View className="px-5 py-4 flex-row items-center">
-        <Text className="text-ink dark:text-ink-dark text-2xl font-extrabold flex-1">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center mr-3"
+          accessibilityLabel="Back"
+        >
+          <Ionicons name="chevron-back" size={20} color={colors.ink} />
+        </TouchableOpacity>
+        <Text className="text-ink dark:text-ink-dark text-xl font-bold flex-1">
           {asset === 'USD' ? 'Dollar transactions' : 'Transactions'}
         </Text>
       </View>
@@ -59,7 +66,19 @@ export default function TransactionsScreen() {
       <FlatList
         data={txns}
         renderItem={({ item, index }) => (
-          <TxnRow t={item} divider={index > 0} onPress={() => router.push(`/(app)/transaction/${item.id}`)} />
+          // Each row draws its slice of one rounded card, as on the website.
+          <View
+            className="bg-card dark:bg-card-dark"
+            style={{
+              borderTopLeftRadius: index === 0 ? 24 : 0,
+              borderTopRightRadius: index === 0 ? 24 : 0,
+              borderBottomLeftRadius: index === txns.length - 1 ? 24 : 0,
+              borderBottomRightRadius: index === txns.length - 1 ? 24 : 0,
+              overflow: 'hidden',
+            }}
+          >
+            <TxnRow t={item} divider={index > 0} onPress={() => router.push(`/(app)/transaction/${item.id}`)} />
+          </View>
         )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}

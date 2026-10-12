@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, TextInput, Share, ActivityInd
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { colors, Card } from '@/components/brand';
+import { colors, Card, ListCard } from '@/components/brand';
 import { TxnRow } from '@/components/TxnRow';
 import { api, getAccessToken, type LedgerTransaction } from '@/services/api';
 
@@ -133,11 +133,11 @@ export default function WalletStatementScreen() {
                 </Text>
               </Card>
             ) : (
-              <Card>
+              <ListCard>
                 {txns.map((t, i) => (
                   <TxnRow key={t.id} t={t} divider={i > 0} onPress={() => router.push(`/(app)/transaction/${t.id}`)} />
                 ))}
-              </Card>
+              </ListCard>
             )}
           </>
         )}

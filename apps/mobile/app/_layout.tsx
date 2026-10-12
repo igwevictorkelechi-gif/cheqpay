@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { NativeWindStyleSheet } from 'nativewind';
@@ -7,12 +8,24 @@ import { authService } from '@/services/auth';
 import { LockGate } from '@/components/LockGate';
 import { applyPalette } from '@/components/brand';
 import TransactionPinProvider from '@/components/TransactionPinProvider';
+import { FONTS } from '@/lib/fonts';
+
+// Compile Tailwind classes to native styles on every platform (the default on
+// web is CSS output, which needs a stylesheet this app doesn't ship), so the
+// web preview renders the same as the phone.
+NativeWindStyleSheet.setOutput({ default: 'native' });
 
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const { isAuthenticated, loading, setUser, setLoading, setIsAuthenticated } = useAuthStore();
   const darkMode = useUIStore((s) => s.darkMode);
+  const themeReady = useUIStore((s) => s.themeReady);
+  const hydrateTheme = useUIStore((s) => s.hydrateTheme);
+  // A font that fails to load leaves the system font in place rather than a
+  // blank app, so an error counts as ready too.
+  const [fontsLoaded, fontError] = useFonts(FONTS);
+  const ready = themeReady && (fontsLoaded || !!fontError);
 
   // Two halves of the theme, applied before children render:
   //  - inline styles read the mutable `colors` palette (components/theme.ts)
@@ -20,6 +33,10 @@ export default function RootLayout() {
   // Both are idempotent, so running them each render is harmless.
   applyPalette(darkMode);
   NativeWindStyleSheet.setColorScheme(darkMode ? 'dark' : 'light');
+
+  useEffect(() => {
+    hydrateTheme();
+  }, [hydrateTheme]);
 
   useEffect(() => {
     // Check if user is already logged in
@@ -42,12 +59,17 @@ export default function RootLayout() {
   // don't force authenticated users out of (auth) here — the login/verify
   // screens navigate forward themselves, e.g. new sign-ups go to onboarding.)
   useEffect(() => {
-    if (loading) return;
+    // Wait for the navigator to mount (it isn't rendered until `ready`).
+    if (loading || !ready) return;
     const inAuthGroup = segments[0] === '(auth)';
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/(auth)/login');
     }
-  }, [isAuthenticated, loading, segments]);
+  }, [isAuthenticated, loading, segments, ready]);
+
+  // Nothing until the typeface and the saved theme are in, so the first frame
+  // is already in the right font and colours.
+  if (!ready) return null;
 
   return (
     <LockGate>

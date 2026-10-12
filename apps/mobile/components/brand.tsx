@@ -56,7 +56,7 @@ export function TopIcon({
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="w-10 h-10 rounded-full bg-card dark:bg-card-dark items-center justify-center ml-3"
+      className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center ml-3"
       activeOpacity={0.7}
     >
       <Ionicons name={name} size={18} color={colors.ink} />
@@ -95,7 +95,10 @@ export function BalanceBlock({ label, amount }: { label: string; amount: string 
   return (
     <View className="items-center mt-4 mb-7">
       <Text className="text-muted dark:text-muted-dark text-base">{label}</Text>
-      <Text className="text-ink dark:text-ink-dark font-extrabold mt-2" style={{ fontSize: 40 }}>
+      <Text
+        className="text-ink dark:text-ink-dark font-extrabold mt-2"
+        style={{ fontSize: 34, letterSpacing: -0.7, fontVariant: ['tabular-nums'] }}
+      >
         {amount}
       </Text>
     </View>
@@ -128,7 +131,9 @@ export function CircleAction({
 /** Row of quick-action buttons, evenly spaced. */
 export function ActionRow({ children }: { children: React.ReactNode }) {
   return (
-    <View className="flex-row justify-center px-10 mb-8" style={{ gap: 36 }}>
+    // Fixed gap rather than the web's padding: four 60pt buttons fit a 360pt
+    // phone with room to spare, and never spill off the edges.
+    <View className="flex-row justify-center px-5 mb-8" style={{ gap: 34 }}>
       {children}
     </View>
   );
@@ -179,4 +184,9 @@ export function Card({
   return (
     <View className={`bg-card dark:bg-card-dark rounded-3xl p-5 ${className}`}>{children}</View>
   );
+}
+
+/** Rounded card for edge-to-edge rows (transaction lists): no inner padding. */
+export function ListCard({ children }: { children: React.ReactNode }) {
+  return <View className="bg-card dark:bg-card-dark rounded-3xl overflow-hidden">{children}</View>;
 }

@@ -14,6 +14,7 @@ import {
   Card,
   NairaFlag,
   SectionHeader,
+  ListCard,
 } from '@/components/brand';
 import { TxnRow } from '@/components/TxnRow';
 import { KycBanner } from '@/components/KycBanner';
@@ -250,16 +251,17 @@ export default function HomeScreen() {
               </Text>
             </Card>
           ) : (
-            <Card>
+            <ListCard>
               {txns.slice(0, 5).map((t, i) => (
                 <TxnRow
                   key={t.id}
                   t={t}
+                  showStatus={false}
                   divider={i > 0}
                   onPress={() => router.push(`/(app)/transaction/${t.id}`)}
                 />
               ))}
-            </Card>
+            </ListCard>
           )}
         </View>
       </ScrollView>
