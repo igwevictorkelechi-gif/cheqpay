@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * CheqPay Developers design system, after Apple's Human Interface Guidelines:
+ * the system font, grouped content on a tinted background, one filled action
+ * per screen, generous spacing, and colours that follow light/dark mode.
+ * Values are space-separated RGB so Tailwind opacity modifiers work.
+ */
+:root {
+  color-scheme: light;
+  --surface: 242 242 247;   /* systemGroupedBackground */
+  --card: 255 255 255;      /* secondarySystemGroupedBackground */
+  --circle: 232 232 237;    /* tertiary fill (inputs, chips) */
+  --border: 216 216 222;    /* hairline separator */
+  --ink: 28 28 30;          /* label */
+  --muted: 110 110 115;     /* secondaryLabel */
+  --brand: 107 91 149;      /* CheqPay purple, the accent */
+  --brand-dark: 87 74 122;
+  --brand-light: 91 75 138; /* accent text on light */
+  --gold: 201 145 44;
+  --good: 52 168 83;
+  --warn: 214 137 16;
+  --bad: 215 58 52;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --surface: 0 0 0;
+    --card: 28 28 30;
+    --circle: 44 44 46;
+    --border: 56 56 58;
+    --ink: 245 245 247;
+    --muted: 152 152 159;
+    --brand: 123 107 170;
+    --brand-dark: 107 91 149;
+    --brand-light: 175 160 220;
+    --gold: 245 201 123;
+    --good: 48 209 88;
+    --warn: 255 179 64;
+    --bad: 255 92 84;
+  }
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: rgb(var(--surface));
+  color: rgb(var(--ink));
+  font-size: 17px;
+  line-height: 1.47;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+::selection { background: rgb(var(--brand) / 0.25); }
+
+@layer components {
+  /* Type */
+  .title-lg { @apply text-[34px] font-bold leading-[1.12] tracking-[-0.022em] text-ink; }
+  .title { @apply text-[28px] font-bold leading-tight tracking-[-0.02em] text-ink; }
+  .headline { @apply text-[17px] font-semibold text-ink; }
+  .subhead { @apply text-[15px] text-muted; }
+  .footnote { @apply text-[13px] text-muted; }
+  .section-label { @apply mb-2 px-4 text-[13px] font-medium uppercase tracking-[0.04em] text-muted; }
+
+  /* Surfaces */
+  .card { @apply rounded-3xl bg-card p-5 shadow-card ring-1 ring-border/40; }
+  .group-list { @apply overflow-hidden rounded-2xl bg-card shadow-card ring-1 ring-border/40; }
+  .group-row { @apply flex min-h-[52px] items-center gap-3 px-4 py-3; }
+  .group-row + .group-row { @apply border-t border-border/70; }
+
+  /* Controls */
+  .input {
+    @apply h-[52px] w-full rounded-xl bg-circle px-4 text-[17px] text-ink placeholder-muted/80 outline-none ring-0 transition
+      focus:bg-card focus:ring-2 focus:ring-brand/40;
+  }
+  textarea.input { @apply h-auto min-h-[112px] py-3 leading-normal; }
+  .label { @apply mb-1.5 block px-1 text-[13px] font-medium text-muted; }
+  .btn {
+    @apply inline-flex h-[52px] select-none items-center justify-center gap-2 rounded-full bg-brand px-7 text-[17px] font-semibold text-white
+      transition duration-200 ease-spring hover:bg-brand-dark active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100;
+  }
+  .btn-tinted {
+    @apply inline-flex h-[52px] select-none items-center justify-center gap-2 rounded-full bg-brand/12 px-7 text-[17px] font-semibold text-brand-light
+      transition duration-200 ease-spring hover:bg-brand/20 active:scale-[0.98] disabled:opacity-40;
+  }
+  .btn-ghost {
+    @apply inline-flex h-[52px] select-none items-center justify-center gap-2 rounded-full px-6 text-[17px] font-semibold text-brand-light
+      transition hover:bg-circle active:scale-[0.98];
+  }
+  .link { @apply font-medium text-brand-light hover:underline; }
+  .chip {
+    @apply inline-flex min-h-[40px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-circle px-4 text-[15px] font-medium text-ink transition
+      active:scale-[0.97];
+  }
+  .chip-on { @apply bg-brand text-white; }
+  .notice { @apply rounded-2xl px-4 py-3 text-[15px]; }
+  .notice-bad { @apply notice bg-bad/10 text-bad; }
+  .notice-good { @apply notice bg-good/10 text-good; }
+  .notice-warn { @apply notice bg-warn/12 text-warn; }
+
+  /* A screen that slides in */
+  .appear { animation: appear 320ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+}
+
+@keyframes appear {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+:focus-visible { outline: 2px solid rgb(var(--brand)); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* Developer docs: code, tables and the method badges of the reference. */
+@layer components {
+  .code {
+    @apply overflow-x-auto rounded-2xl bg-[#1c1c1e] p-4 font-mono text-[13px] leading-relaxed text-[#f5f5f7];
+  }
+  .inline-code { @apply rounded-md bg-circle px-1.5 py-0.5 font-mono text-[0.85em] text-ink; }
+  .prose-doc { @apply max-w-none text-[16px] leading-[1.65] text-ink; }
+  .prose-doc h2 { @apply mt-10 mb-3 scroll-mt-24 text-[22px] font-bold tracking-tight; }
+  .prose-doc h3 { @apply mt-7 mb-2 scroll-mt-24 text-[17px] font-semibold; }
+  .prose-doc p { @apply my-3; }
+  .prose-doc ul { @apply my-3 list-disc space-y-1.5 pl-6; }
+  .prose-doc ol { @apply my-3 list-decimal space-y-1.5 pl-6; }
+  .prose-doc a { @apply font-medium text-brand-light hover:underline; }
+  .prose-doc table { @apply my-4 w-full border-collapse text-[14px]; }
+  .prose-doc th { @apply border-b border-border px-3 py-2 text-left font-semibold text-muted; }
+  .prose-doc td { @apply border-b border-border/60 px-3 py-2 align-top; }
+  .table { @apply w-full border-collapse text-[14px]; }
+  .table th { @apply border-b border-border px-3 py-2 text-left text-[12px] font-semibold uppercase tracking-wide text-muted; }
+  .table td { @apply border-b border-border/50 px-3 py-2.5 align-top; }
+  .badge { @apply inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-[11px] font-bold uppercase; }
+  .badge-get { @apply badge bg-good/15 text-good; }
+  .badge-post { @apply badge bg-brand/15 text-brand-light; }
+  .badge-patch { @apply badge bg-warn/15 text-warn; }
+  .badge-delete { @apply badge bg-bad/15 text-bad; }
+  .pill { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[12px] font-semibold; }
+}

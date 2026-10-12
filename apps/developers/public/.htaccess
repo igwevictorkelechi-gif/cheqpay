@@ -1,0 +1,53 @@
+# CheqPay Developers (developers.mycheqpay.com) — Apache/LiteSpeed configuration.
+# Copied into the export automatically; upload the contents of out/ to the
+# subdomain's document root. Plain files only: the dashboard talks to the
+# CheqPay API over HTTPS from the browser.
+
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # HTTPS only: the sign-in session lives in the browser.
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+
+  # Pages are folders (trailingSlash): /docs -> /docs/
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME}/index.html -f
+  RewriteRule ^(.*[^/])$ /$1/ [R=301,L]
+
+  # A failed RSC prefetch navigates to the payload itself; send the browser to its page.
+  RewriteCond %{HTTP_ACCEPT} text/html
+  RewriteCond %{HTTP:RSC} !=1
+  RewriteRule ^(.*/)?index\.txt$ /$1 [R=302,L]
+</IfModule>
+
+ErrorDocument 404 /404.html
+
+<IfModule mod_headers.c>
+  # No third-party scripts, ever: this site shows API keys and card details.
+  # Only this site, the CheqPay API and CheqPay sign-in may be contacted.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.mycheqpay.com https://cheqpay-admin453.vercel.app https://xttgnswgeffyybjfjlkp.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+  Header always set X-Frame-Options "DENY"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+  Header always set Cross-Origin-Opener-Policy "same-origin"
+
+  # Pages change on every upload; hashed assets never do.
+  <FilesMatch "\.(html|txt|json)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  <If "%{REQUEST_URI} =~ m#^/_next/static/#">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </If>
+  <If "%{REQUEST_URI} =~ m#^/dashboard/#">
+    Header set X-Robots-Tag "noindex"
+  </If>
+</IfModule>
+
+AddType application/json .json

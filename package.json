@@ -8,6 +8,7 @@
     "apps/admin",
     "apps/web",
     "apps/influencer",
+    "apps/developers",
     "apps/api",
     "packages/shared",
     "packages/db",
