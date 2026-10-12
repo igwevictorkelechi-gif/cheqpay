@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 /**
  * Admin: paginated transaction list + a 30-day summary
  * (count, completed, failed, success/failure rate, NGN volume).
- * Query params: page, pageSize (<=50), search (ref/txHash), type.
+ * Query params: page, pageSize (<=50), search (ref/txHash, or an exact transaction id), type.
  */
 export async function GET(req: Request) {
   try {
@@ -37,6 +37,8 @@ export async function GET(req: Request) {
             OR: [
               { externalRef: { contains: search, mode: "insensitive" as const } },
               { txHash: { contains: search, mode: "insensitive" as const } },
+              // A transaction id (the live map links here with one).
+              ...(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(search) ? [{ id: search.toLowerCase() }] : []),
             ],
           }
         : {}),

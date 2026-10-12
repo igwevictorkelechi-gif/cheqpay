@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import { Globe2 } from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
@@ -191,6 +192,8 @@ export default function Dashboard() {
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       )}
 
+      <LiveMapCard />
+
       {/* Overview */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-5">Overview</h2>
@@ -360,5 +363,49 @@ export default function Dashboard() {
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+/** A pointer to the Live map with its two headline numbers, refreshed every 30s. */
+function LiveMapCard() {
+  const [k, setK] = useState<{ activeNow: number; txLastHour: number; countries: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetch('/api/live-map', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => alive && d?.kpis && setK(d.kpis))
+        .catch(() => undefined);
+    void load();
+    const id = window.setInterval(load, 30_000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
+  return (
+    <Link
+      href="/live-map"
+      className="mb-6 flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-brand-400"
+    >
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-500/15 text-brand-400">
+        <Globe2 size={24} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-bold text-gray-900">Live map</p>
+        <p className="text-sm text-gray-500">Where users are, who&apos;s active and transactions as they happen, on an interactive globe.</p>
+      </div>
+      <div className="hidden gap-6 text-right sm:flex">
+        <div>
+          <p className="text-xl font-bold tabular-nums text-emerald-400">{k ? k.activeNow.toLocaleString('en-NG') : '—'}</p>
+          <p className="text-xs text-gray-500">active now</p>
+        </div>
+        <div>
+          <p className="text-xl font-bold tabular-nums text-gray-900">{k ? k.txLastHour.toLocaleString('en-NG') : '—'}</p>
+          <p className="text-xs text-gray-500">transactions / hr</p>
+        </div>
+      </div>
+      <ArrowUpRight size={18} className="shrink-0 text-gray-400" />
+    </Link>
   );
 }
