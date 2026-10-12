@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import { Avatar } from "@/components/MobileUI";
 import { authService } from "@/services/auth";
-import { useAuthStore } from "@/store";
+import { useAuthStore, useInstallGuideStore } from "@/store";
+import { detectIosInstall, isStandalone } from "@/lib/iosInstall";
 import { api, getAccessToken } from "@/services/api";
 import { tierInfo } from "@/lib/tier";
 import { readCache, writeCache } from "@/lib/cache";
@@ -140,6 +141,15 @@ export default function ProfilePage() {
   const [limits, setLimits] = useState<Limits | null>(null);
   const features = useFeatures();
   const menuItems = items.filter((i) => !i.feature || features[i.feature]);
+  const openInstallGuide = useInstallGuideStore((s) => s.setOpen);
+  // iPhone/iPad in the browser (not yet on the Home Screen): offer the guide.
+  const [canInstallIos, setCanInstallIos] = useState(false);
+  useEffect(() => {
+    setCanInstallIos(
+      !isStandalone() &&
+        detectIosInstall({ userAgent: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints }) !== null,
+    );
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -304,6 +314,20 @@ export default function ProfilePage() {
               <ChevronRight className="h-5 w-5 shrink-0 text-muted" />
             </button>
           ))}
+
+          {/* iPhone/iPad, in the browser: reopen the Add to Home Screen guide. */}
+          {canInstallIos && (
+            <button
+              onClick={() => openInstallGuide(true)}
+              className="flex w-full items-center gap-4 rounded-2xl bg-card p-4 text-left"
+            >
+              <div className="flex-1">
+                <p className="text-base font-bold text-ink">Install the app</p>
+                <p className="mt-0.5 text-sm text-muted">Add CheqPay to your Home Screen</p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-muted" />
+            </button>
+          )}
 
           {/* Log out */}
           <button
