@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { X, Download, Share } from "lucide-react";
+import { X, Download } from "lucide-react";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -13,7 +13,6 @@ const DISMISS_KEY = "cheqpay-install-dismissed";
 
 export default function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isIOS, setIsIOS] = useState(false);
   const [show, setShow] = useState(false);
 
   useEffect(() => {
@@ -32,13 +31,8 @@ export default function InstallPrompt() {
       /* ignore */
     }
 
-    const ua = navigator.userAgent || "";
-    const ios = /iphone|ipad|ipod/i.test(ua);
-    if (ios) {
-      setIsIOS(true);
-      setShow(true);
-      return;
-    }
+    // iPhone and iPad never fire beforeinstallprompt; IosInstallGuide walks
+    // them through the Share menu instead.
 
     const handler = (e: Event) => {
       e.preventDefault();
@@ -87,24 +81,16 @@ export default function InstallPrompt() {
         />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-ink">Install CheqPay</p>
-          {isIOS ? (
-            <p className="mt-0.5 flex items-center gap-1 text-xs text-muted">
-              Tap <Share className="inline h-3 w-3" /> then “Add to Home Screen”
-            </p>
-          ) : (
-            <p className="mt-0.5 text-xs text-muted">Add it to your home screen for quick access.</p>
-          )}
+          <p className="mt-0.5 text-xs text-muted">Add it to your home screen for quick access.</p>
         </div>
 
-        {!isIOS && (
-          <button
-            onClick={install}
-            className="min-h-[44px] flex shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-r from-brand to-brand-light px-4 py-2 text-sm font-bold text-white active:scale-95"
-          >
-            <Download className="h-4 w-4" />
-            Install
-          </button>
-        )}
+        <button
+          onClick={install}
+          className="min-h-[44px] flex shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-r from-brand to-brand-light px-4 py-2 text-sm font-bold text-white active:scale-95"
+        >
+          <Download className="h-4 w-4" />
+          Install
+        </button>
         <button
           onClick={dismiss}
           aria-label="Dismiss"

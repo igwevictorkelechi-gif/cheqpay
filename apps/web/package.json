@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "build:static": "STATIC_EXPORT=1 next build"
+    "build:static": "STATIC_EXPORT=1 next build",
+    "test": "vitest run"
   },
   "dependencies": {
     "@cheqpay/shared": "*",
@@ -37,7 +38,8 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "eslint": "^8.54.0",
-    "eslint-config-next": "^15.0.0"
+    "eslint-config-next": "^15.0.0",
+    "vitest": "^1.6.1"
   },
   "engines": {
     "node": ">=18.0.0",

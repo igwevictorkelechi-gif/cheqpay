@@ -33,6 +33,15 @@ const config: Config = {
         success: "#34C759",
         info: "#3B82F6",
       },
+      // The install guide's arrow: a gentle nudge towards the button to tap.
+      keyframes: {
+        "guide-down": { "0%,100%": { transform: "translateY(0)" }, "50%": { transform: "translateY(10px)" } },
+        "guide-up": { "0%,100%": { transform: "translateY(0)" }, "50%": { transform: "translateY(-10px)" } },
+      },
+      animation: {
+        "guide-down": "guide-down 1.1s ease-in-out infinite",
+        "guide-up": "guide-up 1.1s ease-in-out infinite",
+      },
       fontFamily: {
         // The fallbacks matter: `font-display: swap` means the first paint uses
         // one of these, so they are ordered to be the closest thing each OS has

@@ -117,3 +117,9 @@ export const useUIStore = create<UIStore>((set) => ({
     set({ sound });
   },
 }));
+
+/** The iPhone/iPad "Add to Home Screen" guide, opened on first visit or from Profile. */
+export const useInstallGuideStore = create<{ open: boolean; setOpen: (open: boolean) => void }>((set) => ({
+  open: false,
+  setOpen: (open) => set({ open }),
+}));

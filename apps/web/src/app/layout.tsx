@@ -3,6 +3,7 @@ import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import { SITE_URL } from "@/lib/site";
 import InstallPrompt from "@/components/InstallPrompt";
+import IosInstallGuide from "@/components/IosInstallGuide";
 import LockGate from "@/components/LockGate";
 import TransactionPinProvider from "@/components/TransactionPinProvider";
 import AuthGuard from "@/components/AuthGuard";
@@ -112,6 +113,7 @@ export default function RootLayout({
         </AuthGuard>
         <LockGate />
         <InstallPrompt />
+        <IosInstallGuide />
         <ServiceWorkerRegister />
         <SoundProvider />
         <SplashScreen />
