@@ -21,7 +21,7 @@
       "backgroundColor": "#14121A"
     },
     "ios": {
-      "supportsTabletMode": true,
+      "supportsTablet": true,
       "bundleIdentifier": "com.cheqpay.app"
     },
     "android": {
