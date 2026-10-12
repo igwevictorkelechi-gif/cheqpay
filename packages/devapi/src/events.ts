@@ -53,6 +53,36 @@ export const EVENT_TYPES = [
     description: "A bill payment didn't go through. The amount and the fee were returned to the wallet it was paid from.",
   },
   {
+    type: "card.active",
+    object: "card",
+    description: "A card was issued and can be used. Its first top-up is on it.",
+  },
+  {
+    type: "card.failed",
+    object: "card",
+    description: "The card issuer couldn't create a card. Its first top-up and fees were returned to the wallet they came from.",
+  },
+  {
+    type: "card.funded",
+    object: "transaction",
+    description: "Money was loaded onto a card from a USD wallet.",
+  },
+  {
+    type: "card.withdrawn",
+    object: "transaction",
+    description: "Money was taken off a card back into a USD wallet.",
+  },
+  {
+    type: "card.frozen",
+    object: "card",
+    description: "A card was frozen: it can't be used or funded until it's unfrozen.",
+  },
+  {
+    type: "card.unfrozen",
+    object: "card",
+    description: "A frozen card was unfrozen.",
+  },
+  {
     type: "ping",
     object: "ping",
     description: "Sent only when you press \"Send test event\" on an endpoint in your dashboard.",

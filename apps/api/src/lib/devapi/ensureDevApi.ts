@@ -397,6 +397,59 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS dev_webhook_deliveries_due_idx ON dev_webhook_deliveries (next_attempt_at) WHERE status = 'pending'`,
   `CREATE INDEX IF NOT EXISTS dev_webhook_deliveries_endpoint_idx ON dev_webhook_deliveries (endpoint_id, created_at DESC)`,
 
+  // Phase 4: USD virtual cards for a developer's verified customers. The card's
+  // money lives at the issuer (live) or in balance_minor (sandbox only); our
+  // ledger records only what moved between a wallet and a card.
+  `CREATE TABLE IF NOT EXISTS dev_cards (
+    id uuid PRIMARY KEY,
+    account_id uuid NOT NULL REFERENCES dev_accounts(id) ON DELETE RESTRICT,
+    mode text NOT NULL CHECK (mode IN ('test', 'live')),
+    customer_id uuid NOT NULL REFERENCES dev_customers(id) ON DELETE RESTRICT,
+    wallet_id uuid NOT NULL REFERENCES dev_wallets(id) ON DELETE RESTRICT,
+    status text NOT NULL CHECK (status IN ('pending', 'active', 'frozen', 'failed')),
+    brand text NOT NULL DEFAULT 'VISA',
+    last4 text,
+    expiry_month integer,
+    expiry_year integer,
+    provider_card_id text,
+    creation_ref text,
+    balance_minor bigint NOT NULL DEFAULT 0 CHECK (balance_minor >= 0),
+    reference text,
+    metadata jsonb NOT NULL DEFAULT '{}',
+    failure_code text,
+    failure_message text,
+    issue_transaction_id uuid,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS dev_cards_provider_uidx ON dev_cards (provider_card_id) WHERE provider_card_id IS NOT NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS dev_cards_creation_uidx ON dev_cards (creation_ref) WHERE creation_ref IS NOT NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS dev_cards_reference_uidx ON dev_cards (account_id, mode, reference) WHERE reference IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS dev_cards_account_idx ON dev_cards (account_id, mode, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS dev_cards_customer_idx ON dev_cards (customer_id)`,
+  // Every reveal of a card's full number, for the per-card hourly cap and the audit trail.
+  `CREATE TABLE IF NOT EXISTS dev_card_reveals (
+    id bigserial PRIMARY KEY,
+    card_id uuid NOT NULL REFERENCES dev_cards(id) ON DELETE CASCADE,
+    key_id uuid,
+    ip text,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS dev_card_reveals_card_idx ON dev_card_reveals (card_id, created_at DESC)`,
+  // Sandbox card spending (live spending is read from the issuer).
+  `CREATE TABLE IF NOT EXISTS dev_card_transactions (
+    id uuid PRIMARY KEY,
+    card_id uuid NOT NULL REFERENCES dev_cards(id) ON DELETE CASCADE,
+    amount_minor bigint NOT NULL,
+    type text NOT NULL CHECK (type IN ('debit', 'credit')),
+    status text NOT NULL CHECK (status IN ('approved', 'declined')),
+    description text,
+    merchant_name text,
+    decline_reason text,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS dev_card_transactions_card_idx ON dev_card_transactions (card_id, created_at DESC)`,
+
   // Short leases so a background job runs on one instance at a time.
   `CREATE TABLE IF NOT EXISTS dev_job_locks (
     name text PRIMARY KEY,
