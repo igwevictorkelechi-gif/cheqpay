@@ -116,9 +116,45 @@ async function recordActivity(req: Request, userId: string): Promise<void> {
  */
 let ensured: Promise<void> | null = null;
 
+const USER_COLUMNS = [
+  "last_seen_at", "last_ip", "last_device", "last_action",
+  "geo_country", "geo_region", "geo_city", "geo_lat", "geo_lon", "geo_at",
+];
+const SESSION_COLUMNS = ["country", "city", "lat", "lon"];
+const SESSION_INDEXES = ["user_sessions_identity_key", "user_sessions_user_idx", "user_sessions_last_seen_idx"];
+
+/**
+ * Whether every column and index below already exists, read from the catalog.
+ *
+ * Checked first because this runs on the request path (from requireUser, and
+ * the admin live map) on every fresh server instance. An ALTER TABLE takes an
+ * exclusive lock on app_users even when IF NOT EXISTS makes it a no-op, and
+ * while it waits for that lock every other query on the table queues behind
+ * it. A catalog read takes no such lock, so the common case — schema already
+ * there — never touches the table at all.
+ */
+async function activitySchemaPresent(): Promise<boolean> {
+  const [cols, idx] = await Promise.all([
+    prisma.$queryRaw<{ table_name: string; column_name: string }[]>`
+      SELECT table_name, column_name FROM information_schema.columns
+       WHERE table_schema = current_schema() AND table_name IN ('app_users', 'user_sessions')`,
+    prisma.$queryRaw<{ indexname: string }[]>`
+      SELECT indexname FROM pg_indexes
+       WHERE schemaname = current_schema() AND tablename = 'user_sessions'`,
+  ]);
+  const has = new Set(cols.map((c) => `${c.table_name}.${c.column_name}`));
+  const indexes = new Set(idx.map((i) => i.indexname));
+  return (
+    USER_COLUMNS.every((c) => has.has(`app_users.${c}`)) &&
+    SESSION_COLUMNS.every((c) => has.has(`user_sessions.${c}`)) &&
+    SESSION_INDEXES.every((i) => indexes.has(i))
+  );
+}
+
 export function ensureActivitySchema(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
+      if (await activitySchemaPresent()) return;
       // One ALTER, not four. Postgres applies a multi-clause ALTER TABLE
       // atomically, so the columns cannot end up half-added if the process is
       // interrupted between statements — which is exactly what happened on the
