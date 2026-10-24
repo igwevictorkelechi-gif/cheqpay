@@ -1,12 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { NativeWindStyleSheet } from 'nativewind';
 import { useAuthStore, useUIStore } from '@/store';
 import { authService } from '@/services/auth';
 import { LockGate } from '@/components/LockGate';
-import { applyPalette } from '@/components/brand';
+import { applyPalette, colors } from '@/components/brand';
 import TransactionPinProvider from '@/components/TransactionPinProvider';
 import { FONTS } from '@/lib/fonts';
 
@@ -67,6 +68,14 @@ export default function RootLayout() {
     }
   }, [isAuthenticated, loading, segments, ready]);
 
+  // The navigator's own backdrop (behind screens during transitions, under
+  // the tab bar) in the app's colours. Left on react-navigation's default it
+  // is near-white, which flashes between dark screens.
+  const navTheme = useMemo(() => {
+    const base = darkMode ? DarkTheme : DefaultTheme;
+    return { ...base, colors: { ...base.colors, background: colors.surface, card: colors.surface, primary: colors.brand } };
+  }, [darkMode]);
+
   // Nothing until the typeface and the saved theme are in, so the first frame
   // is already in the right font and colours.
   if (!ready) return null;
@@ -81,10 +90,12 @@ export default function RootLayout() {
           the background would otherwise keep the old colours until refocused,
           which looks broken; a nav reset on a deliberate, rare action is the
           better trade. */}
-      <Stack key={darkMode ? 'dark' : 'light'} screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(app)" options={{ headerShown: false }} />
-      </Stack>
+      <ThemeProvider value={navTheme}>
+        <Stack key={darkMode ? 'dark' : 'light'} screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(app)" options={{ headerShown: false }} />
+        </Stack>
+      </ThemeProvider>
       <StatusBar style={darkMode ? 'light' : 'dark'} />
       </TransactionPinProvider>
     </LockGate>

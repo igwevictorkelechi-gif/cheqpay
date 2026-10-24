@@ -170,7 +170,7 @@ export default function PersonalDetailsScreen() {
                 </View>
                 <Text className="text-muted dark:text-muted-dark text-sm ml-3 flex-1">
                   You cannot edit some fields because your account has been verified.{' '}
-                  <Text style={{ color: colors.positive, fontWeight: '600' }} onPress={() => router.push('/(app)/settings')}>
+                  <Text style={{ color: colors.positive, fontWeight: '600' }} onPress={() => router.push('/(app)/support')}>
                     Contact support
                   </Text>{' '}
                   to make changes.
