@@ -11,7 +11,7 @@ import {
   getFxMargins,
   getPricing,
   getSwapSpreadBps,
-  getUsdtNgnRate,
+  getUsdtNgnRateDetails,
   getWithdrawalFeeNgn,
   getWithdrawalMinNgn,
   getWithdrawalMinUsd,
@@ -25,6 +25,7 @@ import {
   setPricing,
   setSwapSpreadBps,
   setUsdtNgnRate,
+  setUsdtNgnRateSource,
   setWithdrawalFeeNgn,
   setWithdrawalMinNgn,
   setWithdrawalMinUsd,
@@ -37,7 +38,7 @@ export const dynamic = "force-dynamic";
 async function snapshot() {
   const [
     spreadBps,
-    usdtNgnRate,
+    usdtRate,
     depositFeeBps,
     withdrawalFeeNgn,
     fxMarginBps,
@@ -50,7 +51,7 @@ async function snapshot() {
     pricing,
   ] = await Promise.all([
     getSwapSpreadBps(),
-    getUsdtNgnRate(),
+    getUsdtNgnRateDetails(),
     getDepositFeeBps(),
     getWithdrawalFeeNgn(),
     getFxMarginBps(),
@@ -64,7 +65,11 @@ async function snapshot() {
   ]);
   return {
     spreadBps,
-    usdtNgnRate,
+    usdtNgnRate: usdtRate.rate,
+    /** "maplerad": the rate follows Maplerad's live dollar rate; "manual": typed in. */
+    usdtNgnRateSource: usdtRate.source,
+    usdtNgnRateUpdatedAt: usdtRate.updatedAt?.toISOString() ?? null,
+    usdtNgnRateUpdatedBy: usdtRate.updatedBy,
     depositFeeBps,
     withdrawalFeeNgn,
     fxMarginBps,
@@ -108,6 +113,10 @@ export async function PUT(req: Request) {
     const body = platformSettingsUpdateSchema.parse(await req.json());
 
     if (body.spreadBps !== undefined) await setSwapSpreadBps(body.spreadBps, updatedBy);
+    if (body.usdtNgnRateSource !== undefined)
+      await setUsdtNgnRateSource(body.usdtNgnRateSource, updatedBy);
+    // Also the baseline a followed rate is checked against, so a manual entry
+    // is how an admin confirms a big move that following refused.
     if (body.usdtNgnRate !== undefined) await setUsdtNgnRate(body.usdtNgnRate, updatedBy);
     if (body.depositFeeBps !== undefined) await setDepositFeeBps(body.depositFeeBps, updatedBy);
     if (body.withdrawalFeeNgn !== undefined)

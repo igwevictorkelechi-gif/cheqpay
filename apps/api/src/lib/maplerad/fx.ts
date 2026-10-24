@@ -15,11 +15,14 @@ import type { FxCurrency, FxExchangeResult, FxQuote } from "./types";
  * cents for USD) — the same minor units we use internally. The returned quote
  * carries a `reference` that must be passed to exchangeFx to settle it.
  */
-export async function quoteFx(input: {
-  sourceCurrency: FxCurrency;
-  targetCurrency: FxCurrency;
-  amount: number;
-}): Promise<FxQuote> {
+export async function quoteFx(
+  input: {
+    sourceCurrency: FxCurrency;
+    targetCurrency: FxCurrency;
+    amount: number;
+  },
+  opts?: { signal?: AbortSignal },
+): Promise<FxQuote> {
   return mapleradRequest<FxQuote>("/fx/quote", {
     method: "POST",
     body: {
@@ -27,6 +30,7 @@ export async function quoteFx(input: {
       target_currency: input.targetCurrency,
       amount: input.amount,
     },
+    signal: opts?.signal,
   });
 }
 
