@@ -1254,13 +1254,14 @@ export const api = {
   },
 
   nearbyVenues(opts: { lat?: number; lng?: number; category?: string | null } = {}): Promise<{ venues: NearbyVenue[]; basis: 'location' | 'state' | 'all'; categories: { key: string; label: string }[] }> {
-    const q = new URLSearchParams();
+    // Built by hand: React Native's URLSearchParams has no set() and throws,
+    // which closed the app when a category was picked.
+    const q: string[] = [];
     if (opts.lat !== undefined && opts.lng !== undefined) {
-      q.set('lat', opts.lat.toFixed(2));
-      q.set('lng', opts.lng.toFixed(2));
+      q.push(`lat=${opts.lat.toFixed(2)}`, `lng=${opts.lng.toFixed(2)}`);
     }
-    if (opts.category) q.set('category', opts.category);
-    const qs = q.toString();
+    if (opts.category) q.push(`category=${encodeURIComponent(opts.category)}`);
+    const qs = q.join('&');
     return apiFetch(`/api/venues/nearby${qs ? `?${qs}` : ''}`);
   },
 
