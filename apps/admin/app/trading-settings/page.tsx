@@ -108,6 +108,9 @@ type BillMargins = Record<BillService, number | null>;
 interface Settings {
   spreadBps: number;
   usdtNgnRate: number | null;
+  usdtNgnRateSource: 'maplerad' | 'manual';
+  usdtNgnRateUpdatedAt: string | null;
+  usdtNgnRateUpdatedBy: string | null;
   depositFeeBps: number;
   withdrawalFeeNgn: number;
   fxMarginBps: number;
@@ -126,9 +129,20 @@ interface Settings {
   pricing: Pricing;
 }
 
+/** "3 min ago" from an ISO time. */
+function timeAgo(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  return hours < 48 ? `${hours} h ago` : new Date(iso).toLocaleString();
+}
+
 export default function TradingSettingsPage() {
   const [spreadBps, setSpreadBps] = useState('');
   const [usdtNgnRate, setUsdtNgnRate] = useState('');
+  const [usdtSource, setUsdtSource] = useState<'maplerad' | 'manual'>('maplerad');
+  const [usdtUpdated, setUsdtUpdated] = useState<{ at: string | null; by: string | null }>({ at: null, by: null });
   const [depositFeeBps, setDepositFeeBps] = useState('');
   const [withdrawalFeeNgn, setWithdrawalFeeNgn] = useState('');
   const [fxMarginBps, setFxMarginBps] = useState('');
@@ -154,6 +168,8 @@ export default function TradingSettingsPage() {
   function applySnapshot(data: Settings) {
     setSpreadBps(String(data.spreadBps ?? ''));
     setUsdtNgnRate(data.usdtNgnRate != null ? String(data.usdtNgnRate) : '');
+    setUsdtSource(data.usdtNgnRateSource === 'manual' ? 'manual' : 'maplerad');
+    setUsdtUpdated({ at: data.usdtNgnRateUpdatedAt ?? null, by: data.usdtNgnRateUpdatedBy ?? null });
     setDepositFeeBps(String(data.depositFeeBps ?? 0));
     setWithdrawalFeeNgn(String(data.withdrawalFeeNgn ?? 0));
     setFxMarginBps(String(data.fxMarginBps ?? 0));
@@ -211,7 +227,10 @@ export default function TradingSettingsPage() {
     try {
       const payload: Record<string, unknown> = {};
       if (spreadBps !== '') payload.spreadBps = Number(spreadBps);
-      if (usdtNgnRate !== '') payload.usdtNgnRate = Number(usdtNgnRate);
+      payload.usdtNgnRateSource = usdtSource;
+      // While following Maplerad the box only shows the live rate; sending it
+      // back would just restamp it as typed in.
+      if (usdtSource === 'manual' && usdtNgnRate !== '') payload.usdtNgnRate = Number(usdtNgnRate);
       if (depositFeeBps !== '') payload.depositFeeBps = Number(depositFeeBps);
       if (withdrawalFeeNgn !== '') payload.withdrawalFeeNgn = Number(withdrawalFeeNgn);
       if (billMarginBps !== '') payload.billMarginBps = Number(billMarginBps);
@@ -316,19 +335,41 @@ export default function TradingSettingsPage() {
             <DollarSign size={18} className="text-brand-600" />
             Business USDT&rarr;NGN rate
           </label>
+          <label className="mb-3 flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={usdtSource === 'maplerad'}
+              onChange={(e) => setUsdtSource(e.target.checked ? 'maplerad' : 'manual')}
+              disabled={loading || saving}
+            />
+            Follow Maplerad&apos;s live dollar rate
+          </label>
           <input
             type="number"
             min={0}
             step="0.01"
             value={usdtNgnRate}
             onChange={(e) => setUsdtNgnRate(e.target.value)}
-            disabled={loading || saving}
+            disabled={loading || saving || usdtSource === 'maplerad'}
             className={inputCls}
             placeholder="e.g. 1750"
           />
           <p className="text-sm text-gray-500 mt-2">
-            Naira paid per 1 USDT before spread. The crypto leg comes from Binance.
+            Naira per 1 USDT before the swap spread. The crypto leg comes from Binance.
           </p>
+          {usdtSource === 'maplerad' ? (
+            <p className="text-sm text-gray-500 mt-1">
+              Set automatically to what Maplerad pays per $1, refreshed every 10 minutes
+              {usdtUpdated.at ? <> (last set {timeAgo(usdtUpdated.at)}{usdtUpdated.by ? ` by ${usdtUpdated.by}` : ''})</> : null}.
+              A move of more than 5% at once is not followed: you get an alert, and the rate stays
+              put until you confirm it by switching this off and typing the new rate.
+            </p>
+          ) : (
+            <p className="text-sm text-amber-700 mt-1">
+              Typed in: it will not move with Maplerad. Keep it at or below what Maplerad pays per $1, or
+              crypto sales lose money.
+            </p>
+          )}
         </div>
 
         <h2 className="text-lg font-bold text-gray-900 pt-2">Fees &amp; margins</h2>

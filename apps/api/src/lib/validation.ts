@@ -226,6 +226,8 @@ export const platformSettingsUpdateSchema = z
   .object({
     spreadBps: z.number().int().min(0).max(10_000).optional(),
     usdtNgnRate: z.number().positive().max(1_000_000).optional(),
+    /** Follow Maplerad's live dollar rate, or keep the typed-in usdtNgnRate. */
+    usdtNgnRateSource: z.enum(["maplerad", "manual"]).optional(),
     /** Deposit fee in basis points (max 5%). */
     depositFeeBps: z.number().int().min(0).max(500).optional(),
     /** Flat withdrawal fee in NGN (max ₦10,000). */

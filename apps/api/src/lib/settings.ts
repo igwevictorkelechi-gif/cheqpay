@@ -2,10 +2,14 @@ import { prisma } from "@cheqpay/db";
 import { cachedSetting, invalidateSetting } from "./settingsCache";
 import { getEnv } from "./env";
 import { ApiError } from "./http";
+import { AUTO_UPDATED_BY, followMapleradRate } from "./usdtRate";
 
 export const SETTING_KEYS = {
   SWAP_SPREAD_BPS: "swap_spread_bps",
   USDT_NGN_RATE: "usdt_ngn_rate",
+  // "maplerad": USDT_NGN_RATE follows Maplerad's live dollar rate (see
+  // lib/usdtRate.ts). "manual": it is whatever an admin last typed.
+  USDT_NGN_RATE_SOURCE: "usdt_ngn_rate_source",
   // Business fees, admin-set from the dashboard. Defaults are the price sheet
   // in PRICING_DEFAULTS: Maplerad's cost to us plus a CheqPay margin.
   DEPOSIT_FEE_BPS: "deposit_fee_bps", // % of each NGN deposit, in basis points
@@ -94,12 +98,50 @@ export async function getSwapSpreadBps(): Promise<number> {
 
 /** Current business USDT->NGN rate, or null if never set. */
 export async function getUsdtNgnRate(): Promise<number | null> {
+  return (await getUsdtNgnRateDetails()).rate;
+}
+
+export type UsdtNgnRateSource = "maplerad" | "manual";
+
+/**
+ * Where the USDT→NGN rate comes from. Following Maplerad is the default
+ * whenever Maplerad is configured; without it there is nothing to follow.
+ */
+export async function getUsdtNgnRateSource(): Promise<UsdtNgnRateSource> {
+  if (!process.env.MAPLERAD_SECRET_KEY) return "manual";
   const row = await prisma.platformSetting.findUnique({
-    where: { key: SETTING_KEYS.USDT_NGN_RATE },
+    where: { key: SETTING_KEYS.USDT_NGN_RATE_SOURCE },
   });
-  if (row) return parseUsdtNgnRate(row.value);
-  const seed = getEnv().BUSINESS_USDT_NGN_RATE;
-  return seed ?? null;
+  return row?.value === "manual" ? "manual" : "maplerad";
+}
+
+export async function setUsdtNgnRateSource(source: UsdtNgnRateSource, updatedBy?: string): Promise<void> {
+  await upsertSetting(SETTING_KEYS.USDT_NGN_RATE_SOURCE, source, updatedBy);
+}
+
+/** The rate with where it came from and when, for pricing and the admin page. */
+export async function getUsdtNgnRateDetails(): Promise<{
+  rate: number | null;
+  source: UsdtNgnRateSource;
+  updatedAt: Date | null;
+  updatedBy: string | null;
+}> {
+  const [row, source] = await Promise.all([
+    prisma.platformSetting.findUnique({ where: { key: SETTING_KEYS.USDT_NGN_RATE } }),
+    getUsdtNgnRateSource(),
+  ]);
+  const stored = row ? parseUsdtNgnRate(row.value) : getEnv().BUSINESS_USDT_NGN_RATE ?? null;
+  const updatedAt = row?.updatedAt ?? null;
+  if (source === "manual") {
+    return { rate: stored, source, updatedAt, updatedBy: row?.updatedBy ?? null };
+  }
+  const { rate, fresh } = await followMapleradRate(stored, updatedAt);
+  return {
+    rate,
+    source,
+    updatedAt: fresh ? new Date() : updatedAt,
+    updatedBy: fresh ? AUTO_UPDATED_BY : row?.updatedBy ?? null,
+  };
 }
 
 export async function setSwapSpreadBps(
