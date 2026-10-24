@@ -54,8 +54,15 @@ function Slide({ banner }: { banner: HomeBannerData }) {
   const body = (
     <>
       {banner.imageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={banner.imageUrl} alt={banner.title ?? ""} draggable={false} className="absolute inset-0 h-full w-full object-cover" />
+        // A background rather than an <img>: browsers offer "Save image" and
+        // drag-out for an <img>, and the banners aren't meant to be taken.
+        <div
+          role={banner.title ? "img" : undefined}
+          aria-label={banner.title ?? undefined}
+          aria-hidden={banner.title ? undefined : true}
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${JSON.stringify(banner.imageUrl)})` }}
+        />
       )}
       {hasText && (
         <div
@@ -115,7 +122,11 @@ export default function HomeBannerCarousel({ banners }: { banners: HomeBannerDat
   };
 
   return (
-    <div className="relative h-32 overflow-hidden rounded-3xl" aria-roledescription={many ? "carousel" : undefined}>
+    <div
+      className="no-save relative h-32 overflow-hidden rounded-3xl"
+      aria-roledescription={many ? "carousel" : undefined}
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <div
         ref={track}
         onScroll={(e) => setIndex(Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth))}
