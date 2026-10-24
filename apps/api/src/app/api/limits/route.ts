@@ -5,7 +5,7 @@ import {
   getDepositMinUsd,
   getFxSideMarginBps,
   getPricing,
-  getSwapSpreadBps,
+  getSwapSpreads,
   getWithdrawalFeeNgn,
   getWithdrawalMinNgn,
   getWithdrawalMinUsd,
@@ -55,7 +55,7 @@ export async function GET() {
       getWithdrawalMinUsd(),
       getWithdrawalFeeNgn(),
       getDepositFeeBps(),
-      getSwapSpreadBps(),
+      getSwapSpreads(),
       getFxSideMarginBps("buy_usd"),
       getFxSideMarginBps("sell_usd"),
       getPricing(),
@@ -73,7 +73,13 @@ export async function GET() {
       fees: {
         withdrawalFeeNgn,
         depositFeeBps,
-        swapSpreadBps,
+        swapSpreadBps: swapSpreadBps.defaultBps,
+        /** What each kind of crypto swap costs (each falls back to swapSpreadBps). */
+        swapSpreads: {
+          buyBps: swapSpreadBps.buyBps ?? swapSpreadBps.defaultBps,
+          sellBps: swapSpreadBps.sellBps ?? swapSpreadBps.defaultBps,
+          convertBps: swapSpreadBps.convertBps ?? swapSpreadBps.defaultBps,
+        },
         fx: { buyUsdBps, sellUsdBps },
         ...pricing,
         bills: {

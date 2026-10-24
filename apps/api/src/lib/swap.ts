@@ -22,7 +22,7 @@ import {
 import {
   feeFromBps,
   getFxSideMarginBps,
-  getSwapSpreadBps,
+  getSwapSpreadBpsFor,
   getUsdtNgnRate,
   type FxSide,
 } from "./settings";
@@ -140,7 +140,7 @@ export async function createQuote(params: {
   if (usdtNgnRate === null) {
     throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
   }
-  const spreadBps = await getSwapSpreadBps();
+  const spreadBps = await getSwapSpreadBpsFor(params.side);
   const cryptoUsdtPrice = await getPriceFeed().getSpotUsdt(params.cryptoAsset);
 
   const { amountOutMinor, rate } = computeSwap({
@@ -205,7 +205,8 @@ export async function createConvertQuote(params: {
     throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
   }
   const usdtNgnDecimal = new Prisma.Decimal(usdtNgnRate);
-  const spreadBps = await getSwapSpreadBps();
+  // A convert that touches naira (crypto ⇄ NGN) is priced as the buy or sell it is.
+  const spreadBps = await getSwapSpreadBpsFor(classifySwap(params.fromAsset, params.toAsset));
   const feed = getPriceFeed();
   const [fromUsdtPrice, toUsdtPrice] = await Promise.all([
     usdtPriceForAsset(params.fromAsset, feed, usdtNgnDecimal),
@@ -407,7 +408,8 @@ export async function executeSwap(params: {
     await ensureUsdAsset();
   }
 
-  const spreadBps = await getSwapSpreadBps();
+  // The same spread the quote was priced with, so recorded revenue matches it.
+  const spreadBps = await getSwapSpreadBpsFor(kind);
   const spreadMinor =
     spreadBps > 0 && spreadBps < 10_000
       ? (quote.amountOut * BigInt(Math.trunc(spreadBps))) / BigInt(10_000 - Math.trunc(spreadBps))

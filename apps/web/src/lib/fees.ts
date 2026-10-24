@@ -164,7 +164,13 @@ export function priceSheet(f: PublicFees): { title: string; rows: PriceRow[] }[]
       rows: [
         { what: "Naira → Dollar", price: percent(f.fx.sellUsdBps), note: "Included in the rate you see before confirming." },
         { what: "Dollar → Naira", price: percent(f.fx.buyUsdBps), note: "Included in the rate you see before confirming." },
-        { what: "Buy, sell or convert crypto", price: percent(f.swapSpreadBps), note: "Included in the rate you see before confirming." },
+        ...(f.swapSpreads
+          ? [
+              { what: "Buy crypto with Naira", price: percent(f.swapSpreads.buyBps), note: "Included in the rate you see before confirming." },
+              { what: "Sell crypto for Naira", price: percent(f.swapSpreads.sellBps), note: "Included in the rate you see before confirming." },
+              { what: "Dollar ⇄ USDT, or one coin for another", price: percent(f.swapSpreads.convertBps), note: "Included in the rate you see before confirming." },
+            ]
+          : [{ what: "Buy, sell or convert crypto", price: percent(f.swapSpreadBps), note: "Included in the rate you see before confirming." }]),
       ],
     },
     {

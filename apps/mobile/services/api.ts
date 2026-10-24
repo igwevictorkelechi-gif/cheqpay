@@ -193,6 +193,8 @@ export interface PublicFees {
   withdrawalFeeNgn: number;
   depositFeeBps: number;
   swapSpreadBps: number;
+  /** Each kind of crypto swap's own spread; absent from older API versions. */
+  swapSpreads?: { buyBps: number; sellBps: number; convertBps: number };
   fx: { buyUsdBps: number; sellUsdBps: number };
   /** Most an NGN deposit fee can be, in naira (0 = no cap). */
   depositFeeCapNgn: number;
