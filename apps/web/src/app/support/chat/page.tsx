@@ -61,7 +61,7 @@ export default function SupportChatPage() {
   const showSuggestions = messages.length === 1 && !sending;
 
   return (
-    <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface lg:pl-64">
+    <div className="flex min-h-screen w-full justify-center bg-backdrop lg:bg-surface lg:pl-64">
       <DesktopSidebar />
       <div className="flex min-h-screen w-full max-w-[480px] flex-col bg-surface lg:max-w-3xl">
         {/* Header */}

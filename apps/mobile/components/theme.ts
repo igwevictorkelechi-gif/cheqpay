@@ -31,6 +31,8 @@ export interface Palette {
   barEdge: string;
   /** Active-tab capsule fill. */
   capsule: string;
+  /** Behind the sign-in card: black in dark mode, the plain light surface in light mode. */
+  backdrop: string;
 }
 
 /** Brand hues are fixed; only the neutrals flip between themes. */
@@ -50,6 +52,7 @@ export const darkPalette: Palette = {
   barFill: 'rgba(31,27,41,0.94)',
   barEdge: 'rgba(255,255,255,0.10)',
   capsule: 'rgba(255,255,255,0.09)',
+  backdrop: '#000000',
 };
 
 /** Mirrors the web light theme (apps/web globals.css) so the two match. */
@@ -69,6 +72,7 @@ export const lightPalette: Palette = {
   barFill: 'rgba(255,255,255,0.96)',
   barEdge: 'rgba(27,23,38,0.08)',
   capsule: 'rgba(27,23,38,0.07)',
+  backdrop: '#F6F5FA',
 };
 
 /**

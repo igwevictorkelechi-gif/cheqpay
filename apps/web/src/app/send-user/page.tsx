@@ -98,7 +98,7 @@ export default function SendToUserPage() {
 
   if (step === "done" && sent) {
     return (
-      <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+      <div className="flex min-h-screen justify-center bg-backdrop lg:bg-surface lg:pl-64">
       <DesktopSidebar />
         <div className="flex min-h-screen w-full max-w-[480px] flex-col items-center bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
           <div className="mt-24 flex flex-col items-center text-center">
@@ -128,7 +128,7 @@ export default function SendToUserPage() {
   }
 
   return (
-    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+    <div className="flex min-h-screen justify-center bg-backdrop lg:bg-surface lg:pl-64">
       <DesktopSidebar />
       <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-6 pt-3 lg:max-w-3xl">
         <button

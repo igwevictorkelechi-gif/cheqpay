@@ -43,7 +43,7 @@ export default function InstantWithdrawalPage() {
   };
 
   return (
-    <div className="flex min-h-screen justify-center bg-black lg:bg-surface lg:pl-64">
+    <div className="flex min-h-screen justify-center bg-backdrop lg:bg-surface lg:pl-64">
       <DesktopSidebar />
       <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-10 pt-3 lg:max-w-3xl">
         <button

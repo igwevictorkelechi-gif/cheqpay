@@ -17,6 +17,7 @@ const config: Config = {
         "brand-dark": "#574A7A",
         "brand-light": "#8A7BB5",
         surface: "rgb(var(--c-surface) / <alpha-value>)",
+        backdrop: "rgb(var(--c-backdrop) / <alpha-value>)",
         "surface-soft": "rgb(var(--c-surface-soft) / <alpha-value>)",
         card: "rgb(var(--c-card) / <alpha-value>)",
         circle: "rgb(var(--c-circle) / <alpha-value>)",
