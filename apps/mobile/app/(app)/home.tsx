@@ -19,6 +19,7 @@ import {
 import { TxnRow } from '@/components/TxnRow';
 import { KycBanner } from '@/components/KycBanner';
 import PromoPopup from '@/components/PromoPopup';
+import HomeBanner, { useHomeBanner } from '@/components/HomeBanner';
 import { useFeatures } from '@/lib/useFeatures';
 import NearbyStrip from '@/components/NearbyStrip';
 
@@ -27,6 +28,7 @@ export default function HomeScreen() {
   const { user } = useAuthStore();
   const { showBalance, toggleBalance } = useUIStore();
   const features = useFeatures();
+  const banner = useHomeBanner();
   const [ngn, setNgn] = useState(0);
   const [usd, setUsd] = useState(0);
   const [currency, setCurrency] = useState<'NGN' | 'USD'>('NGN');
@@ -200,8 +202,12 @@ export default function HomeScreen() {
         </View>
         <NearbyStrip />
 
-        {/* Cash account — the selected currency only. */}
+        {/* The admin's banner when one is live; otherwise the Cash account for
+            the selected currency. Same size either way. */}
         <View className="px-5 mb-4">
+          {banner ? (
+            <HomeBanner banner={banner} />
+          ) : (
           <Card>
             <Text className="text-muted dark:text-muted-dark text-base font-medium mb-4">Cash</Text>
             <View className="flex-row items-center justify-between">
@@ -230,6 +236,7 @@ export default function HomeScreen() {
               </Text>
             </View>
           </Card>
+          )}
         </View>
 
         {/* Transactions */}

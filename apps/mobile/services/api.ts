@@ -187,6 +187,16 @@ export interface Quote {
   expiresAt: string;
 }
 
+/** The admin's home-screen banner. Every field but the id is optional. */
+export interface HomeBannerData {
+  id: string;
+  imageUrl: string | null;
+  title: string | null;
+  message: string | null;
+  /** In-app path or https link a tap opens. */
+  linkUrl: string | null;
+}
+
 /** Fees set in the admin dashboard, as the server charges them. */
 export interface PublicFees {
   /** Flat, taken out of the amount withdrawn. */
@@ -1393,6 +1403,11 @@ export const api = {
 
   getCardTransactions(id: string): Promise<{ transactions: CardTransaction[] }> {
     return apiFetch(`/api/cards/${id}/transactions`);
+  },
+
+  /** Admin-published home-screen banner (null when none is live). */
+  getHomeBanner(): Promise<{ banner: HomeBannerData | null }> {
+    return apiFetch('/api/home-banner');
   },
 
   /** Admin-published in-app popup (null when none is live). */
