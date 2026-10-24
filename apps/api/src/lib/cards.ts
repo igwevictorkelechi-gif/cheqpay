@@ -2,6 +2,7 @@ import { prisma } from "@cheqpay/db";
 import type { CardStorePort, IssuingEventData } from "./maplerad/issuing";
 import { refundCardIssueFee } from "./cardFunding";
 import { finalizeDevCard } from "./devapi/cards";
+import { alertOpsOnce } from "./opsAlert";
 
 /**
  * Card issuing is gated on Maplerad being configured (the same secret key the
@@ -55,12 +56,52 @@ export const cardStore: CardStorePort = {
     // Maplerad said no: the card will never exist, so its price goes back.
     // Only on an explicit failure — an unknown or pending status keeps the charge.
     if (/^(FAILED|FAILURE|DECLINED|REJECTED|ERROR)$/i.test(status)) {
-      await refundCardIssueFee({ reference }).catch((err) => {
-        console.error("[cards] refunding the card price failed — refund by hand", {
-          reference,
-          error: String(err),
+      const refunded = await refundCardIssueFee({ reference })
+        .then(() => true)
+        .catch((err) => {
+          console.error("[cards] refunding the card price failed — refund by hand", {
+            reference,
+            error: String(err),
+          });
+          return false;
         });
-      });
+      await recordIssueFailure(reference, data, refunded);
     }
   },
 };
+
+/**
+ * Keep why Maplerad refused a card (e.g. a selfie that didn't match the
+ * passport) and the link the customer can retry verification with. Never
+ * throws: a missing audit row must not 500 the webhook.
+ */
+async function recordIssueFailure(reference: string, raw: Record<string, unknown>, refunded: boolean): Promise<void> {
+  const str = (v: unknown) => (typeof v === "string" && v !== "" ? v : undefined);
+  const reason = str(raw.reason);
+  const card = await prisma.card
+    .findUnique({ where: { reference }, select: { id: true, userId: true } })
+    .catch(() => null);
+  await prisma.auditLog
+    .create({
+      data: {
+        userId: card?.userId ?? null,
+        action: "card.issue_failed",
+        resourceType: "Card",
+        resourceId: card?.id ?? null,
+        details: {
+          via: "webhook",
+          reference,
+          reason: reason ?? null,
+          verificationLink: str(raw.verification_link) ?? null,
+          linkExpiresAt: str(raw.link_expire_at) ?? null,
+          refunded,
+        },
+      },
+    })
+    .catch(() => undefined);
+  await alertOpsOnce("card-issue-failed-webhook", `Card issuing failed: ${reason ?? "no reason given"}`, {
+    reference,
+    ...(card ? { card: card.id } : {}),
+    refunded: refunded ? "yes" : "no — refund by hand",
+  });
+}
