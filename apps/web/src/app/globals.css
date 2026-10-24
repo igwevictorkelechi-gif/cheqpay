@@ -208,6 +208,13 @@ input[inputmode="numeric"] {
   display: none;
 }
 
+/* Pictures that aren't for saving: no selection, long-press callout or menu (the banner carousel). */
+.no-save {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 /* Scrollbar Styling */
 ::-webkit-scrollbar {
   width: 8px;
