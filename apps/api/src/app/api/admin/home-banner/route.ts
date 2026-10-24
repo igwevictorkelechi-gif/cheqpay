@@ -1,57 +1,44 @@
-import { z } from "zod";
 import { prisma } from "@cheqpay/db";
 import { requireAdmin } from "@/lib/auth";
 import { requireAdminActor } from "@/lib/adminGuard";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
-import { getHomeBanner, isAllowedBannerImage, setHomeBanner } from "@/lib/homeBanner";
+import { bannerImageUrl, createHomeBanner, listHomeBanners, MAX_BANNERS } from "@/lib/homeBanner";
+import { parseBannerInput } from "./schema";
 
 export const dynamic = "force-dynamic";
 
-/** Admin: read the home banner (including when switched off). */
+/** Admin: every home banner (live or not), in display order. */
 export async function GET(req: Request) {
   try {
     await requireAdmin(req);
-    return jsonOk({ banner: await getHomeBanner() });
+    const origin = new URL(req.url).origin;
+    const banners = (await listHomeBanners()).map((b) => ({ ...b, imageUrl: bannerImageUrl(b, origin) }));
+    return jsonOk({ banners, max: MAX_BANNERS });
   } catch (err) {
     return toErrorResponse(err);
   }
 }
 
-const optionalText = (max: number) =>
-  z.string().trim().max(max).nullable().transform((v) => (v ? v : null));
-
-const bannerSchema = z.object({
-  enabled: z.boolean(),
-  imageUrl: z.string().trim().max(900_000).nullable(), // https or data: URL
-  title: optionalText(40),
-  message: optionalText(90),
-  linkUrl: optionalText(300),
-});
-
-/** Admin: replace the home banner. */
-export async function PUT(req: Request) {
+/** Admin: add a banner at the end of the carousel. */
+export async function POST(req: Request) {
   try {
     const actor = (await requireAdminActor(req)).email;
-    const body = bannerSchema.parse(await req.json());
-    if (body.imageUrl && !isAllowedBannerImage(body.imageUrl)) {
-      throw new ApiError(422, "The image must be an uploaded PNG, JPG or WebP, or an https link", "bad_image");
-    }
-    if (!body.imageUrl && !body.title) {
-      throw new ApiError(422, "Add a banner image or a title", "empty_banner");
-    }
-    if (body.linkUrl && !body.linkUrl.startsWith("/") && !body.linkUrl.startsWith("https://")) {
-      throw new ApiError(422, "The link must be an in-app path like /deposit or an https link", "bad_link");
-    }
-    const banner = await setHomeBanner(body, actor);
+    const input = parseBannerInput(await req.json());
+    const banner = await createHomeBanner(input, actor).catch((err) => {
+      if (err instanceof Error && err.message === "max_banners") {
+        throw new ApiError(422, `The carousel holds at most ${MAX_BANNERS} banners. Remove one first.`, "max_banners");
+      }
+      throw err;
+    });
     await prisma.auditLog.create({
       data: {
-        action: "admin.home_banner.updated",
+        action: "admin.home_banner.created",
         resourceType: "PlatformSetting",
-        resourceId: "home_banner",
-        details: { enabled: body.enabled, title: body.title, hasImage: Boolean(body.imageUrl), actor },
+        resourceId: `home_banner:${banner.id}`,
+        details: { enabled: banner.enabled, title: banner.title, image: banner.image ? "yes" : "no", actor },
       },
     });
-    return jsonOk({ banner });
+    return jsonOk({ banner: { ...banner, imageUrl: bannerImageUrl(banner, new URL(req.url).origin) } });
   } catch (err) {
     return toErrorResponse(err);
   }
