@@ -1,43 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type HomeBannerData } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
 import { safeHttpsUrl, safeInternalPath } from "@/lib/safeUrl";
 
-const CACHE_KEY = "cheqpay:home:banner";
+const CACHE_KEY = "cheqpay:home:banners";
+/** How long each banner shows before the next slides in. */
+const ROTATE_MS = 5000;
+/** After a swipe or tap, how long to leave the user in charge. */
+const HOLD_AFTER_TOUCH_MS = 8000;
 
 /**
- * The admin's home banner, or null when none is live. The last one is kept so
- * a returning user sees it straight away instead of a flash of the Cash card.
+ * The admin's live home banners, in order (empty when none). The last list is
+ * kept so a returning user sees them straight away instead of a flash of the
+ * Cash card.
  */
-export function useHomeBanner(): HomeBannerData | null {
-  const [banner, setBanner] = useState<HomeBannerData | null>(null);
+export function useHomeBanners(): HomeBannerData[] {
+  const [banners, setBanners] = useState<HomeBannerData[]>([]);
   useEffect(() => {
     let active = true;
-    setBanner(readCache<HomeBannerData>(CACHE_KEY));
+    setBanners(readCache<HomeBannerData[]>(CACHE_KEY) ?? []);
     api
-      .getHomeBanner()
-      .then(({ banner }) => {
+      .getHomeBanners()
+      .then(({ banners, banner }) => {
         if (!active) return;
-        setBanner(banner);
-        writeCache(CACHE_KEY, banner);
+        // An API from before the carousel sends just `banner`.
+        const list = banners ?? (banner ? [banner] : []);
+        setBanners(list);
+        writeCache(CACHE_KEY, list);
       })
       .catch(() => {});
     return () => {
       active = false;
     };
   }, []);
-  return banner;
+  return banners;
 }
 
-/**
- * The banner in the home screen's card slot, exactly the height of the Cash
- * card it replaces so nothing below it moves: h-32 is 8rem, the card's padding
- * (2.5rem), label (1.5rem), gap (1rem) and row (3rem) added up.
- */
-export default function HomeBanner({ banner }: { banner: HomeBannerData }) {
+/** One banner, filling the slot. */
+function Slide({ banner }: { banner: HomeBannerData }) {
   const router = useRouter();
   const internal = safeInternalPath(banner.linkUrl);
   const external = internal ? null : safeHttpsUrl(banner.linkUrl);
@@ -52,7 +55,7 @@ export default function HomeBanner({ banner }: { banner: HomeBannerData }) {
     <>
       {banner.imageUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={banner.imageUrl} alt={banner.title ?? ""} className="absolute inset-0 h-full w-full object-cover" />
+        <img src={banner.imageUrl} alt={banner.title ?? ""} draggable={false} className="absolute inset-0 h-full w-full object-cover" />
       )}
       {hasText && (
         <div
@@ -66,12 +69,84 @@ export default function HomeBanner({ banner }: { banner: HomeBannerData }) {
     </>
   );
 
-  const cls = "relative block h-32 w-full overflow-hidden rounded-3xl bg-gradient-to-r from-brand to-brand-light";
+  const cls = "relative block h-full w-full shrink-0 snap-center overflow-hidden bg-gradient-to-r from-brand to-brand-light";
   return internal || external ? (
-    <button type="button" onClick={open} className={`tap ${cls}`} aria-label={banner.title ?? "Open banner"}>
+    <button type="button" onClick={open} className={cls} aria-label={banner.title ?? "Open banner"}>
       {body}
     </button>
   ) : (
     <div className={cls}>{body}</div>
+  );
+}
+
+/**
+ * The banners in the home screen's card slot, exactly the height of the Cash
+ * card they replace so nothing below moves: h-32 is 8rem, the card's padding
+ * (2.5rem), label (1.5rem), gap (1rem) and row (3rem) added up.
+ *
+ * With more than one, they slide by every few seconds and can be swiped; the
+ * dots show which is showing. A touch hands control to the user for a while,
+ * and nothing moves on its own for people who ask for reduced motion.
+ */
+export default function HomeBannerCarousel({ banners }: { banners: HomeBannerData[] }) {
+  const track = useRef<HTMLDivElement>(null);
+  const holdUntil = useRef(0);
+  const [index, setIndex] = useState(0);
+  const many = banners.length > 1;
+
+  const goTo = (i: number) => {
+    const el = track.current;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (!many || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const t = window.setInterval(() => {
+      const el = track.current;
+      if (!el || Date.now() < holdUntil.current || document.hidden) return;
+      const current = Math.round(el.scrollLeft / el.clientWidth);
+      goTo((current + 1) % banners.length);
+    }, ROTATE_MS);
+    return () => window.clearInterval(t);
+  }, [many, banners.length]);
+
+  const hold = () => {
+    holdUntil.current = Date.now() + HOLD_AFTER_TOUCH_MS;
+  };
+
+  return (
+    <div className="relative h-32 overflow-hidden rounded-3xl" aria-roledescription={many ? "carousel" : undefined}>
+      <div
+        ref={track}
+        onScroll={(e) => setIndex(Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth))}
+        onPointerDown={hold}
+        onTouchStart={hold}
+        onWheel={hold}
+        className="no-scrollbar flex h-full snap-x snap-mandatory overflow-x-auto"
+      >
+        {banners.map((b) => (
+          <Slide key={b.id} banner={b} />
+        ))}
+      </div>
+      {many && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center gap-1.5">
+          {banners.map((b, i) => (
+            <button
+              key={b.id}
+              type="button"
+              aria-label={`Show banner ${i + 1} of ${banners.length}`}
+              aria-current={i === index}
+              onClick={() => {
+                hold();
+                goTo(i);
+              }}
+              className={`pointer-events-auto h-1.5 rounded-full shadow-[0_0_2px_rgba(0,0,0,0.6)] transition-all ${
+                i === index ? "w-4 bg-white" : "w-1.5 bg-white/60"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

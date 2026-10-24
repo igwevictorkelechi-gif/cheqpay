@@ -1,19 +1,21 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Image as ImageIcon, Save, Upload, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, GripVertical, Image as ImageIcon, Pencil, Plus, Save, Trash2, Upload, X } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
 type Banner = {
-  id?: string;
+  id: string;
+  version: string;
   enabled: boolean;
   imageUrl: string | null;
   title: string | null;
   message: string | null;
   linkUrl: string | null;
 };
+type Draft = Omit<Banner, 'id' | 'version'> & { id?: string };
 
-const EMPTY: Banner = { enabled: false, imageUrl: null, title: null, message: null, linkUrl: null };
+const EMPTY: Draft = { enabled: true, imageUrl: null, title: null, message: null, linkUrl: null };
 
 /** The slot on the home screen: full width less 20px each side, 128px tall. */
 const SLOT_HEIGHT = 128;
@@ -21,8 +23,9 @@ const SLOT_HEIGHT = 128;
 const MAX_DATA_URL = 850_000;
 
 /**
- * Shrink an upload to at most 1200px wide before it is stored: the slot is
- * never wider than a phone, and every byte is sent to every phone once.
+ * Shrink an upload to at most 1200px wide and keep whichever of WebP or JPEG
+ * comes out smaller: the slot is never wider than a phone, and every byte is
+ * sent to every phone once. (Safari can't write WebP and hands back PNG.)
  */
 async function toBannerDataUrl(file: File): Promise<string> {
   const bitmap = await createImageBitmap(file);
@@ -31,15 +34,13 @@ async function toBannerDataUrl(file: File): Promise<string> {
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
   canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  // WebP keeps transparency; browsers that can't write it return PNG instead.
-  let url = canvas.toDataURL('image/webp', 0.85);
-  if (url.length > MAX_DATA_URL) url = canvas.toDataURL('image/jpeg', 0.8);
-  if (url.length > MAX_DATA_URL) throw new Error('That image is still too large after shrinking. Try a simpler one.');
-  return url;
+  const best = [canvas.toDataURL('image/webp', 0.88), canvas.toDataURL('image/jpeg', 0.88)].sort((a, b) => a.length - b.length)[0];
+  if (best.length > MAX_DATA_URL) throw new Error('That image is still too large after shrinking. Try a simpler one.');
+  return best;
 }
 
-/** The banner exactly as the home screen draws it. */
-function BannerPreview({ banner }: { banner: Banner }) {
+/** One banner exactly as the home screen draws it. */
+function BannerPreview({ banner }: { banner: Draft }) {
   const hasText = Boolean(banner.title || banner.message);
   return (
     <div
@@ -67,18 +68,30 @@ function BannerPreview({ banner }: { banner: Banner }) {
 }
 
 export default function HomeBannerAdminPage() {
-  const [banner, setBanner] = useState<Banner>(EMPTY);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [max, setMax] = useState(8);
+  const [draft, setDraft] = useState<Draft | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  async function load() {
+    try {
+      const res = await fetch('/api/home-banner', { cache: 'no-store' });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? 'Failed to load');
+      setBanners(d.banners ?? []);
+      if (d.max) setMax(d.max);
+    } catch (e) {
+      setMessage({ kind: 'err', text: e instanceof Error ? e.message : 'Failed to load' });
+    } finally {
+      setLoading(false);
+    }
+  }
   useEffect(() => {
-    fetch('/api/home-banner', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((d) => { if (d.banner) setBanner(d.banner); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    void load();
   }, []);
 
   async function pickImage(file: File | undefined) {
@@ -86,7 +99,7 @@ export default function HomeBannerAdminPage() {
     setMessage(null);
     try {
       const imageUrl = await toBannerDataUrl(file);
-      setBanner((b) => ({ ...b, imageUrl }));
+      setDraft((b) => (b ? { ...b, imageUrl } : b));
     } catch (e) {
       setMessage({ kind: 'err', text: e instanceof Error ? e.message : 'Could not read that image.' });
     } finally {
@@ -95,29 +108,26 @@ export default function HomeBannerAdminPage() {
   }
 
   async function save() {
+    if (!draft) return;
     setSaving(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/home-banner', {
-        method: 'PUT',
+      const res = await fetch(draft.id ? `/api/home-banner/${draft.id}` : '/api/home-banner', {
+        method: draft.id ? 'PUT' : 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          enabled: banner.enabled,
-          imageUrl: banner.imageUrl || null,
-          title: banner.title?.trim() || null,
-          message: banner.message?.trim() || null,
-          linkUrl: banner.linkUrl?.trim() || null,
+          enabled: draft.enabled,
+          imageUrl: draft.imageUrl || null,
+          title: draft.title?.trim() || null,
+          message: draft.message?.trim() || null,
+          linkUrl: draft.linkUrl?.trim() || null,
         }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? 'Failed to save');
-      setBanner(d.banner);
-      setMessage({
-        kind: 'ok',
-        text: banner.enabled
-          ? 'Saved and live: it replaces the Cash card on everyone’s home screen.'
-          : 'Saved, but switched off: users keep seeing the Cash card.',
-      });
+      setDraft(null);
+      setMessage({ kind: 'ok', text: draft.enabled ? 'Saved and live in the carousel.' : 'Saved, switched off: users won’t see it.' });
+      await load();
     } catch (e) {
       setMessage({ kind: 'err', text: e instanceof Error ? e.message : 'Failed to save' });
     } finally {
@@ -125,26 +135,62 @@ export default function HomeBannerAdminPage() {
     }
   }
 
-  const canSave = Boolean(banner.imageUrl || banner.title?.trim()) && !saving;
-  const inputCls =
-    'w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500';
+  async function remove(b: Banner) {
+    if (!confirm(`Delete this banner${b.title ? ` (“${b.title}”)` : ''}? This can’t be undone.`)) return;
+    setMessage(null);
+    const res = await fetch(`/api/home-banner/${b.id}`, { method: 'DELETE' });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) setMessage({ kind: 'err', text: d.error ?? 'Failed to delete' });
+    if (draft?.id === b.id) setDraft(null);
+    await load();
+  }
+
+  async function toggle(b: Banner) {
+    setMessage(null);
+    const res = await fetch(`/api/home-banner/${b.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: !b.enabled, imageUrl: b.imageUrl, title: b.title, message: b.message, linkUrl: b.linkUrl }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) setMessage({ kind: 'err', text: d.error ?? 'Failed to save' });
+    await load();
+  }
+
+  /** Move the banner at `from` to `to` and save the new order. */
+  async function move(from: number, to: number) {
+    if (from === to || to < 0 || to >= banners.length) return;
+    const next = [...banners];
+    const [b] = next.splice(from, 1);
+    next.splice(to, 0, b);
+    setBanners(next);
+    const res = await fetch('/api/home-banner/order', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ order: next.map((x) => x.id) }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) setMessage({ kind: 'err', text: d.error ?? 'Failed to reorder' });
+    await load();
+  }
+
+  const live = banners.filter((b) => b.enabled).length;
+  const canSave = Boolean(draft && (draft.imageUrl || draft.title?.trim())) && !saving;
+  const inputCls = 'w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500';
 
   return (
     <DashboardLayout>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Home Banner</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Home Banners</h1>
         <p className="text-gray-600 mt-2">
-          A banner in the slot under Deposit · Withdraw · Convert · Send on the home screen, in place of the
-          Cash card. Same size as that card, on the website and in the app.
+          Banners in the slot under Deposit · Withdraw · Convert · Send, in place of the Cash card, on the website
+          and in the app. With more than one live, they slide by every 5 seconds in the order below, and users can
+          swipe between them. With none live, users see the Cash card.
         </p>
       </div>
 
       {message && (
-        <div
-          className={`mb-6 rounded-lg px-4 py-3 text-sm max-w-4xl ${
-            message.kind === 'ok' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-700'
-          }`}
-        >
+        <div className={`mb-6 rounded-lg px-4 py-3 text-sm max-w-5xl ${message.kind === 'ok' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-700'}`}>
           {message.text}
         </div>
       )}
@@ -152,123 +198,165 @@ export default function HomeBannerAdminPage() {
       {loading ? (
         <p className="text-gray-500">Loading…</p>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ImageIcon size={20} className="text-brand-600" />
-                <h2 className="text-lg font-bold text-gray-900">Content</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Carousel</h2>
+                <p className="text-xs text-gray-500">{live} live · {banners.length} of {max} · drag to reorder</p>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-sm font-semibold text-gray-700">{banner.enabled ? 'Live' : 'Off'}</span>
-                <button
-                  role="switch"
-                  aria-checked={banner.enabled}
-                  onClick={() => setBanner((b) => ({ ...b, enabled: !b.enabled }))}
-                  className={'relative h-7 w-12 rounded-full transition-colors ' + (banner.enabled ? 'bg-brand-600' : 'bg-gray-300')}
-                >
-                  <span
-                    className={
-                      'absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ' +
-                      (banner.enabled ? 'translate-x-5' : 'translate-x-0.5')
-                    }
-                  />
-                </button>
-              </label>
+              <button
+                onClick={() => setDraft({ ...EMPTY })}
+                disabled={banners.length >= max}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold disabled:opacity-40"
+              >
+                <Plus size={16} /> Add banner
+              </button>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Banner image</label>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  <Upload size={15} /> Upload
-                </button>
-                {banner.imageUrl && (
-                  <button
-                    onClick={() => setBanner((b) => ({ ...b, imageUrl: null }))}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50"
+            {banners.length === 0 ? (
+              <p className="py-10 text-center text-sm text-gray-500">No banners yet. Users see the Cash card.</p>
+            ) : (
+              <ul className="space-y-2">
+                {banners.map((b, i) => (
+                  <li
+                    key={b.id}
+                    draggable
+                    onDragStart={() => setDragFrom(i)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (dragFrom !== null) void move(dragFrom, i);
+                      setDragFrom(null);
+                    }}
+                    onDragEnd={() => setDragFrom(null)}
+                    className={`flex items-center gap-3 rounded-lg border p-2 ${draft?.id === b.id ? 'border-brand-500 bg-brand-50' : 'border-gray-200'} ${dragFrom === i ? 'opacity-50' : ''}`}
                   >
-                    <Trash2 size={15} /> Remove
+                    <GripVertical size={18} className="shrink-0 cursor-grab text-gray-400" aria-hidden />
+                    <span className="w-5 shrink-0 text-center text-xs font-semibold text-gray-400">{i + 1}</span>
+                    <div className="h-10 w-28 shrink-0 overflow-hidden rounded-md" style={{ background: 'linear-gradient(120deg,#6B5B95,#8A7BB5)' }}>
+                      {b.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={b.imageUrl} alt="" className="h-full w-full object-cover" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-gray-900">{b.title || 'Image banner'}</p>
+                      <p className="truncate text-xs text-gray-500">{b.linkUrl ? `Opens ${b.linkUrl}` : 'Not tappable'}</p>
+                    </div>
+                    <button
+                      onClick={() => void toggle(b)}
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${b.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+                      title={b.enabled ? 'Switch off' : 'Switch on'}
+                    >
+                      {b.enabled ? 'Live' : 'Off'}
+                    </button>
+                    <div className="flex shrink-0 flex-col">
+                      <button onClick={() => void move(i, i - 1)} disabled={i === 0} aria-label="Move up" className="text-gray-400 hover:text-gray-700 disabled:opacity-30">
+                        <ArrowUp size={14} />
+                      </button>
+                      <button onClick={() => void move(i, i + 1)} disabled={i === banners.length - 1} aria-label="Move down" className="text-gray-400 hover:text-gray-700 disabled:opacity-30">
+                        <ArrowDown size={14} />
+                      </button>
+                    </div>
+                    <button onClick={() => setDraft({ ...b })} aria-label="Edit" className="shrink-0 p-1 text-gray-500 hover:text-brand-600">
+                      <Pencil size={16} />
+                    </button>
+                    <button onClick={() => void remove(b)} aria-label="Delete" className="shrink-0 p-1 text-gray-400 hover:text-red-600">
+                      <Trash2 size={16} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {draft ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ImageIcon size={20} className="text-brand-600" />
+                  <h2 className="text-lg font-bold text-gray-900">{draft.id ? 'Edit banner' : 'New banner'}</h2>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="text-sm font-semibold text-gray-700">{draft.enabled ? 'Live' : 'Off'}</span>
+                    <button
+                      role="switch"
+                      aria-checked={draft.enabled}
+                      onClick={() => setDraft((b) => (b ? { ...b, enabled: !b.enabled } : b))}
+                      className={'relative h-7 w-12 rounded-full transition-colors ' + (draft.enabled ? 'bg-brand-600' : 'bg-gray-300')}
+                    >
+                      <span className={'absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ' + (draft.enabled ? 'translate-x-5' : 'translate-x-0.5')} />
+                    </button>
+                  </label>
+                  <button onClick={() => setDraft(null)} aria-label="Close" className="text-gray-400 hover:text-gray-700">
+                    <X size={18} />
                   </button>
-                )}
+                </div>
               </div>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                onChange={(e) => void pickImage(e.target.files?.[0])}
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                Best at <span className="font-medium">1050 × 384 px</span> (about 2.7 : 1). It fills the slot and is
-                cropped on narrow phones, so keep words and logos away from the edges.
-              </p>
-            </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Title (optional)</label>
-              <input
-                value={banner.title ?? ''}
-                onChange={(e) => setBanner((b) => ({ ...b, title: e.target.value }))}
-                maxLength={40}
-                placeholder="Zero fees this weekend"
-                className={inputCls}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Text (optional)</label>
-              <textarea
-                value={banner.message ?? ''}
-                onChange={(e) => setBanner((b) => ({ ...b, message: e.target.value }))}
-                maxLength={90}
-                rows={2}
-                placeholder="Deposit and pay bills free until Sunday."
-                className={inputCls + ' resize-none'}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Leave both empty if the words are already in your image.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Opens when tapped (optional)</label>
-              <input
-                value={banner.linkUrl ?? ''}
-                onChange={(e) => setBanner((b) => ({ ...b, linkUrl: e.target.value }))}
-                maxLength={300}
-                placeholder="/deposit or https://…"
-                className={inputCls}
-              />
-            </div>
-
-            <button
-              onClick={save}
-              disabled={!canSave}
-              className="flex items-center gap-2 px-5 py-3 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"
-            >
-              <Save size={18} />
-              {saving ? 'Publishing…' : 'Save & publish'}
-            </button>
-          </div>
-
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Preview</h2>
-            <div className="rounded-3xl p-5 mx-auto" style={{ backgroundColor: '#0b0a10', width: 390 }}>
-              <div className="mb-4 flex justify-between px-3 text-xs" style={{ color: '#9A93AD' }}>
-                <span>Deposit</span>
-                <span>Withdraw</span>
-                <span>Convert</span>
-                <span>Send</span>
+              <div className="rounded-2xl p-4" style={{ backgroundColor: '#0b0a10' }}>
+                <BannerPreview banner={draft} />
               </div>
-              <BannerPreview banner={banner} />
-              <p className="mt-4 text-sm font-semibold" style={{ color: '#8A7BB5' }}>Transactions ›</p>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Banner image</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <Upload size={15} /> Upload
+                  </button>
+                  {draft.imageUrl && (
+                    <button
+                      onClick={() => setDraft((b) => (b ? { ...b, imageUrl: null } : b))}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={15} /> Remove
+                    </button>
+                  )}
+                </div>
+                <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => void pickImage(e.target.files?.[0])} />
+                <p className="text-xs text-gray-500 mt-2">
+                  Best at <span className="font-medium">1200 × 400 px</span>. Phones trim up to about 100px off the left and right
+                  edges, so keep words and logos at least 130px in from the sides.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Title (optional)</label>
+                <input value={draft.title ?? ''} onChange={(e) => setDraft((b) => (b ? { ...b, title: e.target.value } : b))} maxLength={40} placeholder="Zero fees this weekend" className={inputCls} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Text (optional)</label>
+                <textarea
+                  value={draft.message ?? ''}
+                  onChange={(e) => setDraft((b) => (b ? { ...b, message: e.target.value } : b))}
+                  maxLength={90}
+                  rows={2}
+                  placeholder="Deposit and pay bills free until Sunday."
+                  className={inputCls + ' resize-none'}
+                />
+                <p className="text-xs text-gray-500 mt-1">Leave both empty if the words are already in your image.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Opens when tapped (optional)</label>
+                <input value={draft.linkUrl ?? ''} onChange={(e) => setDraft((b) => (b ? { ...b, linkUrl: e.target.value } : b))} maxLength={300} placeholder="/crypto or https://…" className={inputCls} />
+              </div>
+
+              <button onClick={save} disabled={!canSave} className="flex items-center gap-2 px-5 py-3 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
+                <Save size={18} />
+                {saving ? 'Saving…' : draft.id ? 'Save banner' : 'Add to carousel'}
+              </button>
             </div>
-            <p className="text-xs text-gray-500 mt-3 text-center">Shown at an iPhone&apos;s width: 350 × 128 px.</p>
-          </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-gray-300 p-6 text-sm text-gray-500 flex items-center justify-center text-center">
+              Pick a banner to edit, or add a new one.
+            </div>
+          )}
         </div>
       )}
     </DashboardLayout>

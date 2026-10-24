@@ -1,18 +1,25 @@
 import { NextResponse } from "next/server";
-import { decodeDataImage, getHomeBanner } from "@/lib/homeBanner";
+import { decodeDataImage, getHomeBanner, getHomeBannerImage } from "@/lib/homeBanner";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Public: the uploaded banner image. `?v=` is the banner's id, so a given URL
- * always means the same picture and can be cached for good; a new upload gets
- * a new id and so a new URL.
+ * Public: one banner's uploaded picture. `id` picks the banner and `v` is its
+ * version, so a given URL always means the same picture and can be cached for
+ * good; saving the banner gives it a new version and so a new URL. (Links from
+ * before the carousel carried only `v`, which was then the banner's id.)
  */
 export async function GET(req: Request) {
-  const banner = await getHomeBanner().catch(() => null);
-  const image = banner?.enabled ? decodeDataImage(banner.imageUrl) : null;
+  const params = new URL(req.url).searchParams;
+  const id = params.get("id") ?? params.get("v");
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return new NextResponse(null, { status: 404 });
+  const [banner, stored] = await Promise.all([
+    getHomeBanner(id).catch(() => null),
+    getHomeBannerImage(id).catch(() => null),
+  ]);
+  const image = banner?.image === "upload" ? decodeDataImage(stored) : null;
   if (!banner || !image) return new NextResponse(null, { status: 404 });
-  const current = new URL(req.url).searchParams.get("v") === banner.id;
+  const current = params.get("id") !== null && params.get("v") === banner.version;
   return new NextResponse(new Uint8Array(image.bytes), {
     headers: {
       "content-type": image.contentType,

@@ -1184,8 +1184,8 @@ export const api = {
     return apiFetch(`/api/cards/${id}/transactions`);
   },
 
-  /** Admin-published home-screen banner (null when none is live). */
-  getHomeBanner(): Promise<{ banner: HomeBannerData | null }> {
+  /** Admin-published home-screen banners, in carousel order (empty when none is live). */
+  getHomeBanners(): Promise<{ banners?: HomeBannerData[]; banner: HomeBannerData | null }> {
     return apiFetch("/api/home-banner");
   },
 
