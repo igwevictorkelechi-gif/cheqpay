@@ -36,7 +36,11 @@ export default function GiftCardRatesPage() {
   const [form, setForm] = useState<Form>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [newBrand, setNewBrand] = useState('');
+  const [busyBrand, setBusyBrand] = useState<string | null>(null);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  // What users can pick from: an active brand with at least one active rate.
+  const sellable = brands.filter((b) => b.active && b.rates.some((r) => r.active));
 
   async function load() {
     setLoading(true);
@@ -82,7 +86,12 @@ export default function GiftCardRatesPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to save');
-      setMessage({ kind: 'ok', text: 'Rate saved.' });
+      const b = brands.find((x) => x.id === form.brandId);
+      setMessage(
+        b && !b.active
+          ? { kind: 'err', text: `Rate saved, but ${b.name} is switched off, so users can't see it. Switch it on below.` }
+          : { kind: 'ok', text: 'Rate saved.' },
+      );
       setForm((f) => ({ ...EMPTY, brandId: f.brandId }));
       await load();
     } catch (e) {
@@ -101,14 +110,28 @@ export default function GiftCardRatesPage() {
   }
 
   async function saveBrand(body: { id?: string; name: string; active?: boolean }) {
-    const res = await fetch('/api/giftcards/brands', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) setMessage({ kind: 'err', text: data.error ?? 'Failed to save brand' });
-    await load();
+    // One request per brand at a time: repeat clicks before the list reloads
+    // would all send the same stale value.
+    if (busyBrand) return;
+    setBusyBrand(body.id ?? 'new');
+    try {
+      const res = await fetch('/api/giftcards/brands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setMessage({ kind: 'err', text: data.error ?? 'Failed to save brand' });
+      await load();
+    } finally {
+      setBusyBrand(null);
+    }
+  }
+
+  function toggleBrand(b: Brand) {
+    const live = b.rates.filter((r) => r.active).length;
+    if (b.active && live > 0 && !confirm(`Switch off ${b.name}? Users will stop seeing it and can't sell it until you switch it back on.`)) return;
+    void saveBrand({ id: b.id, name: b.name, active: !b.active });
   }
 
   function edit(b: Brand, r: Rate) {
@@ -135,6 +158,13 @@ export default function GiftCardRatesPage() {
           Turn selling on under Features → Sell gift cards.
         </p>
       </div>
+
+      {!loading && brands.length > 0 && sellable.length === 0 && (
+        <p className="mb-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Users can&apos;t sell any gift cards right now: the app shows &quot;We aren&apos;t buying gift cards right now&quot;.
+          A brand appears once it is switched on <b>and</b> has at least one active rate.
+        </p>
+      )}
 
       {message && (
         <p className={`mb-4 rounded-lg px-4 py-3 text-sm ${message.kind === 'ok' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-700'}`}>{message.text}</p>
@@ -191,7 +221,8 @@ export default function GiftCardRatesPage() {
         <input value={newBrand} onChange={(e) => setNewBrand(e.target.value)} placeholder="Add a brand (e.g. Macy's)" className={`${inputCls} max-w-xs`} />
         <button
           onClick={() => { if (newBrand.trim()) { void saveBrand({ name: newBrand.trim() }); setNewBrand(''); } }}
-          className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700"
+          disabled={busyBrand !== null}
+          className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 disabled:opacity-40"
         >
           <Plus className="h-4 w-4" /> Add brand
         </button>
@@ -201,17 +232,38 @@ export default function GiftCardRatesPage() {
         <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
       ) : (
         <div className="space-y-3">
-          {brands.map((b) => (
+          {brands.map((b) => {
+            const live = b.rates.filter((r) => r.active).length;
+            const status = !b.active
+              ? { text: 'Off: hidden from users', cls: 'bg-gray-100 text-gray-600' }
+              : live === 0
+                ? { text: 'Hidden: no active rate', cls: 'bg-amber-100 text-amber-800' }
+                : { text: 'Live in the app', cls: 'bg-green-100 text-green-700' };
+            return (
             <div key={b.id} className="rounded-xl border border-gray-200 bg-white shadow-sm">
               <div className="flex items-center justify-between px-5 py-3">
-                <p className={`font-semibold ${b.active ? 'text-gray-900' : 'text-gray-400'}`}>{b.name}</p>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500">{b.rates.filter((r) => r.active).length} active rate{b.rates.filter((r) => r.active).length === 1 ? '' : 's'}</span>
-                  <button onClick={() => saveBrand({ id: b.id, name: b.name, active: !b.active })} className="text-xs font-semibold text-brand-600">
-                    {b.active ? 'Switch off' : 'Switch on'}
+                  <p className={`font-semibold ${b.active ? 'text-gray-900' : 'text-gray-400'}`}>{b.name}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${status.cls}`}>{status.text}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500">{live} active rate{live === 1 ? '' : 's'}</span>
+                  <button
+                    onClick={() => toggleBrand(b)}
+                    disabled={busyBrand !== null}
+                    className={`rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
+                      b.active ? 'border-gray-300 text-gray-700' : 'border-brand-600 bg-brand-600 text-white'
+                    }`}
+                  >
+                    {busyBrand === b.id ? 'Saving…' : b.active ? 'Turn off' : 'Turn on'}
                   </button>
                 </div>
               </div>
+              {!b.active && live > 0 && (
+                <p className="border-t border-amber-100 bg-amber-50 px-5 py-2 text-xs text-amber-800">
+                  This brand has {live} active rate{live === 1 ? '' : 's'} but is switched off, so users can&apos;t sell it. Turn it on to start buying.
+                </p>
+              )}
               {b.rates.length > 0 && (
                 <table className="w-full border-t border-gray-100 text-sm">
                   <tbody>
@@ -234,7 +286,8 @@ export default function GiftCardRatesPage() {
                 </table>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </DashboardLayout>
