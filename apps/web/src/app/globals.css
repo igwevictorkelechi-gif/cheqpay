@@ -55,8 +55,9 @@
   --c-border: 42 37 53; /* #2A2535 */
   --c-ink: 244 243 247; /* #F4F3F7 */
   --c-muted: 154 147 173; /* #9A93AD */
-  /* Behind the app column on wider screens and behind the sign-in card. */
-  --c-backdrop: 0 0 0; /* #000 */
+  /* Behind the app column on wider screens and behind the sign-in card:
+     each theme's own surface, so there is no black frame and no wash. */
+  --c-backdrop: 20 18 26; /* #14121A, the same as the status bar */
 }
 
 html[data-theme="light"] {
@@ -197,18 +198,6 @@ input[inputmode="numeric"] {
   .skeleton {
     @apply animate-pulse rounded-lg bg-card;
   }
-}
-
-/* The purple glow behind the sign-in card and the landing headline belongs
-   to the dark theme; light mode keeps its plain light background. */
-.auth-glow {
-  background: radial-gradient(120% 120% at 50% 0%, rgba(138, 123, 181, 0.25) 0%, rgba(20, 18, 26, 0) 60%);
-}
-html[data-theme="light"] .auth-glow {
-  background: none;
-}
-html[data-theme="light"] .brand-wash {
-  display: none;
 }
 
 /* A horizontal strip that swipes without showing a scrollbar (the banner carousel). */

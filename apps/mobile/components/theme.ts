@@ -31,7 +31,7 @@ export interface Palette {
   barEdge: string;
   /** Active-tab capsule fill. */
   capsule: string;
-  /** Behind the sign-in card: black in dark mode, the plain light surface in light mode. */
+  /** Behind the sign-in card: each theme's own surface, with no black frame. */
   backdrop: string;
 }
 
@@ -52,7 +52,7 @@ export const darkPalette: Palette = {
   barFill: 'rgba(31,27,41,0.94)',
   barEdge: 'rgba(255,255,255,0.10)',
   capsule: 'rgba(255,255,255,0.09)',
-  backdrop: '#000000',
+  backdrop: '#14121A',
 };
 
 /** Mirrors the web light theme (apps/web globals.css) so the two match. */
