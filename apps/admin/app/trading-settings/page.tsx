@@ -81,7 +81,8 @@ const PRICING_FIELDS: { group: string; fields: { key: PricingKey; label: string;
 function costRows(s: {
   depositFeeBps: number;
   withdrawalFeeNgn: number;
-  spreadBps: number;
+  /** Effective spread per kind of swap: buy, sell, convert. */
+  swap: [number, number, number];
   fxBuyBps: number;
   fxSellBps: number;
   p: Pricing;
@@ -93,7 +94,7 @@ function costRows(s: {
     { what: 'Naira withdrawal', cost: '₦20', price: `₦${s.withdrawalFeeNgn.toLocaleString()}`, below: s.withdrawalFeeNgn < 20 },
     { what: 'USD bank deposit', cost: '3% / 1.5% from $25k', price: `${pct(s.p.usdDepositFeeBps)} / ${pct(s.p.usdDepositLargeFeeBps)}`, below: s.p.usdDepositFeeBps < 300 || s.p.usdDepositLargeFeeBps < 150 },
     { what: 'Stablecoin → USD', cost: '0.5%', price: pct(s.p.cryptoDepositFeeBps), below: s.p.cryptoDepositFeeBps < 50 },
-    { what: 'Crypto buy / sell / convert', cost: '0.5% ramp', price: pct(s.spreadBps), below: s.spreadBps < 50 },
+    { what: 'Crypto buy / sell / convert', cost: '0.5% ramp', price: s.swap.map(pct).join(' / '), below: s.swap.some((b) => b < 50) },
     { what: 'Naira ⇄ Dollar', cost: 'inside Maplerad’s rate', price: `${pct(s.fxBuyBps)} / ${pct(s.fxSellBps)}`, below: s.fxBuyBps <= 0 || s.fxSellBps <= 0 },
     { what: 'Crypto withdrawal', cost: '$1.50–$2 + gas', price: usd(s.p.cryptoWithdrawalFeeUsd), below: s.p.cryptoWithdrawalFeeUsd < 2 },
     { what: 'Card', cost: '$2', price: usd(s.p.cardIssueFeeUsd), below: s.p.cardIssueFeeUsd < 2 },
@@ -105,8 +106,16 @@ function costRows(s: {
 /** Per service: a number is its own rate; null means it uses the default. */
 type BillMargins = Record<BillService, number | null>;
 
+type SwapKind = 'buy' | 'sell' | 'convert';
+const SWAP_KINDS: { key: SwapKind; label: string; hint: string }[] = [
+  { key: 'buy', label: 'Buying crypto with Naira', hint: 'Users pay Maplerad’s rate plus this.' },
+  { key: 'sell', label: 'Selling crypto for Naira', hint: 'Users get Maplerad’s rate minus this.' },
+  { key: 'convert', label: 'USD ⇄ USDT and crypto ⇄ crypto', hint: 'No Naira involved.' },
+];
+
 interface Settings {
   spreadBps: number;
+  swapSpreads: Record<SwapKind, number | null>;
   usdtNgnRate: number | null;
   usdtNgnRateSource: 'maplerad' | 'manual';
   usdtNgnRateUpdatedAt: string | null;
@@ -140,6 +149,8 @@ function timeAgo(iso: string): string {
 
 export default function TradingSettingsPage() {
   const [spreadBps, setSpreadBps] = useState('');
+  // '' means "uses the shared spread", distinct from '0', which is free.
+  const [swapSpreads, setSwapSpreads] = useState<Record<SwapKind, string>>({ buy: '', sell: '', convert: '' });
   const [usdtNgnRate, setUsdtNgnRate] = useState('');
   const [usdtSource, setUsdtSource] = useState<'maplerad' | 'manual'>('maplerad');
   const [usdtUpdated, setUsdtUpdated] = useState<{ at: string | null; by: string | null }>({ at: null, by: null });
@@ -167,6 +178,11 @@ export default function TradingSettingsPage() {
 
   function applySnapshot(data: Settings) {
     setSpreadBps(String(data.spreadBps ?? ''));
+    setSwapSpreads({
+      buy: data.swapSpreads?.buy == null ? '' : String(data.swapSpreads.buy),
+      sell: data.swapSpreads?.sell == null ? '' : String(data.swapSpreads.sell),
+      convert: data.swapSpreads?.convert == null ? '' : String(data.swapSpreads.convert),
+    });
     setUsdtNgnRate(data.usdtNgnRate != null ? String(data.usdtNgnRate) : '');
     setUsdtSource(data.usdtNgnRateSource === 'manual' ? 'manual' : 'maplerad');
     setUsdtUpdated({ at: data.usdtNgnRateUpdatedAt ?? null, by: data.usdtNgnRateUpdatedBy ?? null });
@@ -227,6 +243,10 @@ export default function TradingSettingsPage() {
     try {
       const payload: Record<string, unknown> = {};
       if (spreadBps !== '') payload.spreadBps = Number(spreadBps);
+      // A blank box clears that kind back to the shared spread.
+      payload.swapSpreads = Object.fromEntries(
+        SWAP_KINDS.map(({ key }) => [key, swapSpreads[key] === '' ? null : Number(swapSpreads[key])]),
+      );
       payload.usdtNgnRateSource = usdtSource;
       // While following Maplerad the box only shows the live rate; sending it
       // back would just restamp it as typed in.
@@ -328,6 +348,40 @@ export default function TradingSettingsPage() {
           <p className="text-sm text-gray-500 mt-2">
             100 bps = 1%. Current margin: <span className="font-semibold">{pct(spreadBps)}%</span>
           </p>
+          <div className="mt-4 border-t border-gray-100 pt-4">
+            <p className="text-sm font-medium text-gray-700">Per kind of swap</p>
+            <p className="text-xs text-gray-500 mt-1 mb-3">
+              Leave a box empty to use the spread above. Keep &ldquo;Selling crypto for Naira&rdquo; equal to
+              Dollar → Naira below, or one route pays users more than the other.
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {SWAP_KINDS.map(({ key, label, hint }) => {
+                const raw = swapSpreads[key];
+                return (
+                  <div key={key}>
+                    <label htmlFor={`swap-${key}`} className="block text-xs font-medium text-gray-600 mb-1">
+                      {label}
+                    </label>
+                    <input
+                      id={`swap-${key}`}
+                      type="number"
+                      min={0}
+                      max={1000}
+                      step={1}
+                      value={raw}
+                      onChange={(e) => setSwapSpreads((m) => ({ ...m, [key]: e.target.value }))}
+                      disabled={loading || saving}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      placeholder={`shared (${pct(spreadBps)}%)`}
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      {raw === '' ? `Using shared · ${pct(spreadBps)}%` : `${pct(raw)}%`} · {hint}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -621,7 +675,9 @@ export default function TradingSettingsPage() {
                 {costRows({
                   depositFeeBps: Number(depositFeeBps || 0),
                   withdrawalFeeNgn: Number(withdrawalFeeNgn || 0),
-                  spreadBps: Number(spreadBps || 0),
+                  swap: SWAP_KINDS.map(({ key }) =>
+                    Number(swapSpreads[key] === '' ? spreadBps || 0 : swapSpreads[key]),
+                  ) as [number, number, number],
                   fxBuyBps: Number(fxBuyUsd === '' ? fxMarginBps || 0 : fxBuyUsd),
                   fxSellBps: Number(fxSellUsd === '' ? fxMarginBps || 0 : fxSellUsd),
                   p: Object.fromEntries(

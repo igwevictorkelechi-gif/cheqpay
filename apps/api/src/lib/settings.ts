@@ -6,6 +6,13 @@ import { AUTO_UPDATED_BY, followMapleradRate } from "./usdtRate";
 
 export const SETTING_KEYS = {
   SWAP_SPREAD_BPS: "swap_spread_bps",
+  // The crypto spread for each kind of swap, each overriding SWAP_SPREAD_BPS
+  // for that kind alone. Buying crypto with naira, selling it for naira, and
+  // converting without naira (USD ⇄ USDT, crypto ⇄ crypto) have different
+  // costs: the first two cross Maplerad's dollar rate, the last does not.
+  SWAP_SPREAD_BUY_BPS: "swap_spread_buy_bps", // NGN → crypto
+  SWAP_SPREAD_SELL_BPS: "swap_spread_sell_bps", // crypto → NGN
+  CONVERT_SPREAD_BPS: "convert_spread_bps", // USD ⇄ crypto, crypto ⇄ crypto
   USDT_NGN_RATE: "usdt_ngn_rate",
   // "maplerad": USDT_NGN_RATE follows Maplerad's live dollar rate (see
   // lib/usdtRate.ts). "manual": it is whatever an admin last typed.
@@ -94,6 +101,49 @@ export async function getSwapSpreadBps(): Promise<number> {
     where: { key: SETTING_KEYS.SWAP_SPREAD_BPS },
   });
   return row ? parseSpreadBps(row.value) : getEnv().SWAP_SPREAD_BPS;
+}
+
+export type SwapKind = "buy" | "sell" | "convert";
+
+const SWAP_KIND_KEYS: Record<SwapKind, string> = {
+  buy: SETTING_KEYS.SWAP_SPREAD_BUY_BPS,
+  sell: SETTING_KEYS.SWAP_SPREAD_SELL_BPS,
+  convert: SETTING_KEYS.CONVERT_SPREAD_BPS,
+};
+
+/** The spread for one kind of swap; the shared swap spread when it has none of its own. */
+export async function getSwapSpreadBpsFor(kind: SwapKind): Promise<number> {
+  const row = await prisma.platformSetting.findUnique({ where: { key: SWAP_KIND_KEYS[kind] } });
+  return row ? parseSpreadBps(row.value) : getSwapSpreadBps();
+}
+
+/** Every kind's own spread (null = uses the shared one), for the admin page and the fee list. */
+export async function getSwapSpreads(): Promise<{
+  defaultBps: number;
+  buyBps: number | null;
+  sellBps: number | null;
+  convertBps: number | null;
+}> {
+  const [defaultBps, rows] = await Promise.all([
+    getSwapSpreadBps(),
+    prisma.platformSetting.findMany({ where: { key: { in: Object.values(SWAP_KIND_KEYS) } } }),
+  ]);
+  const byKey = new Map(rows.map((r) => [r.key, r.value]));
+  const read = (kind: SwapKind) => {
+    const raw = byKey.get(SWAP_KIND_KEYS[kind]);
+    return raw === undefined ? null : parseSpreadBps(raw);
+  };
+  return { defaultBps, buyBps: read("buy"), sellBps: read("sell"), convertBps: read("convert") };
+}
+
+/** Set one kind's spread, or clear it back to the shared spread with null. */
+export async function setSwapSpreadBpsFor(kind: SwapKind, bps: number | null, updatedBy?: string): Promise<void> {
+  const key = SWAP_KIND_KEYS[kind];
+  if (bps === null) {
+    await prisma.platformSetting.deleteMany({ where: { key } });
+    return;
+  }
+  await upsertSetting(key, String(bps), updatedBy);
 }
 
 /** Current business USDT->NGN rate, or null if never set. */

@@ -10,7 +10,7 @@ import {
   getFxMarginBps,
   getFxMargins,
   getPricing,
-  getSwapSpreadBps,
+  getSwapSpreads,
   getUsdtNgnRateDetails,
   getWithdrawalFeeNgn,
   getWithdrawalMinNgn,
@@ -24,6 +24,7 @@ import {
   setFxSideMarginBps,
   setPricing,
   setSwapSpreadBps,
+  setSwapSpreadBpsFor,
   setUsdtNgnRate,
   setUsdtNgnRateSource,
   setWithdrawalFeeNgn,
@@ -31,6 +32,7 @@ import {
   setWithdrawalMinUsd,
   type BillMarginService,
   type FxSide,
+  type SwapKind,
 } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +52,7 @@ async function snapshot() {
     cashback,
     pricing,
   ] = await Promise.all([
-    getSwapSpreadBps(),
+    getSwapSpreads(),
     getUsdtNgnRateDetails(),
     getDepositFeeBps(),
     getWithdrawalFeeNgn(),
@@ -64,7 +66,9 @@ async function snapshot() {
     getPricing(),
   ]);
   return {
-    spreadBps,
+    spreadBps: spreadBps.defaultBps,
+    /** Per kind of swap: a number overrides spreadBps, null means it uses it. */
+    swapSpreads: { buy: spreadBps.buyBps, sell: spreadBps.sellBps, convert: spreadBps.convertBps },
     usdtNgnRate: usdtRate.rate,
     /** "maplerad": the rate follows Maplerad's live dollar rate; "manual": typed in. */
     usdtNgnRateSource: usdtRate.source,
@@ -113,6 +117,13 @@ export async function PUT(req: Request) {
     const body = platformSettingsUpdateSchema.parse(await req.json());
 
     if (body.spreadBps !== undefined) await setSwapSpreadBps(body.spreadBps, updatedBy);
+    if (body.swapSpreads) {
+      // An omitted kind is left alone; null clears its override.
+      for (const [kind, bps] of Object.entries(body.swapSpreads)) {
+        if (bps === undefined) continue;
+        await setSwapSpreadBpsFor(kind as SwapKind, bps, updatedBy);
+      }
+    }
     if (body.usdtNgnRateSource !== undefined)
       await setUsdtNgnRateSource(body.usdtNgnRateSource, updatedBy);
     // Also the baseline a followed rate is checked against, so a manual entry

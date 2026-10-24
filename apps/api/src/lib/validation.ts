@@ -262,6 +262,17 @@ export const platformSettingsUpdateSchema = z
         sellUsd: z.number().int().min(0).max(1_000).nullable().optional(),
       })
       .optional(),
+    /**
+     * The crypto spread per kind of swap, each overriding spreadBps for that
+     * kind (max 10%). null clears a kind back to the shared spreadBps.
+     */
+    swapSpreads: z
+      .object({
+        buy: z.number().int().min(0).max(1_000).nullable().optional(),
+        sell: z.number().int().min(0).max(1_000).nullable().optional(),
+        convert: z.number().int().min(0).max(1_000).nullable().optional(),
+      })
+      .optional(),
     /** Smallest NGN bank payout, whole naira (max ₦1,000,000). */
     withdrawalMinNgn: z.number().min(0).max(1_000_000).optional(),
     /** Smallest crypto withdrawal by USD value (max $10,000). */
