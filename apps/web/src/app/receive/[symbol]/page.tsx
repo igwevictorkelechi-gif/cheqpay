@@ -189,7 +189,7 @@ export default function ReceiveDetailPage() {
 
   if (!meta) {
     return (
-      <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface lg:pl-64">
+      <div className="flex min-h-screen w-full justify-center bg-backdrop lg:bg-surface lg:pl-64">
       <DesktopSidebar />
         <div className="min-h-screen w-full max-w-[480px] bg-surface px-5 pt-4 lg:max-w-3xl">
           <button
@@ -207,7 +207,7 @@ export default function ReceiveDetailPage() {
 
   if (!loading && notLive) {
     return (
-      <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface lg:pl-64">
+      <div className="flex min-h-screen w-full justify-center bg-backdrop lg:bg-surface lg:pl-64">
       <DesktopSidebar />
         <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
           <button
@@ -239,7 +239,7 @@ export default function ReceiveDetailPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface lg:pl-64">
+    <div className="flex min-h-screen w-full justify-center bg-backdrop lg:bg-surface lg:pl-64">
       <DesktopSidebar />
       <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-10 pt-4 lg:max-w-3xl">
         <div className="flex items-center gap-3">

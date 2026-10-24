@@ -41,7 +41,7 @@ export function LoadingAnimation({ size = 90 }: { size?: number }) {
  */
 export function LoadingScreen() {
   return (
-    <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface">
+    <div className="flex min-h-screen w-full justify-center bg-backdrop lg:bg-surface">
       <div className="flex min-h-screen w-full max-w-[480px] flex-col items-center justify-center bg-surface lg:max-w-none">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

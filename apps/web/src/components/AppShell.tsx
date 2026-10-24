@@ -58,7 +58,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const activeIndex = tabs.findIndex((t) => isTabActive(t.href, pathname));
 
   return (
-    <div className="min-h-screen w-full bg-black lg:bg-surface lg:pl-64">
+    <div className="min-h-screen w-full bg-backdrop lg:bg-surface lg:pl-64">
       <DesktopSidebar />
 
       {/*

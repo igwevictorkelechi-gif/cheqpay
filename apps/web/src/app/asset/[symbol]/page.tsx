@@ -338,7 +338,7 @@ function Sparkline({ values, up }: { values: number[]; up: boolean }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface lg:pl-64">
+    <div className="flex min-h-screen w-full justify-center bg-backdrop lg:bg-surface lg:pl-64">
       <DesktopSidebar />
       <div className="relative min-h-screen w-full max-w-[480px] bg-surface pb-28 lg:max-w-3xl">{children}</div>
     </div>

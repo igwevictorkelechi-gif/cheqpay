@@ -21,7 +21,7 @@ import { colors } from './brand';
 export function AuthShell({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: '#000' }}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.backdrop }}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 16, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }}

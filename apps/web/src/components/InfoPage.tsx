@@ -20,7 +20,7 @@ export default function InfoPage({
 }) {
   const router = useRouter();
   return (
-    <div className="flex min-h-screen w-full justify-center bg-black lg:bg-surface">
+    <div className="flex min-h-screen w-full justify-center bg-backdrop lg:bg-surface">
       <div className="relative min-h-screen w-full max-w-[480px] bg-surface px-5 pb-16 pt-4 lg:max-w-3xl">
         <div className="flex items-center gap-3">
           <button

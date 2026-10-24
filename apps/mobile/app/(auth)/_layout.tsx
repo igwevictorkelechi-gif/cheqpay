@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import { useAuthStore } from '@/store';
+import { colors } from '@/components/brand';
 
 export default function AuthLayout() {
   const { isAuthenticated, loading } = useAuthStore();
@@ -16,7 +17,7 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: '#000' },
+        contentStyle: { backgroundColor: colors.backdrop },
         animation: 'default',
       }}
     >

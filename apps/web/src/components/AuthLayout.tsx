@@ -6,14 +6,8 @@ interface AuthLayoutProps {
 
 export default function AuthLayout({ children }: AuthLayoutProps) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-black p-4">
-      <div
-        className="w-full max-w-md rounded-[28px] p-1"
-        style={{
-          background:
-            "radial-gradient(120% 120% at 50% 0%, rgba(138,123,181,0.25) 0%, rgba(20,18,26,0) 60%)",
-        }}
-      >
+    <div className="flex min-h-screen items-center justify-center bg-backdrop p-4">
+      <div className="auth-glow w-full max-w-md rounded-[28px] p-1">
         {/* Logo */}
         <div className="mb-8 mt-2 flex flex-col items-center">
           <Image

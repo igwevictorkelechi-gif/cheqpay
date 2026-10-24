@@ -196,7 +196,7 @@ export default function Landing() {
               swallow a click on the buttons sitting above it. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute -top-40 left-1/2 h-[420px] w-[min(90vw,760px)] -translate-x-1/2 rounded-full bg-brand/25 blur-[110px]"
+            className="brand-wash pointer-events-none absolute -top-40 left-1/2 h-[420px] w-[min(90vw,760px)] -translate-x-1/2 rounded-full bg-brand/25 blur-[110px]"
           />
           <div className="relative mx-auto max-w-6xl px-5 pb-16 pt-14 sm:px-8 sm:pb-24 sm:pt-20 lg:pt-28">
             <div className="mx-auto max-w-3xl text-center">

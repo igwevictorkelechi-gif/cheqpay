@@ -106,7 +106,7 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="flex min-h-screen justify-center bg-black lg:bg-surface">
+    <div className="flex min-h-screen justify-center bg-backdrop lg:bg-surface">
       <div className="relative flex min-h-screen w-full max-w-[480px] flex-col bg-surface px-5 pb-10 pt-8 lg:max-w-3xl">
         <Progress active={step === "kyc" ? 2 : 3} />
 
