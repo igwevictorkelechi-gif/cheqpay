@@ -9,7 +9,7 @@ import { useFeatures } from '@/lib/useFeatures';
 import SponsoredCard from '@/components/SponsoredCard';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 import { api, ApiError, type BillSuggestion, type BillsOverview, type SavedBill } from '@/services/api';
-import { BILL_SECTIONS, maskCustomer, tileFor } from '@/lib/billServices';
+import { BILL_SECTIONS, maskCustomer, tileFor, type BillTile } from '@/lib/billServices';
 
 const PURPLE = '#6D28D9';
 const GREEN = '#4ADE80';
@@ -61,7 +61,15 @@ export default function PayBillScreen() {
   );
   useEffect(() => { void load(month); }, [load, month]);
 
-  const others = useMemo(() => BILL_SECTIONS.flatMap((s) => s.tiles).filter((t) => !t.flag || features[t.flag]), [features]);
+  // Every service on screen at once, bills first: a sideways strip showed four
+  // and hid the rest past the edge, where people didn't know to look.
+  const groups = useMemo(() => {
+    const tiles = BILL_SECTIONS.flatMap((s) => s.tiles).filter((t) => !t.flag || features[t.flag]);
+    return [
+      { title: 'Bills & top-ups', tiles: tiles.filter((t) => t.bill) },
+      { title: 'Shop & more', tiles: tiles.filter((t) => !t.bill) },
+    ].filter((g) => g.tiles.length > 0);
+  }, [features]);
   const paid = Number(data?.paidMinor ?? 0);
   const left = Number(data?.stillToSortMinor ?? 0);
   const pct = paid + left > 0 ? Math.max(paid > 0 ? 4 : 0, Math.round((paid / (paid + left)) * 100)) : 0;
@@ -218,17 +226,19 @@ export default function PayBillScreen() {
         ) : null}
 
         {/* Pay something else */}
-        <Text className="text-ink dark:text-ink-dark font-bold text-lg mb-3 px-5">Pay something else</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }} style={{ marginBottom: 24 }}>
-          {others.map((t) => (
-            <TouchableOpacity key={t.key} disabled={!t.route} onPress={() => t.route && router.push(t.route as never)} className="items-center mr-4" style={{ width: 72, opacity: t.route ? 1 : 0.5 }}>
-              <View className="w-14 h-14 rounded-2xl items-center justify-center bg-card dark:bg-card-dark">
-                <Ionicons name={t.icon} size={24} color={colors.ink} />
+        <View className="px-5 mb-6">
+          <Text className="text-ink dark:text-ink-dark font-bold text-lg mb-3">Pay something else</Text>
+          {groups.map((g, gi) => (
+            <View key={g.title} className="bg-card dark:bg-card-dark rounded-3xl p-4" style={gi ? { marginTop: 12 } : undefined}>
+              <Text className="text-muted dark:text-muted-dark text-xs font-semibold uppercase mb-3 px-1" style={{ letterSpacing: 0.6 }}>{g.title}</Text>
+              <View className="flex-row flex-wrap" style={{ rowGap: 16 }}>
+                {g.tiles.map((t) => (
+                  <ServiceTile key={t.key} t={t} />
+                ))}
               </View>
-              <Text numberOfLines={2} className="text-ink dark:text-ink-dark font-semibold text-center mt-2" style={{ fontSize: 12 }}>{t.label}</Text>
-            </TouchableOpacity>
+            </View>
           ))}
-        </ScrollView>
+        </View>
 
         <View className="px-5 mb-5">
           <SponsoredCard placement="paybills" />
@@ -276,6 +286,31 @@ export default function PayBillScreen() {
         </Pressable>
       </Modal>
     </View>
+  );
+}
+
+/** One service in the grid, in its own colour; one that isn't live yet is faded and says so. */
+function ServiceTile({ t }: { t: BillTile }) {
+  return (
+    <TouchableOpacity
+      disabled={!t.route}
+      onPress={() => t.route && router.push(t.route as never)}
+      accessibilityRole="button"
+      accessibilityLabel={t.route ? t.label : `${t.label}, coming soon`}
+      className="items-center"
+      style={{ width: '25%', opacity: t.route ? 1 : 0.5 }}
+      activeOpacity={0.7}
+    >
+      <View className="w-14 h-14 rounded-2xl items-center justify-center" style={{ backgroundColor: `${t.color}26` }}>
+        <Ionicons name={t.icon} size={24} color={t.color} />
+        {t.badge ? (
+          <View className="absolute rounded-full px-1.5" style={{ top: -6, right: -8, backgroundColor: t.badge === 'New' ? colors.brand : colors.circle }}>
+            <Text style={{ fontSize: 9, fontWeight: '700', color: t.badge === 'New' ? '#fff' : colors.muted }}>{t.badge}</Text>
+          </View>
+        ) : null}
+      </View>
+      <Text numberOfLines={2} className="text-ink dark:text-ink-dark font-semibold text-center mt-2 px-0.5" style={{ fontSize: 12 }}>{t.label}</Text>
+    </TouchableOpacity>
   );
 }
 

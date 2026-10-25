@@ -10,7 +10,7 @@ import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinPro
 import { useAuthStore } from "@/store";
 import { useFeatures } from "@/lib/useFeatures";
 import { api, ApiError, type BillSuggestion, type BillsOverview, type SavedBill } from "@/services/api";
-import { BILL_SECTIONS, maskCustomer, ordinal, tileFor } from "@/lib/billServices";
+import { BILL_SECTIONS, maskCustomer, ordinal, tileFor, type BillTile } from "@/lib/billServices";
 
 /** Where a saved bill's action button goes: the service flow, prefilled. */
 function payHref(b: { service: string; billerId: string; customer: string; planId: string | null; expectedMinor: string | null }, withAmount = true) {
@@ -64,7 +64,15 @@ export default function PayBillPage() {
     void load(month);
   }, [load, month]);
 
-  const others = useMemo(() => BILL_SECTIONS.flatMap((s) => s.tiles).filter((t) => !t.flag || features[t.flag]), [features]);
+  // Every service on screen at once, bills first: a sideways strip showed four
+  // and hid the rest past the edge, where people didn't know to look.
+  const groups = useMemo(() => {
+    const tiles = BILL_SECTIONS.flatMap((s) => s.tiles).filter((t) => !t.flag || features[t.flag]);
+    return [
+      { title: "Bills & top-ups", tiles: tiles.filter((t) => t.bill) },
+      { title: "Shop & more", tiles: tiles.filter((t) => !t.bill) },
+    ].filter((g) => g.tiles.length > 0);
+  }, [features]);
 
   const paid = Number(data?.paidMinor ?? 0);
   const left = Number(data?.stillToSortMinor ?? 0);
@@ -257,21 +265,18 @@ export default function PayBillPage() {
       )}
 
       {/* Pay something else */}
-      <section className="mb-6">
-        <h2 className="mb-3 px-5 text-lg font-bold text-ink">Pay something else</h2>
-        <div className="flex gap-4 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {others.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => (t.route ? router.push(t.route) : toast.show(`${t.label} — coming soon`))}
-              className="flex w-[72px] shrink-0 flex-col items-center gap-2 transition active:scale-95"
-            >
-              <span className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-card">
-                <t.icon className="h-6 w-6 text-ink" />
-                {t.badge === "Soon" && <span className="absolute -right-1 -top-1 rounded-full bg-circle px-1.5 text-[9px] font-bold text-muted">Soon</span>}
-              </span>
-              <span className="text-center text-xs font-semibold leading-tight text-ink">{t.label}</span>
-            </button>
+      <section className="mb-6 px-5">
+        <h2 className="mb-3 text-lg font-bold text-ink">Pay something else</h2>
+        <div className="space-y-3">
+          {groups.map((g) => (
+            <div key={g.title} className="rounded-3xl bg-card p-4">
+              <p className="mb-3 px-1 text-xs font-semibold uppercase tracking-wide text-muted">{g.title}</p>
+              <div className="grid grid-cols-4 gap-x-2 gap-y-4 sm:grid-cols-6">
+                {g.tiles.map((t) => (
+                  <ServiceTile key={t.key} t={t} onOpen={() => (t.route ? router.push(t.route) : toast.show(`${t.label} — coming soon`))} />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       </section>
@@ -317,6 +322,28 @@ export default function PayBillPage() {
       )}
       {toast.node}
     </AppShell>
+  );
+}
+
+/** One service in the grid, in its own colour; one that isn't live yet is faded and says so. */
+function ServiceTile({ t, onOpen }: { t: BillTile; onOpen: () => void }) {
+  const soon = !t.route;
+  return (
+    <button
+      onClick={onOpen}
+      aria-label={soon ? `${t.label}, coming soon` : t.label}
+      className={`flex flex-col items-center gap-2 transition active:scale-95 ${soon ? "opacity-50" : ""}`}
+    >
+      <span className="relative flex h-14 w-14 items-center justify-center rounded-2xl" style={{ backgroundColor: `${t.color}26` }}>
+        <t.icon className="h-6 w-6" style={{ color: t.color }} />
+        {t.badge && (
+          <span className={`absolute -right-2 -top-1.5 rounded-full px-1.5 py-px text-[9px] font-bold ${t.badge === "New" ? "bg-brand text-white" : "bg-circle text-muted"}`}>
+            {t.badge}
+          </span>
+        )}
+      </span>
+      <span className="text-center text-xs font-semibold leading-tight text-ink">{t.label}</span>
+    </button>
   );
 }
 
