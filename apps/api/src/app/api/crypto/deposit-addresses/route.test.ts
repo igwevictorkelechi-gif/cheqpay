@@ -6,6 +6,7 @@ const h = vi.hoisted(() => ({
   provisionWalletsDetailed: vi.fn(),
   getFeatureFlags: vi.fn(),
   getManualWallets: vi.fn(),
+  offrampOn: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -27,6 +28,7 @@ vi.mock("@/lib/wallets", () => ({
   provisionWalletsDetailed: h.provisionWalletsDetailed,
 }));
 vi.mock("@/lib/features", () => ({ getFeatureFlags: h.getFeatureFlags }));
+vi.mock("@/lib/settings", () => ({ getCryptoOfframp: h.offrampOn }));
 vi.mock("@/lib/manualCrypto", () => ({
   getManualWallets: h.getManualWallets,
   MANUAL_ASSETS: ["BTC", "USDT", "USDC"],
@@ -54,6 +56,7 @@ describe("GET /api/crypto/deposit-addresses — stored addresses answer on their
     h.getManualWallets.mockResolvedValue({});
     h.listWallets.mockResolvedValue([]);
     h.provisionWalletsDetailed.mockResolvedValue({ wallets: [], outcomes: [] });
+    h.offrampOn.mockResolvedValue(true);
   });
 
   it("serves addresses straight from the database without calling the provider", async () => {
@@ -143,5 +146,33 @@ describe("GET /api/crypto/deposit-addresses — stored addresses answer on their
     const assets = body.addresses.map((a: { asset: string }) => a.asset);
     expect(assets).toContain("BTC");
     expect(assets).not.toContain("USDT");
+  });
+});
+
+describe("GET /api/crypto/deposit-addresses with the off-ramp switched off", () => {
+  beforeEach(() => {
+    Object.values(h).forEach((fn) => fn.mockReset());
+    h.getFeatureFlags.mockResolvedValue({ crypto_deposits: true });
+    h.getManualWallets.mockResolvedValue({});
+    h.provisionWalletsDetailed.mockResolvedValue({ wallets: [], outcomes: [] });
+    h.offrampOn.mockResolvedValue(false);
+  });
+
+  it("hides an older address on a converting chain and offers only Solana", async () => {
+    h.listWallets.mockResolvedValue([
+      { asset: "USDT", network: "SOLANA", address: "BvH5k" },
+      { asset: "USDT", network: "TRON", address: "TXyz" },
+    ]);
+
+    const body = await (await call()).json();
+
+    expect(body.addresses.map((a: { network: string }) => a.network)).toEqual(["SOLANA"]);
+    expect(body.networks).toEqual([{ network: "SOLANA", label: "Solana (SPL)" }]);
+  });
+
+  it("mints Solana for a user whose only address is on a converting chain", async () => {
+    h.listWallets.mockResolvedValue([{ asset: "USDT", network: "BSC", address: "0xabc" }]);
+    await call();
+    expect(h.provisionWalletsDetailed).toHaveBeenCalled();
   });
 });

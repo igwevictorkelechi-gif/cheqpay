@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   findUnique: vi.fn(),
   provisionWallets: vi.fn(),
   listWallets: vi.fn(),
+  offrampOn: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -26,8 +27,9 @@ vi.mock("@/lib/wallets", () => ({
   provisionWallets: h.provisionWallets,
   listWallets: h.listWallets,
 }));
+vi.mock("@/lib/settings", () => ({ getCryptoOfframp: h.offrampOn }));
 
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 function call(body?: unknown) {
   return POST(
@@ -43,12 +45,13 @@ function offrampArg(): boolean | undefined {
   return h.provisionWallets.mock.calls.at(-1)?.[2];
 }
 
-describe("POST /api/wallets — the chain decides whether it must offramp", () => {
+describe("POST /api/wallets — the chain decides whether it must offramp (off-ramp on)", () => {
   beforeEach(() => {
     Object.values(h).forEach((fn) => fn.mockReset());
     h.requireUser.mockResolvedValue({ id: "u1" });
     h.findUnique.mockResolvedValue({ id: "u1" });
     h.provisionWallets.mockResolvedValue([]);
+    h.offrampOn.mockResolvedValue(true);
   });
 
   it("offramps a chain the user could never send from, without being asked", async () => {
@@ -89,5 +92,34 @@ describe("POST /api/wallets — the chain decides whether it must offramp", () =
     expect(res.status).toBe(200);
     // No explicit pair and no offramp override.
     expect(h.provisionWallets).toHaveBeenCalledWith("u1");
+  });
+});
+
+describe("/api/wallets with the off-ramp switched off", () => {
+  beforeEach(() => {
+    Object.values(h).forEach((fn) => fn.mockReset());
+    h.requireUser.mockResolvedValue({ id: "u1" });
+    h.findUnique.mockResolvedValue({ id: "u1" });
+    h.provisionWallets.mockResolvedValue([]);
+    h.listWallets.mockResolvedValue([]);
+    h.offrampOn.mockResolvedValue(false);
+  });
+
+  it("refuses a chain other than Solana, saying where it can be received", async () => {
+    const res = await call({ asset: "USDT", network: "TRON" });
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toBe("USDT can only be received on Solana right now.");
+    expect(h.provisionWallets).not.toHaveBeenCalled();
+  });
+
+  it("mints Solana as real coin, even when the caller asks to convert", async () => {
+    const res = await call({ asset: "USDT", network: "SOLANA", offramp: true });
+    expect(res.status).toBe(200);
+    expect(offrampArg()).toBe(false);
+  });
+
+  it("offers only Solana", async () => {
+    const body = await (await GET(new Request("https://api/x"))).json();
+    expect(new Set(body.available.map((w: { network: string }) => w.network))).toEqual(new Set(["SOLANA"]));
   });
 });

@@ -119,6 +119,7 @@ interface Settings {
   usdtNgnRate: number | null;
   usdtNgnRateSource: 'maplerad' | 'manual';
   cryptoSettlement?: 'maplerad' | 'ledger';
+  cryptoOfframp?: boolean;
   usdtNgnRateUpdatedAt: string | null;
   usdtNgnRateUpdatedBy: string | null;
   depositFeeBps: number;
@@ -155,6 +156,7 @@ export default function TradingSettingsPage() {
   const [usdtNgnRate, setUsdtNgnRate] = useState('');
   const [usdtSource, setUsdtSource] = useState<'maplerad' | 'manual'>('maplerad');
   const [settlement, setSettlement] = useState<'maplerad' | 'ledger'>('maplerad');
+  const [offramp, setOfframp] = useState(false);
   const [usdtUpdated, setUsdtUpdated] = useState<{ at: string | null; by: string | null }>({ at: null, by: null });
   const [depositFeeBps, setDepositFeeBps] = useState('');
   const [withdrawalFeeNgn, setWithdrawalFeeNgn] = useState('');
@@ -188,6 +190,7 @@ export default function TradingSettingsPage() {
     setUsdtNgnRate(data.usdtNgnRate != null ? String(data.usdtNgnRate) : '');
     setUsdtSource(data.usdtNgnRateSource === 'manual' ? 'manual' : 'maplerad');
     setSettlement(data.cryptoSettlement === 'ledger' ? 'ledger' : 'maplerad');
+    setOfframp(data.cryptoOfframp === true);
     setUsdtUpdated({ at: data.usdtNgnRateUpdatedAt ?? null, by: data.usdtNgnRateUpdatedBy ?? null });
     setDepositFeeBps(String(data.depositFeeBps ?? 0));
     setWithdrawalFeeNgn(String(data.withdrawalFeeNgn ?? 0));
@@ -252,6 +255,7 @@ export default function TradingSettingsPage() {
       );
       payload.usdtNgnRateSource = usdtSource;
       payload.cryptoSettlement = settlement;
+      payload.cryptoOfframp = offramp;
       // While following Maplerad the box only shows the live rate; sending it
       // back would just restamp it as typed in.
       if (usdtSource === 'manual' && usdtNgnRate !== '') payload.usdtNgnRate = Number(usdtNgnRate);
@@ -461,6 +465,28 @@ export default function TradingSettingsPage() {
           <p className="text-sm text-gray-500 mt-1">
             Naira ⇄ dollar conversions are always settled at Maplerad. BTC can&apos;t be: Maplerad doesn&apos;t hold it.
           </p>
+
+          <label className="mt-5 mb-2 flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={offramp}
+              onChange={(e) => setOfframp(e.target.checked)}
+              disabled={loading || saving}
+            />
+            Off-ramp: accept USDT &amp; USDC on Tron, Ethereum, BSC, Base and Polygon, converted to dollars on arrival
+          </label>
+          {offramp ? (
+            <p className="text-sm text-gray-500">
+              On: customers can get addresses on every network. Anything sent on a network other than Solana arrives as
+              dollars in their USD balance, because Maplerad can only send USDT out on Solana.
+            </p>
+          ) : (
+            <p className="text-sm text-gray-500">
+              Off: nothing is converted. Customers receive USDT and USDC as the coin itself, on Solana only — the one
+              network Maplerad can also send from. Older addresses on other networks are no longer shown; anything still
+              sent to one keeps arriving as dollars.
+            </p>
+          )}
         </div>
 
         <h2 className="text-lg font-bold text-gray-900 pt-2">Fees &amp; margins</h2>

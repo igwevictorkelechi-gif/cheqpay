@@ -1,7 +1,8 @@
 import { Asset, Network, Prisma, prisma } from "@cheqpay/db";
 import { getCustodyProvider } from "@/custody";
 import { getFeatureFlags } from "./features";
-import { isSupportedWallet, SUPPORTED_WALLETS } from "./assets";
+import { isSupportedWallet, isWithdrawableNetwork, SUPPORTED_WALLETS } from "./assets";
+import { getCryptoOfframp } from "./settings";
 import { ensureNetworks } from "./ensureNetworks";
 
 export interface WalletView {
@@ -73,8 +74,16 @@ export async function provisionWalletsDetailed(
     };
   }
 
+  // An off-ramp address converts arrivals to dollars at Maplerad. Only while
+  // the off-ramp is switched on: with it off nothing is converted, so a chain
+  // we can't send from can't be minted at all — the coin would sit there with
+  // no way out.
+  const convert = offramp === true && (await getCryptoOfframp().catch(() => false));
+
   // Refuse a pair we cannot mint rather than logging a failure per login.
-  const wanted = pairs.filter((p) => isSupportedWallet(p.asset, p.network));
+  const wanted = pairs.filter(
+    (p) => isSupportedWallet(p.asset, p.network) && (convert || isWithdrawableNetwork(p.network)),
+  );
   for (const p of pairs) {
     if (!isSupportedWallet(p.asset, p.network)) {
       outcomes.push({
@@ -82,6 +91,13 @@ export async function provisionWalletsDetailed(
         network: p.network,
         status: "skipped",
         error: `${p.asset} on ${p.network} is not a mintable pair`,
+      });
+    } else if (!convert && !isWithdrawableNetwork(p.network)) {
+      outcomes.push({
+        asset: p.asset,
+        network: p.network,
+        status: "skipped",
+        error: `${p.asset} on ${p.network} needs the off-ramp, which is switched off — only Solana can be received`,
       });
     }
   }
@@ -117,7 +133,7 @@ export async function provisionWalletsDetailed(
 
     let provisioned: { address: string; custodyRef: string };
     try {
-      provisioned = await custody.createDepositAddress({ userId, asset, network, offramp });
+      provisioned = await custody.createDepositAddress({ userId, asset, network, offramp: convert });
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       console.error(

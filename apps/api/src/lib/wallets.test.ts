@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   getFeatureFlags: vi.fn(),
   createDepositAddress: vi.fn(),
   getCustodyProvider: vi.fn(),
+  offrampOn: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -27,6 +28,7 @@ vi.mock("@cheqpay/db", () => ({
 vi.mock("@/custody", () => ({ getCustodyProvider: h.getCustodyProvider }));
 vi.mock("./features", () => ({ getFeatureFlags: h.getFeatureFlags }));
 vi.mock("./ensureNetworks", () => ({ ensureNetworks: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("./settings", () => ({ getCryptoOfframp: h.offrampOn }));
 
 import { listWallets, provisionWallets, provisionWalletsDetailed } from "./wallets";
 
@@ -55,6 +57,7 @@ describe("provisionWallets", () => {
     h.getFeatureFlags.mockResolvedValue({ crypto_deposits: true });
     h.createDepositAddress.mockResolvedValue({ address: "0xabc", custodyRef: "ref" });
     h.getCustodyProvider.mockReturnValue({ createDepositAddress: h.createDepositAddress });
+    h.offrampOn.mockResolvedValue(true);
   });
 
   it("auto-provisions USDT and USDC on Solana — the withdrawable chain", async () => {
@@ -65,11 +68,27 @@ describe("provisionWallets", () => {
     expect(h.create).toHaveBeenCalledTimes(2);
   });
 
-  it("mints a specific pair on demand (e.g. USDT on Base)", async () => {
-    await provisionWallets("u1", [{ asset: "USDT" as never, network: "BASE" as never }]);
+  it("mints a specific pair on demand (e.g. USDT on Base, as an off-ramp address)", async () => {
+    await provisionWallets("u1", [{ asset: "USDT" as never, network: "BASE" as never }], true);
 
     const minted = h.createDepositAddress.mock.calls.map((c) => `${c[0].asset}/${c[0].network}`);
     expect(minted).toEqual(["USDT/BASE"]);
+    expect(h.createDepositAddress.mock.calls[0][0].offramp).toBe(true);
+  });
+
+  it("with the off-ramp off, mints no address on a chain coin can't be sent from", async () => {
+    h.offrampOn.mockResolvedValue(false);
+    const report = await provisionWalletsDetailed("u1", [{ asset: "USDT" as never, network: "BASE" as never }], true);
+
+    expect(h.createDepositAddress).not.toHaveBeenCalled();
+    expect(report.outcomes[0]).toMatchObject({ status: "skipped", error: expect.stringContaining("off-ramp") });
+  });
+
+  it("with the off-ramp off, mints Solana as real coin even when asked to convert", async () => {
+    h.offrampOn.mockResolvedValue(false);
+    await provisionWallets("u1", [{ asset: "USDT" as never, network: "SOLANA" as never }], true);
+
+    expect(h.createDepositAddress).toHaveBeenCalledWith(expect.objectContaining({ network: "SOLANA", offramp: false }));
   });
 
   it("refuses a pair we cannot mint rather than calling the provider", async () => {

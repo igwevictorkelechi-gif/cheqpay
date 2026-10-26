@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { listWallets, provisionWallets } from "@/lib/wallets";
 import { AVAILABLE_WALLETS, isSupportedWallet, isWithdrawableNetwork } from "@/lib/assets";
+import { getCryptoOfframp } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -10,11 +11,12 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const auth = await requireUser(req);
+    const offrampOn = await getCryptoOfframp();
     return jsonOk({
       wallets: await listWallets(auth.id),
       // What else the user could ask for, so the client can offer a chain picker
-      // without hardcoding the list.
-      available: AVAILABLE_WALLETS,
+      // without hardcoding the list. Only Solana while the off-ramp is off.
+      available: AVAILABLE_WALLETS.filter((w) => offrampOn || isWithdrawableNetwork(w.network)),
     });
   } catch (err) {
     return toErrorResponse(err);
@@ -52,12 +54,22 @@ export async function POST(req: Request) {
         );
       }
       // A chain the user could never send from can only be minted as an offramp
-      // address, where the arrival converts to USD and no coin is stranded.
+      // address, where the arrival converts to USD and no coin is stranded —
+      // and only while the off-ramp is switched on. With it off, say so plainly
+      // rather than minting an address nobody could empty.
+      const offrampOn = await getCryptoOfframp();
+      if (!offrampOn && !isWithdrawableNetwork(network)) {
+        throw new ApiError(
+          422,
+          `${asset} can only be received on Solana right now.`,
+          "network_unavailable",
+        );
+      }
       // Decided here rather than by the caller: a client that omitted the flag
       // would otherwise get a refusal it has no way to interpret, which is
       // exactly how every non-Solana "generate" silently failed. An explicit
-      // `offramp` from the caller still wins.
-      const offramp = body.offramp ?? !isWithdrawableNetwork(network);
+      // `offramp` from the caller still wins, while the off-ramp is on.
+      const offramp = offrampOn && (body.offramp ?? !isWithdrawableNetwork(network));
 
       return jsonOk({
         wallets: await provisionWallets(auth.id, [{ asset, network }], offramp),

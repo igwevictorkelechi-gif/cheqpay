@@ -29,6 +29,8 @@ import {
   setUsdtNgnRateSource,
   getCryptoSettlement,
   setCryptoSettlement,
+  getCryptoOfframp,
+  setCryptoOfframp,
   setWithdrawalFeeNgn,
   setWithdrawalMinNgn,
   setWithdrawalMinUsd,
@@ -78,6 +80,8 @@ async function snapshot() {
     usdtNgnRateUpdatedBy: usdtRate.updatedBy,
     /** "maplerad": naira ⇄ USDT/USDC trades are backed by a real exchange at Maplerad. */
     cryptoSettlement: await getCryptoSettlement(),
+    /** New USDT/USDC addresses on chains other than Solana convert arrivals to dollars. */
+    cryptoOfframp: await getCryptoOfframp(),
     depositFeeBps,
     withdrawalFeeNgn,
     fxMarginBps,
@@ -131,6 +135,7 @@ export async function PUT(req: Request) {
     if (body.usdtNgnRateSource !== undefined)
       await setUsdtNgnRateSource(body.usdtNgnRateSource, updatedBy);
     if (body.cryptoSettlement !== undefined) await setCryptoSettlement(body.cryptoSettlement, updatedBy);
+    if (body.cryptoOfframp !== undefined) await setCryptoOfframp(body.cryptoOfframp, updatedBy);
     // Also the baseline a followed rate is checked against, so a manual entry
     // is how an admin confirms a big move that following refused.
     if (body.usdtNgnRate !== undefined) await setUsdtNgnRate(body.usdtNgnRate, updatedBy);
