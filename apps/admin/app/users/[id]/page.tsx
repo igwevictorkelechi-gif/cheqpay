@@ -359,6 +359,12 @@ export default function UserDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Granting trust (raising a tier, reactivating an account) needs a fresh
+  // authenticator code, and tier 3 or reactivation a reason too: the server
+  // refuses without them, so they are asked for here before the change is sent.
+  const [grant, setGrant] = useState<null | { payload: { status?: string; kycTier?: number }; title: string; needsReason: boolean }>(null);
+  const [grantReason, setGrantReason] = useState('');
+  const [grantOtp, setGrantOtp] = useState('');
 
   // Live Maplerad sync: pull the customer + its accounts from the provider and
   // snapshot them. Lets an operator test the enrolment result from this page.
@@ -448,7 +454,7 @@ export default function UserDetailPage() {
   }, [load]);
 
   const patch = useCallback(
-    async (payload: { status?: string; kycTier?: number }) => {
+    async (payload: { status?: string; kycTier?: number; reason?: string; otp?: string }) => {
       if (!id) return;
       setSaving(true);
       setNotice(null);
@@ -471,6 +477,8 @@ export default function UserDetailPage() {
         } else {
           setNotice('Changes saved.');
         }
+        setGrant(null);
+        setGrantReason('');
         load();
       } catch (e) {
         setError((e as Error).message);
@@ -826,7 +834,11 @@ export default function UserDetailPage() {
                   <button
                     key={s}
                     disabled={active || saving}
-                    onClick={() => patch({ status: s })}
+                    onClick={() =>
+                      s === 'ACTIVE'
+                        ? setGrant({ payload: { status: s }, title: 'Reactivate this account', needsReason: true })
+                        : patch({ status: s })
+                    }
                     className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed ${
                       active
                         ? 'border-brand-500 bg-brand-50 text-brand-700'
@@ -860,7 +872,11 @@ export default function UserDetailPage() {
                   <button
                     key={t}
                     disabled={active || saving}
-                    onClick={() => patch({ kycTier: t })}
+                    onClick={() =>
+                      t > u.kycTier
+                        ? setGrant({ payload: { kycTier: t }, title: `Raise to Tier ${t}`, needsReason: t === 3 })
+                        : patch({ kycTier: t })
+                    }
                     className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed ${
                       active
                         ? 'border-brand-500 bg-brand-50 text-brand-700'
@@ -873,6 +889,62 @@ export default function UserDetailPage() {
               })}
             </div>
           </section>
+
+          {grant && (
+            <section className="mb-6 rounded-xl border border-brand-500 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-900">{grant.title}</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                {grant.payload.kycTier === 3
+                  ? 'Tier 3 is for enhanced due diligence: only grant it once you have checked their source of funds, and whether they are (or are close to) a politically exposed person. Super Admins only.'
+                  : grant.payload.status
+                    ? 'Super Admins only. The reason goes on the audit record.'
+                    : 'Needs the government ID on file for Tier 2 and above.'}
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Reason{grant.needsReason ? ' (required)' : ' (optional)'}
+                  <input
+                    value={grantReason}
+                    onChange={(e) => setGrantReason(e.target.value.slice(0, 200))}
+                    placeholder="e.g. Source of funds checked: salary slips and bank statements"
+                    className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-brand-500 focus:outline-none"
+                  />
+                </label>
+                <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Authenticator code
+                  <input
+                    value={grantOtp}
+                    onChange={(e) => setGrantOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric"
+                    placeholder="6 digits"
+                    className="mt-1 block w-40 rounded-lg border border-gray-300 px-3 py-2 text-sm tracking-widest text-gray-900 focus:border-brand-500 focus:outline-none"
+                  />
+                </label>
+              </div>
+              <div className="mt-4 flex gap-3">
+                <button
+                  disabled={saving || grantOtp.length !== 6 || (grant.needsReason && grantReason.trim().length < 10)}
+                  onClick={() => {
+                    void patch({ ...grant.payload, reason: grantReason.trim() || undefined, otp: grantOtp });
+                    setGrantOtp('');
+                  }}
+                  className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {saving ? 'Saving…' : 'Confirm'}
+                </button>
+                <button
+                  disabled={saving}
+                  onClick={() => {
+                    setGrant(null);
+                    setGrantOtp('');
+                  }}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </section>
+          )}
 
           {/* What the user actually submitted at KYC. Numbers are last-4 only;
               the whole BVN lives behind the audited compliance lookup. */}
