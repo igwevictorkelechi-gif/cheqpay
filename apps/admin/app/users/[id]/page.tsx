@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, PauseCircle, Ban, ShieldCheck } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import UserCardsPanel from '@/components/UserCardsPanel';
 
 type UserDetail = {
   user: {
@@ -1567,6 +1568,9 @@ export default function UserDetailPage() {
               )}
             </div>
           </section>
+
+          {/* Virtual cards — create one for the user, paid from their USD balance. */}
+          <UserCardsPanel userId={id} />
 
           {/* Deposit reconciliation — recover deposits that never credited. */}
           <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
