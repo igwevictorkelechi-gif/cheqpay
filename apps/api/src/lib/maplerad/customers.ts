@@ -81,8 +81,8 @@ export async function upgradeCustomerTier1(
  *
  * PATCH /customers/upgrade/tier2
  *
- * Needs a government ID: the document image itself, base64 (Maplerad refuses a
- * URL), plus its number and country. Both are things we now hold — the KYC form
+ * Needs a government ID: the document image itself as a base64 data URI
+ * (Maplerad refuses a URL and bare base64), plus its number and country. Both are things we now hold — the KYC form
  * collects an ID type, number and front/back images, stored by lib/kycDocuments. (This was previously left unimplemented on the
  * grounds that the app had no document upload; that is no longer true.)
  *
