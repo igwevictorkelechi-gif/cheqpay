@@ -36,6 +36,8 @@ describe("crypto swaps price each kind with its own spread", () => {
     vi.resetModules();
     vi.doMock("./settings", () => ({
       getUsdtNgnRate: vi.fn().mockResolvedValue(1355),
+      // These price on CheqPay's own books; the Maplerad-backed path is in stablecoinRail.test.ts.
+      getCryptoSettlement: vi.fn().mockResolvedValue("ledger"),
       getSwapSpreadBpsFor: h.spreadFor,
       getFxSideMarginBps: vi.fn(),
       feeFromBps: vi.fn(),

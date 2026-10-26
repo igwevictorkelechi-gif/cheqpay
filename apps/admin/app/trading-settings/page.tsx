@@ -118,6 +118,7 @@ interface Settings {
   swapSpreads: Record<SwapKind, number | null>;
   usdtNgnRate: number | null;
   usdtNgnRateSource: 'maplerad' | 'manual';
+  cryptoSettlement?: 'maplerad' | 'ledger';
   usdtNgnRateUpdatedAt: string | null;
   usdtNgnRateUpdatedBy: string | null;
   depositFeeBps: number;
@@ -153,6 +154,7 @@ export default function TradingSettingsPage() {
   const [swapSpreads, setSwapSpreads] = useState<Record<SwapKind, string>>({ buy: '', sell: '', convert: '' });
   const [usdtNgnRate, setUsdtNgnRate] = useState('');
   const [usdtSource, setUsdtSource] = useState<'maplerad' | 'manual'>('maplerad');
+  const [settlement, setSettlement] = useState<'maplerad' | 'ledger'>('maplerad');
   const [usdtUpdated, setUsdtUpdated] = useState<{ at: string | null; by: string | null }>({ at: null, by: null });
   const [depositFeeBps, setDepositFeeBps] = useState('');
   const [withdrawalFeeNgn, setWithdrawalFeeNgn] = useState('');
@@ -185,6 +187,7 @@ export default function TradingSettingsPage() {
     });
     setUsdtNgnRate(data.usdtNgnRate != null ? String(data.usdtNgnRate) : '');
     setUsdtSource(data.usdtNgnRateSource === 'manual' ? 'manual' : 'maplerad');
+    setSettlement(data.cryptoSettlement === 'ledger' ? 'ledger' : 'maplerad');
     setUsdtUpdated({ at: data.usdtNgnRateUpdatedAt ?? null, by: data.usdtNgnRateUpdatedBy ?? null });
     setDepositFeeBps(String(data.depositFeeBps ?? 0));
     setWithdrawalFeeNgn(String(data.withdrawalFeeNgn ?? 0));
@@ -248,6 +251,7 @@ export default function TradingSettingsPage() {
         SWAP_KINDS.map(({ key }) => [key, swapSpreads[key] === '' ? null : Number(swapSpreads[key])]),
       );
       payload.usdtNgnRateSource = usdtSource;
+      payload.cryptoSettlement = settlement;
       // While following Maplerad the box only shows the live rate; sending it
       // back would just restamp it as typed in.
       if (usdtSource === 'manual' && usdtNgnRate !== '') payload.usdtNgnRate = Number(usdtNgnRate);
@@ -424,6 +428,39 @@ export default function TradingSettingsPage() {
               crypto sales lose money.
             </p>
           )}
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <label className="flex items-center gap-2 text-gray-700 font-semibold mb-2">
+            <DollarSign size={18} className="text-brand-600" />
+            Back USDT &amp; USDC trades at Maplerad
+          </label>
+          <label className="mb-2 flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={settlement === 'maplerad'}
+              onChange={(e) => setSettlement(e.target.checked ? 'maplerad' : 'ledger')}
+              disabled={loading || saving}
+            />
+            Buy and sell the dollars behind every naira ⇄ USDT/USDC trade at Maplerad
+          </label>
+          {settlement === 'maplerad' ? (
+            <p className="text-sm text-gray-500">
+              When a customer buys USDT or USDC with naira, their naira is exchanged for dollars at Maplerad (which keeps
+              stablecoins as dollars), and a sale does the reverse — so your Maplerad wallets always hold what customers
+              own. Prices come from Maplerad&apos;s live exchange rate less the buy/sell spread above. If Maplerad
+              refuses an exchange (for example, naira exchanges aren&apos;t enabled on your account), that trade is
+              declined and the customer isn&apos;t charged.
+            </p>
+          ) : (
+            <p className="text-sm text-amber-700">
+              Off: USDT and USDC trades only change CheqPay&apos;s own balances. Nothing is bought at Maplerad, so your
+              wallets there will not cover what customers hold — a customer sending USDT out can fail.
+            </p>
+          )}
+          <p className="text-sm text-gray-500 mt-1">
+            Naira ⇄ dollar conversions are always settled at Maplerad. BTC can&apos;t be: Maplerad doesn&apos;t hold it.
+          </p>
         </div>
 
         <h2 className="text-lg font-bold text-gray-900 pt-2">Fees &amp; margins</h2>
