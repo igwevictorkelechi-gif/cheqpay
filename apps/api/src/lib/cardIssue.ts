@@ -3,7 +3,9 @@
 // Getting a virtual card, in the order the customer sees it:
 //
 //   1. Pay the card fee ($3) from the USD balance. This reserves a card slot —
-//      a card row in status "unfunded" — and calls no provider yet.
+//      a card row in status "unfunded" — and requests no card yet. Maplerad
+//      only issues cards at its tier 2, so a tier 1 customer is upgraded (or
+//      refused) here, before anything is charged.
 //   2. Fund it: choose a first top-up (at least the minimum top-up). The top-up
 //      and its fee are debited, and only now is the card requested from
 //      Maplerad, with the top-up loaded onto it at creation.
@@ -36,6 +38,7 @@ import { minor } from "./maplerad/types";
 import { getProviderBalanceMinor } from "./maplerad/treasury";
 import { describeProviderError } from "./mapleradCustomer";
 import { alertOpsOnce } from "./opsAlert";
+import { upgradeToTier2 } from "./mapleradTier2";
 
 export const UNFUNDED = "unfunded";
 const ACTIVATING = "activating";
@@ -62,10 +65,23 @@ function toUsdCents(amount: string): bigint {
   return BigInt(whole) * 100n + BigInt(frac.padEnd(2, "0"));
 }
 
-async function requireEnrolledCustomer(userId: string): Promise<string> {
+/** Maplerad only issues cards to customers at tier 2 or above. */
+export const CARD_MIN_PROVIDER_TIER = 2;
+
+/**
+ * The customer's Maplerad id, once they can have a card: enrolled, and at
+ * Maplerad tier 2. Checked before any money moves.
+ *
+ * A customer still at tier 1 is upgraded on the spot when their government ID
+ * is on file (most are: the KYC flow's own tier 2 attempt can fail and leave
+ * them behind). Only if that doesn't work is the card refused, with what to do
+ * next: add an ID in Verify identity, or, for someone whose ID is already with
+ * us, contact support while ops are alerted to finish the upgrade.
+ */
+async function requireCardCustomer(userId: string): Promise<string> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { mapleradCustomerId: true },
+    select: { mapleradCustomerId: true, mapleradTier: true, kycTier: true },
   });
   if (!user?.mapleradCustomerId) {
     throw new ApiError(
@@ -74,7 +90,28 @@ async function requireEnrolledCustomer(userId: string): Promise<string> {
       "kyc_required",
     );
   }
-  return user.mapleradCustomerId;
+  if (user.mapleradTier >= CARD_MIN_PROVIDER_TIER) return user.mapleradCustomerId;
+
+  const upgrade = await upgradeToTier2(userId);
+  if (upgrade.upgraded) return user.mapleradCustomerId;
+
+  if (user.kycTier < 2) {
+    throw new ApiError(
+      409,
+      "Virtual cards need Tier 2 verification. Go to Verify identity, add your government ID, then try again.",
+      "tier2_required",
+    );
+  }
+  void alertOpsOnce(
+    `card-tier2:${userId}`,
+    `⚠️ A Tier 2 customer asked for a virtual card, but Maplerad still has them at tier ${user.mapleradTier} and the upgrade didn't go through. Nothing was charged. Reason: ${upgrade.reason}. Run Enrol / upgrade tier on their admin page.`,
+    { userId, reason: upgrade.reason },
+  );
+  throw new ApiError(
+    409,
+    "Virtual cards need Tier 2 verification, and we're still finishing yours. Nothing was charged. Please contact support and we'll complete it.",
+    "tier2_required",
+  );
 }
 
 /**
@@ -85,7 +122,7 @@ async function requireEnrolledCustomer(userId: string): Promise<string> {
  */
 export async function payForCard(userId: string, requestKey: string) {
   await ensureCardsTable();
-  await requireEnrolledCustomer(userId);
+  await requireCardCustomer(userId);
 
   const waiting = await prisma.card.findFirst({
     where: { userId, status: UNFUNDED },
@@ -124,7 +161,7 @@ export async function activateCard(input: {
 }) {
   await ensureCardsTable();
   await Promise.all([ensureUsdAsset(), ensureCardTxnTypes()]);
-  const customerId = await requireEnrolledCustomer(input.userId);
+  const customerId = await requireCardCustomer(input.userId);
 
   const cents = toUsdCents(input.amount);
   const feeCents = cardFundFee(cents, await getPricing()); // enforces the minimum top-up
