@@ -84,8 +84,9 @@ export async function upgradeToTier2(userId: string): Promise<Tier2Outcome> {
       return { upgraded: false, tier: user.mapleradTier, reason: "no ID document image on file" };
     }
 
-    // The image itself, base64. Maplerad refuses a link to it with "identity
-    // image: requires base64 image", which is how every tier 2 upgrade failed.
+    // The image itself, as a base64 data URI (data:image/jpeg;base64,...).
+    // Maplerad refuses both a link to it and bare base64 with "identity image:
+    // requires base64 image", whatever its reference page says.
     const doc = parseKycRef(frontRef);
     const file = doc ? await readKycDocument(doc.docId) : null;
     if (!file || file.data.length === 0) {
@@ -96,7 +97,7 @@ export async function upgradeToTier2(userId: string): Promise<Tier2Outcome> {
       customer_id: user.mapleradCustomerId,
       identity: {
         type: user.idDocType as "NIN" | "PASSPORT" | "VOTERS_CARD" | "DRIVERS_LICENSE",
-        image: file.data.toString("base64"),
+        image: `data:${file.contentType || "image/jpeg"};base64,${file.data.toString("base64")}`,
         number: idNumber,
         country: "NG",
       },

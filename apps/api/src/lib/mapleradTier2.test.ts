@@ -63,7 +63,7 @@ describe("upgradeToTier2", () => {
     readKycDocument.mockReset().mockResolvedValue({ contentType: "image/jpeg", data: Buffer.from("front-image") });
   });
 
-  it("sends the stored ID, with the image itself as base64, and records tier 2 on success", async () => {
+  it("sends the stored ID, with the image itself as a base64 data URI, and records tier 2 on success", async () => {
     const r = await upgradeToTier2("u1");
 
     expect(r).toMatchObject({ upgraded: true, tier: 2 });
@@ -71,8 +71,9 @@ describe("upgradeToTier2", () => {
       customer_id: "cus_1",
       identity: {
         type: "NIN",
-        // Maplerad refuses a URL here: "identity image: requires base64 image".
-        image: Buffer.from("front-image").toString("base64"),
+        // Maplerad refuses a URL and bare base64 here ("identity image:
+        // requires base64 image"); it is sent as a data URI.
+        image: `data:image/jpeg;base64,${Buffer.from("front-image").toString("base64")}`,
         number: "22233344455",
         country: "NG",
       },
