@@ -319,7 +319,7 @@ export async function POST(req: Request) {
       // image. Best-effort by contract: a refusal leaves the user at tier 1 with
       // a working deposit account, and the admin page can retry.
       if (customerId) {
-        const tier2 = await upgradeToTier2(auth.id, resolveApiOrigin(req));
+        const tier2 = await upgradeToTier2(auth.id);
         if (!tier2.upgraded) {
           console.warn("[kyc] tier 2 not granted", { userId: auth.id, reason: tier2.reason });
         }

@@ -11,7 +11,6 @@ import {
 import { ensureMapleradCustomerDetailed, ensureMapleradSchema } from "@/lib/mapleradCustomer";
 import { grantTierFromEnrolment } from "@/lib/kycAutoTier";
 import { upgradeToTier2 } from "@/lib/mapleradTier2";
-import { resolveApiOrigin } from "@/lib/kycDocuments";
 import { createVirtualAccount } from "@/lib/virtualAccounts";
 
 export const dynamic = "force-dynamic";
@@ -272,7 +271,7 @@ export async function POST(req: Request, { params }: Ctx) {
     // reported so an operator can see exactly what is missing.
     let tier2Reason: string | null = null;
     if (body.tier2 !== false) {
-      const t2 = await upgradeToTier2(id, resolveApiOrigin(req));
+      const t2 = await upgradeToTier2(id);
       tier2Reason = t2.reason;
     }
 

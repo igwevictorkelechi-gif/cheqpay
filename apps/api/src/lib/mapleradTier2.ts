@@ -2,7 +2,7 @@ import { prisma } from "@cheqpay/db";
 import { upgradeCustomerTier2 } from "./maplerad/customers";
 import { ensureKycDocSchema, ensureMapleradSchema } from "./mapleradCustomer";
 import { decryptPii, isPiiEncryptionConfigured } from "./pii";
-import { signKycDocumentUrl } from "./kycDocuments";
+import { parseKycRef, readKycDocument } from "./kycDocuments";
 
 export interface Tier2Outcome {
   upgraded: boolean;
@@ -15,8 +15,8 @@ export interface Tier2Outcome {
  * Lift a customer from Maplerad tier 1 to tier 2.
  *
  * Tier 2 is what raises transaction limits and unlocks crypto withdrawals, and
- * Maplerad wants a government ID for it: a document image it can fetch, plus the
- * number and country. Everything needed is already stored by the KYC flow — the
+ * Maplerad wants a government ID for it: the document image itself, base64, plus
+ * the number and country. Everything needed is already stored by the KYC flow — the
  * ID type and encrypted number on the user, and the document refs on the KYC
  * record — so this assembles them rather than asking the user for anything new.
  *
@@ -28,10 +28,7 @@ export interface Tier2Outcome {
  * enrolment or fail a KYC submission that otherwise succeeded — the user keeps
  * their deposit account and can be upgraded later from the admin page.
  */
-export async function upgradeToTier2(
-  userId: string,
-  origin: string,
-): Promise<Tier2Outcome> {
+export async function upgradeToTier2(userId: string): Promise<Tier2Outcome> {
   try {
     await Promise.all([ensureMapleradSchema(), ensureKycDocSchema()]);
 
@@ -87,24 +84,19 @@ export async function upgradeToTier2(
       return { upgraded: false, tier: user.mapleradTier, reason: "no ID document image on file" };
     }
 
-    // A fresh, short-lived URL: Maplerad fetches the image once during the
-    // upgrade, so it only has to be valid for the length of this call.
-    let imageUrl: string;
-    try {
-      imageUrl = signKycDocumentUrl(frontRef, 3600, origin);
-    } catch (err) {
-      return {
-        upgraded: false,
-        tier: user.mapleradTier,
-        reason: `could not sign the ID document: ${err instanceof Error ? err.message : String(err)}`,
-      };
+    // The image itself, base64. Maplerad refuses a link to it with "identity
+    // image: requires base64 image", which is how every tier 2 upgrade failed.
+    const doc = parseKycRef(frontRef);
+    const file = doc ? await readKycDocument(doc.docId) : null;
+    if (!file || file.data.length === 0) {
+      return { upgraded: false, tier: user.mapleradTier, reason: "the ID document image could not be read" };
     }
 
     await upgradeCustomerTier2({
       customer_id: user.mapleradCustomerId,
       identity: {
         type: user.idDocType as "NIN" | "PASSPORT" | "VOTERS_CARD" | "DRIVERS_LICENSE",
-        image: imageUrl,
+        image: file.data.toString("base64"),
         number: idNumber,
         country: "NG",
       },
