@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   createCard: vi.fn(),
   treasury: vi.fn(),
   alert: vi.fn(),
+  tier2: vi.fn(),
 }));
 
 const db = {
@@ -62,6 +63,7 @@ vi.mock("./settings", () => ({
 vi.mock("./maplerad/issuing", () => ({ createCard: h.createCard }));
 vi.mock("./maplerad/treasury", () => ({ getProviderBalanceMinor: h.treasury }));
 vi.mock("./opsAlert", () => ({ alertOpsOnce: h.alert }));
+vi.mock("./mapleradTier2", () => ({ upgradeToTier2: h.tier2 }));
 
 import { activateCard, cancelUnfundedCard, payForCard, slotRef } from "./cardIssue";
 
@@ -70,7 +72,7 @@ const activate = (amount = "10") =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  h.userFind.mockResolvedValue({ mapleradCustomerId: "cust-1" });
+  h.userFind.mockResolvedValue({ mapleradCustomerId: "cust-1", mapleradTier: 2, kycTier: 2 });
   h.cardFindFirst.mockResolvedValue(null);
   h.cardCreate.mockResolvedValue({ id: "c1", status: "unfunded" });
   h.charge.mockResolvedValue({ transactionId: "fee-1", feeCents: 300n });
@@ -106,6 +108,42 @@ describe("payForCard (step 1)", () => {
     h.userFind.mockResolvedValue({ mapleradCustomerId: null });
     await expect(payForCard("u1", "req-3")).rejects.toMatchObject({ code: "kyc_required" });
     expect(h.charge).not.toHaveBeenCalled();
+  });
+
+  // Maplerad only issues cards at its tier 2.
+  it("upgrades a tier 1 customer with an ID on file, then charges as usual", async () => {
+    h.userFind.mockResolvedValue({ mapleradCustomerId: "cust-1", mapleradTier: 1, kycTier: 2 });
+    h.tier2.mockResolvedValue({ upgraded: true, tier: 2, reason: "ok" });
+    const r = await payForCard("u1", "req-4");
+    expect(h.tier2).toHaveBeenCalledWith("u1");
+    expect(r.feeCents).toBe(300n);
+  });
+
+  it("asks a tier 1 customer without an ID for Tier 2, charging nothing", async () => {
+    h.userFind.mockResolvedValue({ mapleradCustomerId: "cust-1", mapleradTier: 1, kycTier: 1 });
+    h.tier2.mockResolvedValue({ upgraded: false, tier: 1, reason: "no government ID type on file" });
+    await expect(payForCard("u1", "req-5")).rejects.toMatchObject({
+      code: "tier2_required",
+      message: expect.stringContaining("add your government ID"),
+    });
+    expect(h.charge).not.toHaveBeenCalled();
+    expect(h.alert).not.toHaveBeenCalled();
+  });
+
+  it("alerts ops when a verified customer's upgrade doesn't go through, charging nothing", async () => {
+    h.userFind.mockResolvedValue({ mapleradCustomerId: "cust-1", mapleradTier: 1, kycTier: 2 });
+    h.tier2.mockResolvedValue({ upgraded: false, tier: 0, reason: "provider refused the upgrade: x" });
+    await expect(payForCard("u1", "req-6")).rejects.toMatchObject({
+      code: "tier2_required",
+      message: expect.stringContaining("contact support"),
+    });
+    expect(h.charge).not.toHaveBeenCalled();
+    expect(h.alert).toHaveBeenCalledWith("card-tier2:u1", expect.stringContaining("provider refused"), expect.anything());
+  });
+
+  it("doesn't re-check the tier of a customer already at tier 2", async () => {
+    await payForCard("u1", "req-7");
+    expect(h.tier2).not.toHaveBeenCalled();
   });
 });
 
@@ -155,6 +193,14 @@ describe("activateCard (step 2)", () => {
   it("won't activate a card that isn't waiting for funding", async () => {
     h.cardFindFirst.mockResolvedValue({ id: "c1", status: "active" });
     await expect(activate("10")).rejects.toMatchObject({ code: "card_not_unfunded" });
+  });
+
+  it("won't fund a slot paid while the customer was below tier 2, until they reach it", async () => {
+    h.userFind.mockResolvedValue({ mapleradCustomerId: "cust-1", mapleradTier: 1, kycTier: 1 });
+    h.tier2.mockResolvedValue({ upgraded: false, tier: 1, reason: "no government ID type on file" });
+    await expect(activate("10")).rejects.toMatchObject({ code: "tier2_required" });
+    expect(h.balanceUpdateMany).not.toHaveBeenCalled();
+    expect(h.createCard).not.toHaveBeenCalled();
   });
 });
 

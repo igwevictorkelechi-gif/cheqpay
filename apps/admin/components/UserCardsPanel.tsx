@@ -24,6 +24,8 @@ type Pricing = {
 type CardsInfo = {
   cards: Card[];
   enrolled: boolean;
+  /** Maplerad issues cards only from tier 2. */
+  mapleradTier: number;
   active: boolean;
   issuingConfigured: boolean;
   hasPaidSlot: boolean;
@@ -108,7 +110,9 @@ export default function UserCardsPanel({ userId }: { userId: string }) {
         ? 'This account isn’t active, so it can’t get a card.'
         : !info.enrolled
           ? 'Enrol the user with Maplerad first (Enrol / upgrade tier above).'
-          : null;
+          : info.mapleradTier < 2
+            ? `Maplerad only issues cards at tier 2, and this user is at tier ${info.mapleradTier}. Use Enrol / upgrade tier above first.`
+            : null;
 
   const canCreate =
     !!info &&

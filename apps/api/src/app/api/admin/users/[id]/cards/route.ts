@@ -47,6 +47,7 @@ async function usdAvailable(userId: string): Promise<bigint> {
  *
  * `hasPaidSlot` means they already paid the card fee for a card that was never
  * created, so a new card for them charges only the top-up and its fee.
+ * `mapleradTier` below 2 means Maplerad won't issue them a card yet.
  */
 export async function GET(req: Request, { params }: Ctx) {
   try {
@@ -54,7 +55,7 @@ export async function GET(req: Request, { params }: Ctx) {
     const { id } = await params;
     const user = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, status: true, mapleradCustomerId: true },
+      select: { id: true, status: true, mapleradCustomerId: true, mapleradTier: true },
     });
     if (!user) throw new ApiError(404, "User not found", "no_user");
 
@@ -67,6 +68,8 @@ export async function GET(req: Request, { params }: Ctx) {
     return jsonOk({
       cards,
       enrolled: Boolean(user.mapleradCustomerId),
+      // Maplerad issues cards only at its tier 2 (CARD_MIN_PROVIDER_TIER).
+      mapleradTier: user.mapleradTier,
       active: user.status === UserStatus.ACTIVE,
       issuingConfigured: cardsAvailable(),
       hasPaidSlot: cards.some((c) => c.status === UNFUNDED),
