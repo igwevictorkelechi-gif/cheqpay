@@ -141,7 +141,7 @@ export interface UpgradeCustomerTier2Input {
   customer_id: string;
   identity: {
     type: "NIN" | "PASSPORT" | "VOTERS_CARD" | "DRIVERS_LICENSE";
-    image: string; // URL to the uploaded document
+    image: string; // the document image, base64 (a URL is refused)
     number: string;
     country: string; // "NG"
   };

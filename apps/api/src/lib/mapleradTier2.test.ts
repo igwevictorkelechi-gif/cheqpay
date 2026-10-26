@@ -9,7 +9,7 @@ const {
   ensureKycDocSchema,
   decryptPii,
   isPiiEncryptionConfigured,
-  signKycDocumentUrl,
+  readKycDocument,
 } = vi.hoisted(() => ({
   findUnique: vi.fn(),
   update: vi.fn(),
@@ -19,7 +19,7 @@ const {
   ensureKycDocSchema: vi.fn(),
   decryptPii: vi.fn(),
   isPiiEncryptionConfigured: vi.fn(),
-  signKycDocumentUrl: vi.fn(),
+  readKycDocument: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -28,7 +28,14 @@ vi.mock("@cheqpay/db", () => ({
 vi.mock("./maplerad/customers", () => ({ upgradeCustomerTier2 }));
 vi.mock("./mapleradCustomer", () => ({ ensureMapleradSchema, ensureKycDocSchema }));
 vi.mock("./pii", () => ({ decryptPii, isPiiEncryptionConfigured }));
-vi.mock("./kycDocuments", () => ({ signKycDocumentUrl }));
+vi.mock("./kycDocuments", () => ({
+  readKycDocument,
+  // The real parser: kyc/{userId}/{docId}.
+  parseKycRef: (ref: string) => {
+    const [, userId, docId] = ref.split("/");
+    return userId && docId ? { userId, docId } : null;
+  },
+}));
 
 import { upgradeToTier2 } from "./mapleradTier2";
 
@@ -53,31 +60,32 @@ describe("upgradeToTier2", () => {
     ensureKycDocSchema.mockReset().mockResolvedValue(undefined);
     decryptPii.mockReset().mockReturnValue("22233344455");
     isPiiEncryptionConfigured.mockReset().mockReturnValue(true);
-    signKycDocumentUrl.mockReset().mockReturnValue("https://api/signed/front");
+    readKycDocument.mockReset().mockResolvedValue({ contentType: "image/jpeg", data: Buffer.from("front-image") });
   });
 
-  it("sends the stored ID and records tier 2 on success", async () => {
-    const r = await upgradeToTier2("u1", "https://api.example.com");
+  it("sends the stored ID, with the image itself as base64, and records tier 2 on success", async () => {
+    const r = await upgradeToTier2("u1");
 
     expect(r).toMatchObject({ upgraded: true, tier: 2 });
     expect(upgradeCustomerTier2).toHaveBeenCalledWith({
       customer_id: "cus_1",
       identity: {
         type: "NIN",
-        image: "https://api/signed/front",
+        // Maplerad refuses a URL here: "identity image: requires base64 image".
+        image: Buffer.from("front-image").toString("base64"),
         number: "22233344455",
         country: "NG",
       },
     });
     // Only the FRONT image is sent — Maplerad's identity block takes one.
-    expect(signKycDocumentUrl).toHaveBeenCalledWith("kyc/u1/front", 3600, "https://api.example.com");
+    expect(readKycDocument).toHaveBeenCalledWith("front");
     expect(update).toHaveBeenCalledWith({ where: { id: "u1" }, data: { mapleradTier: 2 } });
   });
 
   it("refuses without spending a call when the customer is still tier 0", async () => {
     findUnique.mockResolvedValue(tier1User({ mapleradTier: 0 }));
 
-    const r = await upgradeToTier2("u1", "https://api.example.com");
+    const r = await upgradeToTier2("u1");
 
     expect(r.upgraded).toBe(false);
     expect(r.reason).toContain("tier 0");
@@ -87,7 +95,7 @@ describe("upgradeToTier2", () => {
   it("is a no-op when the customer is already tier 2", async () => {
     findUnique.mockResolvedValue(tier1User({ mapleradTier: 2 }));
 
-    const r = await upgradeToTier2("u1", "https://api.example.com");
+    const r = await upgradeToTier2("u1");
 
     expect(r).toMatchObject({ upgraded: false, tier: 2 });
     expect(upgradeCustomerTier2).not.toHaveBeenCalled();
@@ -99,7 +107,7 @@ describe("upgradeToTier2", () => {
   ])("explains what is missing: %s", async (_label, over, expected) => {
     findUnique.mockResolvedValue(tier1User(over));
 
-    const r = await upgradeToTier2("u1", "https://api.example.com");
+    const r = await upgradeToTier2("u1");
 
     expect(r.upgraded).toBe(false);
     expect(r.reason).toContain(expected);
@@ -109,17 +117,27 @@ describe("upgradeToTier2", () => {
   it("explains a missing document image", async () => {
     recordFindFirst.mockResolvedValue(null);
 
-    const r = await upgradeToTier2("u1", "https://api.example.com");
+    const r = await upgradeToTier2("u1");
 
     expect(r.upgraded).toBe(false);
     expect(r.reason).toContain("document image");
     expect(upgradeCustomerTier2).not.toHaveBeenCalled();
   });
 
+  it("explains an ID image that can't be read, without calling the provider", async () => {
+    readKycDocument.mockResolvedValue(null);
+
+    const r = await upgradeToTier2("u1");
+
+    expect(r.upgraded).toBe(false);
+    expect(r.reason).toContain("could not be read");
+    expect(upgradeCustomerTier2).not.toHaveBeenCalled();
+  });
+
   it("never throws when the provider refuses, and does not record tier 2", async () => {
     upgradeCustomerTier2.mockRejectedValue(new Error("identity mismatch"));
 
-    const r = await upgradeToTier2("u1", "https://api.example.com");
+    const r = await upgradeToTier2("u1");
 
     expect(r.upgraded).toBe(false);
     expect(r.reason).toContain("identity mismatch");
