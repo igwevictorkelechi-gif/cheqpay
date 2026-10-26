@@ -27,6 +27,9 @@ export default function KycPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  // Approving raises a tier, which the server only accepts with a fresh
+  // authenticator code (one use each). Rejecting needs none.
+  const [otp, setOtp] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,14 +50,19 @@ export default function KycPage() {
   }, [load]);
 
   async function act(recordId: string, action: 'approve' | 'reject', tier?: number) {
+    if (action === 'approve' && otp.length !== 6) {
+      setMessage({ kind: 'err', text: 'Enter the 6-digit code from your authenticator app above to approve.' });
+      return;
+    }
     setBusy(recordId);
     setMessage(null);
     try {
       const res = await fetch('/api/kyc', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...(action === 'approve' ? { 'x-admin-otp': otp } : {}) },
         body: JSON.stringify({ recordId, action, tier }),
       });
+      if (action === 'approve') setOtp('');
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Action failed');
       setMessage({ kind: 'ok', text: `Submission ${action === 'approve' ? 'approved' : 'rejected'}.` });
@@ -83,6 +91,21 @@ export default function KycPage() {
             authorization.
           </p>
         </div>
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3">
+        <label className="text-sm font-medium text-gray-700" htmlFor="kyc-otp">
+          Authenticator code to approve
+        </label>
+        <input
+          id="kyc-otp"
+          value={otp}
+          onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          inputMode="numeric"
+          placeholder="6 digits"
+          className="w-32 rounded-lg border border-gray-300 px-3 py-1.5 text-sm tracking-widest text-gray-900 focus:border-brand-500 focus:outline-none"
+        />
+        <span className="text-xs text-gray-500">One code per approval. Tier 3 is granted from the user&apos;s page, by a Super Admin.</span>
       </div>
 
       {message && (
