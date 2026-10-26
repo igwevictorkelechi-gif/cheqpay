@@ -21,6 +21,7 @@ import {
 } from "./rates";
 import {
   feeFromBps,
+  getCryptoSettlement,
   getFxSideMarginBps,
   getSwapSpreadBpsFor,
   getUsdtNgnRate,
@@ -36,9 +37,69 @@ import { getProviderBalanceMinor } from "./maplerad/treasury";
 import type { FxCurrency } from "./maplerad/types";
 import { getPriceFeed, type PriceFeed } from "@/market";
 
-/** The internal Asset for a fiat leg maps 1:1 to Maplerad's FX currency code. */
+/** Stablecoins, which Maplerad holds as dollars and pays out of the dollar wallet. */
+function isStablecoin(asset: Asset): boolean {
+  return asset === Asset.USDT || asset === Asset.USDC;
+}
+
+/** Maplerad's FX currency for a rail leg: naira, or dollars (a stablecoin is dollars there). */
 function fxCurrencyOf(asset: Asset): FxCurrency {
-  return asset === Asset.USD ? "USD" : "NGN";
+  return asset === Asset.USD || isStablecoin(asset) ? "USD" : "NGN";
+}
+
+/**
+ * Our minor units per Maplerad minor unit, for a rail leg. Maplerad counts in
+ * kobo and cents, and a stablecoin in cents of its dollar wallet; we count a
+ * stablecoin to 6 places, so one Maplerad cent is 10,000 of ours.
+ */
+function providerScale(asset: Asset): bigint {
+  return isStablecoin(asset) ? 10n ** BigInt(ASSET_DECIMALS[asset] - ASSET_DECIMALS[Asset.USD]) : 1n;
+}
+
+/**
+ * A naira ⇄ USDT/USDC pair. When crypto settlement is "maplerad", it is backed
+ * by the naira ⇄ dollar exchange it amounts to at Maplerad, so the business
+ * holds the dollars behind the stablecoin a customer buys.
+ */
+export function isNgnStablecoinPair(fromAsset: Asset, toAsset: Asset): boolean {
+  return (
+    (fromAsset === Asset.NGN && isStablecoin(toAsset)) ||
+    (toAsset === Asset.NGN && isStablecoin(fromAsset))
+  );
+}
+
+/** Pairs settled by a real exchange on Maplerad's FX rail. */
+function settlesOnFxRail(fromAsset: Asset, toAsset: Asset): boolean {
+  return isNgnUsdPair(fromAsset, toAsset) || isNgnStablecoinPair(fromAsset, toAsset);
+}
+
+/**
+ * The spread kept on a rail exchange. NGN⇄USD has its own per-side FX margin;
+ * a stablecoin buy or sell keeps the crypto buy/sell spread, so backing it at
+ * Maplerad doesn't change which admin setting prices it.
+ */
+function railMarginBps(fromAsset: Asset, toAsset: Asset): Promise<number> {
+  return isNgnUsdPair(fromAsset, toAsset)
+    ? getFxSideMarginBps(fxSideFor(fromAsset))
+    : getSwapSpreadBpsFor(classifySwap(fromAsset, toAsset));
+}
+
+const RAIL_LABEL: Partial<Record<Asset, string>> = {
+  NGN: "naira",
+  USD: "dollars",
+  USDT: "USDT",
+  USDC: "USDC",
+};
+
+/** "Converting naira to dollars isn't available right now. You can still convert dollars to naira." */
+function directionUnavailable(from: Asset, to: Asset): string {
+  if (from === Asset.NGN && isStablecoin(to)) {
+    return `Buying ${to} with naira isn't available right now. You can still sell ${to} for naira.`;
+  }
+  if (to === Asset.NGN && isStablecoin(from)) {
+    return `Selling ${from} for naira isn't available right now. You can still buy ${from} with naira.`;
+  }
+  return `Converting ${RAIL_LABEL[from]} to ${RAIL_LABEL[to]} isn't available right now. You can still convert ${RAIL_LABEL[to]} to ${RAIL_LABEL[from]}.`;
 }
 
 /**
@@ -63,12 +124,7 @@ export function fxQuoteError(err: unknown, from: Asset, to: Asset): ApiError {
     { pair, reason: message.slice(0, 300) }
   );
   if (/not enabled/i.test(message)) {
-    const other = to === Asset.USD ? "dollars to naira" : "naira to dollars";
-    return new ApiError(
-      503,
-      `Converting ${from === Asset.NGN ? "naira to dollars" : "dollars to naira"} isn't available right now. You can still convert ${other}. Nothing was charged.`,
-      "fx_direction_unavailable",
-    );
+    return new ApiError(503, `${directionUnavailable(from, to)} Nothing was charged.`, "fx_direction_unavailable");
   }
   return new ApiError(
     502,
@@ -136,6 +192,19 @@ export async function createQuote(params: {
   cryptoAsset: Asset; // BTC | USDT
   amountInMinor: bigint;
 }) {
+  // A stablecoin bought or sold for naira is backed at Maplerad: priced from a
+  // live naira ⇄ dollar quote and settled by that exchange (see executeFxSwap).
+  if (isStablecoin(params.cryptoAsset) && (await getCryptoSettlement()) === "maplerad") {
+    return createFxConvertQuote({
+      userId: params.userId,
+      tier: params.tier,
+      fromAsset: params.side === "buy" ? Asset.NGN : params.cryptoAsset,
+      toAsset: params.side === "buy" ? params.cryptoAsset : Asset.NGN,
+      amountInMinor: params.amountInMinor,
+      ngnPerCryptoRate: true,
+    });
+  }
+
   const usdtNgnRate = await getUsdtNgnRate();
   if (usdtNgnRate === null) {
     throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
@@ -197,6 +266,10 @@ export async function createConvertQuote(params: {
   // than the synthetic USDT peg. The displayed rate is derived from the two
   // legs Maplerad returns, not from its own `rate` field — see rateFromLegs.
   if (isNgnUsdPair(params.fromAsset, params.toAsset)) {
+    return createFxConvertQuote(params);
+  }
+  // Naira ⇄ stablecoin is backed at Maplerad too, when that is switched on.
+  if (isNgnStablecoinPair(params.fromAsset, params.toAsset) && (await getCryptoSettlement()) === "maplerad") {
     return createFxConvertQuote(params);
   }
 
@@ -267,10 +340,13 @@ function fxSideFor(fromAsset: Asset): FxSide {
 }
 
 /**
- * Price a NGN↔USD convert from a live Maplerad FX quote and persist it with the
- * provider reference, so executeSwap can settle the very same quote. The tier
- * single-tx limit is enforced on the NGN leg (input when selling NGN, output
- * when buying it).
+ * Price a rail swap — NGN↔USD, or NGN↔USDT/USDC backed as NGN↔USD — from a live
+ * Maplerad FX quote and persist it with the provider reference, so executeSwap
+ * can settle the very same quote. The tier single-tx limit is enforced on the
+ * NGN leg (input when selling NGN, output when buying it).
+ *
+ * `ngnPerCryptoRate` stores a stablecoin buy's rate as naira per coin, the way
+ * buy and sell quotes are read by the apps; otherwise the rate is TO per FROM.
  */
 async function createFxConvertQuote(params: {
   userId: string;
@@ -278,16 +354,27 @@ async function createFxConvertQuote(params: {
   fromAsset: Asset;
   toAsset: Asset;
   amountInMinor: bigint;
+  ngnPerCryptoRate?: boolean;
 }) {
+  // Maplerad counts the source in kobo or cents. A stablecoin amount finer
+  // than a cent can't be exchanged, so it is trimmed off and stays with the
+  // user; the quote is for what can actually be exchanged.
+  const scaleIn = providerScale(params.fromAsset);
+  const providerAmount = params.amountInMinor / scaleIn;
+  const amountInMinor = providerAmount * scaleIn;
+  if (providerAmount <= 0n) {
+    throw new ApiError(422, "That amount is too small to convert", "amount_too_small");
+  }
+
   // The exchange is paid out of our business wallet at Maplerad. If it can't
   // cover this amount, Maplerad refuses at execution — after the user has
   // pressed Confirm. Say so now instead. An unreadable balance doesn't block.
   const held = await getProviderBalanceMinor(fxCurrencyOf(params.fromAsset));
-  if (held !== null && held < params.amountInMinor) {
+  if (held !== null && held < providerAmount) {
     console.error("[fx] business wallet too low for a swap — top it up", {
       currency: fxCurrencyOf(params.fromAsset),
       heldMinor: held.toString(),
-      neededMinor: params.amountInMinor.toString(),
+      neededMinor: providerAmount.toString(),
     });
     throw new ApiError(
       503,
@@ -296,12 +383,10 @@ async function createFxConvertQuote(params: {
     );
   }
 
-  // Maplerad's amount is the minor unit of the source currency, which is exactly
-  // our minor unit for NGN (kobo) and USD (cents).
   const fx = await quoteFx({
     sourceCurrency: fxCurrencyOf(params.fromAsset),
     targetCurrency: fxCurrencyOf(params.toAsset),
-    amount: Number(params.amountInMinor),
+    amount: Number(providerAmount),
   }).catch((err) => {
     throw fxQuoteError(err, params.fromAsset, params.toAsset);
   });
@@ -318,8 +403,8 @@ async function createFxConvertQuote(params: {
   // whereas here Maplerad sets the rate and our margin is the slice we keep of
   // the amount it produces. Taken in the asset the user receives, so the
   // difference stays in treasury.
-  const grossOutMinor = BigInt(fx.target.amount);
-  const marginBps = await getFxSideMarginBps(fxSideFor(params.fromAsset));
+  const grossOutMinor = BigInt(fx.target.amount) * providerScale(params.toAsset);
+  const marginBps = await railMarginBps(params.fromAsset, params.toAsset);
   const feeOutMinor = feeFromBps(grossOutMinor, marginBps);
   const amountOutMinor = grossOutMinor - feeOutMinor;
   if (amountOutMinor <= 0n) {
@@ -329,7 +414,7 @@ async function createFxConvertQuote(params: {
       "amount_too_small",
     );
   }
-  const ngnLegMinor = params.fromAsset === Asset.NGN ? params.amountInMinor : amountOutMinor;
+  const ngnLegMinor = params.fromAsset === Asset.NGN ? amountInMinor : amountOutMinor;
   if (!isWithinSingleTxLimit(params.tier, ngnLegMinor)) {
     throw new ApiError(403, "Amount exceeds your per-transaction limit", "single_tx_limit");
   }
@@ -343,13 +428,11 @@ async function createFxConvertQuote(params: {
       fromAsset: params.fromAsset,
       toAsset: params.toAsset,
       // Derived from the legs, not read from fx.rate — see rateFromLegs.
-      rate: rateFromLegs(
-        params.fromAsset,
-        params.amountInMinor,
-        params.toAsset,
-        amountOutMinor,
-      ),
-      amountIn: params.amountInMinor,
+      rate:
+        params.ngnPerCryptoRate && params.fromAsset === Asset.NGN
+          ? rateFromLegs(params.toAsset, amountOutMinor, params.fromAsset, amountInMinor)
+          : rateFromLegs(params.fromAsset, amountInMinor, params.toAsset, amountOutMinor),
+      amountIn: amountInMinor,
       amountOut: amountOutMinor,
       providerRef: fx.reference,
       expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
@@ -387,9 +470,10 @@ export async function executeSwap(params: {
     return { transactionId: existing.id, status: existing.status };
   }
 
-  // NGN↔USD backed by a Maplerad FX quote settles through the real FX rail,
-  // which involves an external call that cannot live inside a DB transaction.
-  if (quote.providerRef && isNgnUsdPair(quote.fromAsset, quote.toAsset)) {
+  // A rail swap (NGN↔USD, or NGN↔stablecoin backed at Maplerad) settles through
+  // the real FX rail, which involves an external call that cannot live inside a
+  // DB transaction.
+  if (quote.providerRef && settlesOnFxRail(quote.fromAsset, quote.toAsset)) {
     return executeFxSwap({ ...params, quote });
   }
 
@@ -542,7 +626,9 @@ export async function executeSwap(params: {
 }
 
 /**
- * Settle a NGN↔USD convert on Maplerad's real FX rail.
+ * Settle a rail swap on Maplerad's real FX rail: a NGN↔USD convert, or a
+ * USDT/USDC buy or sell for naira, which Maplerad settles as NGN↔USD (it keeps
+ * stablecoins as dollars).
  *
  * The exchange is an external, irreversible money movement, so it cannot sit
  * inside a DB transaction. The order is deliberate:
@@ -613,7 +699,7 @@ async function executeFxSwap(params: {
   // The quote is the fallback for a response that does not report an amount.
   const settledGross =
     Number.isInteger(settled?.target?.amount) && settled.target.amount > 0
-      ? BigInt(settled.target.amount)
+      ? BigInt(settled.target.amount) * providerScale(quote.toAsset)
       : null;
 
   // The margin has to come off here too, not just at quote time. This path
@@ -622,7 +708,7 @@ async function executeFxSwap(params: {
   // back — the quote would promise a margin the execution then gives away.
   // When the provider settles exactly what it quoted, this lands on
   // quote.amountOut, so the normal case is unchanged.
-  const marginBps = await getFxSideMarginBps(fxSideFor(quote.fromAsset));
+  const marginBps = await railMarginBps(quote.fromAsset, quote.toAsset);
   const creditMinor =
     settledGross === null ? quote.amountOut : settledGross - feeFromBps(settledGross, marginBps);
   // Our spread on this exchange, in the to-asset, kept on the row for revenue
@@ -645,7 +731,9 @@ async function executeFxSwap(params: {
     });
   }
 
-  // 3. Credit + record.
+  // 3. Credit + record. A stablecoin buy or sell is still recorded, named and
+  // rewarded as the buy or sell it is; only how it settled differs.
+  const kind = classifySwap(quote.fromAsset, quote.toAsset);
   let result: { transactionId: string; status: TransactionStatus };
   try {
     result = await prisma.$transaction(async (db) => {
@@ -657,14 +745,20 @@ async function executeFxSwap(params: {
       const record = await db.transaction.create({
         data: {
           userId: params.userId,
-          type: TransactionType.CONVERT,
-          asset: quote.fromAsset,
-          amount: quote.amountIn,
+          type:
+            kind === "buy"
+              ? TransactionType.BUY
+              : kind === "sell"
+              ? TransactionType.SELL
+              : TransactionType.CONVERT,
+          asset: kind === "buy" ? quote.toAsset : quote.fromAsset,
+          amount: kind === "buy" ? creditMinor : quote.amountIn,
           status: TransactionStatus.COMPLETED,
           idempotencyKey: params.idempotencyKey,
           quoteId: quote.id,
           metadata: {
-            kind: "convert",
+            kind,
+            ...(kind === "convert" ? {} : { side: kind }),
             rail: "maplerad_fx",
             providerRef: quote.providerRef,
             fromAsset: quote.fromAsset,
@@ -683,7 +777,7 @@ async function executeFxSwap(params: {
       await db.auditLog.create({
         data: {
           userId: params.userId,
-          action: "swap.fx",
+          action: kind === "convert" ? "swap.fx" : `swap.${kind}`,
           resourceType: "Transaction",
           resourceId: record.id,
           details: {
@@ -717,16 +811,32 @@ async function executeFxSwap(params: {
     );
   }
 
+  // Cashback on the NGN leg of a buy or sell, as on any other buy or sell.
+  if (kind !== "convert") {
+    await awardCashback({
+      userId: params.userId,
+      source: "trade",
+      baseNgnMinor: quote.fromAsset === Asset.NGN ? quote.amountIn : creditMinor,
+      sourceTransactionId: result.transactionId,
+    });
+  }
+
   // Confirmation (best-effort, after commit).
-  const fmtFiat = (m: bigint, a: Asset) =>
-    a === Asset.USD ? `$${fromMinorUnits(m, a)}` : `₦${fromMinorUnits(m, Asset.NGN)}`;
+  const fmt = (m: bigint, a: Asset) =>
+    a === Asset.USD
+      ? `$${fromMinorUnits(m, a)}`
+      : a === Asset.NGN
+      ? `₦${fromMinorUnits(m, a)}`
+      : `${fromMinorUnits(m, a)} ${a}`;
   await notifyUser(params.userId, {
     category: "trades",
-    title: "Conversion complete",
-    body: `Converted ${fmtFiat(quote.amountIn, quote.fromAsset)} to ${fmtFiat(
-      creditMinor,
-      quote.toAsset,
-    )}.`,
+    title: kind === "buy" ? "Purchase complete" : kind === "sell" ? "Sale complete" : "Conversion complete",
+    body:
+      kind === "buy"
+        ? `Bought ${fmt(creditMinor, quote.toAsset)} for ${fmt(quote.amountIn, quote.fromAsset)}.`
+        : kind === "sell"
+        ? `Sold ${fmt(quote.amountIn, quote.fromAsset)} for ${fmt(creditMinor, quote.toAsset)}.`
+        : `Converted ${fmt(quote.amountIn, quote.fromAsset)} to ${fmt(creditMinor, quote.toAsset)}.`,
     data: { transactionId: result.transactionId },
   });
 

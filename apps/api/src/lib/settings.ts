@@ -17,6 +17,11 @@ export const SETTING_KEYS = {
   // "maplerad": USDT_NGN_RATE follows Maplerad's live dollar rate (see
   // lib/usdtRate.ts). "manual": it is whatever an admin last typed.
   USDT_NGN_RATE_SOURCE: "usdt_ngn_rate_source",
+  // "maplerad": buying or selling USDT/USDC for naira makes the matching
+  // naira ⇄ dollar exchange at Maplerad, so the business wallets back what
+  // customers hold (Maplerad keeps stablecoins as dollars). "ledger": the trade
+  // only moves CheqPay's own balances.
+  CRYPTO_SETTLEMENT: "crypto_settlement",
   // Business fees, admin-set from the dashboard. Defaults are the price sheet
   // in PRICING_DEFAULTS: Maplerad's cost to us plus a CheqPay margin.
   DEPOSIT_FEE_BPS: "deposit_fee_bps", // % of each NGN deposit, in basis points
@@ -167,6 +172,25 @@ export async function getUsdtNgnRateSource(): Promise<UsdtNgnRateSource> {
 
 export async function setUsdtNgnRateSource(source: UsdtNgnRateSource, updatedBy?: string): Promise<void> {
   await upsertSetting(SETTING_KEYS.USDT_NGN_RATE_SOURCE, source, updatedBy);
+}
+
+export type CryptoSettlement = "maplerad" | "ledger";
+
+/**
+ * Whether USDT/USDC trades against naira are backed at Maplerad. On by default
+ * whenever Maplerad is configured; without it there is nowhere to back them.
+ */
+export async function getCryptoSettlement(): Promise<CryptoSettlement> {
+  if (!process.env.MAPLERAD_SECRET_KEY) return "ledger";
+  const value = await cachedSetting(SETTING_KEYS.CRYPTO_SETTLEMENT, async () => {
+    const row = await prisma.platformSetting.findUnique({ where: { key: SETTING_KEYS.CRYPTO_SETTLEMENT } });
+    return row?.value ?? null;
+  });
+  return value === "ledger" ? "ledger" : "maplerad";
+}
+
+export async function setCryptoSettlement(mode: CryptoSettlement, updatedBy?: string): Promise<void> {
+  await upsertSetting(SETTING_KEYS.CRYPTO_SETTLEMENT, mode, updatedBy);
 }
 
 /** The rate with where it came from and when, for pricing and the admin page. */
