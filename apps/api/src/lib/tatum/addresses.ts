@@ -122,9 +122,12 @@ export async function ensureTatumWallet(
  * Best-effort per combination: one chain being unreachable must not stop the
  * others from being minted.
  */
-export async function ensureTatumWalletsForUser(userId: string): Promise<number> {
+export async function ensureTatumWalletsForUser(
+  userId: string,
+  networks: Network[] = tatumNetworks(),
+): Promise<number> {
   let minted = 0;
-  for (const network of tatumNetworks()) {
+  for (const network of networks) {
     for (const asset of CHAIN_ASSETS[network] ?? []) {
       try {
         const out = await ensureTatumWallet(userId, asset, network);

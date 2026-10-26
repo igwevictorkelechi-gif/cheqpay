@@ -49,6 +49,15 @@ export function isWithdrawableNetwork(network: Network): boolean {
   return WITHDRAWABLE_NETWORKS.includes(network);
 }
 
+/**
+ * The chains a stablecoin can be received on. Every chain while the off-ramp is
+ * on (the others convert arrivals to dollars); only the withdrawable ones while
+ * it is off, since unconverted coin on any other chain could never be sent out.
+ */
+export function depositNetworks(offrampOn: boolean): Network[] {
+  return CRYPTO_NETWORKS.filter((n) => offrampOn || isWithdrawableNetwork(n));
+}
+
 /** Is this pair one we can mint at all (not just one we auto-provision)? */
 export function isSupportedWallet(asset: Asset, network: Network): boolean {
   return AVAILABLE_WALLETS.some((w) => w.asset === asset && w.network === network);

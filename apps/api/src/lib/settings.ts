@@ -22,6 +22,11 @@ export const SETTING_KEYS = {
   // customers hold (Maplerad keeps stablecoins as dollars). "ledger": the trade
   // only moves CheqPay's own balances.
   CRYPTO_SETTLEMENT: "crypto_settlement",
+  // "on": USDT/USDC addresses on chains Maplerad can't send from (everything
+  // but Solana) are minted as off-ramp addresses, converting arrivals to
+  // dollars. "off" (the default): nothing is converted, so only Solana is
+  // offered for receiving.
+  CRYPTO_OFFRAMP: "crypto_offramp",
   // Business fees, admin-set from the dashboard. Defaults are the price sheet
   // in PRICING_DEFAULTS: Maplerad's cost to us plus a CheqPay margin.
   DEPOSIT_FEE_BPS: "deposit_fee_bps", // % of each NGN deposit, in basis points
@@ -191,6 +196,19 @@ export async function getCryptoSettlement(): Promise<CryptoSettlement> {
 
 export async function setCryptoSettlement(mode: CryptoSettlement, updatedBy?: string): Promise<void> {
   await upsertSetting(SETTING_KEYS.CRYPTO_SETTLEMENT, mode, updatedBy);
+}
+
+/** Whether new stablecoin deposit addresses may convert arrivals to dollars. Off unless switched on. */
+export async function getCryptoOfframp(): Promise<boolean> {
+  const value = await cachedSetting(SETTING_KEYS.CRYPTO_OFFRAMP, async () => {
+    const row = await prisma.platformSetting.findUnique({ where: { key: SETTING_KEYS.CRYPTO_OFFRAMP } });
+    return row?.value ?? null;
+  });
+  return value === "on";
+}
+
+export async function setCryptoOfframp(on: boolean, updatedBy?: string): Promise<void> {
+  await upsertSetting(SETTING_KEYS.CRYPTO_OFFRAMP, on ? "on" : "off", updatedBy);
 }
 
 /** The rate with where it came from and when, for pricing and the admin page. */

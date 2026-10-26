@@ -230,6 +230,8 @@ export const platformSettingsUpdateSchema = z
     usdtNgnRateSource: z.enum(["maplerad", "manual"]).optional(),
     /** Back naira ⇄ USDT/USDC trades with a real exchange at Maplerad, or keep them on CheqPay's books. */
     cryptoSettlement: z.enum(["maplerad", "ledger"]).optional(),
+    /** Let new non-Solana stablecoin addresses convert arrivals to dollars. */
+    cryptoOfframp: z.boolean().optional(),
     /** Deposit fee in basis points (max 5%). */
     depositFeeBps: z.number().int().min(0).max(500).optional(),
     /** Flat withdrawal fee in NGN (max ₦10,000). */

@@ -4,7 +4,8 @@ import { jsonOk, toErrorResponse } from "@/lib/http";
 import { getManualWallets, MANUAL_ASSETS } from "@/lib/manualCrypto";
 import { getFeatureFlags } from "@/lib/features";
 import { listWallets, provisionWalletsDetailed } from "@/lib/wallets";
-import { CRYPTO_COINS, CRYPTO_NETWORKS } from "@/lib/assets";
+import { CRYPTO_COINS, depositNetworks, isWithdrawableNetwork } from "@/lib/assets";
+import { getCryptoOfframp } from "@/lib/settings";
 import { rateLimit } from "@/lib/ratelimit";
 import { tatumNetworks } from "@/lib/tatum/config";
 import { ensureTatumWalletsForUser } from "@/lib/tatum/addresses";
@@ -44,11 +45,19 @@ export async function GET(req: Request) {
     // one after another. This endpoint is on the path the receive screen opens
     // with, and on a cold lambda three sequential round trips to Postgres is
     // most of what the user experiences as "loading".
-    const [flags, wallets0, manual] = await Promise.all([
+    const [flags, allWallets, manual, offrampOn] = await Promise.all([
       getFeatureFlags(),
       listWallets(auth.id),
       getManualWallets(),
+      getCryptoOfframp(),
     ]);
+    // While the off-ramp is off, only chains a coin can be sent out from are
+    // offered. An older off-ramp address on another chain still converts what
+    // arrives (that is set at Maplerad when it was minted), but it is no longer
+    // handed out.
+    const receivable = (ws: typeof allWallets) =>
+      offrampOn ? ws : ws.filter((w) => isWithdrawableNetwork(w.network));
+    const wallets0 = receivable(allWallets);
 
     // Kill switch: with crypto deposits off, every asset reads as
     // "Coming soon" in the apps (empty list) rather than erroring.
@@ -68,7 +77,8 @@ export async function GET(req: Request) {
     let wallets = wallets0;
     let blocked: string | undefined;
     let mintError: string | undefined;
-    const wantTatum = tatumNetworks().length > 0;
+    const tatumChains = tatumNetworks().filter((n) => offrampOn || isWithdrawableNetwork(n));
+    const wantTatum = tatumChains.length > 0;
     if (wallets.length === 0 || wantTatum) {
       if (rateLimit(`mint:auto:${auth.id}`, 1, 60_000).allowed) {
         // Tatum first where it is configured: those addresses are watched by a
@@ -80,10 +90,10 @@ export async function GET(req: Request) {
         // change underneath them — so an account minted before Tatum keeps its
         // old addresses and gains watched ones for any chain it lacked.
         if (wantTatum) {
-          await ensureTatumWalletsForUser(auth.id).catch((err) => {
+          await ensureTatumWalletsForUser(auth.id, tatumChains).catch((err) => {
             console.error("[deposit-addresses] tatum provisioning failed", err);
           });
-          wallets = await listWallets(auth.id);
+          wallets = receivable(await listWallets(auth.id));
         }
 
         if (wallets.length === 0) {
@@ -91,7 +101,7 @@ export async function GET(req: Request) {
             console.error("[deposit-addresses] provisioning failed", err);
             return { wallets: [], outcomes: [], blocked: String(err) };
           });
-          wallets = report.wallets;
+          wallets = receivable(report.wallets);
           blocked = report.blocked;
           mintError = report.outcomes.find((o) => o.status === "failed")?.error;
         }
@@ -141,7 +151,7 @@ export async function GET(req: Request) {
 
     // Which chains the user could additionally request, so the client can offer
     // a network selector without hardcoding the list.
-    const networks = CRYPTO_NETWORKS.map((n) => ({
+    const networks = depositNetworks(offrampOn).map((n) => ({
       network: n,
       label: NETWORK_LABELS[n] ?? String(n),
     }));
