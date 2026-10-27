@@ -26,7 +26,7 @@
 import { enforceRateLimit } from "./ratelimit";
 import { after } from "next/server";
 import { prisma } from "@cheqpay/db";
-import { requireAdmin, requireUser, isAdminUser } from "./auth";
+import { requireAdmin, requireUser, isAdminUser, subAdminStateFor } from "./auth";
 import { getEnv } from "./env";
 import { ApiError, ForbiddenError } from "./http";
 import { consumeAdminOtp, isAdminOtpConfigured } from "./totp";
@@ -34,6 +34,8 @@ import { notifyAdminAlert } from "./adminAlert";
 import { isEmailConfigured, sendEmail } from "./email";
 import { clientIp } from "./requestContext";
 import { assertSessionCurrent } from "./adminSession";
+import { ADMIN_SECTION_IDS, type AdminSection } from "./adminSections";
+import { consumeSubAdminOtp } from "./adminCreds";
 
 export { getAdminSessionEpoch, rotateAdminSessionEpoch } from "./adminSession";
 
@@ -42,6 +44,8 @@ export type AdminRole = "admin" | "super";
 export interface AdminActor {
   email: string;
   role: AdminRole;
+  /** The dashboard sections this admin may use: all of them for a Super Admin. */
+  sections: AdminSection[];
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +74,7 @@ function hasServiceSecret(req: Request): boolean {
  */
 export async function requireAdminActor(
   req: Request,
-  opts: { superOnly?: boolean } = {},
+  opts: { superOnly?: boolean; section?: AdminSection } = {},
 ): Promise<AdminActor> {
   await requireAdmin(req);
 
@@ -86,10 +90,12 @@ export async function requireAdminActor(
       );
     }
     await assertSessionCurrent(req);
-    actor = { email, role };
+    const sections = role === "super" ? [...ADMIN_SECTION_IDS] : (await subAdminStateFor(req, email)).sections;
+    actor = { email, role, sections };
   } else {
     const auth = await requireUser(req);
-    actor = { email: (auth.email ?? "").toLowerCase(), role: isAdminUser(auth) ? "super" : "admin" };
+    const role = isAdminUser(auth) ? "super" : "admin";
+    actor = { email: (auth.email ?? "").toLowerCase(), role, sections: role === "super" ? [...ADMIN_SECTION_IDS] : [] };
     if (!looksLikeEmail(actor.email)) {
       throw new ApiError(401, "Admin identity could not be established.", "admin_identity_required");
     }
@@ -98,7 +104,18 @@ export async function requireAdminActor(
   if (opts.superOnly && actor.role !== "super") {
     throw new ForbiddenError("Only a Super Admin can do this.");
   }
+  // A section's routes: a Super Admin, or a sub admin who was granted it.
+  if (opts.section && !actor.sections.includes(opts.section)) {
+    throw new ForbiddenError("You don't have access to this part of the dashboard. A Super Admin can grant it from Roles & Access.");
+  }
   return actor;
+}
+
+/** The dashboard sub admin making this request, or null for a Super Admin or a non-dashboard caller. */
+function subAdminActorEmail(req: Request): string | null {
+  if (!hasServiceSecret(req) || req.headers.get("x-admin-role") === "super") return null;
+  const email = (req.headers.get("x-admin-actor") ?? "").trim().toLowerCase();
+  return looksLikeEmail(email) ? email : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +130,10 @@ export async function requireAdminActor(
  * an action that needs a second factor must not quietly proceed without one.
  */
 export async function requireAdminOtp(req: Request, bodyOtp?: unknown): Promise<void> {
+  // A sub admin confirms with their own authenticator, never the owner's.
+  const subAdmin = subAdminActorEmail(req);
+  if (subAdmin) return requireSubAdminOtp(req, subAdmin, bodyOtp);
+
   if (!(await isAdminOtpConfigured())) {
     throw new ApiError(
       403,
@@ -128,6 +149,28 @@ export async function requireAdminOtp(req: Request, bodyOtp?: unknown): Promise<
   // can't be walked 10 at a time.
   await enforceRateLimit("admin-otp-attempts", 10, 15 * 60_000);
   if (!(await consumeAdminOtp(code))) {
+    throw new ApiError(
+      403,
+      "That code didn’t work. Codes can only be used once — wait for the next one and try again.",
+      "bad_otp",
+    );
+  }
+}
+
+async function requireSubAdminOtp(req: Request, email: string, bodyOtp?: unknown): Promise<void> {
+  if (!(await subAdminStateFor(req, email)).otpEnrolled) {
+    throw new ApiError(
+      403,
+      "Set up your own authenticator first: Account → Authenticator in the menu.",
+      "otp_not_configured",
+    );
+  }
+  const code = String(req.headers.get("x-admin-otp") ?? bodyOtp ?? "").replace(/\D/g, "");
+  if (code.length !== 6) {
+    throw new ApiError(403, "Enter the 6-digit code from your authenticator app.", "otp_required");
+  }
+  await enforceRateLimit(`admin-otp-attempts:${email}`, 10, 15 * 60_000);
+  if (!(await consumeSubAdminOtp(email, code))) {
     throw new ApiError(
       403,
       "That code didn’t work. Codes can only be used once — wait for the next one and try again.",

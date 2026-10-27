@@ -13,6 +13,9 @@ const h = vi.hoisted(() => ({
   email: vi.fn(),
   emailOn: vi.fn(() => true),
   webhook: vi.fn(),
+  adminPush: vi.fn(),
+  mainAdmin: vi.fn(),
+  subAdmins: vi.fn(),
   env: { ADMIN_EMAILS: "Owner@CheqPay.com, ops@cheqpay.com,not-an-email" } as Record<string, string | undefined>,
 }));
 
@@ -38,6 +41,8 @@ vi.mock("./webPush", () => ({ sendWebPush: h.webPush }));
 vi.mock("./email", () => ({ sendEmail: h.email, isEmailConfigured: h.emailOn }));
 vi.mock("./adminAlert", () => ({ notifyAdminAlert: h.webhook }));
 vi.mock("./env", () => ({ getEnv: () => h.env }));
+vi.mock("./adminPush", () => ({ sendAdminPush: h.adminPush }));
+vi.mock("./adminCreds", () => ({ getAdminEmail: h.mainAdmin, listSubAdmins: h.subAdmins }));
 vi.mock("./pii", () => ({
   encryptPii: (s: string) => `enc(${s})`,
   decryptPii: (s: string) => s.replace(/^enc\((.*)\)$/, "$1"),
@@ -202,11 +207,20 @@ describe("alertAdminsNewGiftCard", () => {
   } as unknown as Parameters<typeof alertAdminsNewGiftCard>[1];
 
   beforeEach(() => {
-    for (const f of [h.query, h.push, h.webPush, h.email, h.webhook]) f.mockReset();
+    for (const f of [h.query, h.push, h.webPush, h.email, h.webhook, h.adminPush, h.mainAdmin, h.subAdmins]) f.mockReset();
     h.push.mockResolvedValue(1); h.webPush.mockResolvedValue(1); h.email.mockResolvedValue({ id: "e" }); h.webhook.mockResolvedValue(undefined);
+    h.adminPush.mockResolvedValue(1);
     h.emailOn.mockReturnValue(true);
+    h.mainAdmin.mockResolvedValue("admin@cheqpay.com");
+    // Two reviewers with Gift cards; one sub admin who only has Ads, and one
+    // who never set a password, hear nothing about gift cards.
+    h.subAdmins.mockResolvedValue([
+      { email: "ops@cheqpay.com", status: "active", sections: ["giftcards"] },
+      { email: "Reviewer@CheqPay.com", status: "pending", sections: ["giftcards", "users"] },
+      { email: "ads@cheqpay.com", status: "active", sections: ["ads"] },
+      { email: "new@cheqpay.com", status: "no_password", sections: ["giftcards"] },
+    ]);
     h.query.mockImplementation(async (sql: string, ...args: unknown[]) => {
-      if (sql.includes("FROM admin_accounts")) return [{ email: "ops@cheqpay.com" }, { email: "Reviewer@CheqPay.com" }];
       if (sql.includes("legal_name FROM app_users")) return [{ email: "tolu@example.com", legal_name: "Tolu Adeyemi" }];
       if (sql.includes("lower(email) = ANY")) {
         const wanted = args[0] as string[];
@@ -228,6 +242,12 @@ describe("alertAdminsNewGiftCard", () => {
     expect(msg.category).toBe("trades");
     expect(h.email.mock.calls.map((c) => c[0].to)).toEqual(["owner@cheqpay.com", "ops@cheqpay.com", "reviewer@cheqpay.com"]);
     expect(h.webhook).toHaveBeenCalledTimes(1);
+    // An alert on each of their admin dashboards, and the main admin login's,
+    // opening Gift cards. The main login gets no email: it isn't a mailbox.
+    expect(h.adminPush).toHaveBeenCalledWith(
+      ["owner@cheqpay.com", "ops@cheqpay.com", "reviewer@cheqpay.com", "admin@cheqpay.com"],
+      expect.objectContaining({ title: "New gift card to review", url: "/gift-cards", tag: "giftcards" }),
+    );
   });
 
   it("skips email when it isn't configured and survives every channel failing", async () => {
@@ -235,13 +255,16 @@ describe("alertAdminsNewGiftCard", () => {
     h.push.mockRejectedValue(new Error("expo down"));
     h.webPush.mockRejectedValue(new Error("vapid"));
     h.webhook.mockRejectedValue(new Error("hook"));
+    h.adminPush.mockRejectedValue(new Error("push service down"));
     await expect(alertAdminsNewGiftCard("user-1", trade)).resolves.toBeUndefined();
     expect(h.email).not.toHaveBeenCalled();
   });
 
   it("still posts the webhook when there are no admin emails", async () => {
     h.env.ADMIN_EMAILS = "";
-    h.query.mockImplementation(async (sql: string) => (sql.includes("FROM admin_accounts") ? Promise.reject(new Error("no table")) : []));
+    h.mainAdmin.mockRejectedValue(new Error("db down"));
+    h.subAdmins.mockRejectedValue(new Error("no table"));
+    h.query.mockResolvedValue([]);
     await alertAdminsNewGiftCard("user-1", trade);
     expect(h.push).not.toHaveBeenCalled();
     expect(h.email).not.toHaveBeenCalled();

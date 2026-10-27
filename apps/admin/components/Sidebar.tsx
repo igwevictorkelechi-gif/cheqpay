@@ -9,7 +9,12 @@ import {
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
   Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search,
   ShieldAlert, Monitor, Ban, Package, ShoppingBag, Ticket, CalendarDays, ScanLine, Gift, Percent, ListChecks, Code2, SlidersHorizontal, Globe2, Image as ImageIcon, type LucideIcon } from 'lucide-react';
-import { subAdminAccess, SUB_ADMIN_PASSWORD_PAGE, type AdminRole } from '@/lib/adminAuth';
+import {
+  subAdminAccess,
+  SUB_ADMIN_AUTHENTICATOR_PAGE,
+  SUB_ADMIN_PASSWORD_PAGE,
+  type AdminRole,
+} from '@/lib/adminAuth';
 
 type Item = { label: string; href: string; icon: LucideIcon };
 type Category = { label: string; icon: LucideIcon; items: Item[] };
@@ -141,6 +146,9 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [role, setRole] = useState<AdminRole | null>(null);
+  // A sub admin's granted sections, fresh from the backend on every page load
+  // (the same call re-signs their session when a Super Admin changed them).
+  const [sections, setSections] = useState<string[]>([]);
   const [pendingWithdrawals, setPendingWithdrawals] = useState(0);
   useEffect(() => {
     fetch('/api/auth')
@@ -148,14 +156,15 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
       .then((d) => {
         setEmail(d.email ?? null);
         setRole(d.role ?? null);
+        setSections(Array.isArray(d.sections) ? d.sections : []);
       })
       .catch(() => {});
   }, []);
   // Live count of withdrawals awaiting review — surfaced as a nav badge so the
   // admin sees queued payouts the moment they open the dashboard.
   useEffect(() => {
-    // Only Super Admins review withdrawals; sub admins aren't allowed the data.
-    if (role !== 'super') return;
+    // Only those who review withdrawals see the count; others aren't allowed the data.
+    if (role !== 'super' && !sections.includes('withdrawals')) return;
     let active = true;
     const poll = () =>
       fetch('/api/withdrawals', { cache: 'no-store' })
@@ -165,7 +174,7 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
     poll();
     const id = setInterval(poll, 60_000);
     return () => { active = false; clearInterval(id); };
-  }, [role]);
+  }, [role, sections]);
   const logout = async () => {
     try {
       await fetch('/api/auth', { method: 'DELETE' });
@@ -178,11 +187,12 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
     for (const c of categories) init[c.label] = true;
     return init;
   });
-  const toggle = (label: string) => setOpenCats((s) => ({ ...s, [label]: !s[label] }));
+  const toggle = (label: string) => setOpenCats((s) => ({ ...s, [label]: !(s[label] ?? true) }));
 
-  // Sub admins see only what they may open (Dashboard, Analytics) plus their
-  // own password page. While the role is still loading (null) we treat it as
-  // a sub admin, so a restricted link never flashes.
+  // Sub admins see only what they may open (Dashboard, Analytics, the sections
+  // a Super Admin granted them) plus their own account pages. While the role is
+  // still loading (null) we treat it as a sub admin, so a restricted link never
+  // flashes.
   const canSuper = role === 'super';
   const visibleCategories = (
     canSuper
@@ -192,13 +202,16 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
           {
             label: 'Account',
             icon: KeyRound,
-            items: [{ label: 'Change password', href: SUB_ADMIN_PASSWORD_PAGE, icon: KeyRound }],
+            items: [
+              { label: 'Change password', href: SUB_ADMIN_PASSWORD_PAGE, icon: KeyRound },
+              { label: 'Authenticator', href: SUB_ADMIN_AUTHENTICATOR_PAGE, icon: ShieldCheck },
+            ],
           },
         ]
   )
     .map((cat) => ({
       ...cat,
-      items: cat.items.filter((i) => canSuper || subAdminAccess(i.href, 'GET', false) === 'allow'),
+      items: cat.items.filter((i) => canSuper || subAdminAccess(i.href, 'GET', false, sections) === 'allow'),
     }))
     .filter((cat) => cat.items.length > 0);
   const profileHref = canSuper ? '/profile' : SUB_ADMIN_PASSWORD_PAGE;
@@ -231,7 +244,7 @@ export default function Sidebar({ open = false, onClose }: { open?: boolean; onC
         <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1">
           {visibleCategories.map((cat) => {
             const CatIcon = cat.icon;
-            const expanded = openCats[cat.label];
+            const expanded = openCats[cat.label] ?? true;
             const hasActive = cat.items.some((i) => i.href === pathname);
             return (
               <div key={cat.label}>

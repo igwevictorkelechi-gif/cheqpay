@@ -40,7 +40,7 @@ function view(s: AdsSettings) {
 
 export async function GET(req: Request) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "ads" });
     return jsonOk({ settings: view(await getAdsSettings()) });
   } catch (err) {
     return toErrorResponse(err);
@@ -50,7 +50,7 @@ export async function GET(req: Request) {
 /** Prices in ₦ per day. Changes what every new campaign costs, so it needs a fresh code. */
 export async function POST(req: Request) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "ads" });
     await requireAdminOtp(req);
     const b = schema.parse(await req.json());
     const saved = await setAdsSettings(

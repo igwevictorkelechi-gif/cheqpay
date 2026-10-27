@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 /** The business's registration certificate, decrypted for review. Every view is recorded. */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "developers" });
     const { id } = await params;
     const account = /^[0-9a-f-]{36}$/i.test(id) ? await getAccount(id) : null;
     if (!account?.cac_file_id) throw new ApiError(404, "No document on file", "not_found");

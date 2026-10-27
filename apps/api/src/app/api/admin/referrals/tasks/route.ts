@@ -22,7 +22,7 @@ const schema = z.object({
 
 export async function GET(req: Request) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "referrals" });
     return jsonOk({ tasks: await listTasksAdmin(), metrics: TASK_METRICS });
   } catch (err) {
     return toErrorResponse(err);
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 /** Create or edit a task. Tasks pay out, so saving needs a fresh code. */
 export async function POST(req: Request) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "referrals" });
     await requireAdminOtp(req);
     const b = schema.parse(await req.json());
     const target =

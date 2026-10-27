@@ -2,7 +2,7 @@ import { hasAdminServiceSecret } from "@/lib/auth";
 import { prisma } from "@cheqpay/db";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
-import { verifyAdminLogin, getAdminEmail, verifySubAdminLogin } from "@/lib/adminCreds";
+import { verifyAdminLogin, getAdminEmail, verifySubAdminLogin, consumeSubAdminOtp } from "@/lib/adminCreds";
 import { consumeAdminOtp, isAdminOtpConfigured } from "@/lib/totp";
 import { getAdminSessionEpoch } from "@/lib/adminSession";
 import { clientIp } from "@/lib/requestContext";
@@ -21,9 +21,10 @@ export const dynamic = "force-dynamic";
  *
  * Two kinds of login:
  *  - the main admin login (always a Super Admin), and
- *  - a sub admin's own login, set by a Super Admin. Sub admins can only see the
- *    Dashboard and Analytics, so they don't need the admin authenticator; they
- *    must replace their starting password on first sign-in.
+ *  - a sub admin's own login, set by a Super Admin. They must replace their
+ *    starting password on first sign-in. Once they have enrolled their own
+ *    authenticator (needed for the money-moving parts a Super Admin can grant
+ *    them), signing in takes a code from it too.
  *
  * Returns the canonical email, role, whether the password must be changed, and
  * the current session epoch; the admin app signs these into its session cookie.
@@ -69,14 +70,25 @@ export async function POST(req: Request) {
         await audit("admin.login.failed", ip, { email: email.toLowerCase().slice(0, 200), reason: "bad_credentials" });
         return jsonOk({ error: "Invalid email or password", code: "bad_credentials" }, 401);
       }
-      await audit("admin.login.succeeded", ip, { email: sub.email, role: "admin", subAdmin: true });
+      if (sub.otpEnrolled) {
+        const otp = String(body.otp ?? "").replace(/\D/g, "");
+        if (!otp) {
+          return jsonOk({ error: "Enter the code from your authenticator app", code: "otp_required" }, 401);
+        }
+        if (!(await consumeSubAdminOtp(sub.email, otp))) {
+          await audit("admin.login.failed", ip, { email: sub.email, reason: "bad_otp", subAdmin: true });
+          return jsonOk({ error: "That code didn't work. Wait for the next one and try again.", code: "bad_otp" }, 401);
+        }
+      }
+      await audit("admin.login.succeeded", ip, { email: sub.email, role: "admin", subAdmin: true, secondFactor: sub.otpEnrolled });
       return jsonOk({
         ok: true,
         email: sub.email,
         role: "admin",
         mustChangePassword: sub.mustChange,
+        sections: sub.sections,
         epoch: await getAdminSessionEpoch(),
-        otpConfigured: await isAdminOtpConfigured(),
+        otpConfigured: sub.otpEnrolled,
       });
     }
 

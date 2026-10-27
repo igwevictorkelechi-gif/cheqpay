@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /** Approve (pays the task reward after the hold — needs a fresh code) or reject a proof submission. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "referrals" });
     const { id } = await params;
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ApiError(404, "Not found", "not_found");
     const b = z.object({ approve: z.boolean(), reason: z.string().max(300).optional() }).parse(await req.json());

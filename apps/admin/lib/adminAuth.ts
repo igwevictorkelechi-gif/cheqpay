@@ -5,6 +5,8 @@
 // middleware and Node route handlers and can't be forged. Uses Web Crypto,
 // available in both runtimes.
 
+import { cleanSections, inSections, type AdminSection } from "./adminSections";
+
 export const SESSION_COOKIE = "cheqpay_admin";
 
 export type AdminRole = "admin" | "super";
@@ -18,6 +20,12 @@ export interface SessionInfo {
   epoch: string;
   /** A sub admin still on the starting password a Super Admin gave them. */
   mustChangePassword: boolean;
+  /**
+   * The extra sections a Super Admin has granted a sub admin, as of the last
+   * refresh (every page load asks the backend again). Empty for a Super Admin,
+   * who has everything anyway.
+   */
+  sections: AdminSection[];
 }
 
 /**
@@ -28,14 +36,18 @@ export interface SessionInfo {
  */
 export const SESSION_MAX_AGE_S = 60 * 60 * 8;
 
-// Sub admins (role "admin") see the Dashboard and Analytics and nothing else.
-// Everything not listed here is refused for them, so a new page or proxy is
-// Super-Admin-only until someone decides otherwise. The backend enforces the
-// same list on its side.
+// Sub admins (role "admin") see the Dashboard and Analytics, their own account
+// pages, and the sections a Super Admin has granted them (adminSections.ts).
+// Everything else is refused for them, so a new page or proxy is
+// Super-Admin-only until someone puts it in a section. The backend enforces the
+// same rules on its side.
 export const SUB_ADMIN_PASSWORD_PAGE = "/account/password";
-const SUB_ADMIN_PAGES = ["/", "/dashboard", "/analytics", "/live-map", SUB_ADMIN_PASSWORD_PAGE];
+export const SUB_ADMIN_AUTHENTICATOR_PAGE = "/account/authenticator";
+const SUB_ADMIN_PAGES = ["/", "/dashboard", "/analytics", "/live-map", SUB_ADMIN_AUTHENTICATOR_PAGE];
 const SUB_ADMIN_READ_APIS = ["/api/analytics", "/api/transactions", "/api/live-map"];
 const SUB_ADMIN_ALWAYS_APIS = ["/api/auth", "/api/account/password"];
+/** Their own authenticator and alert subscriptions. */
+const SUB_ADMIN_OWN_APIS = ["/api/account/otp", "/api/push"];
 
 export type SubAdminDecision = "allow" | "change_password" | "denied";
 
@@ -43,16 +55,18 @@ export function subAdminAccess(
   pathname: string,
   method: string,
   mustChangePassword: boolean,
+  sections: readonly string[] = [],
 ): SubAdminDecision {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   if (path.startsWith("/api/")) {
     if (SUB_ADMIN_ALWAYS_APIS.includes(path)) return "allow";
     if (mustChangePassword) return "change_password";
+    if (SUB_ADMIN_OWN_APIS.includes(path) || inSections(path, sections)) return "allow";
     return (method === "GET" || method === "HEAD") && SUB_ADMIN_READ_APIS.includes(path) ? "allow" : "denied";
   }
   if (path === SUB_ADMIN_PASSWORD_PAGE) return "allow";
   if (mustChangePassword) return "change_password";
-  return SUB_ADMIN_PAGES.includes(path) ? "allow" : "denied";
+  return SUB_ADMIN_PAGES.includes(path) || inSections(path, sections) ? "allow" : "denied";
 }
 
 /** Secret used to sign the session. Falls back to the API secret if set. */
@@ -95,14 +109,16 @@ export function timingSafeEqual(a: string, b: string): boolean {
 /**
  * Build the signed session cookie value for an authenticated admin.
  *
- * Format (v3):
- *   b64url(email).b64url(role).iat.b64url(epoch).flags.hmac(`session:v3:${email}:${role}:${iat}:${epoch}:${flags}`)
+ * Format (v4):
+ *   b64url(email).b64url(role).iat.b64url(epoch).flags.b64url(sections).hmac(`session:v4:${email}:${role}:${iat}:${epoch}:${flags}:${sections}`)
  *
  * Everything that decides what the session may do — who, which role, when it
- * was issued, which epoch, whether the password must still be changed — is
- * under the signature, so none of it can be edited client-side. The role is
- * trusted in Edge middleware without a database round-trip; the epoch and the
- * sub admin's standing are checked by the backend on every call.
+ * was issued, which epoch, whether the password must still be changed, which
+ * sections a sub admin may open — is under the signature, so none of it can be
+ * edited client-side. It is trusted in Edge middleware without a database
+ * round-trip; the epoch and the sub admin's standing and sections are checked
+ * by the backend on every call, and the sections here are refreshed from it on
+ * every page load.
  */
 export async function sessionCookieValue(
   email: string,
@@ -110,57 +126,81 @@ export async function sessionCookieValue(
   epoch: string,
   iat: number = Math.floor(Date.now() / 1000),
   mustChangePassword = false,
+  sections: readonly string[] = [],
 ): Promise<string> {
   const e = email.trim().toLowerCase();
   const flags = mustChangePassword ? "p" : "-";
-  const sig = await hmacHex(adminSecret(), `session:v3:${e}:${role}:${iat}:${epoch}:${flags}`);
-  return `${b64urlEncode(e)}.${b64urlEncode(role)}.${iat}.${b64urlEncode(epoch)}.${flags}.${sig}`;
+  const list = role === "super" ? "" : cleanSections(sections).join(",");
+  const sig = await hmacHex(adminSecret(), `session:v4:${e}:${role}:${iat}:${epoch}:${flags}:${list}`);
+  return `${b64urlEncode(e)}.${b64urlEncode(role)}.${iat}.${b64urlEncode(epoch)}.${flags}.${b64urlEncode(list)}.${sig}`;
 }
 
 /**
  * Validate a session cookie and return its contents, or null.
  *
- * v3 carries the "must change password" flag. v2 (no flag) is still read so
- * nobody is signed out by this change; anything older fails, which is what
- * signed out every session copied during the 22 Sep incident.
+ * v4 carries a sub admin's sections, v3 the "must change password" flag. v3 and
+ * v2 (neither) are still read, with no sections, so nobody is signed out by
+ * this change; anything older fails, which is what signed out every session
+ * copied during the 22 Sep incident.
  */
 export async function sessionInfo(cookie: string | undefined): Promise<SessionInfo | null> {
   const secret = adminSecret();
   if (!cookie || !secret) return null;
   const parts = cookie.split(".");
-  if (parts.length !== 5 && parts.length !== 6) return null;
-  const v3 = parts.length === 6;
+  if (parts.length < 5 || parts.length > 7) return null;
+  const version = parts.length === 7 ? 4 : parts.length === 6 ? 3 : 2;
   let email: string;
   let role: string;
   let epoch: string;
+  let list = "";
   try {
     email = b64urlDecode(parts[0]);
     role = b64urlDecode(parts[1]);
     epoch = b64urlDecode(parts[3]);
+    if (version === 4) list = b64urlDecode(parts[5]);
   } catch {
     return null;
   }
   if (!/^\d{9,11}$/.test(parts[2])) return null;
   const iat = Number(parts[2]);
-  const flags = v3 ? parts[4] : "-";
+  const flags = version >= 3 ? parts[4] : "-";
   if (flags !== "-" && flags !== "p") return null;
 
-  const message = v3
-    ? `session:v3:${email}:${role}:${iat}:${epoch}:${flags}`
-    : `session:v2:${email}:${role}:${iat}:${epoch}`;
+  const message =
+    version === 4
+      ? `session:v4:${email}:${role}:${iat}:${epoch}:${flags}:${list}`
+      : version === 3
+        ? `session:v3:${email}:${role}:${iat}:${epoch}:${flags}`
+        : `session:v2:${email}:${role}:${iat}:${epoch}`;
   const expected = await hmacHex(secret, message);
-  if (!timingSafeEqual(parts[v3 ? 5 : 4], expected)) return null;
+  if (!timingSafeEqual(parts[parts.length - 1], expected)) return null;
 
   const now = Math.floor(Date.now() / 1000);
   if (iat > now + 60) return null; // issued in the future: not ours
   if (now - iat > SESSION_MAX_AGE_S) return null; // expired, however it is replayed
 
+  const isSuper = role === "super";
   return {
     email,
-    role: role === "super" ? "super" : "admin",
+    role: isSuper ? "super" : "admin",
     iat,
     epoch,
     mustChangePassword: flags === "p",
+    sections: isSuper ? [] : cleanSections(list ? list.split(",") : []),
+  };
+}
+
+/** Cookie options for a session minted at `iat`: a refresh never extends its life. */
+export function sessionCookieOptions(iat: number) {
+  return {
+    httpOnly: true,
+    secure: true,
+    // Strict: the session cookie is never sent on a request started from
+    // another site, which closes cross-site request forgery on every admin
+    // action, including the ones that move money.
+    sameSite: "strict" as const,
+    path: "/",
+    maxAge: Math.max(0, SESSION_MAX_AGE_S - (Math.floor(Date.now() / 1000) - iat)),
   };
 }
 

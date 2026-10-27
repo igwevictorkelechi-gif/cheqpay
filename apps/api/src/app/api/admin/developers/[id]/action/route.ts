@@ -25,7 +25,7 @@ const minor = (v: number | null) => (v === null ? null : BigInt(Math.round(v * 1
 /** Suspend, freeze, revoke keys, change limits. Every one needs a fresh authenticator code. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "developers" });
     await requireAdminOtp(req);
     const { id } = await params;
     const b = schema.parse(await req.json());

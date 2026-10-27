@@ -10,7 +10,7 @@ const STATUSES: AccountStatus[] = ["sandbox", "pending_review", "approved", "rej
 /** Developer accounts, applications waiting for review first. */
 export async function GET(req: Request) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "developers" });
     const s = new URL(req.url).searchParams.get("status");
     const status = s && (STATUSES as string[]).includes(s) ? (s as AccountStatus) : null;
     return jsonOk({ accounts: await adminListAccounts(status) });

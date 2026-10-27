@@ -874,6 +874,8 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Campai
     emailSubject: `New ad to review: ${view.businessName}`,
     data: { adCampaignId: id, kind: "admin_ad_review" },
     icon: "📣",
+    section: "ads",
+    url: "/ads",
   }).catch(() => undefined);
   return view;
 }

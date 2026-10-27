@@ -94,7 +94,8 @@ export function webPushPublicKey(): string | null {
 }
 
 let configured = false;
-function configure(): boolean {
+/** Set up VAPID signing; false when web push is off. Shared with the admin dashboard's alerts. */
+export function configure(): boolean {
   const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = getEnv();
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return false;
   if (!configured) {

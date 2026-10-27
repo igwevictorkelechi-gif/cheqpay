@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Bell, Settings, Menu, LogOut } from 'lucide-react';
+import { Search, Settings, Menu, LogOut } from 'lucide-react';
+import AlertsMenu from '@/components/AlertsMenu';
 
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter();
@@ -47,9 +48,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
         {/* Actions */}
         <div className="flex items-center gap-2 sm:gap-3 ml-2 sm:ml-8">
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <Bell size={20} className="text-gray-600" />
-          </button>
+          <AlertsMenu />
           <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <Settings size={20} className="text-gray-600" />
           </button>

@@ -99,6 +99,7 @@ async function ensureSchema(): Promise<void> {
       { ensureAdsSchema },
       { ensureDevApiSchema },
       { ensureReferralSchema },
+      { ensureAdminAccountsTable },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
@@ -110,6 +111,7 @@ async function ensureSchema(): Promise<void> {
       import("@/lib/ensureAds"),
       import("@/lib/devapi/ensureDevApi"),
       import("@/lib/ensureReferrals"),
+      import("@/lib/ensureAdminAccounts"),
     ]);
     // One at a time: each helper takes a table lock, and run in parallel they
     // opened a dozen connections per cold start — during a deploy, across many
@@ -150,6 +152,9 @@ async function ensureSchema(): Promise<void> {
       // Referral and creator-program tables (raw SQL). The creator application
       // gained columns and a NEEDS_INFO status, so it follows the column-add rule.
       () => ensureReferralSchema(),
+      // Sub admin accounts (raw SQL). Gained the granted sections and each sub
+      // admin's own authenticator, so it follows the column-add rule.
+      () => ensureAdminAccountsTable(),
     ];
     const version = deployVersion();
     if (version && (await schemaAlreadyApplied(version))) return;
