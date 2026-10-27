@@ -16,7 +16,7 @@ const actionSchema = z.object({
 /** Admin: one trade with the card code, PIN and photos, for review. */
 export async function GET(req: Request, { params }: Ctx) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "giftcards" });
     const { id } = await params;
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ApiError(404, "Trade not found", "not_found");
     const trade = await getTradeAdmin(id, resolveApiOrigin(req));
@@ -37,7 +37,7 @@ export async function GET(req: Request, { params }: Ctx) {
 /** Admin: claim, approve (pays the user — needs a fresh code) or reject a trade. */
 export async function POST(req: Request, { params }: Ctx) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "giftcards" });
     const { id } = await params;
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ApiError(404, "Trade not found", "not_found");
     const body = actionSchema.parse(await req.json());

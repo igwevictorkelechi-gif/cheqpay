@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /** Pair the screen showing this 6-digit code with the venue. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "ads" });
     const { id } = await params;
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ApiError(404, "Not found", "not_found");
     const b = z.object({ code: z.string().regex(/^\d{6}$/), label: z.string().max(60).default("") }).parse(await req.json());

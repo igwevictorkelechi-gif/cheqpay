@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "referrals" });
     const q = new URL(req.url).searchParams;
     const s = (q.get("status") ?? "PENDING").toUpperCase();
     const settings = await getReferralSettings();

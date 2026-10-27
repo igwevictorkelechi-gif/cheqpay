@@ -1,5 +1,8 @@
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
 import { prisma } from "@cheqpay/db";
+import { type AdminSection, cleanSections } from "./adminSections";
+import { ensureAdminAccountsTable } from "./ensureAdminAccounts";
+import { newTotpSecret, totpAuthUrl, verifyTotpCode } from "./totp";
 
 // Dashboard login credential for the admin app. Stored in platform_settings so
 // it can be changed at runtime from the admin profile page.
@@ -103,10 +106,16 @@ export async function setAdminCredential(
 // Sub admins.
 //
 // A sub admin signs in with their own email and a password a Super Admin set
-// for them, and must replace it on first sign-in. They can only see the
-// Dashboard and Analytics; `requireAdmin` enforces that on every call, and an
-// account only works while its email is still on the Roles list as a regular
-// admin, so removing someone there locks them out at once.
+// for them, and must replace it on first sign-in. They see the Dashboard and
+// Analytics, plus the sections a Super Admin has granted them (adminSections);
+// `requireAdmin` enforces that on every call, and an account only works while
+// its email is still on the Roles list as a regular admin, so removing someone
+// there locks them out at once.
+//
+// A sub admin with a section that moves money (approving a gift card, say)
+// confirms it with their OWN authenticator, enrolled from their account page.
+// They never use the owner's: one shared code would make every approval look
+// like the owner's in the audit log, and let one person's phone vouch for all.
 // ---------------------------------------------------------------------------
 
 const ROLES_KEY = "admin_emails";
@@ -116,39 +125,21 @@ export function isStrongAdminPassword(p: string): boolean {
   return p.length >= 12 && p.length <= 200 && /[A-Za-z]/.test(p) && /\d/.test(p);
 }
 
-let accountsReady: Promise<void> | null = null;
-export function ensureAdminAccountsTable(): Promise<void> {
-  if (!accountsReady) {
-    accountsReady = (async () => {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS admin_accounts (
-          email text PRIMARY KEY,
-          password_hash text NOT NULL,
-          must_change boolean NOT NULL DEFAULT true,
-          created_by text,
-          created_at timestamptz NOT NULL DEFAULT now(),
-          password_changed_at timestamptz
-        )`);
-    })().catch((err) => {
-      accountsReady = null;
-      throw err;
-    });
-  }
-  return accountsReady;
-}
-
 interface AccountRow {
   email: string;
   password_hash: string;
   must_change: boolean;
   created_at: Date;
   password_changed_at: Date | null;
+  sections: string[] | null;
+  otp_enrolled: boolean;
 }
 
 async function readAccount(email: string): Promise<AccountRow | null> {
   await ensureAdminAccountsTable();
   const rows = await prisma.$queryRaw<AccountRow[]>`
-    SELECT email, password_hash, must_change, created_at, password_changed_at
+    SELECT email, password_hash, must_change, created_at, password_changed_at,
+           sections, (otp_secret IS NOT NULL) AS otp_enrolled
     FROM admin_accounts WHERE email = ${email.trim().toLowerCase()}`;
   return rows[0] ?? null;
 }
@@ -178,22 +169,33 @@ export async function listSubAdminEmails(): Promise<string[]> {
 export interface SubAdminState {
   active: boolean;
   mustChange: boolean;
+  /** The extra dashboard sections a Super Admin has granted. */
+  sections: AdminSection[];
+  /** Whether they have enrolled their own authenticator. */
+  otpEnrolled: boolean;
 }
 
-/** Whether a sub admin may use the dashboard right now, and if they must change password. */
+const NO_ACCESS: SubAdminState = { active: false, mustChange: false, sections: [], otpEnrolled: false };
+
+/** Whether a sub admin may use the dashboard right now, if they must change password, and what they may open. */
 export async function getSubAdminState(email: string): Promise<SubAdminState> {
   const e = email.trim().toLowerCase();
-  if (!(await listSubAdminEmails()).includes(e)) return { active: false, mustChange: false };
+  if (!(await listSubAdminEmails()).includes(e)) return NO_ACCESS;
   const acct = await readAccount(e);
-  if (!acct) return { active: false, mustChange: false };
-  return { active: true, mustChange: acct.must_change };
+  if (!acct) return NO_ACCESS;
+  return {
+    active: true,
+    mustChange: acct.must_change,
+    sections: cleanSections(acct.sections),
+    otpEnrolled: acct.otp_enrolled === true,
+  };
 }
 
 /** Check a sub admin's sign-in. Null when it isn't a working sub-admin login. */
 export async function verifySubAdminLogin(
   email: string,
   password: string,
-): Promise<{ email: string; mustChange: boolean } | null> {
+): Promise<{ email: string; mustChange: boolean; sections: AdminSection[]; otpEnrolled: boolean } | null> {
   const e = email.trim().toLowerCase();
   const acct = await readAccount(e);
   if (!acct) {
@@ -203,7 +205,12 @@ export async function verifySubAdminLogin(
   }
   if (!verifyPassword(password, acct.password_hash)) return null;
   if (!(await listSubAdminEmails()).includes(e)) return null;
-  return { email: e, mustChange: acct.must_change };
+  return {
+    email: e,
+    mustChange: acct.must_change,
+    sections: cleanSections(acct.sections),
+    otpEnrolled: acct.otp_enrolled === true,
+  };
 }
 
 /**
@@ -259,6 +266,8 @@ export interface SubAdminInfo {
   status: "pending" | "active" | "no_password";
   createdAt: string | null;
   passwordChangedAt: string | null;
+  sections: AdminSection[];
+  otpEnrolled: boolean;
 }
 
 /** Every sub admin on the Roles list, with whether they've signed in and set their own password. */
@@ -267,7 +276,8 @@ export async function listSubAdmins(): Promise<SubAdminInfo[]> {
   const emails = await listSubAdminEmails();
   if (emails.length === 0) return [];
   const rows = await prisma.$queryRaw<AccountRow[]>`
-    SELECT email, password_hash, must_change, created_at, password_changed_at
+    SELECT email, password_hash, must_change, created_at, password_changed_at,
+           sections, (otp_secret IS NOT NULL) AS otp_enrolled
     FROM admin_accounts WHERE email = ANY(${emails})`;
   const byEmail = new Map(rows.map((r) => [r.email, r]));
   return emails.map((email) => {
@@ -277,8 +287,78 @@ export async function listSubAdmins(): Promise<SubAdminInfo[]> {
       status: !r ? "no_password" : r.must_change ? "pending" : "active",
       createdAt: r ? new Date(r.created_at).toISOString() : null,
       passwordChangedAt: r?.password_changed_at ? new Date(r.password_changed_at).toISOString() : null,
+      sections: cleanSections(r?.sections),
+      otpEnrolled: r?.otp_enrolled === true,
     };
   });
+}
+
+/** Set the sections a sub admin may open. False when there is no such sub admin account. */
+export async function setSubAdminSections(email: string, sections: AdminSection[]): Promise<boolean> {
+  await ensureAdminAccountsTable();
+  const n = await prisma.$executeRaw`
+    UPDATE admin_accounts SET sections = ${cleanSections(sections)}::text[]
+    WHERE email = ${email.trim().toLowerCase()}`;
+  return n === 1;
+}
+
+// --- A sub admin's own authenticator -----------------------------------------
+
+/**
+ * Begin enrolling a sub admin's own authenticator. Only the first one: a sub
+ * admin can't replace an enrolled authenticator themselves (a stolen session
+ * would enrol its own phone that way, as on 22 Sep); a Super Admin resets it.
+ * Null when one is already enrolled.
+ */
+export async function beginSubAdminOtpSetup(email: string): Promise<{ secret: string; otpauthUrl: string } | null> {
+  const e = email.trim().toLowerCase();
+  const acct = await readAccount(e);
+  if (!acct || acct.otp_enrolled) return null;
+  const secret = newTotpSecret();
+  await prisma.$executeRaw`UPDATE admin_accounts SET otp_pending = ${secret} WHERE email = ${e} AND otp_secret IS NULL`;
+  return { secret, otpauthUrl: totpAuthUrl(`CheqPay Admin (${e})`, secret) };
+}
+
+/** Confirm enrolment with a code from the app. */
+export async function activateSubAdminOtp(email: string, code: string): Promise<boolean> {
+  const e = email.trim().toLowerCase();
+  await ensureAdminAccountsTable();
+  const rows = await prisma.$queryRaw<{ otp_pending: string | null }[]>`
+    SELECT otp_pending FROM admin_accounts WHERE email = ${e} AND otp_secret IS NULL`;
+  const pending = rows[0]?.otp_pending;
+  if (!pending) return false;
+  const counter = verifyTotpCode(code, pending);
+  if (counter === null) return false;
+  const n = await prisma.$executeRaw`
+    UPDATE admin_accounts SET otp_secret = otp_pending, otp_pending = NULL, otp_last_counter = ${counter}
+    WHERE email = ${e} AND otp_secret IS NULL AND otp_pending = ${pending}`;
+  return n === 1;
+}
+
+/** Verify a code from a sub admin's own authenticator, once per timestep. */
+export async function consumeSubAdminOtp(email: string, code: string): Promise<boolean> {
+  const e = email.trim().toLowerCase();
+  await ensureAdminAccountsTable();
+  const rows = await prisma.$queryRaw<{ otp_secret: string | null }[]>`
+    SELECT otp_secret FROM admin_accounts WHERE email = ${e}`;
+  const secret = rows[0]?.otp_secret;
+  if (!secret) return false;
+  const counter = verifyTotpCode(code, secret);
+  if (counter === null) return false;
+  // Claim the timestep in one conditional write, so the same code can't pass twice.
+  const claimed = await prisma.$executeRaw`
+    UPDATE admin_accounts SET otp_last_counter = ${counter}
+    WHERE email = ${e} AND otp_secret = ${secret}
+      AND (otp_last_counter IS NULL OR otp_last_counter < ${counter})`;
+  return claimed === 1;
+}
+
+/** Super Admin: forget a sub admin's authenticator, so they can enrol a new one. */
+export async function resetSubAdminOtp(email: string): Promise<void> {
+  await ensureAdminAccountsTable();
+  await prisma.$executeRaw`
+    UPDATE admin_accounts SET otp_secret = NULL, otp_pending = NULL, otp_last_counter = NULL
+    WHERE email = ${email.trim().toLowerCase()}`;
 }
 
 type RoleEntry = { email: string; role: "admin" | "super" };

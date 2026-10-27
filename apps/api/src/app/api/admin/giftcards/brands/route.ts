@@ -16,7 +16,7 @@ const brandSchema = z.object({
 /** Admin: add a gift card brand, or rename / switch one off. */
 export async function POST(req: Request) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "giftcards" });
     const body = brandSchema.parse(await req.json());
     const id = await upsertBrand(body);
     await recordAdminAction(req, actor, {

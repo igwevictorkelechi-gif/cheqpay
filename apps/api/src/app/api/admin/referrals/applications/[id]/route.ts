@@ -22,7 +22,7 @@ const ID = /^[0-9a-f-]{36}$/i;
 /** One application with the vetting panel's facts about the applicant. */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "referrals" });
     const { id } = await params;
     if (!ID.test(id)) throw new ApiError(404, "Not found", "not_found");
     const settings = await getReferralSettings();
@@ -44,7 +44,7 @@ const ACTIONS = {
 /** Approve (sets code, % and window — needs a fresh code), ask for more, or reject. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "referrals" });
     const { id } = await params;
     if (!ID.test(id)) throw new ApiError(404, "Not found", "not_found");
     const b = schema.parse(await req.json());

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { API_URL } from "@/lib/apiUrl";
 import { adminHeaders } from "@/lib/backend";
-import { SESSION_COOKIE, SESSION_MAX_AGE_S, sessionCookieValue, sessionInfo } from "@/lib/adminAuth";
+import { SESSION_COOKIE, sessionCookieOptions, sessionCookieValue, sessionInfo } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -25,17 +25,12 @@ export async function PATCH(req: Request) {
   if (res.ok) {
     const session = await sessionInfo((await cookies()).get(SESSION_COOKIE)?.value);
     if (session) {
+      // Keep the original expiry (changing a password doesn't extend a session)
+      // and the sections they already have.
       out.cookies.set(
         SESSION_COOKIE,
-        await sessionCookieValue(session.email, session.role, session.epoch, session.iat, false),
-        {
-          httpOnly: true,
-          secure: true,
-          sameSite: "strict",
-          path: "/",
-          // Keep the original expiry: changing a password doesn't extend a session.
-          maxAge: Math.max(0, SESSION_MAX_AGE_S - (Math.floor(Date.now() / 1000) - session.iat)),
-        },
+        await sessionCookieValue(session.email, session.role, session.epoch, session.iat, false, session.sections),
+        sessionCookieOptions(session.iat),
       );
     }
   }

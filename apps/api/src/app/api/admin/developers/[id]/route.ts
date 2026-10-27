@@ -8,7 +8,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "developers" });
     const { id } = await params;
     const detail = UUID.test(id) ? await adminAccountDetail(id) : null;
     if (!detail) throw new ApiError(404, "No such developer account", "not_found");

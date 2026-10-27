@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 /** Admin: remove a rate (the card stops being offered in that country/type). */
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "giftcards" });
     await requireAdminOtp(req);
     const { id } = await ctx.params;
     await deleteRate(id);

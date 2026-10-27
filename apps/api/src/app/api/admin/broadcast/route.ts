@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "content" });
     await requireAdminOtp(req);
     await enforceRateLimit("admin-broadcast", 1, 60_000);
     const msg = broadcastSchema.parse(await req.json());
@@ -60,7 +60,7 @@ type SentDetails = {
  */
 export async function GET(req: Request) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "content" });
     const rows = await prisma.auditLog.findMany({
       where: { action: "admin.broadcast.sent" },
       orderBy: { createdAt: "desc" },

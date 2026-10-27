@@ -6,6 +6,7 @@ const h = vi.hoisted(() => ({
   otpConfigured: vi.fn(),
   otpConsume: vi.fn(),
   subAdminState: vi.fn(),
+  subOtpConsume: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -23,7 +24,7 @@ vi.mock("./totp", () => ({
   consumeAdminOtp: h.otpConsume,
 }));
 vi.mock("./activity", () => ({ touchActivity: vi.fn() }));
-vi.mock("./adminCreds", () => ({ getSubAdminState: h.subAdminState }));
+vi.mock("./adminCreds", () => ({ getSubAdminState: h.subAdminState, consumeSubAdminOtp: h.subOtpConsume }));
 
 const SECRET = "s".repeat(32);
 process.env.ADMIN_API_SECRET = SECRET;
@@ -45,15 +46,18 @@ beforeEach(() => {
   h.settingFind.mockResolvedValue({ key: "admin_session_epoch", value: "epoch-1" });
   h.otpConfigured.mockResolvedValue(true);
   h.otpConsume.mockResolvedValue(true);
-  h.subAdminState.mockResolvedValue({ active: true, mustChange: false });
+  h.subAdminState.mockResolvedValue({ active: true, mustChange: false, sections: [], otpEnrolled: false });
+  h.subOtpConsume.mockResolvedValue(true);
 });
 
 describe("requireAdminActor", () => {
   it("names the signed-in admin", async () => {
-    await expect(requireAdminActor(req(good))).resolves.toEqual({
+    await expect(requireAdminActor(req(good))).resolves.toMatchObject({
       email: "owner@cheqpay.com",
       role: "super",
     });
+    // A Super Admin has every section.
+    expect((await requireAdminActor(req(good))).sections).toContain("giftcards");
   });
 
   it("refuses an anonymous dashboard call", async () => {
@@ -86,6 +90,19 @@ describe("requireAdminActor", () => {
       new Request(`https://api.example${path}`, { method: "GET", headers: h2 });
     await expect(requireAdminActor(get("/api/admin/analytics", sub))).resolves.toMatchObject({ role: "admin" });
     await expect(requireAdminActor(get("/api/admin/users", sub))).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("opens a granted section to a sub admin, and only that one", async () => {
+    h.subAdminState.mockResolvedValue({ active: true, mustChange: false, sections: ["giftcards"], otpEnrolled: true });
+    const sub = { ...good, "x-admin-actor": "sub@mycheqpay.com", "x-admin-role": "admin" };
+    const at = (path: string) => new Request(`https://api.example${path}`, { method: "POST", headers: sub });
+    await expect(requireAdminActor(at("/api/admin/giftcards/trades/x"), { section: "giftcards" })).resolves.toMatchObject({
+      email: "sub@mycheqpay.com",
+      sections: ["giftcards"],
+    });
+    await expect(requireAdminActor(at("/api/admin/ads/campaigns"), { section: "ads" })).rejects.toMatchObject({ status: 403 });
+    // Super-Admin-only stays so, granted section or not.
+    await expect(requireAdminActor(at("/api/admin/giftcards/trades/x"), { superOnly: true })).rejects.toMatchObject({ status: 403 });
   });
 
   it("locks out a sub admin who was removed", async () => {
@@ -122,5 +139,29 @@ describe("requireAdminOtp", () => {
     await expect(requireAdminOtp(req({ "x-admin-otp": "123456" }))).resolves.toBeUndefined();
     await expect(requireAdminOtp(req({}), "654321")).resolves.toBeUndefined();
     expect(h.otpConsume).toHaveBeenLastCalledWith("654321");
+  });
+});
+
+describe("requireAdminOtp for a sub admin", () => {
+  const sub = { ...good, "x-admin-actor": "sub@mycheqpay.com", "x-admin-role": "admin" };
+
+  it("checks their own authenticator, never the owner's", async () => {
+    h.subAdminState.mockResolvedValue({ active: true, mustChange: false, sections: ["giftcards"], otpEnrolled: true });
+    await expect(requireAdminOtp(req({ ...sub, "x-admin-otp": "123456" }))).resolves.toBeUndefined();
+    expect(h.subOtpConsume).toHaveBeenCalledWith("sub@mycheqpay.com", "123456");
+    expect(h.otpConsume).not.toHaveBeenCalled();
+  });
+
+  it("asks them to set one up first", async () => {
+    await expect(requireAdminOtp(req({ ...sub, "x-admin-otp": "123456" }))).rejects.toMatchObject({
+      code: "otp_not_configured",
+    });
+    expect(h.otpConsume).not.toHaveBeenCalled();
+  });
+
+  it("refuses a wrong or reused code", async () => {
+    h.subAdminState.mockResolvedValue({ active: true, mustChange: false, sections: [], otpEnrolled: true });
+    h.subOtpConsume.mockResolvedValue(false);
+    await expect(requireAdminOtp(req({ ...sub, "x-admin-otp": "123456" }))).rejects.toMatchObject({ code: "bad_otp" });
   });
 });

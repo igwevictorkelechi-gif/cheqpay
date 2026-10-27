@@ -184,7 +184,7 @@ export default function Dashboard() {
 
       {denied && (
         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          That area is restricted to Super Admins. Ask a Super Admin if you need access.
+          You don’t have access to that area. A Super Admin can give it to you from Roles &amp; Access.
         </div>
       )}
 

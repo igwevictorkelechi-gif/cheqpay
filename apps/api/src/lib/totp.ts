@@ -93,17 +93,25 @@ export async function isAdminOtpConfigured(): Promise<boolean> {
   return !!(await getSetting(KEY_ACTIVE));
 }
 
+/** A fresh base32 TOTP secret. */
+export function newTotpSecret(): string {
+  return base32Encode(randomBytes(20));
+}
+
+/** The otpauth URI an authenticator app scans, shown under `label`. */
+export function totpAuthUrl(label: string, secret: string): string {
+  return `otpauth://totp/${encodeURIComponent(label)}?secret=${secret}&issuer=CheqPay&digits=${DIGITS}&period=${PERIOD_S}`;
+}
+
 /** Start (or restart) setup: mint a pending secret and return the otpauth URI
  *  the admin scans into their authenticator app. */
 export async function beginAdminOtpSetup(updatedBy?: string): Promise<{
   secret: string;
   otpauthUrl: string;
 }> {
-  const secret = base32Encode(randomBytes(20));
+  const secret = newTotpSecret();
   await putSetting(KEY_PENDING, secret, updatedBy);
-  const label = encodeURIComponent("CheqPay Admin");
-  const otpauthUrl = `otpauth://totp/${label}?secret=${secret}&issuer=CheqPay&digits=${DIGITS}&period=${PERIOD_S}`;
-  return { secret, otpauthUrl };
+  return { secret, otpauthUrl: totpAuthUrl("CheqPay Admin", secret) };
 }
 
 /** Confirm setup with a code from the app; promotes pending -> active. */

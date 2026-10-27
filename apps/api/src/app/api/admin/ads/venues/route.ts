@@ -30,7 +30,7 @@ const schema = z.object({
 
 export async function GET(req: Request) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "ads" });
     return jsonOk({ venues: await listVenuesAdmin(), categories: VENUE_CATEGORIES, states: NIGERIAN_STATES });
   } catch (err) {
     return toErrorResponse(err);
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
 /** Add or edit a partner venue. Sets who gets paid and how much, so it needs a fresh code. */
 export async function POST(req: Request) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "ads" });
     await requireAdminOtp(req);
     const b = schema.parse(await req.json());
     const id = await upsertVenue({

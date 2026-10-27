@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /** Void a held earning (e.g. suspected fraud) so it is never paid. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "referrals" });
     const { id } = await params;
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ApiError(404, "Not found", "not_found");
     const { reason } = z.object({ reason: z.string().min(3).max(300) }).parse(await req.json());

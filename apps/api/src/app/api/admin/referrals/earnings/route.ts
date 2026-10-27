@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "referrals" });
     return jsonOk(await earningsOverviewAdmin());
   } catch (err) {
     return toErrorResponse(err);

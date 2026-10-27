@@ -24,7 +24,7 @@ const minor = (v: number | null | undefined) => (v === null || v === undefined ?
 /** Approve (live access opens) or reject (the business sees the note) an application. Needs a fresh authenticator code. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "developers" });
     await requireAdminOtp(req);
     const { id } = await params;
     const b = schema.parse(await req.json());

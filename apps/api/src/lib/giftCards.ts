@@ -23,6 +23,7 @@
 // The tables are created lazily here and are NOT Prisma models: they are new
 // tables nothing else selects, so adding them can't break existing queries.
 
+import { after } from "next/server";
 import { randomUUID } from "node:crypto";
 import { Asset, TransactionStatus, TransactionType, prisma } from "@cheqpay/db";
 import { notifyAdmins } from "./adminNotify";
@@ -512,13 +513,22 @@ export async function submitTrade(input: SubmitTradeInput): Promise<TradeView> {
       { label: "You'll get", value: trade.payoutFormatted },
     ],
   }).catch(() => undefined);
-  void alertAdminsNewGiftCard(input.userId, trade).catch(() => undefined);
+  // After the response, but kept alive until sent: a bare promise can be cut off
+  // when the serverless function freezes, and then nobody hears about the card.
+  const alert = () => alertAdminsNewGiftCard(input.userId, trade).catch(() => undefined);
+  try {
+    after(alert);
+  } catch {
+    void alert();
+  }
   return trade;
 }
 
 /**
- * Tell the review team a card is waiting (push to each admin's own CheqPay
- * app/browser, email, ops webhook). Best effort — never throws, never delays the user.
+ * Tell the review team a card is waiting: the owners and every sub admin with
+ * the Gift cards section (an alert on their admin dashboard, a push to their
+ * own CheqPay app/browser, email), plus the ops webhook. Best effort — never
+ * throws, never delays the user.
  */
 export async function alertAdminsNewGiftCard(userId: string, trade: TradeView): Promise<void> {
   const [sender] = await prisma.$queryRawUnsafe<{ email: string | null; legal_name: string | null }[]>(
@@ -535,6 +545,8 @@ export async function alertAdminsNewGiftCard(userId: string, trade: TradeView): 
     emailSubject: `${title}: ${trade.faceValueFormatted} ${trade.brandName}`,
     data: { giftCardTradeId: trade.id, kind: "admin_giftcard_review" },
     icon: "🎁",
+    section: "giftcards",
+    url: "/gift-cards",
   });
 }
 

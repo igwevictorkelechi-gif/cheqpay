@@ -6,7 +6,7 @@ import { ApiError, AuthError, ForbiddenError } from "./http";
 import { touchActivity } from "./activity";
 import { assertAccessAllowed } from "./accessControl";
 import { assertSessionCurrent } from "./adminSession";
-import { getSubAdminState } from "./adminCreds";
+import { type SubAdminState, getSubAdminState } from "./adminCreds";
 import { subAdminMayCall } from "./subAdminAccess";
 
 export interface AuthUser {
@@ -243,19 +243,33 @@ async function assertSubAdminAllowed(req: Request): Promise<void> {
   // are not limited here.
   if (!actor || role === "super") return;
 
-  const state = await getSubAdminState(actor);
+  const state = await subAdminStateFor(req, actor);
   if (!state.active) {
     // Same code as a revoked session, so the dashboard signs them out at once.
     throw new ApiError(401, "Your admin access has been removed. Please contact the account owner.", "admin_session_revoked");
   }
   const pathname = new URL(req.url).pathname.replace(/\/+$/, "");
-  if (!subAdminMayCall(req.method, pathname, state.mustChange)) {
+  if (!subAdminMayCall(req.method, pathname, state.mustChange, state.sections)) {
     throw new ForbiddenError(
       state.mustChange
         ? "Set your own password before continuing."
-        : "Sub admins can only view the Dashboard and Analytics.",
+        : "You don't have access to this part of the dashboard. A Super Admin can grant it from Roles & Access.",
     );
   }
+}
+
+// One read of a sub admin's standing per request: requireAdmin and
+// requireAdminActor both need it, and it must not change between the two.
+const subAdminStates = new WeakMap<Request, Promise<SubAdminState>>();
+
+/** A sub admin's current standing (access, sections, authenticator), read once per request. */
+export function subAdminStateFor(req: Request, email: string): Promise<SubAdminState> {
+  let state = subAdminStates.get(req);
+  if (!state) {
+    state = getSubAdminState(email);
+    subAdminStates.set(req, state);
+  }
+  return state;
 }
 
 /** True when the request carries the dashboard's service secret. */

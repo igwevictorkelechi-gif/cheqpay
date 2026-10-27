@@ -94,7 +94,8 @@ export default function RolesPage() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Roles &amp; Access</h1>
         <p className="text-gray-600 mt-2">
-          Manage who can sign in: Super Admins, and sub admins who can only view the Dashboard and Analytics.
+          Manage who can sign in: Super Admins, and sub admins who see the Dashboard and Analytics plus
+          the sections you give them.
         </p>
       </div>
 
@@ -114,7 +115,8 @@ export default function RolesPage() {
             <ShieldCheck size={16} /> Sub admin
           </div>
           <p className="mt-1 text-sm text-gray-600">
-            Can view the Dashboard and Analytics only. Everything else is hidden and blocked.
+            The Dashboard and Analytics, plus the sections you tick for them (gift cards, users, KYC…).
+            Security, roles, balances and provider settings always stay with Super Admins.
           </p>
         </div>
       </div>

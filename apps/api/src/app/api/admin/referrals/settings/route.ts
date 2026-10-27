@@ -32,7 +32,7 @@ function view(s: Awaited<ReturnType<typeof getReferralSettings>>) {
 
 export async function GET(req: Request) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "referrals" });
     return jsonOk({ settings: view(await getReferralSettings()) });
   } catch (err) {
     return toErrorResponse(err);
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
 /** Amounts in ₦. Changes what every referral pays, so it needs a fresh code. */
 export async function POST(req: Request) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "referrals" });
     await requireAdminOtp(req);
     const b = schema.parse(await req.json());
     const k = (n: number) => Math.round(n * 100);

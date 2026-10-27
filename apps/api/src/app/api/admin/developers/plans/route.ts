@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "developers" });
     const [plans, limits] = await Promise.all([getPlans(), getDevLimits()]);
     return jsonOk({ plans: PLAN_IDS.map((id) => plans[id]), limits, bounds: PLAN_FIELD_BOUNDS });
   } catch (err) {
@@ -43,7 +43,7 @@ const schema = z
 /** Change plan prices, rate limits and fees, and the default exposure limits. Needs a fresh authenticator code. */
 export async function POST(req: Request) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "developers" });
     await requireAdminOtp(req);
     const b = schema.parse(await req.json());
     let plans = await getPlans();

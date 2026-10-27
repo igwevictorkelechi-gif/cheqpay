@@ -19,7 +19,7 @@ const rateSchema = z.object({
 /** Admin: every brand with all its rates (active or not). */
 export async function GET(req: Request) {
   try {
-    await requireAdminActor(req, { superOnly: true });
+    await requireAdminActor(req, { section: "giftcards" });
     return jsonOk({ brands: await listCatalogAdmin(), countries: CARD_COUNTRIES });
   } catch (err) {
     return toErrorResponse(err);
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
 /** Admin: set the rate for one brand × country × type. Rates decide payouts, so it needs a fresh code. */
 export async function POST(req: Request) {
   try {
-    const actor = await requireAdminActor(req, { superOnly: true });
+    const actor = await requireAdminActor(req, { section: "giftcards" });
     await requireAdminOtp(req);
     const body = rateSchema.parse(await req.json());
     const id = await upsertRate(
