@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   creditBalance: vi.fn(),
   notifyUser: vi.fn(),
   ensureUsdAsset: vi.fn(),
+  offrampOn: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -27,7 +28,7 @@ vi.mock("../alerts", () => ({ notifyUser: h.notifyUser }));
 vi.mock("../ensureUsdAsset", () => ({ ensureUsdAsset: h.ensureUsdAsset }));
 vi.mock("../settings", async () => {
   const real = await vi.importActual<typeof import("../settings")>("../settings");
-  return { getPricing: async () => real.PRICING_DEFAULTS };
+  return { getPricing: async () => real.PRICING_DEFAULTS, getCryptoOfframp: h.offrampOn };
 });
 
 import {
@@ -126,6 +127,8 @@ describe("creditCryptoDeposit", () => {
     h.creditBalance.mockResolvedValue({ created: true, transactionId: "tx-1" });
     h.notifyUser.mockResolvedValue(undefined);
     h.ensureUsdAsset.mockResolvedValue(undefined);
+    // The dollar cases are with the off-ramp on; "with the off-ramp off" covers the rest.
+    h.offrampOn.mockResolvedValue(true);
   });
 
   it("credits the address owner, keyed on the provider tx id", async () => {
@@ -190,8 +193,8 @@ describe("creditCryptoDeposit", () => {
   it("treats an arrival on a receive-only chain as USD even when the payload is silent", async () => {
     // A USDC address on Base could only ever have been minted as an offramp
     // address — the custody layer refuses any other combination — so the money
-    // arrived as dollars whether or not Maplerad echoed the flag. Crediting the
-    // coin would credit a balance the user can never move off that chain.
+    // arrived as dollars whether or not Maplerad echoed the flag. With the
+    // off-ramp on, it lands as dollars.
     h.walletFindFirst.mockResolvedValue({ userId: "u1", asset: "USDC", network: "BASE" });
 
     await creditCryptoDeposit({ ...deposit, chain: "base", offramp: false, rawAmount: "2500" });
@@ -199,6 +202,17 @@ describe("creditCryptoDeposit", () => {
     expect(h.creditBalance).toHaveBeenCalledWith(
       expect.objectContaining({ asset: "USD", amountMinor: 2500n }),
     );
+  });
+
+  it("with the off-ramp off, keeps the coin from an older converting address, read as dollars", async () => {
+    h.offrampOn.mockResolvedValue(false);
+    h.walletFindFirst.mockResolvedValue({ userId: "u1", asset: "USDT", network: "TRON" });
+    // Converted: the provider states dollars (2500 = $25.00), whatever coin code it echoes.
+    await creditCryptoDeposit({ ...deposit, coin: "USD", chain: "tron", offramp: false, rawAmount: "2500" });
+    expect(h.creditBalance).toHaveBeenCalledWith(
+      expect.objectContaining({ asset: "USDT", amountMinor: 25_000_000n, feeMinor: 250_000n }),
+    );
+    expect(h.ensureUsdAsset).not.toHaveBeenCalled();
   });
 
   it("still credits the coin on Solana, the one chain a user can send from", async () => {
