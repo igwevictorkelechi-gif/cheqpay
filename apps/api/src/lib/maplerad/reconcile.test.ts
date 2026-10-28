@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
+  offrampOn: vi.fn(async () => true),
   getCustomerTransactions: vi.fn(),
   verifyTransaction: vi.fn(),
   hasProcessed: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock("../settings", () => ({
   feeFromBps: (amt: bigint, bps: number) =>
     bps <= 0 ? 0n : (amt * BigInt(Math.trunc(bps))) / 10_000n,
   getDepositFeeBps: h.getDepositFeeBps,
+  getCryptoOfframp: h.offrampOn,
 }));
 
 import { previewReconciliation, commitReconciliation } from "./reconcile";
@@ -222,6 +224,13 @@ describe("a stablecoin collection in the panel", () => {
     });
     expect(res.items[0].reason).toBeUndefined();
     expect(res.summary.creditableMissing).toBe(1);
+  });
+
+  it("with the off-ramp off, shows it as the coin the customer keeps", async () => {
+    h.offrampOn.mockResolvedValueOnce(false);
+    withDeposits([usdt()]);
+    const res = await previewReconciliation("cust");
+    expect(res.items[0]).toMatchObject({ asset: "USDT", amountMinor: "10000000", creditable: true });
   });
 
   it("shows it as already credited once it has been", async () => {

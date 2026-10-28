@@ -16,7 +16,7 @@ import { fromMinorUnits } from "../money";
 import { ASSET_DECIMALS } from "../money";
 import { CRYPTO_COINS, isWithdrawableNetwork } from "../assets";
 import { ensureUsdAsset } from "../ensureUsdAsset";
-import { getPricing } from "../settings";
+import { getCryptoOfframp, getPricing } from "../settings";
 import { cryptoDepositFee } from "../fees";
 
 /** A crypto deposit reduced to the few things crediting actually needs. */
@@ -163,21 +163,29 @@ export async function creditCryptoDeposit(
   });
   if (!wallet) return { outcome: "unmatched", reason: "no wallet for address" };
 
-  // An offramped deposit lands as dollars regardless of the coin sent.
+  // Was it converted to dollars on arrival?
   //
   // The flag in the payload is only believed when it is present; Maplerad has
   // never been observed echoing it. The address itself is the reliable record:
   // a stablecoin address on a chain we cannot send from could ONLY have been
   // minted as an offramp address (that is the rule POST /api/wallets applies,
-  // and the custody layer refuses any other combination), so the arrival is
-  // dollars whether or not the webhook says so. Crediting coin there would
-  // credit a balance the user can never move.
+  // and the custody layer refuses any other combination), so the arrival was
+  // converted whether or not the webhook says so. Balances are per coin, not
+  // per chain, so a coin credited here is sent out on Solana when withdrawn.
   const mintedAsOfframp =
     (CRYPTO_COINS as ReadonlyArray<Asset>).includes(wallet.asset) &&
     !isWithdrawableNetwork(wallet.network);
-  const offramp = deposit.offramp || mintedAsOfframp;
+  const converted = deposit.offramp || mintedAsOfframp;
+  // While the off-ramp is off the customer keeps the coin they sent, even when
+  // Maplerad converted it on arrival: it is credited as the address's coin,
+  // backed by the dollars Maplerad now holds (as coin bought in the app is).
+  const offramp = converted && (await getCryptoOfframp());
 
-  const asset = offramp ? Asset.USD : assetForCoin(deposit.coin);
+  const asset = offramp
+    ? Asset.USD
+    : converted && (CRYPTO_COINS as ReadonlyArray<Asset>).includes(wallet.asset)
+      ? (wallet.asset as Asset)
+      : assetForCoin(deposit.coin);
   if (!asset) return { outcome: "unmatched", reason: `unknown coin ${deposit.coin}` };
 
   // Migrations are not applied on deploy, so USD is added to the Asset enum
@@ -186,14 +194,23 @@ export async function creditCryptoDeposit(
   // sits uncredited — the exact failure this handler exists to prevent.
   if (asset === Asset.USD) await ensureUsdAsset();
 
-  const amountMinor = toMinor(deposit.rawAmount, asset);
+  // A converted arrival is stated in dollars: read it as dollars, then, when it
+  // is kept as the coin, scale cents up to the coin's 6 decimals.
+  const usdMinor = converted ? toMinor(deposit.rawAmount, Asset.USD) : null;
+  const amountMinor =
+    converted && asset !== Asset.USD
+      ? usdMinor === null
+        ? null
+        : usdMinor * 10n ** BigInt(ASSET_DECIMALS[asset] - ASSET_DECIMALS[Asset.USD])
+      : toMinor(deposit.rawAmount, asset);
   if (amountMinor === null || amountMinor <= 0n) {
     return { outcome: "unmatched", reason: `unreadable amount ${deposit.rawAmount}` };
   }
 
-  // A coin that lands as dollars went through Maplerad's 0.5% ramp, so it
-  // carries our conversion fee. A coin credited as itself costs us nothing.
-  const feeMinor = asset === Asset.USD ? cryptoDepositFee(amountMinor, await getPricing()) : 0n;
+  // A converted arrival went through Maplerad's 0.5% ramp, so it carries our
+  // conversion fee, whether it lands as dollars or as the coin. A coin that
+  // arrived as itself costs us nothing.
+  const feeMinor = converted ? cryptoDepositFee(amountMinor, await getPricing()) : 0n;
 
   const { created, transactionId } = await creditBalance({
     userId: wallet.userId,
@@ -212,6 +229,7 @@ export async function creditCryptoDeposit(
       chain: deposit.chain ?? null,
       address: deposit.address,
       offramp,
+      converted,
       offrampSource: deposit.offramp ? "payload" : mintedAsOfframp ? "address" : null,
     },
   });
@@ -227,7 +245,9 @@ export async function creditCryptoDeposit(
         ? feeMinor > 0n
           ? `Your crypto deposit was converted and $${fromMinorUnits(amountMinor - feeMinor, asset)} added to your balance ($${fromMinorUnits(feeMinor, asset)} conversion fee).`
           : `Your crypto deposit was converted and $${fromMinorUnits(amountMinor, asset)} added to your balance.`
-        : `${fromMinorUnits(amountMinor, asset)} ${asset} has landed in your wallet.`,
+        : feeMinor > 0n
+          ? `${fromMinorUnits(amountMinor - feeMinor, asset)} ${asset} has landed in your wallet (${fromMinorUnits(feeMinor, asset)} ${asset} deposit fee).`
+          : `${fromMinorUnits(amountMinor, asset)} ${asset} has landed in your wallet.`,
     data: { transactionId },
   }).catch(() => undefined);
 

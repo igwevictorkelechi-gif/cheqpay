@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   creditBalance: vi.fn(),
   notifyUser: vi.fn(),
   ensureUsdAsset: vi.fn(),
+  offrampOn: vi.fn(),
 }));
 
 vi.mock("@cheqpay/db", () => ({
@@ -27,7 +28,7 @@ vi.mock("../alerts", () => ({ notifyUser: h.notifyUser }));
 vi.mock("../ensureUsdAsset", () => ({ ensureUsdAsset: h.ensureUsdAsset }));
 vi.mock("../settings", async () => {
   const actual = await vi.importActual<typeof import("../settings")>("../settings");
-  return { getPricing: async () => actual.PRICING_DEFAULTS };
+  return { getPricing: async () => actual.PRICING_DEFAULTS, getCryptoOfframp: h.offrampOn };
 });
 
 import {
@@ -61,6 +62,8 @@ function live(over: Partial<VerifiedTransaction> = {}): VerifiedTransaction {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The dollar cases below are with the off-ramp on; "with the off-ramp off" covers the rest.
+  h.offrampOn.mockResolvedValue(true);
   h.userFindFirst.mockResolvedValue({ id: "user-1" });
   h.txFindFirst.mockResolvedValue(null);
   h.walletFindMany.mockResolvedValue([]);
@@ -128,6 +131,24 @@ describe("creditCryptoCollection", () => {
     expect(h.creditBalance).toHaveBeenCalledWith(
       expect.objectContaining({ asset: "USDT", amountMinor: 10_000_000n, feeMinor: 0n, network: "SOLANA" }),
     );
+  });
+
+  it("with the off-ramp off, keeps the coin from an older converting address: USDT, less our fee", async () => {
+    h.offrampOn.mockResolvedValue(false);
+    const res = await creditCryptoCollection(live());
+    expect(res.outcome).toBe("credited");
+    expect(h.creditBalance).toHaveBeenCalledWith(
+      expect.objectContaining({
+        asset: "USDT",
+        amountMinor: 10_000_000n, // $10.00 converted, held as 10 USDT
+        // Maplerad still kept its ramp cut, so our 1% still applies.
+        feeMinor: 100_000n,
+        network: "BSC",
+        metadata: expect.objectContaining({ converted: true, offramp: false, currency: "USDT" }),
+      }),
+    );
+    expect(h.ensureUsdAsset).not.toHaveBeenCalled();
+    expect(h.notifyUser.mock.calls[0][1].body).toBe("9.900000 USDT has landed in your wallet (0.100000 USDT deposit fee).");
   });
 
   it("tells the user the conversion fee on an offramped deposit", async () => {
