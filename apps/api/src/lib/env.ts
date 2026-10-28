@@ -33,6 +33,50 @@ function providerEnum<T extends [string, ...string[]]>(name: string, values: T, 
 }
 
 /**
+ * True for the pentest lab (CHEQPAY_ENV=lab, see pentest/README.md): an
+ * isolated copy of CheqPay with its own database and auth server, where every
+ * money and identity provider is the mock. Never true anywhere else.
+ */
+export function isLabDeployment(): boolean {
+  return (process.env.CHEQPAY_ENV ?? "").trim().toLowerCase() === "lab";
+}
+
+/**
+ * Credentials that would let the process reach a real provider: money rails,
+ * custody, identity checks, bills, email, the ops alert channel. In the lab they
+ * are removed however they got there, so a key pasted into the lab's settings
+ * by mistake can never move real money or message real people.
+ */
+const REAL_PROVIDER_KEYS = [
+  "MAPLERAD_SECRET_KEY",
+  "MAPLERAD_WEBHOOK_SECRET",
+  "MAPLERAD_PROXY_SECRET",
+  "TATUM_API_KEY",
+  "TATUM_WEBHOOK_SECRET",
+  "VTU_NG_USERNAME",
+  "VTU_NG_PASSWORD",
+  "VTU_NG_PIN",
+  "DOJAH_APP_ID",
+  "DOJAH_API_KEY",
+  "RESEND_API_KEY",
+  "ADMIN_ALERT_WEBHOOK",
+  "SENTRY_DSN",
+] as const;
+
+/**
+ * In the lab: mock providers only, and no real-provider credentials at all.
+ * Applied to process.env itself, before it is parsed, so getEnv() and every
+ * direct process.env read see the same isolated values.
+ */
+function isolateLabEnv(): void {
+  for (const key of REAL_PROVIDER_KEYS) delete process.env[key];
+  for (const key of ["CUSTODY_PROVIDER", "PAYMENT_PROVIDER", "KYC_PROVIDER", "PRICE_FEED"]) {
+    process.env[key] = "mock";
+  }
+  process.env.BILLS_PROVIDER = "default";
+}
+
+/**
  * True when this process is the live production deployment.
  *
  * VERCEL_ENV distinguishes production from preview; NODE_ENV cannot, because
@@ -41,6 +85,7 @@ function providerEnum<T extends [string, ...string[]]>(name: string, values: T, 
  * IS the production deployment.
  */
 export function isLiveDeployment(): boolean {
+  if (isLabDeployment()) return false;
   const vercel = process.env.VERCEL_ENV;
   if (vercel) return vercel === "production";
   return process.env.NODE_ENV === "production";
@@ -236,6 +281,7 @@ let cached: Env | null = null;
 
 export function getEnv(): Env {
   if (cached) return cached;
+  if (isLabDeployment()) isolateLabEnv();
   const parsed = envSchema.safeParse(process.env);
   if (!parsed.success) {
     throw new Error(

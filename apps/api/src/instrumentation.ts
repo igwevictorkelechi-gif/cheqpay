@@ -7,6 +7,14 @@ import * as Sentry from "@sentry/nextjs";
  * is handled — which is exactly what the schema work needs and did not have.
  */
 export async function register() {
+  // The pentest lab (CHEQPAY_ENV=lab): settle its isolation first, so mock
+  // providers are forced and real-provider keys (Sentry's included) are gone
+  // before anything reads them.
+  if (process.env.NEXT_RUNTIME === "nodejs" && process.env.CHEQPAY_ENV?.trim().toLowerCase() === "lab") {
+    const { getEnv } = await import("@/lib/env");
+    getEnv();
+  }
+
   const dsn = process.env.SENTRY_DSN;
   if (dsn) {
     Sentry.init({
