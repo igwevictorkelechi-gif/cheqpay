@@ -12,11 +12,26 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
-      "android": { "buildType": "apk" }
+      "android": {
+        "buildType": "apk"
+      }
     },
     "production": {
       "autoIncrement": true,
       "channel": "production"
+    },
+    "pentest": {
+      "distribution": "internal",
+      "channel": "pentest",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "pentest",
+        "EXPO_PUBLIC_API_URL": "https://api.lab.example.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://auth.lab.example.com",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "paste-ANON_KEY-from-pentest/.env"
+      }
     }
   },
   "submit": {

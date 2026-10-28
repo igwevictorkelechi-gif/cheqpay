@@ -117,3 +117,59 @@ describe("getPaymentProvider refuses rather than inventing an account number", (
     expect(() => getPaymentProvider()).toThrow(/not recognised/);
   });
 });
+
+describe("the pentest lab (CHEQPAY_ENV=lab)", () => {
+  it("is not the live deployment, so its mock providers are allowed", async () => {
+    (process.env as Record<string, string>).NODE_ENV = "production"; // the lab runs a production build
+    process.env.CHEQPAY_ENV = "lab";
+    const { isLiveDeployment, assertNotMockInProduction } = await load();
+    expect(isLiveDeployment()).toBe(false);
+    expect(() => assertNotMockInProduction("PAYMENT_PROVIDER", "mock")).not.toThrow();
+  });
+
+  it("forces every provider to the mock and removes real-provider keys, however they got there", async () => {
+    process.env.CHEQPAY_ENV = "lab";
+    process.env.PAYMENT_PROVIDER = "maplerad";
+    process.env.CUSTODY_PROVIDER = "maplerad";
+    process.env.KYC_PROVIDER = "maplerad";
+    process.env.BILLS_PROVIDER = "vtung";
+    process.env.PRICE_FEED = "live";
+    process.env.MAPLERAD_SECRET_KEY = "sk_live_should_never_be_used";
+    process.env.ADMIN_ALERT_WEBHOOK = "https://hooks.example/ops";
+    process.env.RESEND_API_KEY = "re_real";
+    const env = (await load()).getEnv();
+
+    expect(env).toMatchObject({
+      PAYMENT_PROVIDER: "mock",
+      CUSTODY_PROVIDER: "mock",
+      KYC_PROVIDER: "mock",
+      BILLS_PROVIDER: "default",
+      PRICE_FEED: "mock",
+    });
+    expect(env.MAPLERAD_SECRET_KEY).toBeUndefined();
+    expect(env.ADMIN_ALERT_WEBHOOK).toBeUndefined();
+    // Code that reads process.env directly sees the same.
+    expect(process.env.MAPLERAD_SECRET_KEY).toBeUndefined();
+    expect(process.env.RESEND_API_KEY).toBeUndefined();
+    expect(process.env.PAYMENT_PROVIDER).toBe("mock");
+  });
+
+  it("treats provider vars the lab leaves unset as the mock, not as misconfigured", async () => {
+    process.env.CHEQPAY_ENV = "lab";
+    for (const k of ["PAYMENT_PROVIDER", "CUSTODY_PROVIDER", "KYC_PROVIDER", "BILLS_PROVIDER", "PRICE_FEED"]) delete process.env[k];
+    const { getEnv, assertProviderConfigured } = await load();
+    expect(getEnv().PRICE_FEED).toBe("mock");
+    for (const name of ["PAYMENT_PROVIDER", "CUSTODY_PROVIDER", "KYC_PROVIDER", "BILLS_PROVIDER", "PRICE_FEED"]) {
+      expect(() => assertProviderConfigured(name)).not.toThrow();
+    }
+  });
+
+  it("changes nothing outside the lab", async () => {
+    (process.env as Record<string, string>).NODE_ENV = "production";
+    delete process.env.CHEQPAY_ENV;
+    process.env.MAPLERAD_SECRET_KEY = "sk_live_x";
+    const { isLiveDeployment, getEnv } = await load();
+    expect(isLiveDeployment()).toBe(true);
+    expect(getEnv().MAPLERAD_SECRET_KEY).toBe("sk_live_x");
+  });
+});
