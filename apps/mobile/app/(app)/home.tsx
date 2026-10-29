@@ -113,6 +113,9 @@ export default function HomeScreen() {
           name={user?.full_name}
           onAvatarPress={() => router.push('/(app)/profile')}
           icons={[
+            ...(features.p2p_transfers
+              ? [{ name: 'scan-outline' as const, onPress: () => router.push('/(app)/scan') }]
+              : []),
             { name: 'search-outline', onPress: () => router.push('/(app)/transactions') },
             { name: showBalance ? 'eye-outline' : 'eye-off-outline', onPress: toggleBalance },
             { name: 'notifications-outline', onPress: () => router.push('/(app)/activity') },

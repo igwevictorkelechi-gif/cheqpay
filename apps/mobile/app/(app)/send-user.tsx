@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/components/brand';
 import { SuccessAnimation } from '@/components/Lottie';
 import { api, ApiError, type Balance } from '@/services/api';
@@ -19,18 +19,26 @@ import { useFeatures } from '@/lib/useFeatures';
 import { useTransactionPin, PIN_CANCELLED } from '@/components/TransactionPinProvider';
 import SponsoredCard from '@/components/SponsoredCard';
 
-const ASSETS = ['NGN', 'BTC', 'USDT', 'USDC'];
+const CRYPTOS = ['BTC', 'USDT', 'USDC'];
 
 /**
  * Send NGN or crypto to another CheqPay user by username. The recipient is
  * confirmed before any money moves — the equivalent of a bank name enquiry.
+ *
+ * Reached directly, or from a scanned pay code / deep link with `?to=<username>`
+ * — in which case the recipient is looked up automatically on open. The payer
+ * first chooses Naira or crypto; crypto then lists only the coins they hold.
  */
 export default function SendToUserScreen() {
   const insets = useSafeAreaInsets();
   const features = useFeatures();
+  const params = useLocalSearchParams<{ to?: string }>();
 
   const [balances, setBalances] = useState<Balance[]>([]);
-  const [asset, setAsset] = useState('NGN');
+  // Top-level choice first (Naira vs crypto), then the specific coin.
+  const [mode, setMode] = useState<'ngn' | 'crypto'>('ngn');
+  const [coin, setCoin] = useState<string | null>(null);
+  const asset = mode === 'ngn' ? 'NGN' : (coin ?? '');
   const [username, setUsername] = useState('');
   const [confirmed, setConfirmed] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -46,6 +54,26 @@ export default function SendToUserScreen() {
       .then(({ balances }) => setBalances(balances))
       .catch(() => {});
   }, []);
+
+  // Arrived from a scan or deep link: pre-fill and confirm the recipient.
+  useEffect(() => {
+    const to = (params.to ?? '').replace(/^@+/, '');
+    if (!to) return;
+    setUsername(to);
+    setConfirmed(null);
+    setError(null);
+    setChecking(true);
+    api
+      .lookupUser(to)
+      .then((r) => setConfirmed(r.username))
+      .catch((e) => setError(e instanceof ApiError ? e.message : 'Couldn’t find that username.'))
+      .finally(() => setChecking(false));
+  }, [params.to]);
+
+  // Coins with a positive balance — you can only send crypto you actually hold.
+  const heldCoins = CRYPTOS.filter(
+    (c) => Number(balances.find((b) => b.asset === c)?.availableFormatted ?? 0) > 0,
+  );
 
   const available = Number(
     balances.find((b) => b.asset === asset)?.availableFormatted ?? 0
@@ -91,7 +119,7 @@ export default function SendToUserScreen() {
   const amountNum = Number(amount);
   const amountValid = Number.isFinite(amountNum) && amountNum > 0;
   const overBalance = amountValid && amountNum > available;
-  const canSend = !!confirmed && amountValid && !overBalance && !sending;
+  const canSend = !!confirmed && asset !== '' && amountValid && !overBalance && !sending;
 
   const inputStyle = {
     backgroundColor: colors.card,
@@ -208,58 +236,92 @@ export default function SendToUserScreen() {
                 </View>
               )}
 
-              <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-2">Asset</Text>
-              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
-                {ASSETS.map((a) => (
+              <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-2">What are you sending?</Text>
+              <View className="flex-row" style={{ gap: 8 }}>
+                {([['ngn', 'Naira'], ['crypto', 'Crypto']] as const).map(([m, label]) => (
                   <TouchableOpacity
-                    key={a}
+                    key={m}
                     onPress={() => {
-                      setAsset(a);
+                      setMode(m);
+                      setCoin(null);
                       setAmount('');
                     }}
-                    className="px-4 py-2 rounded-full"
-                    style={{ backgroundColor: asset === a ? colors.brand : colors.card }}
+                    className="flex-1 py-3 rounded-2xl items-center"
+                    style={{ backgroundColor: mode === m ? colors.brand : colors.card }}
                   >
-                    <Text
-                      style={{
-                        color: asset === a ? colors.white : colors.muted,
-                        fontWeight: '700',
-                        fontSize: 13,
-                      }}
-                    >
-                      {a}
+                    <Text style={{ color: mode === m ? colors.white : colors.muted, fontWeight: '700', fontSize: 14 }}>
+                      {label}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-1.5">Amount</Text>
-              <TextInput
-                value={amount}
-                onChangeText={(t) => {
-                  setAmount(t.replace(/[^\d.]/g, ''));
-                  setError(null);
-                }}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={colors.muted}
-                style={inputStyle}
-              />
-              <Text className="text-muted dark:text-muted-dark text-xs mt-1.5">
-                Available: {asset === 'NGN' ? '₦' : ''}
-                {available.toLocaleString('en-NG', { maximumFractionDigits: 8 })}
-                {asset === 'NGN' ? '' : ` ${asset}`}
-              </Text>
+              {mode === 'crypto' && (
+                <>
+                  <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-5 mb-2">Choose a coin</Text>
+                  {heldCoins.length === 0 ? (
+                    <Text className="text-muted dark:text-muted-dark text-sm">
+                      You don’t have any crypto to send yet.
+                    </Text>
+                  ) : (
+                    <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+                      {heldCoins.map((c) => {
+                        const bal = Number(balances.find((b) => b.asset === c)?.availableFormatted ?? 0);
+                        return (
+                          <TouchableOpacity
+                            key={c}
+                            onPress={() => {
+                              setCoin(c);
+                              setAmount('');
+                            }}
+                            className="px-4 py-2.5 rounded-2xl"
+                            style={{ backgroundColor: coin === c ? colors.brand : colors.card }}
+                          >
+                            <Text style={{ color: coin === c ? colors.white : colors.ink, fontWeight: '700', fontSize: 13 }}>
+                              {c}
+                            </Text>
+                            <Text style={{ color: coin === c ? 'rgba(255,255,255,0.8)' : colors.muted, fontSize: 11 }}>
+                              {bal.toLocaleString('en-NG', { maximumFractionDigits: 8 })}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                </>
+              )}
 
-              <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-5 mb-1.5">Note (optional)</Text>
-              <TextInput
-                value={note}
-                onChangeText={setNote}
-                maxLength={140}
-                placeholder="What’s it for?"
-                placeholderTextColor={colors.muted}
-                style={inputStyle}
-              />
+              {asset !== '' && (
+                <>
+                  <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-6 mb-1.5">Amount</Text>
+                  <TextInput
+                    value={amount}
+                    onChangeText={(t) => {
+                      setAmount(t.replace(/[^\d.]/g, ''));
+                      setError(null);
+                    }}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={colors.muted}
+                    style={inputStyle}
+                  />
+                  <Text className="text-muted dark:text-muted-dark text-xs mt-1.5">
+                    Available: {asset === 'NGN' ? '₦' : ''}
+                    {available.toLocaleString('en-NG', { maximumFractionDigits: 8 })}
+                    {asset === 'NGN' ? '' : ` ${asset}`}
+                  </Text>
+
+                  <Text className="text-muted dark:text-muted-dark text-sm font-semibold mt-5 mb-1.5">Note (optional)</Text>
+                  <TextInput
+                    value={note}
+                    onChangeText={setNote}
+                    maxLength={140}
+                    placeholder="What’s it for?"
+                    placeholderTextColor={colors.muted}
+                    style={inputStyle}
+                  />
+                </>
+              )}
 
               {(error || overBalance) && (
                 <Text style={{ color: '#F87171', marginTop: 16 }}>

@@ -159,6 +159,13 @@ const envSchema = z.object({
   ADMIN_API_SECRET: z.string().min(16).optional(),
   ADMIN_EMAILS: z.string().optional(), // comma-separated
 
+  // Signs the per-user token in a QR pay link (/pay/<username>?c=<token>), so a
+  // shared link resolves an account but the public pay endpoint can't be used to
+  // enumerate usernames -> account numbers. Optional: when unset, a key is
+  // derived (domain-separated) from an existing server secret, so pay links work
+  // with zero extra configuration. See lib/payLink.ts.
+  PAY_LINK_SECRET: z.string().min(16).optional(),
+
   // AML thresholds (NGN, whole naira). Converted to kobo at use.
   AML_LARGE_AMOUNT_NGN: z.coerce.number().positive().default(1_000_000),
   AML_REVIEW_THRESHOLD_NGN: z.coerce.number().positive().default(5_000_000),

@@ -1314,6 +1314,12 @@ export const api = {
     });
   },
 
+  /** This user's own pay link + QR value for the "My code" screen. 409 if no
+   * username is set yet (code `username_required`). */
+  getPayLink(): Promise<{ username: string; link: string; token: string }> {
+    return apiFetch('/api/pay-link');
+  },
+
   /** Whether emailed statements are available (email delivery configured). */
   getStatementAvailability(): Promise<{ available: boolean; maxRangeDays: number }> {
     return apiFetch('/api/statements/request');

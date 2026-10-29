@@ -16,6 +16,7 @@ export const FEATURE_DEFS = [
   { key: "bill_payments", label: "Bill payments", description: "Airtime, data, electricity and cable" },
   { key: "virtual_cards", label: "Virtual cards", description: "USD virtual cards (requires Maplerad keys)" },
   { key: "p2p_transfers", label: "User transfers", description: "Send Naira or crypto to another CheqPay user" },
+  { key: "nqr_payments", label: "Cross-bank QR (NQR)", description: "Let other banks' apps (OPay etc.) scan a user's code and pay their Naira account. Needs an NQR provider/NIBSS onboarding — leave OFF until that is live" },
   { key: "gadgets", label: "Gadget store", description: "Buy gadgets, paid from the NGN balance and fulfilled by us" },
   { key: "events", label: "Event tickets", description: "Buy tickets to events & concerts, paid from the NGN balance" },
   { key: "gift_cards_sell", label: "Sell gift cards", description: "Trade gift cards for Naira — reviewed by an admin, paid at the rates you set" },
@@ -84,6 +85,11 @@ const DEFAULT_OFF: readonly FeatureKey[] = [
   // and live mode to the businesses you approve. Review plan prices and limits
   // in admin first.
   "developer_api",
+  // Cross-bank NQR ships OFF and stays off until a real NQR provider is wired
+  // and each Naira account is registered as an NQR merchant (lib/nqr/). With it
+  // off, a user's QR is only the CheqPay pay link; turning it on before the
+  // provider exists would render codes no bank app can actually pay.
+  "nqr_payments",
 ];
 
 const DEFAULTS: Record<FeatureKey, boolean> = Object.fromEntries(
