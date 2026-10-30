@@ -85,7 +85,14 @@ export default function AdjustBalancePage() {
         body: JSON.stringify({ email: email.trim(), asset, amount: amount.trim(), direction, reason: reason.trim(), otp: otp.trim() }),
       });
       const d = await res.json();
-      if (!res.ok) throw new Error(d.error ?? 'Adjustment failed');
+      if (!res.ok) {
+        // The API returns Zod `issues` on a validation error; surface the first
+        // field message (e.g. "Give a reason of at least 10 characters") instead
+        // of the generic "Validation failed".
+        const issue =
+          Array.isArray(d.issues) && d.issues[0]?.message ? String(d.issues[0].message) : null;
+        throw new Error(issue ?? d.error ?? 'Adjustment failed');
+      }
       setMessage({
         kind: 'ok',
         text: `${direction === 'credit' ? 'Credited' : 'Debited'} ${d.amount} ${d.asset} ${direction === 'credit' ? 'to' : 'from'} ${d.email}.`,
@@ -100,8 +107,14 @@ export default function AdjustBalancePage() {
     }
   }
 
+  // Match the API's own rules (apps/api .../admin/adjust-balance): a strict
+  // decimal amount and a reason of at least 10 characters. The form used to
+  // allow a 3-char reason and looser amounts, so valid-looking submits were
+  // rejected server-side with a generic "Validation failed".
+  const amountValid = /^\d+(\.\d+)?$/.test(amount.trim()) && Number(amount) > 0;
+  const reasonValid = reason.trim().length >= 10;
   const canSubmit =
-    /\S+@\S+\.\S+/.test(email) && Number(amount) > 0 && reason.trim().length >= 3 && otp.replace(/\D/g, '').length >= 6 && !busy;
+    /\S+@\S+\.\S+/.test(email) && amountValid && reasonValid && otp.replace(/\D/g, '').length >= 6 && !busy;
 
   const inputCls =
     'w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500';
@@ -253,6 +266,9 @@ export default function AdjustBalancePage() {
                 maxLength={200}
                 className={inputCls}
               />
+              <p className={`mt-1 text-xs ${reason.trim().length > 0 && !reasonValid ? 'text-red-600' : 'text-gray-500'}`}>
+                At least 10 characters{reason.trim().length > 0 ? ` (${reason.trim().length}/10)` : ''}.
+              </p>
             </div>
 
             <div>
