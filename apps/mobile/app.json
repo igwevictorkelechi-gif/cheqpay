@@ -22,14 +22,23 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cheqpay.app"
+      "bundleIdentifier": "com.cheqpay.app",
+      "associatedDomains": ["applinks:mycheqpay.com"]
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.cheqpay.app"
+      "package": "com.cheqpay.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "mycheqpay.com", "pathPrefix": "/pay" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -37,6 +46,12 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow CheqPay to use the camera to scan pay codes."
+        }
+      ],
       [
         "expo-local-authentication",
         {

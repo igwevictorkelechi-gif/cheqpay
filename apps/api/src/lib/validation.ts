@@ -454,3 +454,19 @@ export const profileUpdateSchema = z
     message: "Provide at least one field to update",
   });
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
+
+/**
+ * Create a standing price alert. `target` is a USD price as a positive decimal
+ * string (parsed to minor-agnostic Decimal server-side). Asset is limited to
+ * the crypto the platform actually prices; BTC is the one that meaningfully
+ * moves (USDT/USDC are ~$1 pegs).
+ */
+export const priceAlertCreateSchema = z.object({
+  asset: z.enum(["BTC", "USDT", "USDC"]),
+  direction: z.enum(["ABOVE", "BELOW"]),
+  target: z
+    .string()
+    .trim()
+    .regex(/^\d+(\.\d{1,8})?$/, "Enter a valid target price")
+    .refine((v) => Number(v) > 0, "Target must be greater than zero"),
+});

@@ -9,6 +9,7 @@ export const NOTIFICATION_CATEGORIES = [
   "trades",
   "bills",
   "price",
+  "news",
   "security",
   "updates",
   "promos",
@@ -20,7 +21,9 @@ export type NotificationPrefs = Record<NotificationCategory, boolean>;
 
 /**
  * Sensible defaults: money movement, security and product news on; price
- * alerts and promotions off. `promos` stays opt-in — marketing needs consent.
+ * alerts, crypto news and promotions off. `promos` stays opt-in — marketing
+ * needs consent; `price`/`news` are opt-in so we never push markets at someone
+ * who didn't ask.
  */
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   deposits: true,
@@ -28,6 +31,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   trades: true,
   bills: true,
   price: false,
+  news: false,
   security: true,
   updates: true,
   promos: false,
