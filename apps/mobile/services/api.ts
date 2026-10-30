@@ -108,6 +108,23 @@ export interface Balance {
   availableFormatted: string;
   lockedFormatted: string;
 }
+export interface PriceAlert {
+  id: string;
+  asset: string;
+  direction: 'ABOVE' | 'BELOW';
+  target: string;
+  active: boolean;
+  createdAt: string;
+  lastTriggeredAt: string | null;
+}
+export interface NewsItem {
+  id: string;
+  source: string;
+  title: string;
+  url: string;
+  summary: string | null;
+  publishedAt: string;
+}
 export interface Me {
   id: string;
   email: string;
@@ -1318,6 +1335,37 @@ export const api = {
    * username is set yet (code `username_required`). */
   getPayLink(): Promise<{ username: string; link: string; token: string }> {
     return apiFetch('/api/pay-link');
+  },
+
+  /** The user's standing crypto price alerts. */
+  listPriceAlerts(): Promise<{ alerts: PriceAlert[] }> {
+    return apiFetch('/api/price-alerts');
+  },
+
+  /** Create a price alert ("notify me when BTC goes above $X"). */
+  createPriceAlert(input: {
+    asset: string;
+    direction: 'ABOVE' | 'BELOW';
+    target: string;
+  }): Promise<{ alert: PriceAlert }> {
+    return apiFetch('/api/price-alerts', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  deletePriceAlert(id: string): Promise<{ deleted: boolean }> {
+    return apiFetch(`/api/price-alerts/${id}`, { method: 'DELETE' });
+  },
+
+  /** Re-arm (active:true) or pause (active:false) a one-shot alert. */
+  togglePriceAlert(id: string, active: boolean): Promise<{ updated: boolean; active: boolean }> {
+    return apiFetch(`/api/price-alerts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ active }),
+    });
+  },
+
+  /** Recent crypto news headlines for the in-app feed. */
+  getNews(): Promise<{ news: NewsItem[] }> {
+    return apiFetch('/api/news');
   },
 
   /** Whether emailed statements are available (email delivery configured). */

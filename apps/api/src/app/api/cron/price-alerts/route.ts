@@ -3,7 +3,9 @@ import { getEnv } from "@/lib/env";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { getPriceFeed } from "@/market";
 import { cronRefusal } from "@/lib/cronAuth";
-import { broadcastPush } from "@/lib/push";
+import { broadcastPush, sendPush } from "@/lib/push";
+import { alertCrossed, prettyUsd } from "@/lib/priceAlerts";
+import { ensurePriceAlertsSchema } from "@/lib/ensurePriceAlerts";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +38,14 @@ export async function GET(req: Request) {
 
     const feed = getPriceFeed();
     const results: Array<{ asset: string; price: string; movePct: number; alerted: boolean }> = [];
+    // Spot prices gathered this run, reused by the per-user alert pass below so
+    // a watched asset isn't fetched twice.
+    const spot: Partial<Record<Asset, number>> = {};
 
     for (const asset of WATCHED) {
       const price = await feed.getSpotUsdt(asset);
       const current = Number(price.toString());
+      spot[asset] = current;
       const prev = state[asset]?.ref ? Number(state[asset].ref) : null;
 
       let alerted = false;
@@ -72,10 +78,68 @@ export async function GET(req: Request) {
       create: { key: STATE_KEY, value: JSON.stringify(state), updatedBy: "cron" },
     });
 
-    return jsonOk({ ran: true, thresholdPct: PRICE_ALERT_THRESHOLD_PCT, results });
+    // Per-user custom alerts: fire once when their target is crossed, then go
+    // inactive (the user re-arms from the app). The push is gated by the user's
+    // `price` opt-in inside sendPush.
+    const userAlerts = await evaluateUserAlerts(feed, spot);
+
+    return jsonOk({ ran: true, thresholdPct: PRICE_ALERT_THRESHOLD_PCT, results, userAlerts });
   } catch (err) {
     return toErrorResponse(err);
   }
+}
+
+/**
+ * Evaluate every active per-user price alert against current spot prices. Each
+ * crossed alert sends one push and is deactivated (one-shot). Spot is fetched
+ * once per distinct asset, reusing anything the global pass already priced.
+ */
+async function evaluateUserAlerts(
+  feed: ReturnType<typeof getPriceFeed>,
+  spot: Partial<Record<Asset, number>>,
+): Promise<{ evaluated: number; fired: number }> {
+  await ensurePriceAlertsSchema();
+  const alerts = await prisma.priceAlert.findMany({
+    where: { active: true },
+    select: { id: true, userId: true, asset: true, direction: true, targetUsd: true },
+  });
+  if (alerts.length === 0) return { evaluated: 0, fired: 0 };
+
+  // Price each asset referenced by an alert, once.
+  const prices = new Map<Asset, number>();
+  for (const asset of new Set(alerts.map((a) => a.asset))) {
+    if (spot[asset] != null) {
+      prices.set(asset, spot[asset] as number);
+      continue;
+    }
+    try {
+      prices.set(asset, Number((await feed.getSpotUsdt(asset)).toString()));
+    } catch {
+      /* feed hiccup for this asset — skip it this run */
+    }
+  }
+
+  let fired = 0;
+  for (const a of alerts) {
+    const price = prices.get(a.asset);
+    if (price == null) continue;
+    const target = Number(a.targetUsd.toString());
+    if (!alertCrossed(a.direction, target, price)) continue;
+
+    const up = a.direction === "ABOVE";
+    await sendPush(a.userId, {
+      category: "price",
+      title: `${a.asset} ${up ? "hit" : "dropped to"} your target`,
+      body: `${a.asset} is ${prettyUsd(price)} (your alert: ${up ? "≥" : "≤"} ${prettyUsd(target)}).`,
+      data: { asset: a.asset, price, alertId: a.id },
+    });
+    await prisma.priceAlert.update({
+      where: { id: a.id },
+      data: { active: false, lastTriggeredAt: new Date() },
+    });
+    fired++;
+  }
+  return { evaluated: alerts.length, fired };
 }
 
 function safeParse(raw: string): AlertState {

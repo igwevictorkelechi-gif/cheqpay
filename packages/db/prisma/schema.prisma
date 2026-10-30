@@ -205,6 +205,7 @@ model User {
   ticketOrders  TicketOrder[]
   tickets       Ticket[]
   sessions      UserSession[]
+  priceAlerts   PriceAlert[]
 
   @@index([bvnFingerprint])
   @@index([legalName])
@@ -678,4 +679,42 @@ model BillerAsset {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("biller_assets")
+}
+
+/// A user's standing price alert: notify them once when `asset` crosses
+/// `targetUsd` in `direction`. One-shot — it fires, then goes inactive until the
+/// user re-arms it, which keeps alerts from spamming on every cron tick.
+/// Evaluated by the price-alerts cron (apps/api/src/app/api/cron/price-alerts).
+model PriceAlert {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  asset           Asset
+  /// "ABOVE" | "BELOW" — which way spot must cross the target to fire.
+  direction       String
+  /// Target price in USD (spot measured vs USDT).
+  targetUsd       Decimal   @map("target_usd") @db.Decimal(20, 8)
+  active          Boolean   @default(true)
+  lastTriggeredAt DateTime? @map("last_triggered_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([active, asset])
+  @@index([userId])
+  @@map("price_alerts")
+}
+
+/// A crypto news headline pulled from a public RSS feed, deduped on `url`.
+/// Powers the in-app news feed (/api/news) and the news push notifications.
+model NewsItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  source      String
+  title       String
+  url         String   @unique
+  summary     String?
+  publishedAt DateTime @map("published_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([publishedAt])
+  @@map("news_items")
 }

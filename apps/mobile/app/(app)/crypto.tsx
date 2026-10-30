@@ -106,9 +106,11 @@ export default function CryptoScreen() {
           name={user?.full_name}
           onAvatarPress={() => router.push('/(app)/profile')}
           icons={[
-            { name: 'search-outline', onPress: () => router.push('/(app)/transactions') },
+            ...(features.crypto_news
+              ? [{ name: 'newspaper-outline' as const, onPress: () => router.push('/(app)/news') }]
+              : []),
             { name: showBalance ? 'eye-outline' : 'eye-off-outline', onPress: toggleBalance },
-            { name: 'notifications-outline' },
+            { name: 'notifications-outline', onPress: () => router.push('/(app)/price-alerts') },
           ]}
         />
 

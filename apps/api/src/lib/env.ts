@@ -280,6 +280,9 @@ const envSchema = z.object({
   CRON_SECRET: z.string().min(16).optional(),
   // Percentage move (since the last alert) that triggers a price notification.
   PRICE_ALERT_THRESHOLD_PCT: z.coerce.number().positive().max(100).default(5),
+  // Comma-separated crypto-news RSS feed URLs. Optional — sensible public
+  // defaults live in lib/news/feeds.ts; set this to override them.
+  NEWS_FEEDS: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

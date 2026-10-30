@@ -108,6 +108,8 @@ async function ensureSchema(): Promise<void> {
       { ensureDevApiSchema },
       { ensureReferralSchema },
       { ensureAdminAccountsTable },
+      { ensurePriceAlertsSchema },
+      { ensureNewsSchema },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
@@ -120,6 +122,8 @@ async function ensureSchema(): Promise<void> {
       import("@/lib/devapi/ensureDevApi"),
       import("@/lib/ensureReferrals"),
       import("@/lib/ensureAdminAccounts"),
+      import("@/lib/ensurePriceAlerts"),
+      import("@/lib/ensureNews"),
     ]);
     // One at a time: each helper takes a table lock, and run in parallel they
     // opened a dozen connections per cold start — during a deploy, across many
@@ -163,6 +167,11 @@ async function ensureSchema(): Promise<void> {
       // Sub admin accounts (raw SQL). Gained the granted sections and each sub
       // admin's own authenticator, so it follows the column-add rule.
       () => ensureAdminAccountsTable(),
+      // Standing price alerts and the crypto news feed. New tables only, booted
+      // here so the price-alerts / crypto-news / daily-digest crons and the
+      // /api/price-alerts and /api/news routes find them on the first request.
+      () => ensurePriceAlertsSchema(),
+      () => ensureNewsSchema(),
     ];
     const version = deployVersion();
     if (version && (await schemaAlreadyApplied(version))) return;

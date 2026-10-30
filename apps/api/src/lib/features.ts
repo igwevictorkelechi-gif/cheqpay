@@ -17,6 +17,8 @@ export const FEATURE_DEFS = [
   { key: "virtual_cards", label: "Virtual cards", description: "USD virtual cards (requires Maplerad keys)" },
   { key: "p2p_transfers", label: "User transfers", description: "Send Naira or crypto to another CheqPay user" },
   { key: "nqr_payments", label: "Cross-bank QR (NQR)", description: "Let other banks' apps (OPay etc.) scan a user's code and pay their Naira account. Needs an NQR provider/NIBSS onboarding — leave OFF until that is live" },
+  { key: "price_alerts", label: "Price alerts", description: "Standing crypto price alerts: big-move broadcasts, per-user targets, and the daily digest (opt-in, category 'price')" },
+  { key: "crypto_news", label: "Crypto news", description: "In-app crypto news feed and news push notifications from public RSS feeds (opt-in, category 'news')" },
   { key: "gadgets", label: "Gadget store", description: "Buy gadgets, paid from the NGN balance and fulfilled by us" },
   { key: "events", label: "Event tickets", description: "Buy tickets to events & concerts, paid from the NGN balance" },
   { key: "gift_cards_sell", label: "Sell gift cards", description: "Trade gift cards for Naira — reviewed by an admin, paid at the rates you set" },
@@ -90,6 +92,10 @@ const DEFAULT_OFF: readonly FeatureKey[] = [
   // off, a user's QR is only the CheqPay pay link; turning it on before the
   // provider exists would render codes no bank app can actually pay.
   "nqr_payments",
+  // Crypto news ships OFF until the live RSS feeds are confirmed reachable from
+  // the deployment (they can't be fetched from the dev proxy). Turn on once the
+  // crypto-news cron has pulled items in a preview/prod deploy.
+  "crypto_news",
 ];
 
 const DEFAULTS: Record<FeatureKey, boolean> = Object.fromEntries(
