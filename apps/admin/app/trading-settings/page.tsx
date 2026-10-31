@@ -124,6 +124,7 @@ interface Settings {
   usdtNgnRateUpdatedBy: string | null;
   depositFeeBps: number;
   withdrawalFeeNgn: number;
+  minTradeMarginNgn: number;
   fxMarginBps: number;
   fxMargins: { buyUsd: number | null; sellUsd: number | null };
   withdrawalMinNgn: number;
@@ -160,6 +161,7 @@ export default function TradingSettingsPage() {
   const [usdtUpdated, setUsdtUpdated] = useState<{ at: string | null; by: string | null }>({ at: null, by: null });
   const [depositFeeBps, setDepositFeeBps] = useState('');
   const [withdrawalFeeNgn, setWithdrawalFeeNgn] = useState('');
+  const [minTradeMarginNgn, setMinTradeMarginNgn] = useState('');
   const [fxMarginBps, setFxMarginBps] = useState('');
   const [fxBuyUsd, setFxBuyUsd] = useState('');
   const [fxSellUsd, setFxSellUsd] = useState('');
@@ -194,6 +196,7 @@ export default function TradingSettingsPage() {
     setUsdtUpdated({ at: data.usdtNgnRateUpdatedAt ?? null, by: data.usdtNgnRateUpdatedBy ?? null });
     setDepositFeeBps(String(data.depositFeeBps ?? 0));
     setWithdrawalFeeNgn(String(data.withdrawalFeeNgn ?? 0));
+    setMinTradeMarginNgn(String(data.minTradeMarginNgn ?? 0));
     setFxMarginBps(String(data.fxMarginBps ?? 0));
     setFxBuyUsd(data.fxMargins?.buyUsd == null ? '' : String(data.fxMargins.buyUsd));
     setFxSellUsd(data.fxMargins?.sellUsd == null ? '' : String(data.fxMargins.sellUsd));
@@ -261,6 +264,7 @@ export default function TradingSettingsPage() {
       if (usdtSource === 'manual' && usdtNgnRate !== '') payload.usdtNgnRate = Number(usdtNgnRate);
       if (depositFeeBps !== '') payload.depositFeeBps = Number(depositFeeBps);
       if (withdrawalFeeNgn !== '') payload.withdrawalFeeNgn = Number(withdrawalFeeNgn);
+      if (minTradeMarginNgn !== '') payload.minTradeMarginNgn = Number(minTradeMarginNgn);
       if (billMarginBps !== '') payload.billMarginBps = Number(billMarginBps);
       if (fxMarginBps !== '') payload.fxMarginBps = Number(fxMarginBps);
       // Blank clears a side back to the shared spread; '0' is a real rate.
@@ -532,6 +536,31 @@ export default function TradingSettingsPage() {
           <p className="text-sm text-gray-500 mt-2">
             Taken out of each bank payout: the user withdraws ₦100,000, the bank receives ₦100,000
             minus this fee. Maplerad charges us ₦20 per payout. Set 0 for free withdrawals.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <label className="flex items-center gap-2 text-gray-700 font-semibold mb-2">
+            <Banknote size={18} className="text-brand-600" />
+            Minimum profit per trade (flat ₦)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={100000}
+            step="0.01"
+            value={minTradeMarginNgn}
+            onChange={(e) => setMinTradeMarginNgn(e.target.value)}
+            disabled={loading || saving}
+            className={inputCls}
+            placeholder="0"
+          />
+          <p className="text-sm text-gray-500 mt-2">
+            The least CheqPay keeps on any buy or sell of BTC, USDT or USDC, on top of the
+            percentage spreads above. On a small trade the spread alone can earn only a few naira;
+            this tops it up to a flat floor (currently ₦{minTradeMarginNgn || '0'}) so no trade runs
+            below it — the user just pays a little more, or receives a little less. It never narrows
+            a margin the spread already clears. Set 0 to use the percentage spread alone.
           </p>
         </div>
 

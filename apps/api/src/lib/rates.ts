@@ -181,6 +181,52 @@ function floorToBigInt(d: Decimal): bigint {
   return BigInt(d.floor().toFixed(0));
 }
 
+function ceilToBigInt(d: Decimal): bigint {
+  return BigInt(d.ceil().toFixed(0));
+}
+
+/**
+ * Enforce a minimum business margin, in whole naira, on a buy or sell by
+ * reducing what the user receives until the spread we keep is worth at least
+ * `minMarginNgn`.
+ *
+ * Every swap already keeps a percentage spread, which earns too little on a
+ * small trade — a ₦500 buy at a 2% spread is ₦10 to us. This floor tops that
+ * up to a fixed naira amount so no trade is run for less than it costs to run.
+ * It can only ever WIDEN our margin (reduce the payout), never narrow it, so a
+ * trade whose spread already clears the floor is returned unchanged.
+ *
+ *  - `grossOutMinor`  — what the user would receive at the mid price (no spread)
+ *  - `netOutMinor`    — what the quote currently pays (spread already applied)
+ *  - `outAsset`       — the asset the user receives (the leg margin is kept in)
+ *  - `ngnPerOutWhole` — mid naira value of one whole unit of the out asset
+ *                       (1 when the out asset is NGN itself)
+ *  - `minMarginNgn`   — the floor, in whole naira; 0 (or less) disables it
+ *
+ * The returned payout may be ≤ 0 for a trade too small to leave the floor
+ * behind; the caller rejects that as a dust amount, exactly as it already does
+ * for a payout the spread alone rounds away.
+ */
+export function floorOutToMinMarginNgn(params: {
+  grossOutMinor: bigint;
+  netOutMinor: bigint;
+  outAsset: Asset;
+  ngnPerOutWhole: Decimal;
+  minMarginNgn: number;
+}): bigint {
+  if (params.minMarginNgn <= 0 || params.ngnPerOutWhole.lte(0)) return params.netOutMinor;
+  const outDecimals = ASSET_DECIMALS[params.outAsset];
+  // Out-asset minor units worth `minMarginNgn` at the mid price. Ceil so a
+  // rounding never leaves the kept margin a hair under the floor.
+  const minMarginOutMinor = ceilToBigInt(
+    new D(params.minMarginNgn).div(params.ngnPerOutWhole).mul(new D(10).pow(outDecimals)),
+  );
+  const flooredNet = params.grossOutMinor - minMarginOutMinor;
+  // Only ever reduce the payout; a trade whose spread already clears the floor
+  // keeps its better rate.
+  return flooredNet < params.netOutMinor ? flooredNet : params.netOutMinor;
+}
+
 /**
  * Value a crypto amount (minor units) in NGN kobo at the given price + business
  * rate. Used to enforce NGN-denominated limits on crypto withdrawals. No spread

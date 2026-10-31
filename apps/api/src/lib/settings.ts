@@ -42,6 +42,12 @@ export const SETTING_KEYS = {
   BILL_MARGIN_CABLETV_BPS: "bill_margin_cabletv_bps",
   BILL_MARGIN_BETTING_BPS: "bill_margin_betting_bps",
   BILL_MARGIN_FOOD_BPS: "bill_margin_food_bps",
+  // Smallest profit, in whole naira, the business keeps on any buy or sell.
+  // The percentage spreads above earn too little on a small trade; this tops
+  // the kept margin up to a flat floor so no buy or sell runs below it. 0 =
+  // off (percentage spread only). Applies to BTC, USDT and USDC against naira,
+  // however the trade settles.
+  MIN_TRADE_MARGIN_NGN: "min_trade_margin_ngn",
   // Spread taken on a NGN⇄USD conversion, which settles on Maplerad's FX rail
   // rather than the synthetic USDT peg — so SWAP_SPREAD_BPS never reaches it
   // and it needs a margin of its own.
@@ -440,6 +446,19 @@ export async function setFxSideMarginBps(
     return;
   }
   await upsertSetting(key, String(bps), updatedBy);
+}
+
+/**
+ * Smallest profit, in whole naira, the business keeps on any buy or sell.
+ * 0 = off, so a fresh install behaves exactly as before. Applied on top of the
+ * percentage spread by the swap engine (see floorOutToMinMarginNgn).
+ */
+export function getMinTradeMarginNgn(): Promise<number> {
+  return getNumberSetting(SETTING_KEYS.MIN_TRADE_MARGIN_NGN, 0);
+}
+
+export async function setMinTradeMarginNgn(ngn: number, updatedBy?: string): Promise<void> {
+  await upsertSetting(SETTING_KEYS.MIN_TRADE_MARGIN_NGN, String(ngn), updatedBy);
 }
 
 // --- Minimums ----------------------------------------------------------------

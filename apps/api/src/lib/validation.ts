@@ -236,6 +236,8 @@ export const platformSettingsUpdateSchema = z
     depositFeeBps: z.number().int().min(0).max(500).optional(),
     /** Flat withdrawal fee in NGN (max ₦10,000). */
     withdrawalFeeNgn: z.number().min(0).max(10_000).optional(),
+    /** Minimum business profit per buy/sell, flat NGN (max ₦100,000). 0 = off. */
+    minTradeMarginNgn: z.number().min(0).max(100_000).optional(),
     /** Default bill-payment profit margin in basis points (max 20%). */
     billMarginBps: z.number().int().min(0).max(2_000).optional(),
     /**
