@@ -16,6 +16,7 @@ import {
   computeSwap,
   cryptoToNgnKobo,
   fiatUsdtPrice,
+  floorOutToMinMarginNgn,
   isNgnUsdPair,
   type SwapSide,
 } from "./rates";
@@ -23,6 +24,7 @@ import {
   feeFromBps,
   getCryptoSettlement,
   getFxSideMarginBps,
+  getMinTradeMarginNgn,
   getSwapSpreadBpsFor,
   getUsdtNgnRate,
   type FxSide,
@@ -212,17 +214,45 @@ export async function createQuote(params: {
   const spreadBps = await getSwapSpreadBpsFor(params.side);
   const cryptoUsdtPrice = await getPriceFeed().getSpotUsdt(params.cryptoAsset);
 
-  const { amountOutMinor, rate } = computeSwap({
+  const usdtNgnDecimal = new Prisma.Decimal(usdtNgnRate);
+  const { amountOutMinor: spreadOutMinor, rate } = computeSwap({
     side: params.side,
     cryptoAsset: params.cryptoAsset,
     amountInMinor: params.amountInMinor,
     cryptoUsdtPrice,
-    usdtNgnRate: new Prisma.Decimal(usdtNgnRate),
+    usdtNgnRate: usdtNgnDecimal,
     spreadBps,
   });
 
   const fromAsset = params.side === "buy" ? Asset.NGN : params.cryptoAsset;
   const toAsset = params.side === "buy" ? params.cryptoAsset : Asset.NGN;
+
+  // Keep at least a flat naira profit on top of the percentage spread. The
+  // gross (zero-spread) payout is the mid value; the mid naira price of one
+  // whole out unit is the crypto price for a buy (out = crypto) and 1 for a
+  // sell (out = naira).
+  const minMarginNgn = await getMinTradeMarginNgn();
+  let amountOutMinor = spreadOutMinor;
+  if (minMarginNgn > 0) {
+    const { amountOutMinor: grossOutMinor } = computeSwap({
+      side: params.side,
+      cryptoAsset: params.cryptoAsset,
+      amountInMinor: params.amountInMinor,
+      cryptoUsdtPrice,
+      usdtNgnRate: usdtNgnDecimal,
+      spreadBps: 0,
+    });
+    amountOutMinor = floorOutToMinMarginNgn({
+      grossOutMinor,
+      netOutMinor: spreadOutMinor,
+      outAsset: toAsset,
+      ngnPerOutWhole: toAsset === Asset.NGN ? new Prisma.Decimal(1) : cryptoUsdtPrice.mul(usdtNgnDecimal),
+      minMarginNgn,
+    });
+    if (amountOutMinor <= 0n) {
+      throw new ApiError(422, "Amount too small to trade", "dust_amount");
+    }
+  }
 
   // Enforce the tier single-tx limit on the NGN leg.
   const ngnLegMinor = params.side === "buy" ? params.amountInMinor : amountOutMinor;
@@ -405,8 +435,42 @@ async function createFxConvertQuote(params: {
   // difference stays in treasury.
   const grossOutMinor = BigInt(fx.target.amount) * providerScale(params.toAsset);
   const marginBps = await railMarginBps(params.fromAsset, params.toAsset);
-  const feeOutMinor = feeFromBps(grossOutMinor, marginBps);
-  const amountOutMinor = grossOutMinor - feeOutMinor;
+  let feeOutMinor = feeFromBps(grossOutMinor, marginBps);
+  let amountOutMinor = grossOutMinor - feeOutMinor;
+
+  // A buy or sell of a stablecoin for naira keeps at least a flat naira profit
+  // on top of the percentage spread. A NGN↔USD convert is left on the spread
+  // alone — the floor is for trades, not for moving dollars in and out.
+  const kind = classifySwap(params.fromAsset, params.toAsset);
+  if (kind === "buy" || kind === "sell") {
+    const minMarginNgn = await getMinTradeMarginNgn();
+    if (minMarginNgn > 0) {
+      // Mid naira per whole out unit: 1 for a sell (out = naira), else the
+      // naira paid in per whole coin the provider returned before our spread.
+      const ngnPerOutWhole =
+        params.toAsset === Asset.NGN
+          ? new Prisma.Decimal(1)
+          : new Prisma.Decimal(amountInMinor.toString())
+              .div(100)
+              .div(
+                new Prisma.Decimal(grossOutMinor.toString()).div(
+                  new Prisma.Decimal(10).pow(ASSET_DECIMALS[params.toAsset]),
+                ),
+              );
+      const flooredOut = floorOutToMinMarginNgn({
+        grossOutMinor,
+        netOutMinor: amountOutMinor,
+        outAsset: params.toAsset,
+        ngnPerOutWhole,
+        minMarginNgn,
+      });
+      if (flooredOut !== amountOutMinor) {
+        amountOutMinor = flooredOut;
+        feeOutMinor = grossOutMinor - amountOutMinor;
+      }
+    }
+  }
+
   if (amountOutMinor <= 0n) {
     throw new ApiError(
       422,
@@ -709,8 +773,34 @@ async function executeFxSwap(params: {
   // When the provider settles exactly what it quoted, this lands on
   // quote.amountOut, so the normal case is unchanged.
   const marginBps = await railMarginBps(quote.fromAsset, quote.toAsset);
-  const creditMinor =
+  const settleKind = classifySwap(quote.fromAsset, quote.toAsset);
+  let creditMinor =
     settledGross === null ? quote.amountOut : settledGross - feeFromBps(settledGross, marginBps);
+  // If the provider settled a different amount than it quoted, re-apply the
+  // flat naira floor to that amount too — otherwise a drifting settlement
+  // could hand back the minimum margin the quote promised.
+  if (settledGross !== null && (settleKind === "buy" || settleKind === "sell")) {
+    const minMarginNgn = await getMinTradeMarginNgn();
+    if (minMarginNgn > 0) {
+      const ngnPerOutWhole =
+        quote.toAsset === Asset.NGN
+          ? new Prisma.Decimal(1)
+          : new Prisma.Decimal(quote.amountIn.toString())
+              .div(100)
+              .div(
+                new Prisma.Decimal(settledGross.toString()).div(
+                  new Prisma.Decimal(10).pow(ASSET_DECIMALS[quote.toAsset]),
+                ),
+              );
+      creditMinor = floorOutToMinMarginNgn({
+        grossOutMinor: settledGross,
+        netOutMinor: creditMinor,
+        outAsset: quote.toAsset,
+        ngnPerOutWhole,
+        minMarginNgn,
+      });
+    }
+  }
   // Our spread on this exchange, in the to-asset, kept on the row for revenue
   // reporting. Without a settled figure it is backed out of the quoted net.
   const spreadMinor =

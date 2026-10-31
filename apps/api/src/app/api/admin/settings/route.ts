@@ -9,6 +9,7 @@ import {
   getDepositMinUsd,
   getFxMarginBps,
   getFxMargins,
+  getMinTradeMarginNgn,
   getPricing,
   getSwapSpreads,
   getUsdtNgnRateDetails,
@@ -22,6 +23,7 @@ import {
   setDepositMinUsd,
   setFxMarginBps,
   setFxSideMarginBps,
+  setMinTradeMarginNgn,
   setPricing,
   setSwapSpreadBps,
   setSwapSpreadBpsFor,
@@ -47,6 +49,7 @@ async function snapshot() {
     usdtRate,
     depositFeeBps,
     withdrawalFeeNgn,
+    minTradeMarginNgn,
     fxMarginBps,
     fxMargins,
     billMargins,
@@ -60,6 +63,7 @@ async function snapshot() {
     getUsdtNgnRateDetails(),
     getDepositFeeBps(),
     getWithdrawalFeeNgn(),
+    getMinTradeMarginNgn(),
     getFxMarginBps(),
     getFxMargins(),
     getBillMargins(),
@@ -84,6 +88,8 @@ async function snapshot() {
     cryptoOfframp: await getCryptoOfframp(),
     depositFeeBps,
     withdrawalFeeNgn,
+    /** Flat naira profit floor kept on every buy/sell; 0 = percentage spread only. */
+    minTradeMarginNgn,
     fxMarginBps,
     /** Per side: a number overrides the shared spread, null means it uses it. */
     fxMargins: { buyUsd: fxMargins.buyUsdBps, sellUsd: fxMargins.sellUsdBps },
@@ -142,6 +148,8 @@ export async function PUT(req: Request) {
     if (body.depositFeeBps !== undefined) await setDepositFeeBps(body.depositFeeBps, updatedBy);
     if (body.withdrawalFeeNgn !== undefined)
       await setWithdrawalFeeNgn(body.withdrawalFeeNgn, updatedBy);
+    if (body.minTradeMarginNgn !== undefined)
+      await setMinTradeMarginNgn(body.minTradeMarginNgn, updatedBy);
     if (body.billMarginBps !== undefined) await setBillMarginBps(body.billMarginBps, updatedBy);
     if (body.fxMarginBps !== undefined) await setFxMarginBps(body.fxMarginBps, updatedBy);
     if (body.withdrawalMinNgn !== undefined)

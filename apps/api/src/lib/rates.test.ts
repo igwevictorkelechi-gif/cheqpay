@@ -7,6 +7,7 @@ import {
   cryptoToNgnKobo,
   effectivePrice,
   fiatUsdtPrice,
+  floorOutToMinMarginNgn,
   isNgnUsdPair,
 } from "./rates";
 
@@ -245,5 +246,69 @@ describe("computeCryptoConvert fee", () => {
       spreadBps: 0,
     });
     expect(r.feeOutMinor).toBe(0n);
+  });
+});
+
+describe("floorOutToMinMarginNgn", () => {
+  // A sell: out asset is NGN, so one whole out unit is worth ₦1.
+  it("widens a thin sell margin up to the flat floor (out = NGN)", () => {
+    // Mid value ₦1,000 (100,000 kobo); spread kept only ₦5 (net 99,500 kobo).
+    // Floor ₦15 must cut the net to 98,500 kobo so we keep ₦15.
+    const net = floorOutToMinMarginNgn({
+      grossOutMinor: 100_000n,
+      netOutMinor: 99_500n,
+      outAsset: Asset.NGN,
+      ngnPerOutWhole: D(1),
+      minMarginNgn: 15,
+    });
+    expect(net).toBe(98_500n); // gross − ₦15
+  });
+
+  it("leaves a sell alone when the spread already clears the floor", () => {
+    // Spread already kept ₦30 (net 97,000 kobo) — above the ₦15 floor.
+    const net = floorOutToMinMarginNgn({
+      grossOutMinor: 100_000n,
+      netOutMinor: 97_000n,
+      outAsset: Asset.NGN,
+      ngnPerOutWhole: D(1),
+      minMarginNgn: 15,
+    });
+    expect(net).toBe(97_000n);
+  });
+
+  it("widens a thin buy margin, converting ₦15 into the out coin (out = USDT)", () => {
+    // 1 USDT costs ₦1,500 at mid. Gross 10 USDT = 10,000,000 minor; spread kept
+    // ₦3 worth. The ₦15 floor = 0.01 USDT = 10,000 minor, so net = gross − that.
+    const net = floorOutToMinMarginNgn({
+      grossOutMinor: 10_000_000n,
+      netOutMinor: 9_998_000n, // ~₦3 of margin
+      outAsset: Asset.USDT,
+      ngnPerOutWhole: D(1500),
+      minMarginNgn: 15,
+    });
+    expect(net).toBe(9_990_000n); // 10,000,000 − 10,000 (= 0.01 USDT = ₦15)
+  });
+
+  it("is a no-op when the floor is 0 (disabled)", () => {
+    const net = floorOutToMinMarginNgn({
+      grossOutMinor: 100_000n,
+      netOutMinor: 99_990n,
+      outAsset: Asset.NGN,
+      ngnPerOutWhole: D(1),
+      minMarginNgn: 0,
+    });
+    expect(net).toBe(99_990n);
+  });
+
+  it("can drive a tiny trade's payout to zero or below (caller rejects as dust)", () => {
+    // Gross only ₦10 (1,000 kobo) but the floor wants ₦15 → net goes negative.
+    const net = floorOutToMinMarginNgn({
+      grossOutMinor: 1_000n,
+      netOutMinor: 950n,
+      outAsset: Asset.NGN,
+      ngnPerOutWhole: D(1),
+      minMarginNgn: 15,
+    });
+    expect(net).toBeLessThanOrEqual(0n);
   });
 });

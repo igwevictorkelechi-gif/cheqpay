@@ -53,6 +53,7 @@ vi.mock("./settings", () => ({
   getUsdtNgnRate: vi.fn(),
   getSwapSpreadBps: vi.fn(),
   getFxSideMarginBps: h.getFxSideMarginBps,
+  getMinTradeMarginNgn: vi.fn().mockResolvedValue(0),
   // The real implementation: the arithmetic is the thing under test.
   feeFromBps: (amt: bigint, bps: number) =>
     bps <= 0 ? 0n : (amt * BigInt(Math.trunc(bps))) / 10_000n,
