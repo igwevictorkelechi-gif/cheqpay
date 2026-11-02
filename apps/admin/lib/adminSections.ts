@@ -25,7 +25,8 @@ export type AdminSection =
   | "bills"
   | "content"
   | "support"
-  | "compliance";
+  | "compliance"
+  | "social";
 
 export interface SectionInfo {
   id: AdminSection;
@@ -123,6 +124,13 @@ export const ADMIN_SECTIONS: SectionInfo[] = [
     hint: "Look up a person or account (masked details).",
     pages: ["/compliance"],
     apis: ["/api/subject-lookup"],
+  },
+  {
+    id: "social",
+    label: "Social media",
+    hint: "Connect the company's social accounts; draft, approve and schedule posts.",
+    pages: ["/social"],
+    apis: ["/api/social"],
   },
 ];
 

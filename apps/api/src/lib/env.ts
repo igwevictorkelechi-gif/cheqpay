@@ -178,6 +178,32 @@ const envSchema = z.object({
   // trailing slash.
   API_PUBLIC_URL: z.string().url().optional(),
 
+  // Social media scheduler (admin "Social" section). Each platform is offered
+  // for connecting only once its app keys are set. OAuth callbacks are
+  // `${API_PUBLIC_URL}/api/social/oauth/<platform>/callback` — register that
+  // exact URL in each platform's developer console.
+  META_APP_ID: z.string().optional(), // Facebook Pages + Instagram (one Meta app)
+  META_APP_SECRET: z.string().optional(),
+  META_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v23.0"),
+  X_CLIENT_ID: z.string().optional(),
+  X_CLIENT_SECRET: z.string().optional(),
+  TIKTOK_CLIENT_KEY: z.string().optional(),
+  TIKTOK_CLIENT_SECRET: z.string().optional(),
+  // Until TikTok audits the app, posts can only be private ("only me").
+  TIKTOK_APP_AUDITED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  LINKEDIN_CLIENT_ID: z.string().optional(),
+  LINKEDIN_CLIENT_SECRET: z.string().optional(),
+  // LinkedIn's versioned API header (YYYYMM). Unset: a recent month is used.
+  LINKEDIN_API_VERSION: z.string().regex(/^\d{6}$/).optional(),
+  // Private Supabase Storage bucket for scheduled media (created on first use).
+  SOCIAL_MEDIA_BUCKET: z.string().regex(/^[a-z0-9-]{3,63}$/).default("social-media"),
+  // Lets the database's minute scheduler (pg_cron) call the publisher without
+  // sharing CRON_SECRET. Either secret is accepted there.
+  SOCIAL_CRON_SECRET: z.string().min(32).optional(),
+
   // Phase 2 (custody). Maplerad stablecoin (USDT/USDC) is the only provider;
   // "mock" keeps dev and tests free of external calls. No provider offers BTC —
   // it stays "coming soon" until a BTC custodian is wired.
