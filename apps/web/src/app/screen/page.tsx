@@ -175,7 +175,7 @@ export default function ScreenPlayer() {
   const brand = (
     <div className="flex items-center gap-2 text-white/80">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/cheqpay-icon.png" alt="" className="h-7 w-7 rounded-full" />
+      <img src="/brand/icon-144.png" alt="" className="h-7 w-7 rounded-full" />
       <span className="text-sm font-bold tracking-wide">CheqPay Ads</span>
     </div>
   );

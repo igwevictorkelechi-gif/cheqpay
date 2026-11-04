@@ -9,10 +9,14 @@ import BrandLogo from "./BrandLogo";
  * reload), not on in-app navigation — the layout mounts once, so it doesn't
  * re-appear as you move between screens.
  *
- * Rendered visible on the server so it covers the very first paint, then the
- * client fades and unmounts it. The PWA also declares a native splash via the
- * manifest icons + background_color for the installed-app launch; this covers
- * the browser and the moment before hydration everywhere.
+ * Installed app only. In a browser tab it used to cover the prerendered page
+ * from first paint until the JavaScript had downloaded and hydrated, and then
+ * hold for another 1.3 s — so a visitor on a slow connection stared at a logo
+ * while the landing page was already sitting underneath, fully rendered. That
+ * read as "the website loads slowly". CSS (.splash-pwa in globals.css) now
+ * hides it unless the page runs in display-mode standalone, so browser
+ * visitors see content at first paint, and the installed app keeps its
+ * branded launch with a much shorter hold.
  */
 const SEEN_KEY = "cheqpay:splash";
 
@@ -36,8 +40,8 @@ export default function SplashScreen() {
     } catch {
       /* ignore */
     }
-    const hold = setTimeout(() => setLeaving(true), 900);
-    const done = setTimeout(() => setVisible(false), 1300);
+    const hold = setTimeout(() => setLeaving(true), 250);
+    const done = setTimeout(() => setVisible(false), 600);
     return () => {
       clearTimeout(hold);
       clearTimeout(done);
@@ -50,7 +54,7 @@ export default function SplashScreen() {
     <div
       aria-hidden
       className={
-        "fixed inset-0 z-[100] flex items-center justify-center bg-surface transition-opacity duration-300 " +
+        "splash-pwa fixed inset-0 z-[100] items-center justify-center bg-surface transition-opacity duration-300 " +
         (leaving ? "pointer-events-none opacity-0" : "opacity-100")
       }
     >

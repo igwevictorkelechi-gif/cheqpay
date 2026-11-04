@@ -93,7 +93,7 @@ export default function IosInstallGuide() {
         </button>
 
         <div className="flex items-center gap-3 pr-8">
-          <Image src="/cheqpay-icon.png" alt="" width={48} height={48} className="h-12 w-12 shrink-0 rounded-xl" />
+          <Image src="/brand/icon-144.png" alt="" width={48} height={48} className="h-12 w-12 shrink-0 rounded-xl" />
           <div>
             <h2 id="ios-guide-title" className="text-lg font-extrabold leading-tight text-ink">
               Install CheqPay on your {where}
