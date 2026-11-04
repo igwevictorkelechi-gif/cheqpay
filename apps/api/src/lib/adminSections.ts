@@ -31,6 +31,7 @@ export const ADMIN_SECTIONS = {
   content: ["/api/admin/popup", "/api/admin/home-banner", "/api/admin/broadcast"],
   support: ["/api/admin/support-contact"],
   compliance: ["/api/admin/subjects"],
+  social: ["/api/admin/social"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type AdminSection = keyof typeof ADMIN_SECTIONS;

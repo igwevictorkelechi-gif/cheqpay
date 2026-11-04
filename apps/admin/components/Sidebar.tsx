@@ -8,7 +8,7 @@ import {
   LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
   Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search,
-  ShieldAlert, Monitor, Ban, Package, ShoppingBag, Ticket, CalendarDays, ScanLine, Gift, Percent, ListChecks, Code2, SlidersHorizontal, Globe2, Image as ImageIcon, type LucideIcon } from 'lucide-react';
+  ShieldAlert, Monitor, Ban, Package, ShoppingBag, Ticket, CalendarDays, ScanLine, Gift, Percent, ListChecks, Code2, SlidersHorizontal, Globe2, Image as ImageIcon, Share2, PenSquare, Link2, type LucideIcon } from 'lucide-react';
 import {
   subAdminAccess,
   SUB_ADMIN_AUTHENTICATOR_PAGE,
@@ -114,6 +114,15 @@ const categories: Category[] = [
     items: [
       { label: 'Trades', href: '/gift-cards', icon: Gift },
       { label: 'Rates', href: '/gift-cards/rates', icon: Percent },
+    ],
+  },
+  {
+    label: 'Social Media',
+    icon: Share2,
+    items: [
+      { label: 'Posts & calendar', href: '/social', icon: CalendarDays },
+      { label: 'New post', href: '/social/new', icon: PenSquare },
+      { label: 'Accounts', href: '/social/accounts', icon: Link2 },
     ],
   },
   {

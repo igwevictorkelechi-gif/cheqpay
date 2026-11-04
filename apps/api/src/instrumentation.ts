@@ -110,6 +110,7 @@ async function ensureSchema(): Promise<void> {
       { ensureAdminAccountsTable },
       { ensurePriceAlertsSchema },
       { ensureNewsSchema },
+      { ensureSocialSchema },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
@@ -124,6 +125,7 @@ async function ensureSchema(): Promise<void> {
       import("@/lib/ensureAdminAccounts"),
       import("@/lib/ensurePriceAlerts"),
       import("@/lib/ensureNews"),
+      import("@/lib/social/schema"),
     ]);
     // One at a time: each helper takes a table lock, and run in parallel they
     // opened a dozen connections per cold start — during a deploy, across many
@@ -172,6 +174,8 @@ async function ensureSchema(): Promise<void> {
       // /api/price-alerts and /api/news routes find them on the first request.
       () => ensurePriceAlertsSchema(),
       () => ensureNewsSchema(),
+      // Social media scheduler: new tables only.
+      () => ensureSocialSchema(),
     ];
     const version = deployVersion();
     if (version && (await schemaAlreadyApplied(version))) return;
