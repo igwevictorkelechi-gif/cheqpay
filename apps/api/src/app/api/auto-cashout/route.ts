@@ -8,6 +8,7 @@ import { readPin, requireTransactionPin } from "@/lib/transactionPin";
 import { getWithdrawalFeeNgn, getWithdrawalMinNgn } from "@/lib/settings";
 import { getAutoCashoutSettings, listAutoCashouts, saveAutoCashoutSettings } from "@/lib/autoCashout";
 import { maskedAccount } from "@/lib/autoCashout/rules";
+import { notifyUser } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,7 @@ export async function PUT(req: Request) {
     const auth = await requireUser(req);
     await enforceRateLimit(`autocash:set:${auth.id}`, 10, 60_000);
     const body = autoCashoutSettingsSchema.parse(await req.json());
+    let widened = false;
 
     if (body.enabled) {
       const flags = await getFeatureFlags();
@@ -77,6 +79,7 @@ export async function PUT(req: Request) {
         current.beneficiaryId !== body.beneficiaryId ||
         body.assets.some((a) => !current.assets.includes(a));
       if (widens) await requireTransactionPin(auth.id, readPin(req));
+      widened = widens;
     }
 
     await saveAutoCashoutSettings(auth.id, {
@@ -84,6 +87,22 @@ export async function PUT(req: Request) {
       assets: [...new Set(body.assets)],
       beneficiaryId: body.beneficiaryId,
     });
+    // Tell the owner whenever payouts are authorised or redirected, so a change
+    // they didn't make is noticed straight away.
+    if (widened) {
+      const ben = await prisma.beneficiary.findFirst({
+        where: { id: body.beneficiaryId as string, userId: auth.id },
+        select: { bankName: true, accountNumber: true },
+      });
+      await notifyUser(auth.id, {
+        category: "security",
+        title: "Auto cash-out is on",
+        body: `${body.assets.join(", ")} you receive will be sold and paid to ${
+          ben ? maskedAccount(ben.bankName, ben.accountNumber) : "your bank account"
+        }. If this wasn't you, turn it off and change your transaction PIN.`,
+        data: {},
+      }).catch(() => undefined);
+    }
     await prisma.auditLog
       .create({
         data: {

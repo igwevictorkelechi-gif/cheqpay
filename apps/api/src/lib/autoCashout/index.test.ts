@@ -24,6 +24,7 @@ const h = vi.hoisted(() => ({
   notifyAdmins: vi.fn(),
   flags: { auto_cashout: true, crypto_trading: true, ngn_withdrawals: true } as Record<string, boolean>,
   usedToday: 0n,
+  markerFree: true,
 }));
 
 const sqlOf = (strings: TemplateStringsArray) => strings.join("?");
@@ -42,7 +43,9 @@ vi.mock("@cheqpay/db", () => ({
       return [];
     }),
     $executeRaw: vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
-      h.executes.push({ sql: sqlOf(strings), values });
+      const sql = sqlOf(strings);
+      h.executes.push({ sql, values });
+      if (sql.includes("SET sale_started_at = now()")) return h.markerFree ? 1 : 0;
       return 1;
     }),
     transaction: { findUnique: h.txFindUnique, findFirst: h.txFindFirst },
@@ -100,6 +103,7 @@ beforeEach(() => {
   h.settings = [{ enabled: true, assets: ["USDT", "BTC"], beneficiary_id: "b1" }];
   h.flags = { auto_cashout: true, crypto_trading: true, ngn_withdrawals: true };
   h.usedToday = 0n;
+  h.markerFree = true;
   h.txFindFirst.mockResolvedValue(null);
   h.txFindUnique.mockImplementation(async ({ where }: { where: { id?: string; idempotencyKey?: string } }) => {
     if (where.idempotencyKey) return null; // no earlier sale
@@ -224,6 +228,50 @@ describe("auto cash-out", () => {
     expect(statusUpdates().some((u) => u.includes("failed"))).toBe(true);
     expect(h.executes.some((e) => e.sql.includes("next_attempt_at = now()"))).toBe(false);
     expect(h.notifyAdmins).toHaveBeenCalled();
+  });
+});
+
+describe("never selling twice", () => {
+  it("marks the sale as started before selling", async () => {
+    h.claims.push([row()]);
+    await runAutoCashouts({ id: "ac1" });
+    const marker = h.executes.findIndex((e) => e.sql.includes("SET sale_started_at = now()"));
+    expect(marker).toBeGreaterThanOrEqual(0);
+    expect(h.executeSwap).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops for a person when an earlier sale attempt left no record", async () => {
+    h.claims.push([row({ attempts: 1 })]);
+    h.markerFree = false; // an earlier attempt started a sale
+    await runAutoCashouts({ id: "ac1" });
+    expect(h.executeSwap).not.toHaveBeenCalled();
+    expect(statusUpdates().some((u) => u.includes("failed"))).toBe(true);
+    expect(h.notifyAdmins).toHaveBeenCalled();
+  });
+
+  it("allows another try only when the exchange refused and nothing moved", async () => {
+    h.claims.push([row()]);
+    h.executeSwap.mockRejectedValue(new ApiError(502, "refused", "fx_failed"));
+    await runAutoCashouts({ id: "ac1" });
+    expect(h.executes.some((e) => e.sql.includes("SET sale_started_at = NULL"))).toBe(true);
+    expect(h.executes.some((e) => e.sql.includes("next_attempt_at = now()"))).toBe(true);
+  });
+
+  it("keeps the marker when the outcome of the sale is unknown", async () => {
+    h.claims.push([row()]);
+    h.executeSwap.mockRejectedValue(new Error("connection reset"));
+    await runAutoCashouts({ id: "ac1" });
+    expect(h.executes.some((e) => e.sql.includes("SET sale_started_at = NULL"))).toBe(false);
+  });
+
+  it("holds each row longer than a function can run", async () => {
+    h.claims.push([]);
+    const { prisma } = await import("@cheqpay/db");
+    await runAutoCashouts({ id: "ac1" });
+    const call = (prisma.$queryRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls.find((c) =>
+      sqlOf(c[0] as TemplateStringsArray).includes("locked_until = now()"),
+    );
+    expect(call?.[1]).toBeGreaterThanOrEqual(10); // minutes; Vercel stops a function at 5
   });
 });
 

@@ -60,6 +60,12 @@ export interface ParsedTatumDeposit {
   contract?: string;
   asset?: string;
   txId: string;
+  /**
+   * Tatum flags a transfer that is only in the mempool (not yet in a block)
+   * with `mempool: true`. Such a transfer can still be replaced or dropped,
+   * so it is never credited.
+   */
+  mempool?: boolean;
 }
 
 type Bag = Record<string, unknown>;
@@ -110,6 +116,7 @@ export function parseTatumDeposit(event: unknown): ParsedTatumDeposit | null {
     contract: contract ? contract.toLowerCase() : undefined,
     asset: str(bag, ["asset", "currency"]),
     txId,
+    mempool: bag.mempool === true || bag.mempool === "true",
   };
 }
 
