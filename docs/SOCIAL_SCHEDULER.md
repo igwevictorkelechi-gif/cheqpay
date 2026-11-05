@@ -52,7 +52,7 @@ company's accounts once, then draft, approve and schedule posts to them.
 | `TIKTOK_APP_AUDITED` | `true` once TikTok has audited the app. Until then posts are private ("only me"). |
 | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | LinkedIn app. |
 | `LINKEDIN_API_VERSION` | Optional `YYYYMM`; default is three months back. |
-| `SOCIAL_CRON_SECRET` | ≥32 chars. Lets the database scheduler call the publisher (see below). |
+| `DB_CRON_SECRET` | ≥32 chars. Lets the database scheduler call the publisher (see below). `SOCIAL_CRON_SECRET` is still accepted. |
 
 A platform only shows a **Connect** button once its keys are set. The Accounts
 page shows the exact callback URL to register for each one.
@@ -97,38 +97,34 @@ page shows the exact callback URL to register for each one.
 
 Vercel Hobby only runs crons once a day, so posts at an exact time are triggered
 by the database itself: `pg_cron` calls the publisher every minute through `pg_net`.
-The secret lives in Supabase Vault, not in the job's text.
+The same scheduler also runs auto cash-out retries (see `docs/AUTO_CASHOUT.md`).
+The secret lives in Supabase Vault (`db_cron_secret`) and in `DB_CRON_SECRET` on
+the API Vercel project. It is never written in the job's text.
 
-1. Generate a random secret (≥32 characters).
-2. Set it as `SOCIAL_CRON_SECRET` on the API Vercel project and redeploy.
-3. In Supabase (SQL editor), run:
+**Status:** set up on 5 Nov 2026. The jobs are `social-publish` and `auto-cashout`, each running every minute.
+
+To recreate it (SQL editor):
 
 ```sql
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
--- Store the same secret in Vault (never in the job text).
-select vault.create_secret('<the secret>', 'social_cron_secret');
+-- The same value as DB_CRON_SECRET on Vercel.
+select vault.create_secret('<the secret>', 'db_cron_secret');
 
-select cron.schedule(
-  'social-publish',
-  '* * * * *',
-  $$
+select cron.schedule('social-publish', '* * * * *', $$
   select net.http_post(
-    url := '<API_PUBLIC_URL>/api/cron/social-publish',
+    url := 'https://cheqpay-admin453.vercel.app/api/cron/social-publish',
     headers := jsonb_build_object(
-      'authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'social_cron_secret'),
-      'content-type', 'application/json'
-    ),
-    -- Longer than the publisher's 4-minute budget, so a run always finishes
-    -- before the call gives up. Quiet minutes return in about a second.
-    timeout_milliseconds := 280000
-  );
-  $$
-);
+      'authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'db_cron_secret'),
+      'content-type', 'application/json'),
+    timeout_milliseconds := 280000);
+$$);
+-- auto-cashout: the same, with /api/cron/auto-cashout.
 ```
 
 - Overlapping runs are safe: each target is claimed with a row lock and a lease, so it's never sent twice.
 - Approving a post that's due now also publishes immediately, without waiting for the minute job.
-- To stop it: `select cron.unschedule('social-publish');`
-- Recent runs: `select * from cron.job_run_details order by start_time desc limit 20;`
+- To stop a job: `select cron.unschedule('social-publish');`
+- To see recent runs: `select * from cron.job_run_details order by start_time desc limit 20;`
+- To see the HTTP responses: `select id, status_code, left(content::text, 200) from net._http_response order by id desc limit 20;`

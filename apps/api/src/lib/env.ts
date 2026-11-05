@@ -200,9 +200,14 @@ const envSchema = z.object({
   LINKEDIN_API_VERSION: z.string().regex(/^\d{6}$/).optional(),
   // Private Supabase Storage bucket for scheduled media (created on first use).
   SOCIAL_MEDIA_BUCKET: z.string().regex(/^[a-z0-9-]{3,63}$/).default("social-media"),
-  // Lets the database's minute scheduler (pg_cron) call the publisher without
-  // sharing CRON_SECRET. Either secret is accepted there.
+  // Lets the database's minute scheduler (pg_cron + pg_net) call the publisher
+  // without sharing CRON_SECRET. Kept for older setups; DB_CRON_SECRET is the
+  // one secret for every database-scheduled job.
   SOCIAL_CRON_SECRET: z.string().min(32).optional(),
+  // The database scheduler's secret (stored in Supabase Vault as
+  // 'db_cron_secret'). Accepted by the jobs it calls every minute — auto
+  // cash-out retries and the social publisher — alongside CRON_SECRET.
+  DB_CRON_SECRET: z.string().min(32).optional(),
 
   // Phase 2 (custody). Maplerad stablecoin (USDT/USDC) is the only provider;
   // "mock" keeps dev and tests free of external calls. No provider offers BTC —

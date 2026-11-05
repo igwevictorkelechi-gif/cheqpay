@@ -47,13 +47,10 @@ Before a payout is retried, it looks for an earlier payout for the same
 cash-out that is still in flight or done. That way a payout is never sent twice.
 
 **Retries run:**
+- every minute, from the database scheduler (`pg_cron` calls
+  `/api/cron/auto-cashout` with `DB_CRON_SECRET`; see `docs/SOCIAL_SCHEDULER.md`);
 - whenever any new deposit arrives;
-- in the daily `/api/cron/auto-cashout` sweep (Vercel Hobby only allows daily
-  crons).
-
-For faster retries, point the database scheduler at
-`/api/cron/auto-cashout` (POST with `Bearer CRON_SECRET`), the same way as
-the social publisher.
+- in Vercel's daily `/api/cron/auto-cashout` run, as a backstop.
 
 ## Money behind it
 - **BTC** sells settle on the ledger (treasury).
