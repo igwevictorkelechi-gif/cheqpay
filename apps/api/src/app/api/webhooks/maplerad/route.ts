@@ -20,7 +20,7 @@ import {
   notifySettlement,
 } from "@/lib/ngnWebhook";
 import type { MapleradWebhookEvent } from "@/lib/maplerad/types";
-import { handleIssuingEvent, type IssuingEventData } from "@/lib/maplerad/issuing";
+import { handleIssuingEvent } from "@/lib/maplerad/issuing";
 import { settleCollectionById } from "@/lib/maplerad/settle";
 import { billOutcomeFrom, settleBillByProviderRef } from "@/lib/billSettlement";
 import { creditCryptoDeposit, parseCryptoDeposit } from "@/lib/maplerad/cryptoDeposits";
@@ -66,7 +66,12 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const name = event.event ?? event.type ?? "";
+  // Most events are flat ({ event, ... }); a wrapped one such as
+  // issuing.created.failed names itself in eventType and payload.event.
+  const env = event as Record<string, unknown>;
+  const payload = env.payload && typeof env.payload === "object"
+    ? (env.payload as Record<string, unknown>) : undefined;
+  const name = String(event.event ?? event.type ?? env.eventType ?? payload?.event ?? "");
 
   // Set once the claim exists, so a failure below can hand it back.
   let claimed = false;
@@ -173,12 +178,10 @@ export async function POST(req: Request): Promise<Response> {
       // Card issuing is async: reconcile the pending card (matched by the
       // creation reference) to active/failed. Safe to run even while
       // virtual_cards is OFF — it only updates a card the user already requested.
-      await handleIssuingEvent(
-        event as unknown as MapleradWebhookEvent<IssuingEventData>,
-        cardStore
-      );
+      // Only issuing.created.* settles a card; the rest are acknowledged.
+      const outcome = await handleIssuingEvent(event, cardStore);
       await markProcessed(SOURCE, svix.id);
-      return NextResponse.json({ status: "processed", eventId: svix.id });
+      return NextResponse.json({ status: "processed", ...outcome, eventId: svix.id });
     }
 
     if (name.startsWith("crypto.")) {

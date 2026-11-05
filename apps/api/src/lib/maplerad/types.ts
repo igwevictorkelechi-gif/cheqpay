@@ -316,10 +316,15 @@ export type InstitutionType =
 // ---- Webhooks -------------------------------------------------------------
 
 export interface MapleradWebhookEvent<T = unknown> {
-  event: string;
+  event?: string;
   type?: string;
+  /** Wrapped deliveries (e.g. issuing.created.failed) name the event here. */
+  eventType?: string;
   reference?: string;
-  data: T;
+  /** Older deliveries nest the body here; most current ones are flat. */
+  data?: T;
+  /** The body of a wrapped delivery. */
+  payload?: Record<string, unknown>;
   [key: string]: unknown;
 }
 

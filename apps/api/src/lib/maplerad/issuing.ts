@@ -12,7 +12,7 @@
 // building the NFC UX on top of this.
 
 import { mapleradRequest } from "./client";
-import type { Minor, MapleradWebhookEvent } from "./types";
+import type { Minor } from "./types";
 
 export type CardBrand = "VISA" | "MASTERCARD";
 
@@ -185,18 +185,117 @@ export interface CardStorePort {
   }): Promise<void>;
 }
 
-/** Route an issuing webhook to your card store. */
+/**
+ * One issuing webhook, whatever shape it arrived in. Maplerad sends two
+ * (https://maplerad.dev/docs/issuing):
+ *
+ * - `issuing.created.successful` (and the other issuing.* events) is flat:
+ *   `{ event, reference, card: { id, masked_pan, issuer, ... } }`.
+ * - `issuing.created.failed` is wrapped:
+ *   `{ eventId, eventType, payload: { event, reference, status, reason, verification_link, link_expire_at } }`.
+ *
+ * The older `{ event, data: { reference, card_id, status } }` shape is still
+ * read, in case some deliveries use it.
+ */
+export interface NormalizedIssuingEvent {
+  name: string; // e.g. "issuing.created.successful", "" if unknown
+  reference?: string; // card-creation reference (created.* only)
+  cardId?: string;
+  status?: string; // "SUCCESS" | "FAILED" for created.*; raw otherwise
+  maskedPan?: string;
+  brand?: string;
+  reason?: string;
+  verificationLink?: string;
+  linkExpiresAt?: string;
+  raw: Record<string, unknown>; // the unwrapped body
+}
+
+const CREATED_OK = "issuing.created.successful";
+const CREATED_FAILED = "issuing.created.failed";
+
+function bag(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/** Read an issuing webhook in any of its shapes. Pure; never throws. */
+export function normalizeIssuingEvent(input: unknown): NormalizedIssuingEvent {
+  const root = bag(input) ?? {};
+  const body = bag(root.payload) ?? root;
+  const data = bag(root.data);
+  const card = bag(body.card);
+
+  const name =
+    text(root.event) ?? text(root.type) ?? text(root.eventType) ?? text(body.event) ?? "";
+
+  // The status comes from the event name. The success payload's card.status is
+  // "ACTIVE" and the failure's status is "Rejected"; they stay in `raw`.
+  const status =
+    name === CREATED_OK
+      ? "SUCCESS"
+      : name === CREATED_FAILED
+        ? "FAILED"
+        : text(data?.status) ?? text(body.status);
+
+  return {
+    name,
+    reference: text(data?.reference) ?? text(body.reference),
+    cardId: text(data?.card_id) ?? text(card?.id) ?? text(body.card_id),
+    status,
+    maskedPan: text(card?.masked_pan) ?? text(data?.masked_pan),
+    brand: text(card?.issuer) ?? text(data?.brand),
+    reason: text(body.reason),
+    verificationLink: text(body.verification_link),
+    linkExpiresAt: text(body.link_expire_at),
+    raw: body,
+  };
+}
+
+export interface IssuingOutcome {
+  action: "finalized" | "ignored";
+  reason?: string;
+}
+
+/**
+ * Route an issuing webhook to the card store. Only card creation settles a
+ * card. The other issuing.* events (transaction, terminated, charge,
+ * activation) carry a transaction reference, not a creation one, and card
+ * spend is read from Maplerad on demand, so they are acknowledged and ignored.
+ */
 export async function handleIssuingEvent(
-  event: MapleradWebhookEvent<IssuingEventData>,
+  input: unknown,
   store: CardStorePort,
-): Promise<void> {
-  const data = event.data;
-  const reference = data?.reference;
-  if (!reference) return; // nothing to reconcile against
+): Promise<IssuingOutcome> {
+  const event = normalizeIssuingEvent(input);
+  if (event.name !== CREATED_OK && event.name !== CREATED_FAILED) {
+    return { action: "ignored", reason: event.name || "unknown_event" };
+  }
+  if (!event.reference) {
+    // This card will never settle on its own: a human has to match it.
+    console.error("[maplerad issuing] card creation event without a reference", {
+      name: event.name,
+      payload: JSON.stringify(input).slice(0, 2000),
+    });
+    return { action: "ignored", reason: "no_reference" };
+  }
+
+  const raw: IssuingEventData = { ...event.raw };
+  if (event.maskedPan) raw.masked_pan = event.maskedPan;
+  if (event.brand) raw.brand = event.brand;
+  if (event.reason) raw.reason = event.reason;
+  if (event.verificationLink) raw.verification_link = event.verificationLink;
+  if (event.linkExpiresAt) raw.link_expire_at = event.linkExpiresAt;
+
   await store.finalizeCard({
-    reference,
-    cardId: data.card_id,
-    status: data.status ?? "UNKNOWN",
-    raw: data,
+    reference: event.reference,
+    cardId: event.cardId,
+    status: event.status ?? "UNKNOWN",
+    raw,
   });
+  return { action: "finalized" };
 }
