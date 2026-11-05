@@ -29,3 +29,18 @@ export function cronRefusal(req: Request): Response | null {
   }
   return null;
 }
+
+/**
+ * For jobs the database scheduler (pg_cron + pg_net) calls every minute: the
+ * scheduler's own secret (DB_CRON_SECRET, or the older SOCIAL_CRON_SECRET) is
+ * accepted as well as CRON_SECRET, so CRON_SECRET never has to be copied into
+ * the database. Null when the caller may run the job.
+ */
+export function schedulerRefusal(req: Request): Response | null {
+  const { DB_CRON_SECRET, SOCIAL_CRON_SECRET } = getEnv();
+  const header = req.headers.get("authorization");
+  for (const secret of [DB_CRON_SECRET, SOCIAL_CRON_SECRET]) {
+    if (secret && bearerMatches(header, secret)) return null;
+  }
+  return cronRefusal(req);
+}
