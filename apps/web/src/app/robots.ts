@@ -44,6 +44,7 @@ export default function robots(): MetadataRoute.Robots {
           "/cheqpay-logo.png",
           "/cheqpay-logo-dark.png",
           "/cheqpay-icon.png",
+          "/brand/",
           "/icon-192.png",
           "/icon-512.png",
         ],

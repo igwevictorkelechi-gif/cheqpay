@@ -11,7 +11,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
         {/* Logo */}
         <div className="mb-8 mt-2 flex flex-col items-center">
           <Image
-            src="/cheqpay-icon.png"
+            src="/brand/icon-144.png"
             alt="CheqPay"
             width={72}
             height={72}

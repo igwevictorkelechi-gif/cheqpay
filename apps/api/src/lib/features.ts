@@ -25,6 +25,7 @@ export const FEATURE_DEFS = [
   { key: "gift_cards_buy", label: "Buy gift cards", description: "Buy digital gift cards with Naira (needs the gift card supplier set up)" },
   { key: "referrals", label: "Referrals & influencers", description: "Refer & earn in the app, and the influencer portal at creator.mycheqpay.com" },
   { key: "ads", label: "CheqPay Ads", description: "Businesses buy ads shown in the app (home, after a payment, Pay bills); every ad is reviewed first" },
+  { key: "auto_cashout", label: "Auto cash-out", description: "Users can have each USDT, USDC or BTC deposit sold for naira and paid straight to their own bank account. Uses the normal sell and withdrawal rules, fees and limits" },
   { key: "developer_api", label: "Developer API", description: "The public API and developer portal at developers.mycheqpay.com (sandbox and live). Live access still needs an approved business and a paid plan" },
 ] as const;
 
@@ -96,6 +97,11 @@ const DEFAULT_OFF: readonly FeatureKey[] = [
   // the deployment (they can't be fetched from the dev proxy). Turn on once the
   // crypto-news cron has pulled items in a preview/prod deploy.
   "crypto_news",
+  // Auto cash-out ships OFF: it sells and pays out without a tap, so turn it on
+  // once a supervised test deposit has gone all the way to a bank account, and
+  // the exchange (Maplerad USD wallet for stablecoins) and payout wallet are
+  // funded.
+  "auto_cashout",
 ];
 
 const DEFAULTS: Record<FeatureKey, boolean> = Object.fromEntries(

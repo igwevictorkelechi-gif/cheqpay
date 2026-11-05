@@ -230,6 +230,17 @@ input[inputmode="numeric"] {
   border-radius: 4px;
 }
 
+/* Launch splash (components/SplashScreen.tsx): installed app only. In a browser
+   tab it would hide the already-rendered page until the JavaScript loads. */
+.splash-pwa {
+  display: none;
+}
+@media (display-mode: standalone) {
+  .splash-pwa {
+    display: flex;
+  }
+}
+
 /* Theme-specific logo artwork (see components/BrandLogo.tsx). Both files are in
    the markup and CSS chooses, because the theme is set on <html> before paint —
    swapping in React would flash the wrong one on every load. */

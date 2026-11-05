@@ -263,5 +263,9 @@ export async function creditCryptoCollection(
     data: { transactionId },
   }).catch(() => undefined);
 
+  // Sell and pay out to the bank when the owner turned auto cash-out on. Runs
+  // after the response; never affects the credit above.
+  await import("@/lib/autoCashout").then((m) => m.afterDepositCredited(transactionId)).catch(() => undefined);
+
   return { outcome: "credited", userId, amount: tx.amount };
 }

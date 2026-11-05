@@ -24,18 +24,18 @@ export default function BrandLogo({
   return (
     <>
       <Image
-        src="/cheqpay-logo-dark.png"
+        src="/brand/logo-dark.png"
         alt="CheqPay"
-        width={1528}
-        height={439}
+        width={600}
+        height={172}
         priority={priority}
         className={`logo-dark ${className}`}
       />
       <Image
-        src="/cheqpay-logo.png"
+        src="/brand/logo-light.png"
         alt="CheqPay"
-        width={1942}
-        height={809}
+        width={600}
+        height={250}
         priority={priority}
         className={`logo-light ${className}`}
         aria-hidden

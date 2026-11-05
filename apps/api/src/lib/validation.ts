@@ -472,3 +472,14 @@ export const priceAlertCreateSchema = z.object({
     .regex(/^\d+(\.\d{1,8})?$/, "Enter a valid target price")
     .refine((v) => Number(v) > 0, "Target must be greater than zero"),
 });
+
+/** Auto cash-out settings: which coins to sell on arrival, and which saved bank account to pay. */
+export const autoCashoutSettingsSchema = z
+  .object({
+    enabled: z.boolean(),
+    assets: z.array(z.enum(["USDT", "USDC", "BTC"])).max(3).default([]),
+    beneficiaryId: z.string().uuid().nullable().default(null),
+  })
+  .refine((v) => !v.enabled || (v.assets.length > 0 && v.beneficiaryId), {
+    message: "Pick at least one coin and a bank account to turn auto cash-out on",
+  });

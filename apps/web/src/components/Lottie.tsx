@@ -45,7 +45,7 @@ export function LoadingScreen() {
       <div className="flex min-h-screen w-full max-w-[480px] flex-col items-center justify-center bg-surface lg:max-w-none">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/cheqpay-icon.png"
+          src="/brand/icon-144.png"
           alt="CheqPay"
           width={72}
           height={72}

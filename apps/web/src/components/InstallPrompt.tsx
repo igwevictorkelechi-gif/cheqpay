@@ -73,7 +73,7 @@ export default function InstallPrompt() {
     <div className="fixed inset-x-0 bottom-24 z-[60] mx-auto flex max-w-[440px] justify-center px-4 lg:bottom-8 lg:left-64">
       <div className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card/95 p-3 shadow-2xl shadow-black/50 backdrop-blur-xl">
         <Image
-          src="/cheqpay-icon.png"
+          src="/brand/icon-144.png"
           alt="CheqPay"
           width={44}
           height={44}
