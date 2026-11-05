@@ -1,8 +1,13 @@
 name: Deploy to Vercel (production)
 
-# Deploys both Vercel projects on every push to the branches below:
+# Deploys both Vercel projects on every push to main:
 #   - web  -> project "cheqpy"            (apps/web)
 #   - api  -> project "cheqpay-admin453"  (apps/api, the custodial backend)
+#
+# Only main deploys to production, so merging a pull request is the gate:
+# work in progress on any other branch never reaches customers. (A work branch
+# used to be listed here too, which put unmerged code live in production.)
+# Run it by hand from the Actions tab (workflow_dispatch) to redeploy main.
 #
 # One-time setup (can be done from a phone browser):
 #   GitHub repo -> Settings -> Secrets and variables -> Actions ->
@@ -18,7 +23,6 @@ on:
   push:
     branches:
       - main
-      - claude/cheq-pay-rebrand-kjehub
   workflow_dispatch:
 
 concurrency:
