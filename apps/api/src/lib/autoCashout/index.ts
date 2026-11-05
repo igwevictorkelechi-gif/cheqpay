@@ -50,7 +50,13 @@ import {
   type AutoCashoutStatus,
 } from "./rules";
 
-const LEASE_MIN = 5;
+/**
+ * How long a run owns a row. Longer than any function can live (Vercel stops
+ * a function after at most 5 minutes), so a lease only ever expires after the
+ * run holding it is dead. Two runs can therefore never work on one cash-out
+ * at the same time, which is what keeps a sale or payout from happening twice.
+ */
+const LEASE_MIN = 15;
 
 // ---------------------------------------------------------------- settings --
 
@@ -223,7 +229,7 @@ export async function runAutoCashouts(opts: { id?: string; budgetMs?: number; li
 
 async function claimNext(id?: string): Promise<Row | null> {
   const rows = await prisma.$queryRaw<Row[]>`
-    UPDATE auto_cashouts c SET locked_until = now() + make_interval(mins => ${LEASE_MIN}), updated_at = now()
+    UPDATE auto_cashouts c SET locked_until = now() + make_interval(mins => ${LEASE_MIN}::int), updated_at = now()
     WHERE c.id = (
       SELECT c2.id FROM auto_cashouts c2
       WHERE c2.status IN ('queued', 'sold')
@@ -241,6 +247,22 @@ async function claimNext(id?: string): Promise<Row | null> {
 
 /** A definite "no" that leaves the money where it is. */
 class Stop extends Error {}
+
+/** Money may have moved without a record: never retried, a person checks it. */
+class Danger extends Error {}
+
+/**
+ * executeSwap errors that are raised before anything moved, or after the
+ * exchange was refused and the coins put back. Only after one of these may the
+ * sale be tried again.
+ */
+const SALE_NOTHING_MOVED = new Set([
+  "no_quote",
+  "quote_consumed",
+  "quote_expired",
+  "insufficient_funds",
+  "fx_failed",
+]);
 
 const swapKey = (id: string) => `autocash:swap:${id}`;
 
@@ -308,7 +330,25 @@ async function sell(row: Row): Promise<bigint> {
     throw err;
   }
 
-  const res = await executeSwap({ userId: row.user_id, quoteId: quote.id, idempotencyKey: swapKey(row.id) });
+  // Record the intent before the point of no return. If an earlier attempt
+  // already set it and left no sale on record (checked above), that attempt's
+  // outcome is unknown: selling again could sell twice, so a person decides.
+  const started = await prisma.$executeRaw`
+    UPDATE auto_cashouts SET sale_started_at = now(), updated_at = now()
+    WHERE id = ${row.id}::uuid AND sale_started_at IS NULL`;
+  if (started !== 1) {
+    throw new Danger("An earlier sale attempt has no record of finishing; not selling again until it is checked.");
+  }
+  let res: { transactionId: string };
+  try {
+    res = await executeSwap({ userId: row.user_id, quoteId: quote.id, idempotencyKey: swapKey(row.id) });
+  } catch (err) {
+    const code = (err as { code?: unknown } | null)?.code;
+    if (typeof code === "string" && SALE_NOTHING_MOVED.has(code)) {
+      await prisma.$executeRaw`UPDATE auto_cashouts SET sale_started_at = NULL WHERE id = ${row.id}::uuid`;
+    }
+    throw err;
+  }
   const swap = await prisma.transaction.findUnique({ where: { id: res.transactionId } });
   return markSold(row, res.transactionId, swap?.metadata ?? null, quote.amountOut);
 }
@@ -387,13 +427,13 @@ async function markPaid(row: Row, payoutTxId: string, payoutMinor: bigint, accou
 async function handleFailure(row: Row, err: unknown): Promise<AutoCashoutStatus> {
   const sold = row.status === "sold";
   const message = err instanceof Error ? err.message : String(err);
-  const kind = err instanceof Stop ? "stop" : classifyError(err);
+  const kind = err instanceof Stop ? "stop" : err instanceof Danger ? "danger" : classifyError(err);
   const attempts = row.attempts + 1;
 
   if (kind === "retry" && attempts < MAX_ATTEMPTS) {
     await prisma.$executeRaw`
       UPDATE auto_cashouts SET attempts = ${attempts}, reason = ${message.slice(0, 500)}, locked_until = NULL,
-        next_attempt_at = now() + make_interval(secs => ${retryDelaySeconds(attempts)}), updated_at = now()
+        next_attempt_at = now() + make_interval(secs => ${retryDelaySeconds(attempts)}::int), updated_at = now()
       WHERE id = ${row.id}::uuid`;
     return row.status;
   }

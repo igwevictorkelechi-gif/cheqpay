@@ -48,6 +48,10 @@ export function ensureAutoCashoutSchema(): Promise<void> {
           updated_at timestamptz NOT NULL DEFAULT now()
         )`,
         `CREATE UNIQUE INDEX IF NOT EXISTS auto_cashouts_deposit_key ON auto_cashouts(deposit_tx_id)`,
+        // Set just before a sale is attempted, cleared only when that attempt
+        // definitely moved nothing. A later attempt that finds it set, with no
+        // sale on record, stops for a person instead of selling again.
+        `ALTER TABLE auto_cashouts ADD COLUMN IF NOT EXISTS sale_started_at timestamptz`,
         `CREATE INDEX IF NOT EXISTS auto_cashouts_user_idx ON auto_cashouts(user_id, created_at DESC)`,
         `CREATE INDEX IF NOT EXISTS auto_cashouts_due_idx ON auto_cashouts(status, next_attempt_at)`,
       ];

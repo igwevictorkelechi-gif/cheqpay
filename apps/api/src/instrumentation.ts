@@ -111,6 +111,7 @@ async function ensureSchema(): Promise<void> {
       { ensurePriceAlertsSchema },
       { ensureNewsSchema },
       { ensureSocialSchema },
+      { ensureAutoCashoutSchema },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
@@ -126,6 +127,7 @@ async function ensureSchema(): Promise<void> {
       import("@/lib/ensurePriceAlerts"),
       import("@/lib/ensureNews"),
       import("@/lib/social/schema"),
+      import("@/lib/autoCashout/schema"),
     ]);
     // One at a time: each helper takes a table lock, and run in parallel they
     // opened a dozen connections per cold start — during a deploy, across many
@@ -176,6 +178,9 @@ async function ensureSchema(): Promise<void> {
       () => ensureNewsSchema(),
       // Social media scheduler: new tables only.
       () => ensureSocialSchema(),
+      // Auto cash-out: its own tables, plus sale_started_at added to one of
+      // them, so it follows the column-add rule and runs here.
+      () => ensureAutoCashoutSchema(),
     ];
     const version = deployVersion();
     if (version && (await schemaAlreadyApplied(version))) return;

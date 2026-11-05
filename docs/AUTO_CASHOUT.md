@@ -43,8 +43,30 @@ nothing is sold and the coins stay in the wallet. That covers:
 | Retries run out after the sale | `kept_ngn`: the naira stays in the wallet and the user is told |
 | Sold, but the balance update failed (`fx_credit_failed`) | `failed`: never retried, and admins with the Transactions section are alerted |
 
-Before a payout is retried, it looks for an earlier payout for the same
-cash-out that is still in flight or done. That way a payout is never sent twice.
+## Why nothing happens twice
+- **One row per deposit.** The deposit's ID is unique, so webhook re-deliveries add nothing.
+- **A 15-minute lease on each row.** Vercel stops a function after 5 minutes,
+  so a lease only expires once the run holding it is dead. Two runs never work
+  on the same cash-out at once.
+- **A sale marker.** `sale_started_at` is set just before selling. It is
+  cleared only when the sale definitely moved nothing (quote expired, exchange
+  refused and the coins were put back). If a later attempt finds the marker set
+  and no sale on record, it stops as `failed` for a person to check. It never
+  sells again.
+- **A fixed sale key.** `autocash:swap:<id>`: a sale that went through is found and reused.
+- **A payout lookup.** Before any payout, it looks for one for this cash-out
+  that is already in flight or done. Each attempt also has its own unique key,
+  so two payouts can't both be written.
+
+## Fraud controls
+- Payouts only go to the user's own saved accounts. The name is checked against
+  KYC when the account is saved and again at every payout.
+- Turning it on, adding a coin or changing the account needs the transaction
+  PIN. The owner also gets a security notification ("If this wasn't you…").
+- Only real, confirmed deposits trigger it: webhooks are signature-checked,
+  and Tatum `mempool: true` (unconfirmed) transfers are never credited. Admin
+  balance credits never trigger it.
+- The normal tier limits, daily withdrawal cap and minimum payout apply.
 
 **Retries run:**
 - every minute, from the database scheduler (`pg_cron` calls

@@ -54,6 +54,13 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ status: "unparseable" });
   }
 
+  // Unconfirmed (mempool) transfers are never credited: they can still be
+  // replaced or dropped. Not claimed either, so the confirmed notification for
+  // the same transfer is credited when it arrives.
+  if (parsed.mempool) {
+    return NextResponse.json({ status: "pending_confirmations", txId: parsed.txId });
+  }
+
   // Set once the claim exists, so a failure below can hand it back.
   let claimedEventId: string | null = null;
 

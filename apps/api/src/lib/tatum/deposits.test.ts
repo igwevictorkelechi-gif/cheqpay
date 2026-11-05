@@ -79,6 +79,12 @@ describe("networkForChain", () => {
 });
 
 describe("parseTatumDeposit", () => {
+  it("flags an unconfirmed (mempool) transfer so it is never credited", () => {
+    const base = { address: ADDRESS, amount: "0.01", chain: "bitcoin-mainnet", txId: "abc" };
+    expect(parseTatumDeposit({ ...base, mempool: true })?.mempool).toBe(true);
+    expect(parseTatumDeposit(base)?.mempool).toBe(false);
+  });
+
   it("reads a flat ADDRESS_EVENT payload", () => {
     const d = parseTatumDeposit({
       address: ADDRESS,
