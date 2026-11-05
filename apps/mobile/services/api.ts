@@ -1204,6 +1204,23 @@ export const api = {
     return apiFetch(`/api/beneficiaries/${id}`, { method: 'DELETE' });
   },
 
+  // ---- Auto cash-out (crypto deposits sold and paid to the bank) ----
+  getAutoCashout(): Promise<AutoCashoutState> {
+    return apiFetch('/api/auto-cashout');
+  },
+
+  /** Turning it on or widening it needs the transaction PIN; turning it off doesn't. */
+  setAutoCashout(
+    input: { enabled: boolean; assets: AutoCashoutCoin[]; beneficiaryId: string | null },
+    pin?: string,
+  ): Promise<{ ok: boolean }> {
+    return apiFetch('/api/auto-cashout', {
+      method: 'PUT',
+      headers: pinHeader(pin),
+      body: JSON.stringify(input),
+    });
+  },
+
   // ---- Support ----
   getSupportContact(): Promise<{ email: string; phone: string; whatsapp: string }> {
     return apiFetch('/api/support/contact');
@@ -1504,6 +1521,30 @@ export interface FeatureFlags {
   gift_cards_buy: boolean;
   referrals: boolean;
   ads: boolean;
+  auto_cashout?: boolean;
+}
+
+export type AutoCashoutCoin = 'USDT' | 'USDC' | 'BTC';
+
+export interface AutoCashoutRun {
+  id: string;
+  coin: string;
+  amount: string;
+  status: 'queued' | 'sold' | 'paid' | 'skipped' | 'kept_ngn' | 'failed';
+  reason: string | null;
+  ngn: string | null;
+  payout: string | null;
+  createdAt: string;
+}
+
+export interface AutoCashoutState {
+  available: boolean;
+  enabled: boolean;
+  assets: AutoCashoutCoin[];
+  beneficiary: { id: string; bankName: string; accountName: string; label: string } | null;
+  minPayoutNgn: number;
+  payoutFeeNgn: number;
+  runs: AutoCashoutRun[];
 }
 
 export interface CardTransaction {

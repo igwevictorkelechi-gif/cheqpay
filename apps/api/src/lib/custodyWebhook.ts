@@ -116,6 +116,13 @@ export async function handleCustodyWebhook(req: Request) {
     }),
   ]);
 
+  if (result.created) {
+    // Sell and pay out to the bank when the owner turned auto cash-out on.
+    await import("@/lib/autoCashout")
+      .then((m) => m.afterDepositCredited(result.transactionId))
+      .catch(() => undefined);
+  }
+
   return jsonOk({
     status: result.created ? "credited" : "already_credited",
     transactionId: result.transactionId,

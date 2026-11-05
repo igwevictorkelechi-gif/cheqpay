@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/developers",
       "schedule": "35 5 * * *"
+    },
+    {
+      "path": "/api/cron/auto-cashout",
+      "schedule": "25 6 * * *"
     }
   ]
 }
