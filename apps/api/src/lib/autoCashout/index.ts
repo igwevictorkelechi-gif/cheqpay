@@ -229,7 +229,7 @@ export async function runAutoCashouts(opts: { id?: string; budgetMs?: number; li
 
 async function claimNext(id?: string): Promise<Row | null> {
   const rows = await prisma.$queryRaw<Row[]>`
-    UPDATE auto_cashouts c SET locked_until = now() + make_interval(mins => ${LEASE_MIN}), updated_at = now()
+    UPDATE auto_cashouts c SET locked_until = now() + make_interval(mins => ${LEASE_MIN}::int), updated_at = now()
     WHERE c.id = (
       SELECT c2.id FROM auto_cashouts c2
       WHERE c2.status IN ('queued', 'sold')
@@ -433,7 +433,7 @@ async function handleFailure(row: Row, err: unknown): Promise<AutoCashoutStatus>
   if (kind === "retry" && attempts < MAX_ATTEMPTS) {
     await prisma.$executeRaw`
       UPDATE auto_cashouts SET attempts = ${attempts}, reason = ${message.slice(0, 500)}, locked_until = NULL,
-        next_attempt_at = now() + make_interval(secs => ${retryDelaySeconds(attempts)}), updated_at = now()
+        next_attempt_at = now() + make_interval(secs => ${retryDelaySeconds(attempts)}::int), updated_at = now()
       WHERE id = ${row.id}::uuid`;
     return row.status;
   }

@@ -57,7 +57,7 @@ export async function startConnect(provider: ProviderId, actor: string, returnUr
   await prisma.$executeRaw`DELETE FROM social_oauth_states WHERE expires_at < now()`;
   await prisma.$executeRaw`
     INSERT INTO social_oauth_states (state, platform, code_verifier, actor, return_url, expires_at)
-    VALUES (${state}, ${provider}, ${pkce?.verifier ?? null}, ${actor}, ${returnUrl}, now() + make_interval(mins => ${STATE_TTL_MIN}))`;
+    VALUES (${state}, ${provider}, ${pkce?.verifier ?? null}, ${actor}, ${returnUrl}, now() + make_interval(mins => ${STATE_TTL_MIN}::int))`;
   return p.authorizeUrl({ state, redirectUri: callbackUrl(provider), codeChallenge: pkce?.challenge });
 }
 

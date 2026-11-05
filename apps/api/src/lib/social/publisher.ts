@@ -83,7 +83,7 @@ export async function runPublisher(opts: { budgetMs?: number; postId?: string } 
 async function claimNext(postId?: string): Promise<ClaimedTarget | null> {
   const rows = await prisma.$queryRaw<ClaimedTarget[]>`
     UPDATE social_post_targets t
-    SET locked_until = now() + make_interval(mins => ${LEASE_MIN}), updated_at = now()
+    SET locked_until = now() + make_interval(mins => ${LEASE_MIN}::int), updated_at = now()
     WHERE t.id = (
       SELECT t2.id FROM social_post_targets t2
       JOIN social_posts p ON p.id = t2.post_id
@@ -155,7 +155,7 @@ async function processTarget(t: ClaimedTarget): Promise<Outcome> {
     const merged = { ...stage, ...result.stage };
     await prisma.$executeRaw`
       UPDATE social_post_targets SET status = 'processing', stage = ${JSON.stringify(merged)}::jsonb,
-        next_attempt_at = now() + make_interval(secs => ${result.retryInSec}), locked_until = NULL, updated_at = now()
+        next_attempt_at = now() + make_interval(secs => ${result.retryInSec}::int), locked_until = NULL, updated_at = now()
       WHERE id = ${t.id}::uuid`;
     return "waiting";
   } catch (err) {
@@ -171,7 +171,7 @@ async function processTarget(t: ClaimedTarget): Promise<Outcome> {
       await prisma.$executeRaw`
         UPDATE social_post_targets SET attempts = ${attempts}, error = ${message.slice(0, 1000)},
           stage = ${JSON.stringify(stage)}::jsonb, locked_until = NULL,
-          next_attempt_at = now() + make_interval(secs => ${retryDelaySeconds(attempts)}), updated_at = now()
+          next_attempt_at = now() + make_interval(secs => ${retryDelaySeconds(attempts)}::int), updated_at = now()
         WHERE id = ${t.id}::uuid`;
       return "retrying";
     }
