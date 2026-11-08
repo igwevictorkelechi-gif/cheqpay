@@ -23,6 +23,7 @@ export function serializeTransaction(t: Transaction) {
     token?: string | null;
     counterparty?: string | null;
     note?: string | null;
+    groupName?: string | null;
     toAddress?: string;
     rate?: string;
   };
@@ -58,5 +59,7 @@ export function serializeTransaction(t: Transaction) {
     // User-to-user transfers: the other party's username and the sender's note.
     counterparty: meta.counterparty ?? null,
     note: meta.note ?? null,
+    // Ajo: the group a contribution or payout belongs to (a plan's name is planName).
+    groupName: meta.groupName ?? null,
   };
 }

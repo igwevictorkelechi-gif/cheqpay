@@ -235,7 +235,11 @@ export type LedgerTxType =
   | "AD_REFUND"
   | "AD_PAYOUT"
   | "DEV_WALLET_FUND"
-  | "DEV_WALLET_WITHDRAW";
+  | "DEV_WALLET_WITHDRAW"
+  | "AJO_SAVE"
+  | "AJO_RELEASE"
+  | "AJO_CONTRIBUTION"
+  | "AJO_PAYOUT";
 export type LedgerTxStatus =
   | "PENDING"
   | "PROCESSING"
@@ -269,6 +273,8 @@ export interface LedgerTransaction {
   token: string | null;
   counterparty: string | null;
   note: string | null;
+  /** Ajo: the group a contribution or payout belongs to. */
+  groupName?: string | null;
 }
 
 export interface VirtualAccount {
