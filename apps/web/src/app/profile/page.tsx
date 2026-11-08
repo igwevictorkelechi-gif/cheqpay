@@ -26,7 +26,7 @@ type Item = {
   subtitle: string;
   href?: string;
   /** When set, this entry is hidden while the admin feature flag is off. */
-  feature?: "virtual_cards" | "referrals" | "ads" | "auto_cashout";
+  feature?: "virtual_cards" | "referrals" | "ads" | "auto_cashout" | "ajo";
 };
 
 const items: Item[] = [
@@ -45,6 +45,12 @@ const items: Item[] = [
     subtitle: "Turn crypto you receive into naira in your bank, automatically",
     href: "/auto-cashout",
     feature: "auto_cashout",
+  },
+  {
+    title: "Ajo savings",
+    subtitle: "Save on a schedule, alone or with a group",
+    href: "/ajo",
+    feature: "ajo",
   },
   {
     title: "Virtual cards",

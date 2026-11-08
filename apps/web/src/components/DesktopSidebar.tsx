@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   LifeBuoy,
   LogOut,
+  PiggyBank,
   type LucideIcon,
 } from "lucide-react";
 import { useFeatures } from "@/lib/useFeatures";
@@ -62,6 +63,7 @@ const GROUPS: Group[] = [
       { label: "Crypto", href: "/crypto", icon: Bitcoin, flag: "crypto_trading" },
       { label: "Pay a bill", href: "/pay-bill", icon: Tag, flag: "bill_payments" },
       { label: "Cards", href: "/cards", icon: CreditCard, flag: "virtual_cards" },
+      { label: "Ajo savings", href: "/ajo", icon: PiggyBank, flag: "ajo" },
     ],
   },
   {

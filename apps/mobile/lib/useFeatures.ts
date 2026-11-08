@@ -18,6 +18,7 @@ export const ALL_ON: FeatureFlags = {
   gift_cards_buy: false,
   referrals: false,
   ads: false,
+  ajo: false,
 };
 
 /** Admin feature switches for hiding disabled features in the app UI. */

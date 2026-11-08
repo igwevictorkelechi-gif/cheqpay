@@ -24,6 +24,7 @@ export const ALL_ON: FeatureFlags = {
   gift_cards_buy: false,
   referrals: false,
   ads: false,
+  ajo: false,
 };
 
 /**

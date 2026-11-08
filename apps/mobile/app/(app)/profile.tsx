@@ -10,7 +10,7 @@ import { api, getAccessToken } from '@/services/api';
 import { tierInfo } from '@/lib/tier';
 import { useFeatures } from '@/lib/useFeatures';
 
-type Item = { title: string; subtitle: string; route?: string; feature?: 'virtual_cards' | 'referrals' | 'ads' | 'auto_cashout' };
+type Item = { title: string; subtitle: string; route?: string; feature?: 'virtual_cards' | 'referrals' | 'ads' | 'auto_cashout' | 'ajo' };
 
 const items: Item[] = [
   {
@@ -24,6 +24,12 @@ const items: Item[] = [
     subtitle: 'Turn crypto you receive into naira in your bank, automatically',
     route: '/(app)/auto-cashout',
     feature: 'auto_cashout',
+  },
+  {
+    title: 'Ajo savings',
+    subtitle: 'Save on a schedule, alone or with a group',
+    route: '/(app)/ajo',
+    feature: 'ajo',
   },
   { title: 'Virtual cards', subtitle: 'USD cards for online payments', route: '/(app)/cards', feature: 'virtual_cards' },
   { title: 'Refer & earn', subtitle: 'Invite friends and earn when they join', route: '/(app)/refer', feature: 'referrals' },
