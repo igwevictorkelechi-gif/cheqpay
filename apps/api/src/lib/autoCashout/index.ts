@@ -49,6 +49,7 @@ import {
   type AutoCashoutCoin,
   type AutoCashoutStatus,
 } from "./rules";
+import { ajoArrearsKobo } from "@/lib/ajo/lien";
 
 /**
  * How long a run owns a row. Longer than any function can live (Vercel stops
@@ -391,6 +392,11 @@ async function payOut(row: Row, ngnMinor: bigint): Promise<AutoCashoutStatus> {
   if (!ben) throw new Stop("The bank account for auto cash-out was removed, so the naira is in your wallet.");
   const user = await prisma.user.findUnique({ where: { id: row.user_id }, select: { id: true, legalName: true, kycTier: true } });
   if (!user) throw new Stop("Account not found.");
+  // The Ajo lien: money that comes in while the user owes their group goes to
+  // the group first, so it is not paid out to the bank (lib/ajo/lien.ts).
+  if ((await ajoArrearsKobo(row.user_id)) > 0n) {
+    throw new Stop("You owe your Ajo group, so the naira stayed in your wallet and goes to your group first.");
+  }
 
   const out = await initiateNgnPayout({
     user,

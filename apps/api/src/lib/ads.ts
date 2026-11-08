@@ -38,6 +38,7 @@ import { ApiError } from "./http";
 import { formatNairaMinor } from "./money";
 import { ensureReferralSchema } from "./referrals";
 import { cachedSetting, invalidateSetting } from "./settingsCache";
+import { assertNoAjoArrears } from "@/lib/ajo/lien";
 
 // ---------------------------------------------------------------------------
 // Vocabulary
@@ -784,6 +785,9 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Campai
     placements, venues: input.venues, nearbyVenueId: input.nearbyVenueId, influencer: input.influencer, days: input.days, userId: input.userId,
   });
   const id = randomUUID();
+
+  // A member who owes their Ajo group can't move money out until it's paid (lib/ajo/lien.ts).
+  await assertNoAjoArrears(input.userId);
 
   await prisma.$transaction(async (db) => {
     // Lock every channel-day being bought, in a fixed order, then count what's

@@ -26,6 +26,7 @@ export const FEATURE_DEFS = [
   { key: "referrals", label: "Referrals & influencers", description: "Refer & earn in the app, and the influencer portal at creator.mycheqpay.com" },
   { key: "ads", label: "CheqPay Ads", description: "Businesses buy ads shown in the app (home, after a payment, Pay bills); every ad is reviewed first" },
   { key: "auto_cashout", label: "Auto cash-out", description: "Users can have each USDT, USDC or BTC deposit sold for naira and paid straight to their own bank account. Uses the normal sell and withdrawal rules, fees and limits" },
+  { key: "ajo", label: "Ajo savings", description: "Personal Ajo (automatic saving into a locked pot) and group Ajo (rotating savings circles with an arrears lien). No interest is paid; breaking a personal plan early costs the Ajo break fee" },
   { key: "developer_api", label: "Developer API", description: "The public API and developer portal at developers.mycheqpay.com (sandbox and live). Live access still needs an approved business and a paid plan" },
 ] as const;
 
@@ -102,6 +103,8 @@ const DEFAULT_OFF: readonly FeatureKey[] = [
   // the exchange (Maplerad USD wallet for stablecoins) and payout wallet are
   // funded.
   "auto_cashout",
+  // Ajo ships OFF: switch it on once a test circle has run a full cycle.
+  "ajo",
 ];
 
 const DEFAULTS: Record<FeatureKey, boolean> = Object.fromEntries(

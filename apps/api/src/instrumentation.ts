@@ -112,6 +112,7 @@ async function ensureSchema(): Promise<void> {
       { ensureNewsSchema },
       { ensureSocialSchema },
       { ensureAutoCashoutSchema },
+      { ensureAjoSchema },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
@@ -128,6 +129,7 @@ async function ensureSchema(): Promise<void> {
       import("@/lib/ensureNews"),
       import("@/lib/social/schema"),
       import("@/lib/autoCashout/schema"),
+      import("@/lib/ajo/schema"),
     ]);
     // One at a time: each helper takes a table lock, and run in parallel they
     // opened a dozen connections per cold start — during a deploy, across many
@@ -181,6 +183,9 @@ async function ensureSchema(): Promise<void> {
       // Auto cash-out: its own tables, plus sale_started_at added to one of
       // them, so it follows the column-add rule and runs here.
       () => ensureAutoCashoutSchema(),
+      // Ajo savings: new tables plus four ledger TransactionType values. The
+      // enum values must exist before any ledger read meets an Ajo row.
+      () => ensureAjoSchema(),
     ];
     const version = deployVersion();
     if (version && (await schemaAlreadyApplied(version))) return;

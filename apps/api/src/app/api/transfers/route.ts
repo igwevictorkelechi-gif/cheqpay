@@ -9,6 +9,7 @@ import { notifyUser } from "@/lib/alerts";
 import { ensureTransferEnums } from "@/lib/ensureTransfers";
 import { requestContext } from "@/lib/requestContext";
 import { readPin, requireTransactionPin } from "@/lib/transactionPin";
+import { assertNoAjoArrears } from "@/lib/ajo/lien";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,8 @@ export async function POST(req: Request) {
     // PIN leaves no transaction row and does not burn the idempotency key —
     // a user who fat-fingers their PIN must be able to retry the same payment.
     await requireTransactionPin(auth.id, readPin(req));
+    // Owing an Ajo group pauses transfers until it's paid (lib/ajo/lien.ts).
+    await assertNoAjoArrears(auth.id);
 
     await ensureTransferEnums();
 

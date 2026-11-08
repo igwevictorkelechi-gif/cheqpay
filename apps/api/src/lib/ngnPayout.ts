@@ -26,6 +26,7 @@ import { MAX_TIER } from "@/lib/kyc";
 import { getEnv } from "@/lib/env";
 import { getWithdrawalFeeNgn } from "@/lib/settings";
 import { withdrawalBreakdown } from "@/lib/fees";
+import { assertNoAjoArrears } from "@/lib/ajo/lien";
 
 export interface NgnPayoutParams {
   user: { id: string; legalName: string | null; kycTier: number };
@@ -110,6 +111,9 @@ export async function initiateNgnPayout(p: NgnPayoutParams): Promise<NgnPayoutRe
   // Limit check + atomic debit + record, as one step per user: the lock makes
   // parallel requests take turns, so they can't each pass the daily limit
   // on the same starting total. Throws (rolls back) on insufficient funds.
+  // A member who owes their Ajo group can't move money out until it's paid (lib/ajo/lien.ts).
+  await assertNoAjoArrears(userId);
+
   const tx = await prisma.$transaction(async (db) => {
     await lockUserMoney(db, userId);
     const usedToday = await sumTodayWithdrawalsNgnKobo(userId, db);

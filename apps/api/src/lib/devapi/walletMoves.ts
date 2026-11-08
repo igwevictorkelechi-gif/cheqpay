@@ -22,6 +22,7 @@ import { applyLegs, ensureMainWallets, getMainWallet, getTransaction, insertTran
 import { effectiveLimits, getDevLimits } from "./limits";
 import { alertOwner, recordDevAudit } from "./audit";
 import type { AccountRow, Currency, DevTransactionRow } from "./types";
+import { assertNoAjoArrears } from "@/lib/ajo/lien";
 
 const ASSET: Record<Currency, Asset> = { NGN: Asset.NGN, USD: Asset.USD };
 
@@ -56,6 +57,9 @@ export async function moveMoney(input: MoveInput): Promise<{ transaction: DevTra
   const limits = effectiveLimits(account, await getDevLimits());
   const appKey = `devmove:${account.id}:${input.idempotencyKey}`;
   const scope = { accountId: account.id, mode: "live" as const };
+
+  // A member who owes their Ajo group can't move money into a developer wallet until it's paid (lib/ajo/lien.ts).
+  if (direction === "in") await assertNoAjoArrears(account.owner_user_id);
 
   const result = await prisma.$transaction(async (db) => {
     // A replay of the same request returns the move it already made.

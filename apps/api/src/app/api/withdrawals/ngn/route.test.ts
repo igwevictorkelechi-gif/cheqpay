@@ -28,6 +28,8 @@ const db = {
   $queryRaw: vi.fn().mockResolvedValue([]),
 };
 
+// Nobody here owes an Ajo group; the lien itself is covered in lib/ajo/lien.test.ts.
+vi.mock("@/lib/ajo/lien", () => ({ assertNoAjoArrears: vi.fn(async () => undefined), ajoArrearsKobo: vi.fn(async () => 0n) }));
 vi.mock("@cheqpay/db", () => ({
   Asset: { NGN: "NGN" },
   TransactionStatus: { PROCESSING: "PROCESSING", FAILED: "FAILED" },
@@ -62,6 +64,7 @@ vi.mock("@/payments", () => ({
 }));
 
 import { POST } from "./route";
+import { assertNoAjoArrears } from "@/lib/ajo/lien";
 
 function withdraw(body: Record<string, unknown>) {
   return POST(
@@ -140,6 +143,15 @@ describe("without feeInclusive (older clients)", () => {
 });
 
 describe("security", () => {
+  it("refuses while the user owes their Ajo group, before any debit (the lien)", async () => {
+    const { ApiError } = await import("@/lib/http");
+    vi.mocked(assertNoAjoArrears).mockRejectedValueOnce(new ApiError(423, "You owe ₦10,000 to your Ajo group.", "ajo_arrears"));
+    const res = await withdraw({ amount: "5000", feeInclusive: true });
+    expect(res.status).toBe(423);
+    expect((await res.json()).code).toBe("ajo_arrears");
+    expect(h.balanceUpdateMany).not.toHaveBeenCalled();
+  });
+
   it("refuses a bank account that isn't in the user's verified name, before any debit", async () => {
     h.resolveBankAccount.mockResolvedValue({ accountName: "JOHN STRANGER" });
     const res = await withdraw({ amount: "5000", feeInclusive: true });

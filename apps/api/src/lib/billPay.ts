@@ -11,6 +11,7 @@ import { billPaySchema } from "@/lib/validation";
 import { notifyUser } from "@/lib/alerts";
 import { BillPaymentError } from "@/payments/types";
 import { feeFromBps, getBillMarginBps } from "@/lib/settings";
+import { assertNoAjoArrears } from "@/lib/ajo/lien";
 
 export interface BillPayInput {
   userId: string;
@@ -120,6 +121,9 @@ export async function executeBillPayment(input: BillPayInput): Promise<BillPayRe
   // Authorise the purchase. After the replay short-circuit and before the
   // debit, so a wrong PIN neither charges the user nor burns their key.
   if (input.authorize) await input.authorize();
+
+  // A member who owes their Ajo group can't move money out until it's paid (lib/ajo/lien.ts).
+  await assertNoAjoArrears(userId);
 
   // Atomic debit + record. Rolls back on insufficient funds.
   const tx = await prisma.$transaction(async (db) => {

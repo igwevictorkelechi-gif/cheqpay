@@ -483,3 +483,35 @@ export const autoCashoutSettingsSchema = z
   .refine((v) => !v.enabled || (v.assets.length > 0 && v.beneficiaryId), {
     message: "Pick at least one coin and a bank account to turn auto cash-out on",
   });
+
+// ------------------------------------------------------------------- Ajo --
+
+const ajoName = z.string().trim().min(2, "Give it a name").max(40, "Keep the name under 40 characters");
+const ajoAmount = z.string().trim().regex(/^\d+(\.\d{1,2})?$/, "Enter a naira amount like 5000");
+const ajoFrequency = z.enum(["daily", "weekly", "monthly"]);
+
+/** A personal Ajo plan: save `amount` every period, `count` times. */
+export const ajoPlanSchema = z.object({
+  name: ajoName,
+  amount: ajoAmount,
+  frequency: ajoFrequency,
+  count: z.number().int().min(2).max(366),
+});
+
+/** A new Ajo group: everyone pays `amount` each round; `size` members, one collects per round. */
+export const ajoGroupSchema = z.object({
+  name: ajoName,
+  amount: ajoAmount,
+  frequency: ajoFrequency,
+  size: z.number().int().min(2).max(30),
+  payoutOrder: z.enum(["join", "random"]).default("random"),
+  /** The member must tick the lien terms: missed contributions are collected from their wallet. */
+  acceptTerms: z.literal(true, { errorMap: () => ({ message: "Agree to the Ajo group terms to continue" }) }),
+});
+
+export const ajoJoinSchema = z.object({
+  code: z.string().trim().min(4).max(12),
+  acceptTerms: z.literal(true, { errorMap: () => ({ message: "Agree to the Ajo group terms to continue" }) }),
+});
+
+export const ajoGroupActionSchema = z.object({ action: z.enum(["start", "leave", "cancel"]) });
