@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { ApiError, jsonOk, toErrorResponse } from "@/lib/http";
 import { assertFeatureEnabled } from "@/lib/features";
@@ -8,11 +9,9 @@ import { groupDetailView } from "@/lib/ajo/view";
 
 export const dynamic = "force-dynamic";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 async function groupId(params: Promise<{ id: string }>): Promise<string> {
   const { id } = await params;
-  if (!UUID.test(id)) throw new ApiError(404, "Group not found", "not_found");
+  if (!z.string().uuid().safeParse(id).success) throw new ApiError(404, "Group not found", "not_found");
   return id;
 }
 

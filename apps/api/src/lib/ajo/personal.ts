@@ -20,6 +20,7 @@ import { ensureAjoSchema } from "./schema";
 import { ajoArrearsKobo, assertNoAjoArrears } from "./lien";
 import { PLAN_MIN_TIER, breakFee, nextDueAfter, planProblem, type Frequency } from "./rules";
 import { notIn, skipOrThrow, tagged } from "./runner";
+import { creditNgn, debitNgn, laterOf } from "./wallet";
 
 type Tx = Prisma.TransactionClient;
 
@@ -40,23 +41,6 @@ export interface PlanRow {
 }
 
 const naira = formatNairaMinor;
-
-async function debitNgn(db: Tx, userId: string, kobo: bigint): Promise<boolean> {
-  const r = await db.balance.updateMany({
-    where: { userId, asset: Asset.NGN, available: { gte: kobo } },
-    data: { available: { decrement: kobo } },
-  });
-  return r.count === 1;
-}
-
-async function creditNgn(db: Tx, userId: string, kobo: bigint): Promise<void> {
-  if (kobo <= 0n) return;
-  await db.balance.upsert({
-    where: { userId_asset: { userId, asset: Asset.NGN } },
-    update: { available: { increment: kobo } },
-    create: { userId, asset: Asset.NGN, available: kobo },
-  });
-}
 
 // ------------------------------------------------------------------ create --
 
@@ -103,7 +87,7 @@ export async function createPlan(
 
 // ------------------------------------------------------------- scheduled --
 
-type PlanOutcome = { plan: PlanRow; paid: boolean; matured: bigint | null };
+type PlanOutcome = { plan: PlanRow; paid: boolean; why: "short" | "arrears" | null; matured: bigint | null };
 
 /** Take one due contribution from one plan (and pay out if it was the last). */
 async function processOneDuePlan(skip: readonly string[]): Promise<PlanOutcome | null> {
@@ -126,6 +110,7 @@ async function takeContribution(db: Tx, p: PlanRow): Promise<PlanOutcome> {
   // money is held for the arrears sweep, so this contribution is skipped.
   const owesGroup = (await ajoArrearsKobo(p.user_id, db)) > 0n;
   const paid = !owesGroup && (await debitNgn(db, p.user_id, p.amount_minor));
+  const why = paid ? null : owesGroup ? "arrears" : "short";
   let saved = p.saved_minor;
   if (paid) {
     saved += p.amount_minor;
@@ -163,15 +148,15 @@ async function takeContribution(db: Tx, p: PlanRow): Promise<PlanOutcome> {
         paid_count = paid_count + ${paid ? 1 : 0}, missed_count = missed_count + ${paid ? 0 : 1},
         next_due_at = NULL, closed_at = now(), updated_at = now()
       WHERE id = ${p.id}::uuid`;
-    return { plan: p, paid, matured: saved };
+    return { plan: p, paid, why, matured: saved };
   }
   await db.$executeRaw`
     UPDATE ajo_plans SET saved_minor = ${saved},
       paid_count = paid_count + ${paid ? 1 : 0}, missed_count = missed_count + ${paid ? 0 : 1},
-      next_due_at = ${nextDueAfter(p.next_due_at ?? new Date(), p.frequency, new Date(p.created_at).getUTCDate())},
+      next_due_at = ${nextDueAfter(laterOf(p.next_due_at), p.frequency, new Date(p.created_at).getUTCDate())},
       updated_at = now()
     WHERE id = ${p.id}::uuid`;
-  return { plan: p, paid, matured: null };
+  return { plan: p, paid, why, matured: null };
 }
 
 export async function runDuePlans(opts: { deadline: number; limit?: number }): Promise<{ processed: number; missed: number; matured: number }> {
@@ -189,10 +174,15 @@ export async function runDuePlans(opts: { deadline: number; limit?: number }): P
     out.processed++;
     if (!r.paid) {
       out.missed++;
+      // A missed slot is not retried: the plan still ends on schedule, with
+      // that much less in it. Say so, and say why it was missed.
       await notifyUser(r.plan.user_id, {
         category: "withdrawals",
-        title: "Ajo contribution missed",
-        body: `We couldn't take ${naira(r.plan.amount_minor)} for "${r.plan.name}" because your wallet was short. We'll try again on the next due date.`,
+        title: "Ajo contribution skipped",
+        body:
+          r.why === "arrears"
+            ? `Today's ${naira(r.plan.amount_minor)} for "${r.plan.name}" was skipped because you owe your Ajo group. The plan carries on from the next due date.`
+            : `Today's ${naira(r.plan.amount_minor)} for "${r.plan.name}" was skipped: your wallet was short. The plan carries on from the next due date, so it ends with that much less. Top up before the next one.`,
         data: { ajoPlanId: r.plan.id },
       }).catch(() => undefined);
     }

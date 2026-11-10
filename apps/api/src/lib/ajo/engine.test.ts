@@ -71,6 +71,7 @@ vi.mock("@/lib/limits", () => ({ lockUserMoney: vi.fn(async () => undefined) }))
 vi.mock("@/lib/opsAlert", () => ({ alertOpsOnce: h.alertOps }));
 
 import { breakPlan, createPlan, runDuePlans } from "./personal";
+import { nextDueAfter } from "./rules";
 import { runDueRounds, sweepArrears } from "./groups";
 
 const AMT = 1_000_000n; // ₦10,000
@@ -119,28 +120,52 @@ describe("personal Ajo", () => {
     });
   });
 
-  it("debits a due contribution and moves the due date on", async () => {
+  it("debits a due contribution and moves the due date on a week from today", async () => {
     h.state.balances.set("u1", AMT);
     let served = false;
-    h.state.query = (sql) => (sql.includes("FOR UPDATE SKIP LOCKED") && !served ? ((served = true), [plan()]) : []);
+    // Due an hour ago, as every due plan is when the scheduler reaches it.
+    h.state.query = (sql) =>
+      sql.includes("FOR UPDATE SKIP LOCKED") && !served ? ((served = true), [plan({ next_due_at: new Date(Date.now() - 3_600_000) })]) : [];
     const out = await runDuePlans({ deadline: far() });
     expect(out).toEqual({ processed: 1, missed: 0, matured: 0 });
     expect(bal("u1")).toBe(0n);
     const upd = execs("UPDATE ajo_plans")[0];
     expect(upd.values[0]).toBe(2n * AMT); // saved
-    expect(upd.values).toContainEqual(new Date("2026-03-17T08:00:00Z"));
+    expect(upd.values).toContainEqual(nextDueAfter(new Date(), "weekly"));
   });
 
-  it("records a miss when the wallet is short, and when the user owes a group", async () => {
-    for (const setup of [() => h.state.balances.set("u1", 5n), () => { h.state.balances.set("u1", AMT); h.state.owed = 1n; }]) {
+  it("records a miss when the wallet is short, and when the user owes a group, and says which", async () => {
+    const { notifyUser } = await import("@/lib/alerts");
+    for (const [setup, why] of [
+      [() => h.state.balances.set("u1", 5n), "wallet was short"],
+      [() => { h.state.balances.set("u1", AMT); h.state.owed = 1n; }, "owe your Ajo group"],
+    ] as const) {
       h.state.exec = [];
+      vi.mocked(notifyUser).mockClear();
       setup();
       let served = false;
       h.state.query = (sql) => (sql.includes("FOR UPDATE SKIP LOCKED") && !served ? ((served = true), [plan()]) : []);
       const out = await runDuePlans({ deadline: far() });
       expect(out.missed).toBe(1);
       expect(h.state.txs).toEqual([]);
+      expect(vi.mocked(notifyUser)).toHaveBeenCalledWith("u1", expect.objectContaining({ body: expect.stringContaining(why) }));
     }
+  });
+
+  it("runs one contribution after downtime and schedules the next from today, not from the stale date", async () => {
+    h.state.balances.set("u1", 10n * AMT);
+    let served = false;
+    // Five days overdue: without the guard this plan would be debited five times in one pass.
+    h.state.query = (sql) =>
+      sql.includes("FOR UPDATE SKIP LOCKED") && !served
+        ? ((served = true), [plan({ frequency: "daily", next_due_at: new Date(Date.now() - 5 * 86_400_000) })])
+        : [];
+    const out = await runDuePlans({ deadline: far() });
+    expect(out.processed).toBe(1);
+    expect(bal("u1")).toBe(9n * AMT);
+    const next = execs("UPDATE ajo_plans")[0].values.find((v) => v instanceof Date) as Date;
+    expect(next.getTime()).toBeGreaterThan(Date.now());
+    expect(next.getTime() - Date.now()).toBeLessThanOrEqual(86_400_000 + 1_000);
   });
 
   it("keeps a monthly plan on the day it started, through a short month", async () => {
@@ -151,7 +176,8 @@ describe("personal Ajo", () => {
         ? ((served = true), [plan({ frequency: "monthly", next_due_at: new Date("2026-02-28T08:00:00Z"), created_at: new Date("2026-01-31T10:00:00Z") })])
         : [];
     await runDuePlans({ deadline: far() });
-    expect(execs("UPDATE ajo_plans")[0].values).toContainEqual(new Date("2026-03-31T08:00:00Z"));
+    // Scheduled from today (the stale Feb date is behind us) but on the 31st, the day it started.
+    expect(execs("UPDATE ajo_plans")[0].values).toContainEqual(nextDueAfter(new Date(), "monthly", 31));
   });
 
   it("skips a plan that fails and carries on with the rest of the pass", async () => {
@@ -258,6 +284,16 @@ describe("group Ajo rounds", () => {
     expect(bal("u3")).toBe(5n);
     const missed = execs("INSERT INTO ajo_contributions").find((e) => e.sql.includes("'missed'"));
     expect(missed?.values).toContain("u3");
+  });
+
+  it("after downtime, runs one round and schedules the next from today", async () => {
+    h.state.balances.set("u2", 10n * AMT);
+    h.state.balances.set("u3", 10n * AMT);
+    serveRound({ ...group, frequency: "daily", next_due_at: new Date(Date.now() - 3 * 86_400_000) });
+    await runDueRounds({ deadline: far() });
+    expect(bal("u2")).toBe(9n * AMT);
+    const next = execs("SET current_round")[0].values.find((v) => v instanceof Date) as Date;
+    expect(next.getTime()).toBeGreaterThan(Date.now());
   });
 
   it("closes the group after the last round", async () => {

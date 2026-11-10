@@ -172,8 +172,9 @@ export async function DELETE(req: Request) {
     const balances = await prisma.balance.findMany({ where: { userId: auth.id } });
     const hasFunds = balances.some((b) => b.available > 0n || b.locked > 0n);
     // Ajo money is not on the balance rows: a plan's savings sit in the plan,
-    // and a group seat is a promise to other people. Deleting the user would
-    // cascade both away, so the account can't close until they're settled.
+    // and a group seat is a promise to other people. A closed account would
+    // keep being debited by rounds and credited by payouts it can never
+    // withdraw, so the account can't close until they're settled.
     const ajo = await ajoCommitments(auth.id);
     if (ajo.savedKobo > 0n || ajo.activePlans > 0 || ajo.openGroups > 0 || ajo.owedKobo > 0n) {
       throw new ApiError(
