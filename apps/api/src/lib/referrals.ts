@@ -339,17 +339,25 @@ export async function settleReferrals(opts: { earnerId?: string } = {}): Promise
     earner, BigInt(s.qualifyMinMinor), rateKobo,
   );
   for (const r of ready) {
-    const flipped = await prisma.$executeRawUnsafe(
-      `UPDATE referrals SET status = 'QUALIFIED', qualified_at = now() WHERE referred_user_id = $1::uuid AND status = 'SIGNED_UP'`,
-      r.referred_user_id,
-    );
-    if (!flipped) continue;
-    res.qualified++;
-    if (r.kind === "BASIC" && s.basicBonusMinor > 0) {
-      await accrue({ earnerId: r.referrer_user_id, kind: "BASIC_BONUS", sourceKey: `basic:${r.referred_user_id}`, amount: BigInt(s.basicBonusMinor), referredUserId: r.referred_user_id, note: "Friend joined and qualified" }, s);
-    }
-    if (s.welcomeEnabled && s.welcomeBonusMinor > 0) {
-      await accrue({ earnerId: r.referred_user_id, kind: "WELCOME_BONUS", sourceKey: `welcome:${r.referred_user_id}`, amount: BigInt(s.welcomeBonusMinor), referredUserId: r.referred_user_id, note: "Welcome bonus" }, s);
+    try {
+      // Bonuses first, status second. Each bonus is keyed (ON CONFLICT DO
+      // NOTHING), so a retry can't pay twice; flipping first would lose the
+      // bonus for good if the accrual then failed, since the row would no
+      // longer be SIGNED_UP on the next pass.
+      if (r.kind === "BASIC" && s.basicBonusMinor > 0) {
+        await accrue({ earnerId: r.referrer_user_id, kind: "BASIC_BONUS", sourceKey: `basic:${r.referred_user_id}`, amount: BigInt(s.basicBonusMinor), referredUserId: r.referred_user_id, note: "Friend joined and qualified" }, s);
+      }
+      if (s.welcomeEnabled && s.welcomeBonusMinor > 0) {
+        await accrue({ earnerId: r.referred_user_id, kind: "WELCOME_BONUS", sourceKey: `welcome:${r.referred_user_id}`, amount: BigInt(s.welcomeBonusMinor), referredUserId: r.referred_user_id, note: "Welcome bonus" }, s);
+      }
+      const flipped = await prisma.$executeRawUnsafe(
+        `UPDATE referrals SET status = 'QUALIFIED', qualified_at = now() WHERE referred_user_id = $1::uuid AND status = 'SIGNED_UP'`,
+        r.referred_user_id,
+      );
+      if (flipped) res.qualified++;
+    } catch (err) {
+      // One referral failing must not stop the rest; it is retried next pass.
+      console.error(`[referrals] qualifying ${r.referred_user_id} failed`, err);
     }
   }
 

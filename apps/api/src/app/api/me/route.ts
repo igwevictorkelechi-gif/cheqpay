@@ -9,7 +9,7 @@ import { profileUpdateSchema } from "@/lib/validation";
 import { assignUsernameIfMissing, ensureUsernameCaseIndex } from "@/lib/username";
 import { closeAccountWithRetention } from "@/lib/retention";
 import { AccountBlockedError, blockIfLinkedToBlocked } from "@/lib/accessControl";
-import { ajoCommitments } from "@/lib/ajo/lien";
+import { closureBlockers } from "@/lib/accountClosure";
 
 export const dynamic = "force-dynamic";
 
@@ -169,29 +169,14 @@ export async function DELETE(req: Request) {
       return jsonOk({ deleted: true });
     }
 
-    const balances = await prisma.balance.findMany({ where: { userId: auth.id } });
-    const hasFunds = balances.some((b) => b.available > 0n || b.locked > 0n);
-    // Ajo money is not on the balance rows: a plan's savings sit in the plan,
-    // and a group seat is a promise to other people. A closed account would
-    // keep being debited by rounds and credited by payouts it can never
-    // withdraw, so the account can't close until they're settled.
-    const ajo = await ajoCommitments(auth.id);
-    if (ajo.savedKobo > 0n || ajo.activePlans > 0 || ajo.openGroups > 0 || ajo.owedKobo > 0n) {
-      throw new ApiError(
-        409,
-        ajo.owedKobo > 0n
-          ? "Settle what you owe your Ajo group before deleting your account."
-          : "End your Ajo plans and finish or leave your Ajo groups before deleting your account.",
-        "ajo_active",
-      );
-    }
-    if (hasFunds) {
-      throw new ApiError(
-        409,
-        "Withdraw your remaining balance before deleting your account",
-        "nonzero_balance"
-      );
-    }
+    // Closing never moves money, so nothing of the user's may still be in
+    // flight or held outside a wallet they can withdraw from: a balance, a
+    // pending payout, an Ajo plan or group, a developer wallet, a gift card
+    // under review, an undelivered order, ad days not yet shown. A closed
+    // account would otherwise keep receiving refunds and payouts it can never
+    // withdraw. lib/accountClosure names what to settle first.
+    const blockers = await closureBlockers(auth.id);
+    if (blockers.length > 0) throw new ApiError(409, blockers[0].message, blockers[0].code);
 
     // Revoke access FIRST. If this fails the account must stay open: telling
     // someone their account is closed while their credentials still work is
