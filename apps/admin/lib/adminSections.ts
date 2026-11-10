@@ -26,7 +26,8 @@ export type AdminSection =
   | "content"
   | "support"
   | "compliance"
-  | "social";
+  | "social"
+  | "ajo";
 
 export interface SectionInfo {
   id: AdminSection;
@@ -95,6 +96,13 @@ export const ADMIN_SECTIONS: SectionInfo[] = [
     apis: ["/api/referrals"],
   },
   { id: "ads", label: "Ads", hint: "Campaigns, venues, screens and prices.", pages: ["/ads"], apis: ["/api/ads"] },
+  {
+    id: "ajo",
+    label: "Ajo savings",
+    hint: "Plans, groups, who is in arrears and for how long (read-only).",
+    pages: ["/ajo"],
+    apis: ["/api/ajo"],
+  },
   { id: "events", label: "Events", hint: "Events, tickets and check-in.", pages: ["/events"], apis: ["/api/events"] },
   {
     id: "developers",

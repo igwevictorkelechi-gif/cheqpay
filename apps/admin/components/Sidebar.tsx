@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity,
+  LayoutGrid, BarChart3, Users, ShieldCheck, CreditCard, Activity, PiggyBank, AlertTriangle,
   TrendingUp, Receipt, Settings, Server, Wallet, LogOut, ChevronDown,
   Banknote, MessageSquare, KeyRound, ToggleLeft, Megaphone, Search,
   ShieldAlert, Monitor, Ban, Package, ShoppingBag, Ticket, CalendarDays, ScanLine, Gift, Percent, ListChecks, Code2, SlidersHorizontal, Globe2, Image as ImageIcon, Share2, PenSquare, Link2, type LucideIcon } from 'lucide-react';
@@ -106,6 +106,14 @@ const categories: Category[] = [
     items: [
       { label: 'Applications & accounts', href: '/developers', icon: Code2 },
       { label: 'Plans & limits', href: '/developers/plans', icon: SlidersHorizontal },
+    ],
+  },
+  {
+    label: 'Ajo Savings',
+    icon: PiggyBank,
+    items: [
+      { label: 'Overview & groups', href: '/ajo', icon: PiggyBank },
+      { label: 'Arrears', href: '/ajo?tab=debtors', icon: AlertTriangle },
     ],
   },
   {
