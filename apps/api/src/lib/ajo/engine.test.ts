@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 type Row = Record<string, unknown>;
 
 const h = vi.hoisted(() => {
+  const alertOps = vi.fn(async () => true);
   const state = {
     balances: new Map<string, bigint>(),
     txs: [] as Row[],
@@ -41,11 +42,17 @@ const h = vi.hoisted(() => {
     transaction: { create: async ({ data }: { data: Row }) => (state.txs.push(data), data) },
     user: { findUnique: async () => ({ kycTier: 2, status: "ACTIVE" }) },
   };
-  return { state, db };
+  return { state, db, alertOps };
 });
 
 vi.mock("@cheqpay/db", () => ({
   prisma: { ...h.db, $transaction: (fn: (db: unknown) => unknown) => fn(h.db) },
+  // Enough of Prisma.sql for the skip list: fragments are opaque to the stand-in.
+  Prisma: {
+    sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }),
+    join: (parts: unknown[]) => ({ parts }),
+    empty: { strings: [""], values: [] },
+  },
   Asset: { NGN: "NGN" },
   TransactionStatus: { COMPLETED: "COMPLETED" },
   TransactionType: { AJO_SAVE: "AJO_SAVE", AJO_RELEASE: "AJO_RELEASE", AJO_CONTRIBUTION: "AJO_CONTRIBUTION", AJO_PAYOUT: "AJO_PAYOUT" },
@@ -61,6 +68,7 @@ vi.mock("@/lib/kyc", () => ({ getTierLimits: () => ({ singleTxKobo: 100_000_000n
 vi.mock("@/lib/settings", () => ({ getAjoBreakFeeBps: async () => 100 }));
 vi.mock("@/lib/alerts", () => ({ notifyUser: vi.fn(async () => ({})) }));
 vi.mock("@/lib/limits", () => ({ lockUserMoney: vi.fn(async () => undefined) }));
+vi.mock("@/lib/opsAlert", () => ({ alertOpsOnce: h.alertOps }));
 
 import { breakPlan, createPlan, runDuePlans } from "./personal";
 import { runDueRounds, sweepArrears } from "./groups";
@@ -132,6 +140,46 @@ describe("personal Ajo", () => {
       const out = await runDuePlans({ deadline: far() });
       expect(out.missed).toBe(1);
       expect(h.state.txs).toEqual([]);
+    }
+  });
+
+  it("keeps a monthly plan on the day it started, through a short month", async () => {
+    h.state.balances.set("u1", AMT);
+    let served = false;
+    h.state.query = (sql) =>
+      sql.includes("FOR UPDATE SKIP LOCKED") && !served
+        ? ((served = true), [plan({ frequency: "monthly", next_due_at: new Date("2026-02-28T08:00:00Z"), created_at: new Date("2026-01-31T10:00:00Z") })])
+        : [];
+    await runDuePlans({ deadline: far() });
+    expect(execs("UPDATE ajo_plans")[0].values).toContainEqual(new Date("2026-03-31T08:00:00Z"));
+  });
+
+  it("skips a plan that fails and carries on with the rest of the pass", async () => {
+    h.state.balances.set("u1", 10n * AMT);
+    const served: string[] = [];
+    h.state.query = (sql, values) => {
+      if (!sql.includes("FOR UPDATE SKIP LOCKED")) return [];
+      // The skip list reaches the query as a fragment; honour it like Postgres would.
+      const skipped = JSON.stringify(values);
+      const next = ["bad", "p2"].find((id) => !served.includes(id) && !skipped.includes(`"${id}"`));
+      if (!next) return [];
+      served.push(next);
+      return [plan({ id: next, user_id: next === "bad" ? "nobody" : "u1" })];
+    };
+    // "bad" debits a user with no balance row; make its ledger write explode instead.
+    const create = h.db.transaction.create;
+    h.db.transaction.create = async (args: { data: Row }) => {
+      if (String(args.data.idempotencyKey).startsWith("ajo:p:bad")) throw new Error("boom");
+      return create(args);
+    };
+    h.state.balances.set("nobody", AMT);
+    try {
+      const out = await runDuePlans({ deadline: far() });
+      expect(out.processed).toBe(1);
+      expect(served).toEqual(["bad", "p2"]);
+      expect(h.alertOps).toHaveBeenCalledWith("ajo:plan:bad", expect.stringContaining("boom"));
+    } finally {
+      h.db.transaction.create = create;
     }
   });
 

@@ -19,6 +19,7 @@ import { notifyUser } from "@/lib/alerts";
 import { ensureAjoSchema } from "./schema";
 import { ajoArrearsKobo, assertNoAjoArrears } from "./lien";
 import { PLAN_MIN_TIER, breakFee, nextDueAfter, planProblem, type Frequency } from "./rules";
+import { notIn, skipOrThrow, tagged } from "./runner";
 
 type Tx = Prisma.TransactionClient;
 
@@ -105,73 +106,85 @@ export async function createPlan(
 type PlanOutcome = { plan: PlanRow; paid: boolean; matured: bigint | null };
 
 /** Take one due contribution from one plan (and pay out if it was the last). */
-async function processOneDuePlan(): Promise<PlanOutcome | null> {
+async function processOneDuePlan(skip: readonly string[]): Promise<PlanOutcome | null> {
   return prisma.$transaction(
     async (db) => {
       const rows = await db.$queryRaw<PlanRow[]>`
-        SELECT * FROM ajo_plans WHERE status = 'active' AND next_due_at <= now()
+        SELECT * FROM ajo_plans WHERE status = 'active' AND next_due_at <= now() ${notIn(skip)}
         ORDER BY next_due_at LIMIT 1 FOR UPDATE SKIP LOCKED`;
       const p = rows[0];
       if (!p) return null;
-      const n = p.paid_count + p.missed_count + 1;
-      // A member who owes their Ajo group pays the group first: their wallet
-      // money is held for the arrears sweep, so this contribution is skipped.
-      const owesGroup = (await ajoArrearsKobo(p.user_id, db)) > 0n;
-      const paid = !owesGroup && (await debitNgn(db, p.user_id, p.amount_minor));
-      let saved = p.saved_minor;
-      if (paid) {
-        saved += p.amount_minor;
-        await db.transaction.create({
-          data: {
-            userId: p.user_id,
-            type: TransactionType.AJO_SAVE,
-            asset: Asset.NGN,
-            amount: p.amount_minor,
-            status: TransactionStatus.COMPLETED,
-            idempotencyKey: `ajo:p:${p.id}:${n}`,
-            metadata: { kind: "ajo_plan", planId: p.id, planName: p.name, contribution: n, of: p.total_count },
-          },
-        });
-      }
-      if (n >= p.total_count) {
-        // Last contribution: everything saved goes back to the wallet, free.
-        await creditNgn(db, p.user_id, saved);
-        if (saved > 0n) {
-          await db.transaction.create({
-            data: {
-              userId: p.user_id,
-              type: TransactionType.AJO_RELEASE,
-              asset: Asset.NGN,
-              amount: saved,
-              fee: 0n,
-              status: TransactionStatus.COMPLETED,
-              idempotencyKey: `ajo:p:${p.id}:release`,
-              metadata: { kind: "ajo_plan", planId: p.id, planName: p.name, reason: "matured" },
-            },
-          });
-        }
-        await db.$executeRaw`
-          UPDATE ajo_plans SET status = 'matured', saved_minor = 0,
-            paid_count = paid_count + ${paid ? 1 : 0}, missed_count = missed_count + ${paid ? 0 : 1},
-            next_due_at = NULL, closed_at = now(), updated_at = now()
-          WHERE id = ${p.id}::uuid`;
-        return { plan: p, paid, matured: saved };
-      }
-      await db.$executeRaw`
-        UPDATE ajo_plans SET saved_minor = ${saved},
-          paid_count = paid_count + ${paid ? 1 : 0}, missed_count = missed_count + ${paid ? 0 : 1},
-          next_due_at = ${nextDueAfter(p.next_due_at ?? new Date(), p.frequency)}, updated_at = now()
-        WHERE id = ${p.id}::uuid`;
-      return { plan: p, paid, matured: null };
+      return tagged(p.id, () => takeContribution(db, p));
     },
     { timeout: 20_000 },
   );
 }
 
+async function takeContribution(db: Tx, p: PlanRow): Promise<PlanOutcome> {
+  const n = p.paid_count + p.missed_count + 1;
+  // A member who owes their Ajo group pays the group first: their wallet
+  // money is held for the arrears sweep, so this contribution is skipped.
+  const owesGroup = (await ajoArrearsKobo(p.user_id, db)) > 0n;
+  const paid = !owesGroup && (await debitNgn(db, p.user_id, p.amount_minor));
+  let saved = p.saved_minor;
+  if (paid) {
+    saved += p.amount_minor;
+    await db.transaction.create({
+      data: {
+        userId: p.user_id,
+        type: TransactionType.AJO_SAVE,
+        asset: Asset.NGN,
+        amount: p.amount_minor,
+        status: TransactionStatus.COMPLETED,
+        idempotencyKey: `ajo:p:${p.id}:${n}`,
+        metadata: { kind: "ajo_plan", planId: p.id, planName: p.name, contribution: n, of: p.total_count },
+      },
+    });
+  }
+  if (n >= p.total_count) {
+    // Last contribution: everything saved goes back to the wallet, free.
+    await creditNgn(db, p.user_id, saved);
+    if (saved > 0n) {
+      await db.transaction.create({
+        data: {
+          userId: p.user_id,
+          type: TransactionType.AJO_RELEASE,
+          asset: Asset.NGN,
+          amount: saved,
+          fee: 0n,
+          status: TransactionStatus.COMPLETED,
+          idempotencyKey: `ajo:p:${p.id}:release`,
+          metadata: { kind: "ajo_plan", planId: p.id, planName: p.name, reason: "matured" },
+        },
+      });
+    }
+    await db.$executeRaw`
+      UPDATE ajo_plans SET status = 'matured', saved_minor = 0,
+        paid_count = paid_count + ${paid ? 1 : 0}, missed_count = missed_count + ${paid ? 0 : 1},
+        next_due_at = NULL, closed_at = now(), updated_at = now()
+      WHERE id = ${p.id}::uuid`;
+    return { plan: p, paid, matured: saved };
+  }
+  await db.$executeRaw`
+    UPDATE ajo_plans SET saved_minor = ${saved},
+      paid_count = paid_count + ${paid ? 1 : 0}, missed_count = missed_count + ${paid ? 0 : 1},
+      next_due_at = ${nextDueAfter(p.next_due_at ?? new Date(), p.frequency, new Date(p.created_at).getUTCDate())},
+      updated_at = now()
+    WHERE id = ${p.id}::uuid`;
+  return { plan: p, paid, matured: null };
+}
+
 export async function runDuePlans(opts: { deadline: number; limit?: number }): Promise<{ processed: number; missed: number; matured: number }> {
   const out = { processed: 0, missed: 0, matured: 0 };
+  const skipped: string[] = [];
   while (Date.now() < opts.deadline && out.processed < (opts.limit ?? 500)) {
-    const r = await processOneDuePlan();
+    let r: PlanOutcome | null;
+    try {
+      r = await processOneDuePlan(skipped);
+    } catch (err) {
+      await skipOrThrow("plan", err, skipped);
+      continue;
+    }
     if (!r) break;
     out.processed++;
     if (!r.paid) {

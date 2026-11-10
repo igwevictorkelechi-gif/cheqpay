@@ -14,6 +14,7 @@ import {
   getSwapSpreads,
   getUsdtNgnRateDetails,
   getWithdrawalFeeNgn,
+  getAjoBreakFeeBps,
   getWithdrawalMinNgn,
   getWithdrawalMinUsd,
   setBillMarginBps,
@@ -34,6 +35,7 @@ import {
   getCryptoOfframp,
   setCryptoOfframp,
   setWithdrawalFeeNgn,
+  setAjoBreakFeeBps,
   setWithdrawalMinNgn,
   setWithdrawalMinUsd,
   type BillMarginService,
@@ -49,6 +51,7 @@ async function snapshot() {
     usdtRate,
     depositFeeBps,
     withdrawalFeeNgn,
+    ajoBreakFeeBps,
     minTradeMarginNgn,
     fxMarginBps,
     fxMargins,
@@ -63,6 +66,7 @@ async function snapshot() {
     getUsdtNgnRateDetails(),
     getDepositFeeBps(),
     getWithdrawalFeeNgn(),
+    getAjoBreakFeeBps(),
     getMinTradeMarginNgn(),
     getFxMarginBps(),
     getFxMargins(),
@@ -88,6 +92,8 @@ async function snapshot() {
     cryptoOfframp: await getCryptoOfframp(),
     depositFeeBps,
     withdrawalFeeNgn,
+    /** Kept when a personal Ajo plan is broken early, in bps of what was saved. */
+    ajoBreakFeeBps,
     /** Flat naira profit floor kept on every buy/sell; 0 = percentage spread only. */
     minTradeMarginNgn,
     fxMarginBps,
@@ -148,6 +154,7 @@ export async function PUT(req: Request) {
     if (body.depositFeeBps !== undefined) await setDepositFeeBps(body.depositFeeBps, updatedBy);
     if (body.withdrawalFeeNgn !== undefined)
       await setWithdrawalFeeNgn(body.withdrawalFeeNgn, updatedBy);
+    if (body.ajoBreakFeeBps !== undefined) await setAjoBreakFeeBps(body.ajoBreakFeeBps, updatedBy);
     if (body.minTradeMarginNgn !== undefined)
       await setMinTradeMarginNgn(body.minTradeMarginNgn, updatedBy);
     if (body.billMarginBps !== undefined) await setBillMarginBps(body.billMarginBps, updatedBy);

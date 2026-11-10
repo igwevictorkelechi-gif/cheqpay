@@ -32,10 +32,13 @@ export {
  */
 export async function runAjo(opts: { budgetMs: number }) {
   await ensureAjoSchema();
-  const deadline = Date.now() + opts.budgetMs;
-  const arrears = await sweepArrears({ deadline });
-  const rounds = await runDueRounds({ deadline });
-  const plans = await runDuePlans({ deadline });
+  // Each stage gets its own slice of the budget, so a long sweep can't starve
+  // the rounds and plans due behind it; a quick stage hands its time on.
+  const start = Date.now();
+  const at = (share: number) => start + Math.round(opts.budgetMs * share);
+  const arrears = await sweepArrears({ deadline: at(0.4) });
+  const rounds = await runDueRounds({ deadline: at(0.7) });
+  const plans = await runDuePlans({ deadline: at(1) });
   return {
     arrears: { users: arrears.users, settledKobo: arrears.settledKobo.toString() },
     rounds,

@@ -21,6 +21,17 @@ describe("nextDueAfter", () => {
     expect(nextDueAfter(from, "monthly").toISOString()).toBe("2026-04-10T08:00:00.000Z");
   });
 
+  it("keeps a monthly schedule on its anchor day after a short month", () => {
+    // Started on the 31st: Feb is clamped, but March goes back to the 31st.
+    const feb = nextDueAfter(new Date("2026-01-31T08:00:00Z"), "monthly", 31);
+    expect(feb.toISOString()).toBe("2026-02-28T08:00:00.000Z");
+    expect(nextDueAfter(feb, "monthly", 31).toISOString()).toBe("2026-03-31T08:00:00.000Z");
+    expect(nextDueAfter(feb, "monthly", 30).toISOString()).toBe("2026-03-30T08:00:00.000Z");
+    // Without an anchor the old drift would have kept it on the 28th.
+    expect(nextDueAfter(feb, "monthly").toISOString()).toBe("2026-03-28T08:00:00.000Z");
+    expect(nextDueAfter(feb, "monthly", NaN).toISOString()).toBe("2026-03-28T08:00:00.000Z");
+  });
+
   it("clamps the 31st to the end of a shorter month", () => {
     expect(nextDueAfter(new Date("2026-01-31T08:00:00Z"), "monthly").toISOString()).toBe("2026-02-28T08:00:00.000Z");
     expect(nextDueAfter(new Date("2028-01-31T08:00:00Z"), "monthly").toISOString()).toBe("2028-02-29T08:00:00.000Z");

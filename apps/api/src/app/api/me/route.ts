@@ -9,6 +9,7 @@ import { profileUpdateSchema } from "@/lib/validation";
 import { assignUsernameIfMissing, ensureUsernameCaseIndex } from "@/lib/username";
 import { closeAccountWithRetention } from "@/lib/retention";
 import { AccountBlockedError, blockIfLinkedToBlocked } from "@/lib/accessControl";
+import { ajoCommitments } from "@/lib/ajo/lien";
 
 export const dynamic = "force-dynamic";
 
@@ -170,6 +171,19 @@ export async function DELETE(req: Request) {
 
     const balances = await prisma.balance.findMany({ where: { userId: auth.id } });
     const hasFunds = balances.some((b) => b.available > 0n || b.locked > 0n);
+    // Ajo money is not on the balance rows: a plan's savings sit in the plan,
+    // and a group seat is a promise to other people. Deleting the user would
+    // cascade both away, so the account can't close until they're settled.
+    const ajo = await ajoCommitments(auth.id);
+    if (ajo.savedKobo > 0n || ajo.activePlans > 0 || ajo.openGroups > 0 || ajo.owedKobo > 0n) {
+      throw new ApiError(
+        409,
+        ajo.owedKobo > 0n
+          ? "Settle what you owe your Ajo group before deleting your account."
+          : "End your Ajo plans and finish or leave your Ajo groups before deleting your account.",
+        "ajo_active",
+      );
+    }
     if (hasFunds) {
       throw new ApiError(
         409,

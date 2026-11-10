@@ -8,7 +8,7 @@ Two products, both in naira, with no interest paid.
 - The first contribution is taken when they create the plan, which needs their transaction PIN. The rest are auto-debited at 9:00am Lagos time (08:00 UTC) on each due date.
 - If the wallet is short on a due date, that contribution is missed. It is not retried, and the plan carries on.
 - When the last contribution is due, everything saved goes back to the wallet. A plan that runs to the end is **free**.
-- Breaking a plan early (PIN) returns what was saved minus the **break fee**. The fee is a setting, `ajo_break_fee_bps` (default 100 = 1%).
+- Breaking a plan early (PIN) returns what was saved minus the **break fee**. The fee is set in the admin's Trading settings ("Ajo early-break fee", default 1%).
 - Needs KYC Tier 1. The money never leaves the user. The ledger records AJO_SAVE for money into the plan and AJO_RELEASE for money back out.
 
 ## Group Ajo (a rotating savings circle)
@@ -38,6 +38,7 @@ While a member owes anything (`lib/ajo/lien.ts`):
    - Swaps *out of* naira. Selling crypto *for* naira stays open, because that is how a member catches up.
    - Bills, gadget and event purchases, ad campaigns, and moving naira into a developer wallet.
 3. They can't create or join groups, start new personal plans, or have personal-plan contributions taken.
+4. They can't delete their account. Nor can anyone with an active plan or an open group seat: closing would strand the money and the group.
 
 Members agree to this when they join (the ticked terms).
 
@@ -48,6 +49,8 @@ Members agree to this when they join (the ticked terms).
   - Adding the Supabase pg_cron minute job, like `auto-cashout`, makes arrears clear within a minute of a top-up.
 - **Feature flag:** `ajo` (off by default). Switching it off closes the user routes. The scheduler keeps running, so money already committed still moves.
 - **Tables** (raw SQL, created by `ensureAjoSchema` at boot): `ajo_plans`, `ajo_groups`, `ajo_members`, `ajo_contributions`, `ajo_payouts`.
+- **Treasury:** naira in personal plans has left users' balances but is still theirs, so the daily treasury check counts it as owed to customers.
+- **One bad row never stalls the rest:** a plan, group or sweep that fails is skipped for that pass and ops are told once an hour; everything else carries on. Monthly schedules keep the day they started on through short months.
 - **Exactly once:**
   - Every money move is one database transaction with a balance guard and a fixed idempotency key: `ajo:p:*`, `ajo:g:*`, `ajo:gp:*`, `ajo:gl:*` and `ajo:glp:*`.
   - Due plans and rounds are claimed with `FOR UPDATE SKIP LOCKED`, so overlapping scheduler runs never process the same one twice.

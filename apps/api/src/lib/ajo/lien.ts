@@ -33,6 +33,49 @@ export async function ajoArrearsKobo(userId: string, db: Db = prisma): Promise<b
   }
 }
 
+/** Money and promises Ajo holds for a user: what closing the account would strand. */
+export async function ajoCommitments(
+  userId: string,
+  db: Db = prisma,
+): Promise<{ savedKobo: bigint; activePlans: number; openGroups: number; owedKobo: bigint }> {
+  try {
+    const [plans, groups, owedKobo] = await Promise.all([
+      db.$queryRaw<{ n: number; saved: bigint | null }[]>`
+        SELECT count(*)::int AS n, COALESCE(SUM(saved_minor), 0)::bigint AS saved
+        FROM ajo_plans WHERE user_id = ${userId}::uuid AND status = 'active'`,
+      db.$queryRaw<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM ajo_members m JOIN ajo_groups g ON g.id = m.group_id
+        WHERE m.user_id = ${userId}::uuid AND g.status IN ('forming', 'active')`,
+      ajoArrearsKobo(userId, db),
+    ]);
+    return {
+      savedKobo: BigInt(plans[0]?.saved ?? 0n),
+      activePlans: Number(plans[0]?.n ?? 0),
+      openGroups: Number(groups[0]?.n ?? 0),
+      owedKobo,
+    };
+  } catch (err) {
+    if (isMissingTable(err)) return { savedKobo: 0n, activePlans: 0, openGroups: 0, owedKobo: 0n };
+    throw err;
+  }
+}
+
+/**
+ * Naira sitting in every active personal plan, in kobo. It left the users'
+ * `available` balances but is still theirs, so the treasury check counts it
+ * as owed to customers.
+ */
+export async function ajoPotsKobo(db: Db = prisma): Promise<bigint> {
+  try {
+    const rows = await db.$queryRaw<{ saved: bigint | null }[]>`
+      SELECT COALESCE(SUM(saved_minor), 0)::bigint AS saved FROM ajo_plans WHERE status = 'active'`;
+    return BigInt(rows[0]?.saved ?? 0n);
+  } catch (err) {
+    if (isMissingTable(err)) return 0n;
+    throw err;
+  }
+}
+
 /** Refuse a money-out action while the user owes their Ajo group. */
 export async function assertNoAjoArrears(userId: string, db: Db = prisma): Promise<void> {
   const owed = await ajoArrearsKobo(userId, db);

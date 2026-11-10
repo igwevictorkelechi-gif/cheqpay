@@ -24,14 +24,20 @@ export const GROUP_MIN_TIER = 2;
 /** Personal Ajo only moves the user's own money, so Tier 1 is enough. */
 export const PLAN_MIN_TIER = 1;
 
-/** The due time after `from`: the next period, at 08:00 UTC that day. */
-export function nextDueAfter(from: Date, frequency: Frequency): Date {
+/**
+ * The due time after `from`: the next period, at 08:00 UTC that day.
+ *
+ * Monthly schedules keep `anchorDay`, the day of the month the schedule
+ * started on, so a plan that began on the 31st is due on the 28th of February
+ * and back on the 31st of March, instead of drifting to the 28th for good.
+ */
+export function nextDueAfter(from: Date, frequency: Frequency, anchorDay: number = from.getUTCDate()): Date {
   const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate(), DUE_HOUR_UTC));
   if (frequency === "daily") d.setUTCDate(d.getUTCDate() + 1);
   else if (frequency === "weekly") d.setUTCDate(d.getUTCDate() + 7);
   else {
-    // Same day next month, clamped to the month's last day (31 Jan -> 28/29 Feb).
-    const day = d.getUTCDate();
+    // The anchor day next month, clamped to that month's last day (31 Jan -> 28/29 Feb).
+    const day = Number.isFinite(anchorDay) ? Math.min(31, Math.max(1, Math.round(anchorDay))) : from.getUTCDate();
     d.setUTCDate(1);
     d.setUTCMonth(d.getUTCMonth() + 1);
     const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();

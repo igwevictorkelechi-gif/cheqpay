@@ -41,6 +41,7 @@ import {
   payoutOrder,
   type Frequency,
 } from "./rules";
+import { notIn, skipOrThrow, tagged } from "./runner";
 
 type Tx = Prisma.TransactionClient;
 
@@ -229,101 +230,114 @@ interface RoundOutcome {
 }
 
 /** Run one due round of one group: debit everyone, pay the collector. */
-async function processOneDueRound(groupId?: string): Promise<RoundOutcome | null> {
+async function processOneDueRound(groupId: string | undefined, skip: readonly string[]): Promise<RoundOutcome | null> {
   return prisma.$transaction(
     async (db) => {
       const rows = await db.$queryRaw<GroupRow[]>`
         SELECT * FROM ajo_groups
         WHERE status = 'active' AND next_due_at <= now()
-          AND (${groupId ?? null}::uuid IS NULL OR id = ${groupId ?? null}::uuid)
+          AND (${groupId ?? null}::uuid IS NULL OR id = ${groupId ?? null}::uuid) ${notIn(skip)}
         ORDER BY next_due_at LIMIT 1 FOR UPDATE SKIP LOCKED`;
       const g = rows[0];
       if (!g) return null;
-      const r = g.current_round;
-      // Locked in a fixed order (by user id) to avoid deadlocks between groups.
-      const members = await db.$queryRaw<{ user_id: string; position: number }[]>`
-        SELECT user_id, position FROM ajo_members WHERE group_id = ${g.id}::uuid ORDER BY user_id`;
-      const recipient = members.find((m) => m.position === r);
-      if (!recipient) throw new Error(`ajo group ${g.id} has no member at position ${r}`);
-
-      const paid: string[] = [];
-      const missed: string[] = [];
-      let collected = 0n;
-      for (const m of members) {
-        const exists = await db.$queryRaw<{ id: string }[]>`
-          SELECT id FROM ajo_contributions WHERE group_id = ${g.id}::uuid AND round = ${r} AND user_id = ${m.user_id}::uuid`;
-        if (exists[0]) continue; // already handled (never happens under the row lock; belt and braces)
-        if (m.user_id === recipient.user_id) {
-          // The collector's own share never leaves their wallet.
-          await db.$executeRaw`
-            INSERT INTO ajo_contributions (group_id, round, user_id, recipient_id, amount_minor, paid_minor, status, paid_at)
-            VALUES (${g.id}::uuid, ${r}, ${m.user_id}::uuid, ${recipient.user_id}::uuid, ${g.amount_minor}, ${g.amount_minor}, 'paid', now())`;
-          continue;
-        }
-        if (await debitNgn(db, m.user_id, g.amount_minor)) {
-          collected += g.amount_minor;
-          paid.push(m.user_id);
-          await db.$executeRaw`
-            INSERT INTO ajo_contributions (group_id, round, user_id, recipient_id, amount_minor, paid_minor, status, paid_at)
-            VALUES (${g.id}::uuid, ${r}, ${m.user_id}::uuid, ${recipient.user_id}::uuid, ${g.amount_minor}, ${g.amount_minor}, 'paid', now())`;
-          await db.transaction.create({
-            data: {
-              userId: m.user_id,
-              type: TransactionType.AJO_CONTRIBUTION,
-              asset: Asset.NGN,
-              amount: g.amount_minor,
-              status: TransactionStatus.COMPLETED,
-              idempotencyKey: `ajo:g:${g.id}:${r}:${m.user_id}`,
-              metadata: { kind: "ajo_group", groupId: g.id, groupName: g.name, round: r, recipientId: recipient.user_id },
-            },
-          });
-        } else {
-          missed.push(m.user_id);
-          await db.$executeRaw`
-            INSERT INTO ajo_contributions (group_id, round, user_id, recipient_id, amount_minor, paid_minor, status)
-            VALUES (${g.id}::uuid, ${r}, ${m.user_id}::uuid, ${recipient.user_id}::uuid, ${g.amount_minor}, 0, 'missed')`;
-        }
-      }
-
-      await creditNgn(db, recipient.user_id, collected);
-      if (collected > 0n) {
-        await db.transaction.create({
-          data: {
-            userId: recipient.user_id,
-            type: TransactionType.AJO_PAYOUT,
-            asset: Asset.NGN,
-            amount: collected,
-            status: TransactionStatus.COMPLETED,
-            idempotencyKey: `ajo:gp:${g.id}:${r}`,
-            metadata: { kind: "ajo_group", groupId: g.id, groupName: g.name, round: r, from: paid.length },
-          },
-        });
-      }
-      await db.$executeRaw`
-        INSERT INTO ajo_payouts (group_id, round, recipient_id, amount_minor)
-        VALUES (${g.id}::uuid, ${r}, ${recipient.user_id}::uuid, ${collected + g.amount_minor})
-        ON CONFLICT (group_id, round) DO NOTHING`;
-
-      if (r >= g.size) {
-        await db.$executeRaw`
-          UPDATE ajo_groups SET status = 'completed', next_due_at = NULL, closed_at = now(), updated_at = now()
-          WHERE id = ${g.id}::uuid`;
-      } else {
-        await db.$executeRaw`
-          UPDATE ajo_groups SET current_round = ${r + 1},
-            next_due_at = ${nextDueAfter(g.next_due_at ?? new Date(), g.frequency)}, updated_at = now()
-          WHERE id = ${g.id}::uuid`;
-      }
-      return { group: g, round: r, recipientId: recipient.user_id, receivedKobo: collected, paid, missed };
+      return tagged(g.id, () => runRound(db, g));
     },
     { timeout: 30_000 },
   );
 }
 
+async function runRound(db: Tx, g: GroupRow): Promise<RoundOutcome> {
+  const r = g.current_round;
+  // Locked in a fixed order (by user id) to avoid deadlocks between groups.
+  const members = await db.$queryRaw<{ user_id: string; position: number }[]>`
+    SELECT user_id, position FROM ajo_members WHERE group_id = ${g.id}::uuid ORDER BY user_id`;
+  const recipient = members.find((m) => m.position === r);
+  if (!recipient) throw new Error(`ajo group ${g.id} has no member at position ${r}`);
+
+  const paid: string[] = [];
+  const missed: string[] = [];
+  let collected = 0n;
+  for (const m of members) {
+    const exists = await db.$queryRaw<{ id: string }[]>`
+      SELECT id FROM ajo_contributions WHERE group_id = ${g.id}::uuid AND round = ${r} AND user_id = ${m.user_id}::uuid`;
+    if (exists[0]) continue; // already handled (never happens under the row lock; belt and braces)
+    if (m.user_id === recipient.user_id) {
+      // The collector's own share never leaves their wallet.
+      await db.$executeRaw`
+        INSERT INTO ajo_contributions (group_id, round, user_id, recipient_id, amount_minor, paid_minor, status, paid_at)
+        VALUES (${g.id}::uuid, ${r}, ${m.user_id}::uuid, ${recipient.user_id}::uuid, ${g.amount_minor}, ${g.amount_minor}, 'paid', now())`;
+      continue;
+    }
+    if (await debitNgn(db, m.user_id, g.amount_minor)) {
+      collected += g.amount_minor;
+      paid.push(m.user_id);
+      await db.$executeRaw`
+        INSERT INTO ajo_contributions (group_id, round, user_id, recipient_id, amount_minor, paid_minor, status, paid_at)
+        VALUES (${g.id}::uuid, ${r}, ${m.user_id}::uuid, ${recipient.user_id}::uuid, ${g.amount_minor}, ${g.amount_minor}, 'paid', now())`;
+      await db.transaction.create({
+        data: {
+          userId: m.user_id,
+          type: TransactionType.AJO_CONTRIBUTION,
+          asset: Asset.NGN,
+          amount: g.amount_minor,
+          status: TransactionStatus.COMPLETED,
+          idempotencyKey: `ajo:g:${g.id}:${r}:${m.user_id}`,
+          metadata: { kind: "ajo_group", groupId: g.id, groupName: g.name, round: r, recipientId: recipient.user_id },
+        },
+      });
+    } else {
+      missed.push(m.user_id);
+      await db.$executeRaw`
+        INSERT INTO ajo_contributions (group_id, round, user_id, recipient_id, amount_minor, paid_minor, status)
+        VALUES (${g.id}::uuid, ${r}, ${m.user_id}::uuid, ${recipient.user_id}::uuid, ${g.amount_minor}, 0, 'missed')`;
+    }
+  }
+
+  await creditNgn(db, recipient.user_id, collected);
+  if (collected > 0n) {
+    await db.transaction.create({
+      data: {
+        userId: recipient.user_id,
+        type: TransactionType.AJO_PAYOUT,
+        asset: Asset.NGN,
+        amount: collected,
+        status: TransactionStatus.COMPLETED,
+        idempotencyKey: `ajo:gp:${g.id}:${r}`,
+        metadata: { kind: "ajo_group", groupId: g.id, groupName: g.name, round: r, from: paid.length },
+      },
+    });
+  }
+  await db.$executeRaw`
+    INSERT INTO ajo_payouts (group_id, round, recipient_id, amount_minor)
+    VALUES (${g.id}::uuid, ${r}, ${recipient.user_id}::uuid, ${collected + g.amount_minor})
+    ON CONFLICT (group_id, round) DO NOTHING`;
+
+  if (r >= g.size) {
+    await db.$executeRaw`
+      UPDATE ajo_groups SET status = 'completed', next_due_at = NULL, closed_at = now(), updated_at = now()
+      WHERE id = ${g.id}::uuid`;
+  } else {
+    // Monthly rounds stay on the day round 1 fell on (see nextDueAfter).
+    const anchor = firstDueAt(new Date(g.started_at ?? g.created_at)).getUTCDate();
+    await db.$executeRaw`
+      UPDATE ajo_groups SET current_round = ${r + 1},
+        next_due_at = ${nextDueAfter(g.next_due_at ?? new Date(), g.frequency, anchor)}, updated_at = now()
+      WHERE id = ${g.id}::uuid`;
+  }
+  return { group: g, round: r, recipientId: recipient.user_id, receivedKobo: collected, paid, missed };
+}
+
 export async function runDueRounds(opts: { deadline: number; groupId?: string }): Promise<{ rounds: number; missed: number }> {
   const out = { rounds: 0, missed: 0 };
+  const skipped: string[] = [];
   while (Date.now() < opts.deadline) {
-    const r = await processOneDueRound(opts.groupId);
+    let r: RoundOutcome | null;
+    try {
+      r = await processOneDueRound(opts.groupId, skipped);
+    } catch (err) {
+      await skipOrThrow("group", err, skipped);
+      continue;
+    }
     if (!r) break;
     out.rounds++;
     out.missed += r.missed.length;
@@ -364,7 +378,33 @@ export async function sweepArrears(opts: { deadline: number; userId?: string }):
   const out = { users: 0, settledKobo: 0n };
   for (const { user_id } of debtors) {
     if (Date.now() >= opts.deadline) break;
-    const settled = await prisma.$transaction(
+    let settled: bigint;
+    try {
+      settled = await settleOne(user_id);
+    } catch (err) {
+      // One member's sweep failing (a deadlock with their own transfer, say)
+      // must not stop the others; theirs runs again next pass.
+      await skipOrThrow("sweep", err, []);
+      continue;
+    }
+    if (settled > 0n) {
+      out.users++;
+      out.settledKobo += settled;
+      await notifyUser(user_id, {
+        category: "withdrawals",
+        title: "Ajo arrears paid",
+        body: `${naira(settled)} from your wallet went to your Ajo group to cover what you owed.`,
+        data: {},
+      }).catch(() => undefined);
+    }
+  }
+  return out;
+}
+
+/** Settle one member's arrears from their wallet, inside their money lock. */
+function settleOne(user_id: string): Promise<bigint> {
+  return tagged(user_id, () =>
+    prisma.$transaction(
       async (db) => {
         await lockUserMoney(db, user_id);
         const bal = await db.balance.findUnique({ where: { userId_asset: { userId: user_id, asset: Asset.NGN } } });
@@ -421,19 +461,8 @@ export async function sweepArrears(opts: { deadline: number; userId?: string }):
         return total;
       },
       { timeout: 20_000 },
-    );
-    if (settled > 0n) {
-      out.users++;
-      out.settledKobo += settled;
-      await notifyUser(user_id, {
-        category: "withdrawals",
-        title: "Ajo arrears paid",
-        body: `${naira(settled)} from your wallet went to your Ajo group to cover what you owed.`,
-        data: {},
-      }).catch(() => undefined);
-    }
-  }
-  return out;
+    ),
+  );
 }
 
 // ------------------------------------------------------------------ views --

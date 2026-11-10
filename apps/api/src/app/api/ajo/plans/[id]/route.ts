@@ -20,7 +20,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     await assertFeatureEnabled("ajo");
     await enforceRateLimit(`ajo:break:${auth.id}`, 5, 60_000);
     const { id } = await params;
-    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ApiError(404, "Plan not found", "not_found");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      throw new ApiError(404, "Plan not found", "not_found");
+    }
     await requireTransactionPin(auth.id, readPin(req));
     const r = await breakPlan(auth.id, id);
     const returned = fromMinorUnits(r.returnedKobo, Asset.NGN);
