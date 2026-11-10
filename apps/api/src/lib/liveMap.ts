@@ -68,6 +68,10 @@ const LABELS: Record<string, [kind: string, label: string]> = {
   AD_PAYOUT: ["out", "Venue payout"],
   DEV_WALLET_FUND: ["out", "API wallet top-up"],
   DEV_WALLET_WITHDRAW: ["in", "API wallet withdrawal"],
+  AJO_SAVE: ["other", "Ajo saving"],
+  AJO_RELEASE: ["other", "Ajo plan paid out"],
+  AJO_CONTRIBUTION: ["other", "Ajo contribution"],
+  AJO_PAYOUT: ["other", "Ajo collection"],
 };
 
 export function txLabel(type: string): { kind: string; label: string } {

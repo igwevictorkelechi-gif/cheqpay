@@ -124,6 +124,7 @@ interface Settings {
   usdtNgnRateUpdatedBy: string | null;
   depositFeeBps: number;
   withdrawalFeeNgn: number;
+  ajoBreakFeeBps?: number;
   minTradeMarginNgn: number;
   fxMarginBps: number;
   fxMargins: { buyUsd: number | null; sellUsd: number | null };
@@ -161,6 +162,7 @@ export default function TradingSettingsPage() {
   const [usdtUpdated, setUsdtUpdated] = useState<{ at: string | null; by: string | null }>({ at: null, by: null });
   const [depositFeeBps, setDepositFeeBps] = useState('');
   const [withdrawalFeeNgn, setWithdrawalFeeNgn] = useState('');
+  const [ajoBreakFeeBps, setAjoBreakFeeBps] = useState('');
   const [minTradeMarginNgn, setMinTradeMarginNgn] = useState('');
   const [fxMarginBps, setFxMarginBps] = useState('');
   const [fxBuyUsd, setFxBuyUsd] = useState('');
@@ -196,6 +198,7 @@ export default function TradingSettingsPage() {
     setUsdtUpdated({ at: data.usdtNgnRateUpdatedAt ?? null, by: data.usdtNgnRateUpdatedBy ?? null });
     setDepositFeeBps(String(data.depositFeeBps ?? 0));
     setWithdrawalFeeNgn(String(data.withdrawalFeeNgn ?? 0));
+    setAjoBreakFeeBps(String(data.ajoBreakFeeBps ?? 100));
     setMinTradeMarginNgn(String(data.minTradeMarginNgn ?? 0));
     setFxMarginBps(String(data.fxMarginBps ?? 0));
     setFxBuyUsd(data.fxMargins?.buyUsd == null ? '' : String(data.fxMargins.buyUsd));
@@ -264,6 +267,7 @@ export default function TradingSettingsPage() {
       if (usdtSource === 'manual' && usdtNgnRate !== '') payload.usdtNgnRate = Number(usdtNgnRate);
       if (depositFeeBps !== '') payload.depositFeeBps = Number(depositFeeBps);
       if (withdrawalFeeNgn !== '') payload.withdrawalFeeNgn = Number(withdrawalFeeNgn);
+      if (ajoBreakFeeBps !== '') payload.ajoBreakFeeBps = Math.round(Number(ajoBreakFeeBps));
       if (minTradeMarginNgn !== '') payload.minTradeMarginNgn = Number(minTradeMarginNgn);
       if (billMarginBps !== '') payload.billMarginBps = Number(billMarginBps);
       if (fxMarginBps !== '') payload.fxMarginBps = Number(fxMarginBps);
@@ -536,6 +540,29 @@ export default function TradingSettingsPage() {
           <p className="text-sm text-gray-500 mt-2">
             Taken out of each bank payout: the user withdraws ₦100,000, the bank receives ₦100,000
             minus this fee. Maplerad charges us ₦20 per payout. Set 0 for free withdrawals.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <label className="flex items-center gap-2 text-gray-700 font-semibold mb-2">
+            <Banknote size={18} className="text-brand-600" />
+            Ajo early-break fee (bps)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={1000}
+            step="1"
+            value={ajoBreakFeeBps}
+            onChange={(e) => setAjoBreakFeeBps(e.target.value)}
+            disabled={loading || saving}
+            className={inputCls}
+            placeholder="100"
+          />
+          <p className="text-sm text-gray-500 mt-2">
+            Kept when a user ends a personal Ajo plan before its last contribution, as a share of what
+            they saved: 100 bps = 1%. Plans that run to the end are always free, and group Ajo never
+            charges this. Max 1,000 bps (10%). Set 0 to let people break plans for free.
           </p>
         </div>
 

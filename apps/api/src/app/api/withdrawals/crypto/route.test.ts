@@ -17,6 +17,8 @@ const h = vi.hoisted(() => ({
   feeInCoin: vi.fn(),
 }));
 
+// Nobody here owes an Ajo group; the lien itself is covered in lib/ajo/lien.test.ts.
+vi.mock("@/lib/ajo/lien", () => ({ assertNoAjoArrears: vi.fn(async () => undefined), ajoArrearsKobo: vi.fn(async () => 0n) }));
 vi.mock("@cheqpay/db", () => ({
   Asset: { NGN: "NGN", USD: "USD", BTC: "BTC", USDT: "USDT", USDC: "USDC" },
   Network: {

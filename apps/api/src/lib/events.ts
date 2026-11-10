@@ -24,6 +24,7 @@ import { formatNairaMinor } from "./money";
 import { ensureEventsSchema } from "./ensureEvents";
 import { ensureTicketTxnType } from "./ensureTicketTxnType";
 import { notifyUser } from "./alerts";
+import { assertNoAjoArrears } from "@/lib/ajo/lien";
 
 /** Sanity ceiling on one order — a storefront, not a wholesaler. */
 const MAX_QUANTITY = 10;
@@ -326,6 +327,9 @@ export async function checkoutTickets(input: TicketCheckoutInput): Promise<Ticke
   const eventTitle = tier.event.title;
   const tierName = tier.name;
   const free = unitPriceMinor === 0n;
+
+  // A member who owes their Ajo group can't move money out until it's paid (lib/ajo/lien.ts).
+  if (!free) await assertNoAjoArrears(input.userId);
 
   const order = await prisma.$transaction(async (db) => {
     if (free) {

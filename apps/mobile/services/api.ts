@@ -379,7 +379,11 @@ export type LedgerTxType =
   | 'AD_REFUND'
   | 'AD_PAYOUT'
   | 'DEV_WALLET_FUND'
-  | 'DEV_WALLET_WITHDRAW';
+  | 'DEV_WALLET_WITHDRAW'
+  | 'AJO_SAVE'
+  | 'AJO_RELEASE'
+  | 'AJO_CONTRIBUTION'
+  | 'AJO_PAYOUT';
 export type LedgerTxStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
 export interface LedgerTransaction {
   id: string;
@@ -408,6 +412,8 @@ export interface LedgerTransaction {
   token: string | null;
   counterparty: string | null;
   note: string | null;
+  /** Ajo: the group a contribution or payout belongs to. */
+  groupName?: string | null;
 }
 
 // ---- Endpoints ----
@@ -1221,6 +1227,47 @@ export const api = {
     });
   },
 
+  // ---- Ajo savings (personal plans and group circles) ----
+  getAjo(): Promise<AjoOverview> {
+    return apiFetch('/api/ajo');
+  },
+
+  /** Takes the first contribution now, so it needs the transaction PIN. */
+  createAjoPlan(
+    input: { name: string; amount: string; frequency: AjoFrequency; count: number },
+    pin?: string,
+  ): Promise<{ plan: AjoPlan }> {
+    return apiFetch('/api/ajo/plans', { method: 'POST', headers: pinHeader(pin), body: JSON.stringify(input) });
+  },
+
+  /** Ends a plan early: savings back to the wallet minus the break fee. */
+  breakAjoPlan(id: string, pin?: string): Promise<{ returned: string; fee: string }> {
+    return apiFetch(`/api/ajo/plans/${id}`, { method: 'DELETE', headers: pinHeader(pin) });
+  },
+
+  createAjoGroup(
+    input: { name: string; amount: string; frequency: AjoFrequency; size: number; payoutOrder: 'join' | 'random'; acceptTerms: true },
+    pin?: string,
+  ): Promise<{ group: AjoGroup }> {
+    return apiFetch('/api/ajo/groups', { method: 'POST', headers: pinHeader(pin), body: JSON.stringify(input) });
+  },
+
+  joinAjoGroup(code: string, pin?: string): Promise<{ group: AjoGroup }> {
+    return apiFetch('/api/ajo/groups/join', {
+      method: 'POST',
+      headers: pinHeader(pin),
+      body: JSON.stringify({ code, acceptTerms: true }),
+    });
+  },
+
+  getAjoGroup(id: string): Promise<AjoGroupDetail> {
+    return apiFetch(`/api/ajo/groups/${id}`);
+  },
+
+  ajoGroupAction(id: string, action: 'start' | 'leave' | 'cancel'): Promise<{ ok: boolean }> {
+    return apiFetch(`/api/ajo/groups/${id}`, { method: 'POST', body: JSON.stringify({ action }) });
+  },
+
   // ---- Support ----
   getSupportContact(): Promise<{ email: string; phone: string; whatsapp: string }> {
     return apiFetch('/api/support/contact');
@@ -1522,6 +1569,68 @@ export interface FeatureFlags {
   referrals: boolean;
   ads: boolean;
   auto_cashout?: boolean;
+  ajo?: boolean;
+  price_alerts?: boolean;
+  crypto_news?: boolean;
+}
+
+export type AjoFrequency = 'daily' | 'weekly' | 'monthly';
+
+export interface AjoPlan {
+  id: string;
+  name: string;
+  amount: string;
+  frequency: AjoFrequency;
+  totalCount: number;
+  paidCount: number;
+  missedCount: number;
+  saved: string;
+  target: string;
+  status: 'active' | 'matured' | 'broken';
+  nextDueAt: string | null;
+  closedAt: string | null;
+  createdAt: string;
+}
+
+export interface AjoGroup {
+  id: string;
+  name: string;
+  amount: string;
+  pot: string;
+  frequency: AjoFrequency;
+  size: number;
+  members?: number;
+  payoutOrder: 'join' | 'random';
+  inviteCode: string | null;
+  status: 'forming' | 'active' | 'completed' | 'cancelled';
+  currentRound: number;
+  nextDueAt: string | null;
+  startedAt: string | null;
+  closedAt: string | null;
+  createdAt: string;
+  isOrganiser: boolean;
+  myPosition: number | null;
+}
+
+export interface AjoGroupDetail {
+  group: AjoGroup;
+  members: { username: string; position: number | null; isMe: boolean; isOrganiser: boolean; behind: boolean; owed: string }[];
+  payouts: { round: number; collector: string; isMe: boolean; amount: string; at: string }[];
+}
+
+export interface AjoOverview {
+  plans: AjoPlan[];
+  groups: AjoGroup[];
+  arrears: string;
+  inArrears: boolean;
+  rules: {
+    breakFeePercent: number;
+    minAmountNgn: number;
+    maxCount: Record<AjoFrequency, number>;
+    planMinTier: number;
+    groupMinTier: number;
+    dueTime: string;
+  };
 }
 
 export type AutoCashoutCoin = 'USDT' | 'USDC' | 'BTC';

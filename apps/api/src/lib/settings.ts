@@ -48,6 +48,7 @@ export const SETTING_KEYS = {
   // off (percentage spread only). Applies to BTC, USDT and USDC against naira,
   // however the trade settles.
   MIN_TRADE_MARGIN_NGN: "min_trade_margin_ngn",
+  AJO_BREAK_FEE_BPS: "ajo_break_fee_bps", // fee kept when a personal Ajo is broken early
   // Spread taken on a NGN⇄USD conversion, which settles on Maplerad's FX rail
   // rather than the synthetic USDT peg — so SWAP_SPREAD_BPS never reaches it
   // and it needs a margin of its own.
@@ -459,6 +460,18 @@ export function getMinTradeMarginNgn(): Promise<number> {
 
 export async function setMinTradeMarginNgn(ngn: number, updatedBy?: string): Promise<void> {
   await upsertSetting(SETTING_KEYS.MIN_TRADE_MARGIN_NGN, String(ngn), updatedBy);
+}
+
+/**
+ * Fee, in basis points of what was saved, kept when a user breaks a personal
+ * Ajo plan before it ends. Default 100 = 1%. Matured plans are always free.
+ */
+export function getAjoBreakFeeBps(): Promise<number> {
+  return getNumberSetting(SETTING_KEYS.AJO_BREAK_FEE_BPS, 100);
+}
+
+export async function setAjoBreakFeeBps(bps: number, updatedBy?: string): Promise<void> {
+  await upsertSetting(SETTING_KEYS.AJO_BREAK_FEE_BPS, String(bps), updatedBy);
 }
 
 // --- Minimums ----------------------------------------------------------------

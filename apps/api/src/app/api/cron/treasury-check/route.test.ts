@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   getWallets: vi.fn(),
   alert: vi.fn(),
   devTotals: vi.fn(),
+  ajoPots: vi.fn(),
   env: { CRON_SECRET: "cron-secret-123" } as Record<string, string | undefined>,
 }));
 
@@ -16,6 +17,7 @@ vi.mock("@/lib/env", () => ({ getEnv: () => h.env }));
 vi.mock("@/lib/maplerad/wallets", () => ({ getWallets: h.getWallets }));
 vi.mock("@/lib/adminAlert", () => ({ notifyAdminAlert: h.alert }));
 vi.mock("@/lib/devapi/ledger", () => ({ liveTotals: h.devTotals }));
+vi.mock("@/lib/ajo/lien", () => ({ ajoPotsKobo: h.ajoPots }));
 
 import { GET } from "./route";
 
@@ -32,6 +34,7 @@ beforeEach(() => {
     { asset: "NGN", _sum: { available: 50_000_00n, locked: 0n } },
   ]);
   h.devTotals.mockResolvedValue({ NGN: 0n, USD: 0n });
+  h.ajoPots.mockResolvedValue(0n);
 });
 
 describe("treasury check", () => {
@@ -50,6 +53,17 @@ describe("treasury check", () => {
     const body = await (await call()).json();
     expect(body.alerted).toBe(false);
     expect(h.alert).not.toHaveBeenCalled();
+  });
+
+  it("counts naira saved in Ajo plans as owed: it left users' balances but is still theirs", async () => {
+    // Users hold ₦50,000 and the pool ₦90,000: covered, until ₦60,000 in Ajo pots is added.
+    h.getWallets.mockResolvedValue([wallet("USD", 20_000), wallet("NGN", 90_000_00)]);
+    h.ajoPots.mockResolvedValue(60_000_00n);
+    const body = await (await call()).json();
+    const ngn = body.report.find((r: { currency: string }) => r.currency === "NGN");
+    expect(ngn.ajoMinor).toBe("6000000");
+    expect(ngn.shortMinor).toBe("2000000");
+    expect(body.alerted).toBe(true);
   });
 
   it("counts developers' live wallets as owed too", async () => {

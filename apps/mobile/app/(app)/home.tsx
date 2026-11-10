@@ -201,8 +201,28 @@ export default function HomeScreen() {
           )}
         </ActionRow>
 
-        <View className="px-5">
-        </View>
+        {features.ajo && (
+          <View className="px-5 mb-4">
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push('/(app)/ajo')}
+              className="flex-row items-center px-4 py-4 rounded-3xl"
+              style={{ backgroundColor: colors.card }}
+            >
+              <View
+                className="w-10 h-10 rounded-full items-center justify-center"
+                style={{ backgroundColor: 'rgba(107,91,149,0.25)' }}
+              >
+                <Ionicons name="people" size={20} color={colors.brandLight} />
+              </View>
+              <View className="ml-3 flex-1">
+                <Text className="text-ink dark:text-ink-dark font-bold">Ajo savings</Text>
+                <Text className="text-muted dark:text-muted-dark text-xs">Save on a schedule, alone or with your people</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </TouchableOpacity>
+          </View>
+        )}
         <NearbyStrip />
 
         {/* The admin's banners when any are live; otherwise the Cash account for

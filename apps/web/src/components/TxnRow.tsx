@@ -8,6 +8,7 @@ import {
   Zap,
   Gift,
   Megaphone,
+  Users,
 } from "lucide-react";
 import type { LedgerTransaction } from "@/services/api";
 
@@ -37,6 +38,11 @@ export function txnIcon(type: LedgerTransaction["type"]) {
     case "TRANSFER_OUT":
     case "DEV_WALLET_FUND":
       return { Icon: ArrowUpRight, color: "#FF6B6B", bg: "rgba(255,107,107,0.15)" };
+    case "AJO_SAVE":
+    case "AJO_RELEASE":
+    case "AJO_CONTRIBUTION":
+    case "AJO_PAYOUT":
+      return { Icon: Users, color: "#8A7BB5", bg: "rgba(107,91,149,0.2)" };
     case "BUY":
     case "SELL":
     default:
@@ -92,6 +98,14 @@ export function txnTitle(t: LedgerTransaction): string {
       return "To developer wallet";
     case "DEV_WALLET_WITHDRAW":
       return "From developer wallet";
+    case "AJO_SAVE":
+      return t.planName ? `Ajo · ${t.planName}` : "Ajo savings";
+    case "AJO_RELEASE":
+      return t.planName ? `Ajo paid out · ${t.planName}` : "Ajo savings returned";
+    case "AJO_CONTRIBUTION":
+      return t.groupName ? `Ajo · ${t.groupName}` : "Ajo contribution";
+    case "AJO_PAYOUT":
+      return t.groupName ? `Ajo collection · ${t.groupName}` : "Ajo collection";
     default:
       return t.type;
   }
@@ -135,6 +149,10 @@ export function txnAmount(t: LedgerTransaction): { text: string; positive: boole
     return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
   if (t.type === "TRANSFER_OUT")
     return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
+  if (t.type === "AJO_SAVE" || t.type === "AJO_CONTRIBUTION") return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
+  // A release's fee is the break fee kept, so the wallet got amount − fee.
+  if (t.type === "AJO_RELEASE") return { text: `+₦${fmt(withFee(t, -1))}`, positive: true };
+  if (t.type === "AJO_PAYOUT") return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   // BUY / SELL / CONVERT show the received leg as the headline.
   if (t.toAsset && t.toFormatted)
     return { text: `+${fmt(t.toFormatted)} ${t.toAsset}`, positive: true };

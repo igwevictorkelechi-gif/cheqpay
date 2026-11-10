@@ -34,6 +34,7 @@ import { cryptoWithdrawalSchema } from "@/lib/validation";
 import { readPin, requireTransactionPin } from "@/lib/transactionPin";
 
 import { assertFeatureEnabled } from "@/lib/features";
+import { assertNoAjoArrears } from "@/lib/ajo/lien";
 
 export const dynamic = "force-dynamic";
 
@@ -178,6 +179,8 @@ export async function POST(req: Request) {
     // After the replay short-circuit and before the first write, so a wrong
     // PIN neither records a transaction nor burns the idempotency key.
     await requireTransactionPin(auth.id, readPin(req));
+    // Owing an Ajo group pauses withdrawals until it's paid (lib/ajo/lien.ts).
+    await assertNoAjoArrears(auth.id);
 
     // Manual-custody assets always queue as PENDING (resolved above): the
     // business pays out from its own wallet, then the admin marks it complete.

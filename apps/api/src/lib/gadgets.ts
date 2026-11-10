@@ -33,6 +33,7 @@ import {
 } from "./gadgetDiscounts";
 import { ensureGadgetTxnType } from "./ensureGadgetTxnType";
 import { notifyUser } from "./alerts";
+import { assertNoAjoArrears } from "@/lib/ajo/lien";
 
 /** Sanity ceiling on a single order line — a storefront, not a wholesaler. */
 const MAX_QUANTITY = 20;
@@ -302,6 +303,9 @@ export async function checkoutGadget(input: CheckoutInput): Promise<OrderView> {
     discountMaxRedemptions = codeRow.maxRedemptions;
   }
   const totalMinor = subtotalMinor - discountMinor;
+
+  // A member who owes their Ajo group can't move money out until it's paid (lib/ajo/lien.ts).
+  await assertNoAjoArrears(input.userId);
 
   const order = await prisma.$transaction(async (db) => {
     // Guarded debit: a balance floor means an overdraw changes zero rows.

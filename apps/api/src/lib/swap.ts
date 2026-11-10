@@ -38,6 +38,7 @@ import { alertOpsOnce } from "./opsAlert";
 import { getProviderBalanceMinor } from "./maplerad/treasury";
 import type { FxCurrency } from "./maplerad/types";
 import { getPriceFeed, type PriceFeed } from "@/market";
+import { assertNoAjoArrears } from "@/lib/ajo/lien";
 
 /** Stablecoins, which Maplerad holds as dollars and pays out of the dollar wallet. */
 function isStablecoin(asset: Asset): boolean {
@@ -533,6 +534,10 @@ export async function executeSwap(params: {
   if (existing) {
     return { transactionId: existing.id, status: existing.status };
   }
+
+  // Spending naira while owing an Ajo group is paused (lib/ajo/lien.ts);
+  // selling crypto FOR naira stays open, since that's how a member catches up.
+  if (quote.fromAsset === Asset.NGN) await assertNoAjoArrears(params.userId);
 
   // A rail swap (NGN↔USD, or NGN↔stablecoin backed at Maplerad) settles through
   // the real FX rail, which involves an external call that cannot live inside a

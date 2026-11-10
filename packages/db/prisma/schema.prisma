@@ -77,6 +77,10 @@ enum TransactionType {
   AD_PAYOUT // NGN paid to a partner venue for showing ads on its screen
   DEV_WALLET_FUND // NGN/USD moved from the in-app balance into the owner's developer (API) main wallet
   DEV_WALLET_WITHDRAW // NGN/USD moved from the developer main wallet back to the in-app balance
+  AJO_SAVE // NGN moved from the wallet into the user's own personal Ajo plan
+  AJO_RELEASE // NGN returned from a personal Ajo plan to the wallet (matured, or broken early; any break fee is the row's fee)
+  AJO_CONTRIBUTION // NGN paid from the wallet into a group Ajo round (on time, or later to clear arrears)
+  AJO_PAYOUT // NGN received from a group Ajo pot (the collector's round, or a late contribution forwarded to them)
 }
 
 enum TicketStatus {

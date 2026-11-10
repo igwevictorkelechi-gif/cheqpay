@@ -59,6 +59,10 @@ export default function AppLayout() {
       <Tabs.Screen name="support-chat" options={{ href: null }} />
       <Tabs.Screen name="activity" options={{ href: null }} />
       <Tabs.Screen name="bank-accounts" options={{ href: null }} />
+      <Tabs.Screen name="ajo" options={{ href: null }} />
+      <Tabs.Screen name="ajo-plan-new" options={{ href: null }} />
+      <Tabs.Screen name="ajo-group-new" options={{ href: null }} />
+      <Tabs.Screen name="ajo-group/[id]" options={{ href: null }} />
     </Tabs>
   );
 }
