@@ -13,6 +13,8 @@ import {
   RefreshCw,
   Receipt,
   Send,
+  Users,
+  ChevronRight,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import {
@@ -257,8 +259,23 @@ export default function Dashboard() {
         )}
       </ActionRow>
 
-      <div className="px-5">
-      </div>
+      {features.ajo && (
+        <div className="mb-4 px-5">
+          <button
+            onClick={() => router.push("/ajo")}
+            className="flex w-full items-center gap-3 rounded-3xl bg-card px-4 py-4 text-left hover:bg-circle"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand/25">
+              <Users className="h-5 w-5 text-brand-light" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-bold text-ink">Ajo savings</span>
+              <span className="block text-xs text-muted">Save on a schedule, alone or with your people</span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted" />
+          </button>
+        </div>
+      )}
 
       <NearbyStrip />
 

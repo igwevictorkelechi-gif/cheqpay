@@ -1347,7 +1347,12 @@ export async function runAdsDaily(): Promise<{ segments: number; delivered: numb
     today,
   );
   for (const w of waiting) {
-    if ((await refundSlots(w.id, `day < $2::date`, [today], "missed_while_in_review")) > 0n) expiredRefunds++;
+    try {
+      if ((await refundSlots(w.id, `day < $2::date`, [today], "missed_while_in_review")) > 0n) expiredRefunds++;
+    } catch (err) {
+      // One campaign's refund failing must not stop the others; it is retried tomorrow.
+      console.error(`[ads] refund of missed days for campaign ${w.id} failed`, err);
+    }
   }
   // Its last day has passed without a review: reject it (every slot was refunded above; posts are refunded below).
   const lapsed = await prisma.$queryRawUnsafe<{ id: string }[]>(
@@ -1359,7 +1364,13 @@ export async function runAdsDaily(): Promise<{ segments: number; delivered: numb
       RETURNING c.id::text`,
     today,
   );
-  for (const l of lapsed) if ((await refundInfluencerPosts(l.id, "not_reviewed", { close: true })) > 0n) expiredRefunds++;
+  for (const l of lapsed) {
+    try {
+      if ((await refundInfluencerPosts(l.id, "not_reviewed", { close: true })) > 0n) expiredRefunds++;
+    } catch (err) {
+      console.error(`[ads] refund of unclaimed posts for campaign ${l.id} failed`, err);
+    }
+  }
 
   const ended = await prisma.$queryRawUnsafe<{ id: string; user_id: string; headline: string }[]>(
     `UPDATE ad_campaigns c SET status = 'ENDED', updated_at = now()

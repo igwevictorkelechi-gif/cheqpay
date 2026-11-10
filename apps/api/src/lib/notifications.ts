@@ -8,6 +8,7 @@ export const NOTIFICATION_CATEGORIES = [
   "withdrawals",
   "trades",
   "bills",
+  "savings",
   "price",
   "news",
   "security",
@@ -20,7 +21,7 @@ export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 export type NotificationPrefs = Record<NotificationCategory, boolean>;
 
 /**
- * Sensible defaults: money movement, security and product news on; price
+ * Sensible defaults: money movement, savings, security and product news on; price
  * alerts, crypto news and promotions off. `promos` stays opt-in — marketing
  * needs consent; `price`/`news` are opt-in so we never push markets at someone
  * who didn't ask.
@@ -30,6 +31,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   withdrawals: true,
   trades: true,
   bills: true,
+  savings: true,
   price: false,
   news: false,
   security: true,

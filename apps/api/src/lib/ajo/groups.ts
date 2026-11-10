@@ -42,6 +42,7 @@ import {
   type Frequency,
 } from "./rules";
 import { notIn, skipOrThrow, tagged } from "./runner";
+import { creditNgn, debitNgn, laterOf } from "./wallet";
 
 type Tx = Prisma.TransactionClient;
 
@@ -64,25 +65,10 @@ export interface GroupRow {
 
 const naira = formatNairaMinor;
 
-async function debitNgn(db: Tx, userId: string, kobo: bigint): Promise<boolean> {
-  const r = await db.balance.updateMany({
-    where: { userId, asset: Asset.NGN, available: { gte: kobo } },
-    data: { available: { decrement: kobo } },
-  });
-  return r.count === 1;
-}
+type Member = { kycTier: number; status: string } | null;
 
-async function creditNgn(db: Tx, userId: string, kobo: bigint): Promise<void> {
-  if (kobo <= 0n) return;
-  await db.balance.upsert({
-    where: { userId_asset: { userId, asset: Asset.NGN } },
-    update: { available: { increment: kobo } },
-    create: { userId, asset: Asset.NGN, available: kobo },
-  });
-}
-
-async function requireGroupMemberEligible(userId: string, amountKobo: bigint): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { kycTier: true, status: true } });
+async function requireGroupMemberEligible(userId: string, amountKobo: bigint, known?: Member): Promise<void> {
+  const user = known ?? (await prisma.user.findUnique({ where: { id: userId }, select: { kycTier: true, status: true } }));
   if (!user || user.status !== "ACTIVE") throw new ApiError(403, "Your account can't join an Ajo group.", "account_inactive");
   if (user.kycTier < GROUP_MIN_TIER) {
     throw new ApiError(403, "Group Ajo needs a verified government ID (Tier 2). Upgrade your verification to join.", "kyc_required");
@@ -107,10 +93,10 @@ export async function createGroup(
   input: { name: string; amountKobo: bigint; frequency: Frequency; size: number; order: "join" | "random" },
 ): Promise<GroupRow> {
   await ensureAjoSchema();
-  const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { kycTier: true } });
+  const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { kycTier: true, status: true } });
   const problem = groupProblem(input, getTierLimits(owner?.kycTier ?? 0).singleTxKobo);
   if (problem) throw new ApiError(422, problem, "ajo_invalid");
-  await requireGroupMemberEligible(ownerId, input.amountKobo);
+  await requireGroupMemberEligible(ownerId, input.amountKobo, owner);
 
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -152,7 +138,7 @@ export async function joinGroup(userId: string, rawCode: string): Promise<GroupR
   });
   if (full) {
     await notifyUser(group.owner_id, {
-      category: "updates",
+      category: "savings",
       title: "Your Ajo group is full",
       body: `"${group.name}" has all ${group.size} members. Start it when you're ready.`,
       data: { ajoGroupId: group.id },
@@ -169,7 +155,8 @@ export async function leaveGroup(userId: string, groupId: string): Promise<void>
     if (!g) throw new ApiError(404, "Group not found", "not_found");
     if (g.owner_id === userId) throw new ApiError(409, "As the organiser, cancel the group instead.", "ajo_owner");
     if (g.status !== "forming") throw new ApiError(409, "You can't leave a group once it has started.", "ajo_started");
-    await db.$executeRaw`DELETE FROM ajo_members WHERE group_id = ${groupId}::uuid AND user_id = ${userId}::uuid`;
+    const gone = await db.$executeRaw`DELETE FROM ajo_members WHERE group_id = ${groupId}::uuid AND user_id = ${userId}::uuid`;
+    if (gone !== 1) throw new ApiError(404, "You're not in this group.", "not_found");
   });
 }
 
@@ -196,21 +183,22 @@ export async function startGroup(userId: string, groupId: string): Promise<Group
       await db.$executeRaw`
         UPDATE ajo_members SET position = ${i + 1} WHERE group_id = ${g.id}::uuid AND user_id = ${uid}::uuid`;
     }
-    const due = firstDueAt();
+    // One clock for both: started_at is what later rounds derive their
+    // monthly anchor day from, so it must be the instant round 1 was set from.
+    const now = new Date();
+    const due = firstDueAt(now);
     const out = await db.$queryRaw<GroupRow[]>`
-      UPDATE ajo_groups SET status = 'active', size = ${order.length}, current_round = 1, started_at = now(),
+      UPDATE ajo_groups SET status = 'active', size = ${order.length}, current_round = 1, started_at = ${now},
         next_due_at = ${due}, updated_at = now()
       WHERE id = ${g.id}::uuid RETURNING *`;
-    return out[0];
+    return { ...out[0], order };
   });
-  const members = await prisma.$queryRaw<{ user_id: string; position: number }[]>`
-    SELECT user_id, position FROM ajo_members WHERE group_id = ${g.id}::uuid`;
   await Promise.all(
-    members.map((m) =>
-      notifyUser(m.user_id, {
-        category: "updates",
+    g.order.map((uid, i) =>
+      notifyUser(uid, {
+        category: "savings",
         title: `"${g.name}" has started`,
-        body: `You collect in round ${m.position} of ${g.size}. The first ${naira(g.amount_minor)} contribution is taken from your wallet at 9am on ${g.next_due_at?.toISOString().slice(0, 10)}.`,
+        body: `You collect in round ${i + 1} of ${g.size}. The first ${naira(g.amount_minor)} contribution is taken from your wallet at 9am on ${g.next_due_at?.toISOString().slice(0, 10)}.`,
         data: { ajoGroupId: g.id },
       }).catch(() => undefined),
     ),
@@ -257,10 +245,9 @@ async function runRound(db: Tx, g: GroupRow): Promise<RoundOutcome> {
   const paid: string[] = [];
   const missed: string[] = [];
   let collected = 0n;
+  // Under the group's row lock a round runs once; the unique index on
+  // (group, round, member) turns any repeat into an error that skips the group.
   for (const m of members) {
-    const exists = await db.$queryRaw<{ id: string }[]>`
-      SELECT id FROM ajo_contributions WHERE group_id = ${g.id}::uuid AND round = ${r} AND user_id = ${m.user_id}::uuid`;
-    if (exists[0]) continue; // already handled (never happens under the row lock; belt and braces)
     if (m.user_id === recipient.user_id) {
       // The collector's own share never leaves their wallet.
       await db.$executeRaw`
@@ -321,7 +308,7 @@ async function runRound(db: Tx, g: GroupRow): Promise<RoundOutcome> {
     const anchor = firstDueAt(new Date(g.started_at ?? g.created_at)).getUTCDate();
     await db.$executeRaw`
       UPDATE ajo_groups SET current_round = ${r + 1},
-        next_due_at = ${nextDueAfter(g.next_due_at ?? new Date(), g.frequency, anchor)}, updated_at = now()
+        next_due_at = ${nextDueAfter(laterOf(g.next_due_at), g.frequency, anchor)}, updated_at = now()
       WHERE id = ${g.id}::uuid`;
   }
   return { group: g, round: r, recipientId: recipient.user_id, receivedKobo: collected, paid, missed };
@@ -344,7 +331,7 @@ export async function runDueRounds(opts: { deadline: number; groupId?: string })
     const g = r.group;
     const pot = g.amount_minor * BigInt(g.size);
     await notifyUser(r.recipientId, {
-      category: "deposits",
+      category: "savings",
       title: `It's your turn: ${g.name}`,
       body: r.missed.length === 0
         ? `You collected the ${naira(pot)} pot for round ${r.round}. ${naira(r.receivedKobo)} from the group is in your wallet, and your own ${naira(g.amount_minor)} share stayed there.`
@@ -354,7 +341,7 @@ export async function runDueRounds(opts: { deadline: number; groupId?: string })
     await Promise.all(
       r.missed.map((uid) =>
         notifyUser(uid, {
-          category: "withdrawals",
+          category: "savings",
           title: "Ajo contribution missed",
           body: `Your ${naira(g.amount_minor)} for "${g.name}" round ${r.round} couldn't be taken. Add money to your wallet: it goes to your group first, and withdrawals and transfers are paused until you're caught up.`,
           data: { ajoGroupId: g.id },
@@ -391,7 +378,7 @@ export async function sweepArrears(opts: { deadline: number; userId?: string }):
       out.users++;
       out.settledKobo += settled;
       await notifyUser(user_id, {
-        category: "withdrawals",
+        category: "savings",
         title: "Ajo arrears paid",
         body: `${naira(settled)} from your wallet went to your Ajo group to cover what you owed.`,
         data: {},

@@ -164,6 +164,7 @@ export default function TransactionDetailPage() {
               {!!tx.network && <Row label="Network" value={tx.network} />}
               {!!tx.billerName && <Row label="Biller" value={tx.billerName} />}
               {!!tx.planName && <Row label="Plan" value={tx.planName} />}
+              {!!tx.groupName && <Row label="Ajo group" value={tx.groupName} />}
               {!!tx.customer && <Row label="Recipient" value={tx.customer} />}
               {!!tx.token && <Row label="Recharge token" value={tx.token} mono />}
               {Number(tx.feeFormatted) > 0 && (

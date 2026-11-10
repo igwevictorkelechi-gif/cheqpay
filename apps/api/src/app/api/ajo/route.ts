@@ -12,21 +12,20 @@ export const dynamic = "force-dynamic";
 
 /**
  * Ajo home: the user's personal plans, their groups, what they owe, and the
- * rules the apps show before anyone commits. Opening it also settles any
- * arrears from money that has come in since the last scheduler pass, so a
- * user who just topped up sees the lien lift straight away.
+ * rules the apps show before anyone commits.
  */
 export async function GET(req: Request) {
   try {
     const auth = await requireUser(req);
     await assertFeatureEnabled("ajo");
-    await sweepArrears({ deadline: Date.now() + 5_000, userId: auth.id }).catch(() => undefined);
-    const [plans, groups, owed, bps] = await Promise.all([
-      listPlans(auth.id),
-      listMyGroups(auth.id),
-      ajoArrearsKobo(auth.id),
-      getAjoBreakFeeBps(),
-    ]);
+    // Settle arrears from money that came in since the last scheduler pass, so
+    // a user who just topped up sees the lien lift. Only debtors pay the cost.
+    let owed = await ajoArrearsKobo(auth.id);
+    if (owed > 0n) {
+      await sweepArrears({ deadline: Date.now() + 5_000, userId: auth.id }).catch(() => undefined);
+      owed = await ajoArrearsKobo(auth.id);
+    }
+    const [plans, groups, bps] = await Promise.all([listPlans(auth.id), listMyGroups(auth.id), getAjoBreakFeeBps()]);
     return jsonOk({
       plans: plans.map(planView),
       groups: groups.map((g) => groupView(g, auth.id)),
