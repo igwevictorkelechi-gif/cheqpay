@@ -177,7 +177,7 @@ export async function runDuePlans(opts: { deadline: number; limit?: number }): P
       // A missed slot is not retried: the plan still ends on schedule, with
       // that much less in it. Say so, and say why it was missed.
       await notifyUser(r.plan.user_id, {
-        category: "withdrawals",
+        category: "savings",
         title: "Ajo contribution skipped",
         body:
           r.why === "arrears"
@@ -189,7 +189,7 @@ export async function runDuePlans(opts: { deadline: number; limit?: number }): P
     if (r.matured !== null) {
       out.matured++;
       await notifyUser(r.plan.user_id, {
-        category: "deposits",
+        category: "savings",
         title: "Your Ajo plan is complete",
         body: r.matured > 0n
           ? `${naira(r.matured)} from "${r.plan.name}" is back in your wallet.`

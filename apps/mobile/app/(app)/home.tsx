@@ -171,7 +171,7 @@ export default function HomeScreen() {
                 <Text className="text-white/80 text-sm mt-0.5">
                   {isUsd
                     ? 'Open your USD account to receive dollars from anywhere.'
-                    : 'Fund your wallet by bank transfer to buy crypto and pay bills.'}
+                    : 'Top up by bank transfer, then save, send and pay bills from one place.'}
                 </Text>
               </View>
             </TouchableOpacity>

@@ -131,6 +131,7 @@ export default function TransactionDetailScreen() {
               {!!tx.network && <Row label="Network" value={tx.network} />}
               {!!tx.billerName && <Row label="Biller" value={tx.billerName} />}
               {!!tx.planName && <Row label="Plan" value={tx.planName} />}
+              {!!tx.groupName && <Row label="Ajo group" value={tx.groupName} />}
               {!!tx.customer && <Row label="Recipient" value={tx.customer} />}
               {Number(tx.feeFormatted) > 0 && <Row label="Fee" value={`${fmt(tx.feeFormatted)} ${tx.asset}`} />}
               {!!tx.toAddress && <Row label="Address" value={tx.toAddress} mono />}

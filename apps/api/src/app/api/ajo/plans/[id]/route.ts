@@ -27,7 +27,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const returned = fromMinorUnits(r.returnedKobo, Asset.NGN);
     const fee = fromMinorUnits(r.feeKobo, Asset.NGN);
     await notifyUser(auth.id, {
-      category: "deposits",
+      category: "savings",
       title: "Ajo plan ended early",
       body: r.feeKobo > 0n
         ? `${formatNairaMinor(r.returnedKobo)} is back in your wallet (${formatNairaMinor(r.feeKobo)} break fee).`

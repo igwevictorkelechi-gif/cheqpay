@@ -13,6 +13,7 @@ const rows: { key: string; title: string; subtitle: string }[] = [
   { key: "trades", title: "Buy, sell & convert", subtitle: "Confirmations for crypto trades" },
   { key: "bills", title: "Bill payments", subtitle: "Airtime, data, electricity & more" },
   { key: "price", title: "Price alerts", subtitle: "Big moves, your price targets, and the daily update" },
+  { key: "savings", title: "Ajo savings", subtitle: "Contributions, payouts and your turn to collect" },
   { key: "news", title: "Crypto news", subtitle: "Breaking crypto headlines" },
   { key: "security", title: "Security alerts", subtitle: "New logins and sensitive changes" },
   { key: "updates", title: "News & announcements", subtitle: "New features and important changes" },

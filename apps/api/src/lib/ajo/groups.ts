@@ -138,7 +138,7 @@ export async function joinGroup(userId: string, rawCode: string): Promise<GroupR
   });
   if (full) {
     await notifyUser(group.owner_id, {
-      category: "updates",
+      category: "savings",
       title: "Your Ajo group is full",
       body: `"${group.name}" has all ${group.size} members. Start it when you're ready.`,
       data: { ajoGroupId: group.id },
@@ -196,7 +196,7 @@ export async function startGroup(userId: string, groupId: string): Promise<Group
   await Promise.all(
     g.order.map((uid, i) =>
       notifyUser(uid, {
-        category: "updates",
+        category: "savings",
         title: `"${g.name}" has started`,
         body: `You collect in round ${i + 1} of ${g.size}. The first ${naira(g.amount_minor)} contribution is taken from your wallet at 9am on ${g.next_due_at?.toISOString().slice(0, 10)}.`,
         data: { ajoGroupId: g.id },
@@ -331,7 +331,7 @@ export async function runDueRounds(opts: { deadline: number; groupId?: string })
     const g = r.group;
     const pot = g.amount_minor * BigInt(g.size);
     await notifyUser(r.recipientId, {
-      category: "deposits",
+      category: "savings",
       title: `It's your turn: ${g.name}`,
       body: r.missed.length === 0
         ? `You collected the ${naira(pot)} pot for round ${r.round}. ${naira(r.receivedKobo)} from the group is in your wallet, and your own ${naira(g.amount_minor)} share stayed there.`
@@ -341,7 +341,7 @@ export async function runDueRounds(opts: { deadline: number; groupId?: string })
     await Promise.all(
       r.missed.map((uid) =>
         notifyUser(uid, {
-          category: "withdrawals",
+          category: "savings",
           title: "Ajo contribution missed",
           body: `Your ${naira(g.amount_minor)} for "${g.name}" round ${r.round} couldn't be taken. Add money to your wallet: it goes to your group first, and withdrawals and transfers are paused until you're caught up.`,
           data: { ajoGroupId: g.id },
@@ -378,7 +378,7 @@ export async function sweepArrears(opts: { deadline: number; userId?: string }):
       out.users++;
       out.settledKobo += settled;
       await notifyUser(user_id, {
-        category: "withdrawals",
+        category: "savings",
         title: "Ajo arrears paid",
         body: `${naira(settled)} from your wallet went to your Ajo group to cover what you owed.`,
         data: {},
