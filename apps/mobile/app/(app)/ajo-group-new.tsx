@@ -99,7 +99,7 @@ export default function AjoGroupNewScreen() {
               className="flex-1 py-2.5 rounded-full items-center"
               style={{ backgroundColor: mode === m ? colors.brand : 'transparent' }}
             >
-              <Text style={chipText(mode === m)}>{m === 'join' ? 'Join a group' : 'Start a group'}</Text>
+              <Text style={chipText(mode === m)}>{m === 'join' ? 'Join my people' : 'Start a group'}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -119,7 +119,7 @@ export default function AjoGroupNewScreen() {
               style={[input, { letterSpacing: 4 }]}
             />
             <Text className="text-muted dark:text-muted-dark text-xs mt-2">
-              Ask the organiser for the 6-character code.
+              Got a link from a friend? Tapping it fills this in. Otherwise ask them for the 6-character code.
             </Text>
           </>
         ) : (
@@ -129,7 +129,7 @@ export default function AjoGroupNewScreen() {
               value={name}
               onChangeText={setName}
               maxLength={40}
-              placeholder="Office Ajo, Family savings…"
+              placeholder="Office Ajo, Squad fund, Family…"
               placeholderTextColor={colors.muted}
               className="rounded-2xl px-4 py-3.5 text-ink dark:text-ink-dark text-base"
               style={input}

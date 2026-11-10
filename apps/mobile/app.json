@@ -35,7 +35,10 @@
         {
           "action": "VIEW",
           "autoVerify": true,
-          "data": [{ "scheme": "https", "host": "mycheqpay.com", "pathPrefix": "/pay" }],
+          "data": [
+            { "scheme": "https", "host": "mycheqpay.com", "pathPrefix": "/pay" },
+            { "scheme": "https", "host": "mycheqpay.com", "pathPrefix": "/ajo" }
+          ],
           "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
