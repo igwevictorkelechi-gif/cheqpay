@@ -61,6 +61,10 @@ const REAL_PROVIDER_KEYS = [
   "RESEND_API_KEY",
   "ADMIN_ALERT_WEBHOOK",
   "SENTRY_DSN",
+  // The WhatsApp send token reaches real customers' phones, so the lab must
+  // never hold it. Without this the lab could message real people.
+  "WHATSAPP_ACCESS_TOKEN",
+  "WHATSAPP_PHONE_NUMBER_ID",
 ] as const;
 
 /**
@@ -185,6 +189,23 @@ const envSchema = z.object({
   META_APP_ID: z.string().optional(), // Facebook Pages + Instagram (one Meta app)
   META_APP_SECRET: z.string().optional(),
   META_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v23.0"),
+
+  // WhatsApp Business Cloud API. The WhatsApp Business account hangs off the
+  // SAME Meta app as the social publisher above, so META_APP_SECRET is what
+  // signs the inbound webhook (X-Hub-Signature-256) — there is no separate
+  // app secret to set.
+  //   WHATSAPP_PHONE_NUMBER_ID — the sender, from the WhatsApp Manager
+  //   WHATSAPP_ACCESS_TOKEN    — a System User token; the temporary 24h token
+  //                              from the dashboard is for local trials only
+  //   WHATSAPP_VERIFY_TOKEN    — any random string; it must match what is typed
+  //                              into Meta's webhook setup form
+  // Webhook callback URL to register: `${API_PUBLIC_URL}/api/webhooks/whatsapp`
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+  WHATSAPP_VERIFY_TOKEN: z.string().optional(),
+  // The bot's number in public form (E.164, e.g. 2348012345678). Not a secret:
+  // it is what the app's "Connect WhatsApp" button opens a chat with.
+  WHATSAPP_BOT_NUMBER: z.string().optional(),
   X_CLIENT_ID: z.string().optional(),
   X_CLIENT_SECRET: z.string().optional(),
   TIKTOK_CLIENT_KEY: z.string().optional(),
