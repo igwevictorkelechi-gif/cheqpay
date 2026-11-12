@@ -49,6 +49,17 @@ export const SETTING_KEYS = {
   // however the trade settles.
   MIN_TRADE_MARGIN_NGN: "min_trade_margin_ngn",
   AJO_BREAK_FEE_BPS: "ajo_break_fee_bps", // fee kept when a personal Ajo is broken early
+  // Daily ceilings on payments COMPOSED in the WhatsApp bot, in kobo. These sit
+  // on top of the KYC tier limits, and for two of the three actions they are
+  // the only ceiling there is: P2P transfers and bill payments have no tier
+  // gate at all. Split by where the money can actually go, so the restriction
+  // lands on the exposure rather than on the safe paths:
+  //  - P2P can reach ANYONE, so it stays tight.
+  //  - A bank payout is name-matched to the account holder (lib/ngnPayout.ts),
+  //    so it can only ever land in the user's own account; bills reach the
+  //    user's own meter or phone. A thief gains nothing from either.
+  WHATSAPP_P2P_DAILY_CAP_KOBO: "whatsapp_p2p_daily_cap_kobo",
+  WHATSAPP_SELF_DAILY_CAP_KOBO: "whatsapp_self_daily_cap_kobo",
   // Spread taken on a NGN⇄USD conversion, which settles on Maplerad's FX rail
   // rather than the synthetic USDT peg — so SWAP_SPREAD_BPS never reaches it
   // and it needs a margin of its own.
@@ -472,6 +483,33 @@ export function getAjoBreakFeeBps(): Promise<number> {
 
 export async function setAjoBreakFeeBps(bps: number, updatedBy?: string): Promise<void> {
   await upsertSetting(SETTING_KEYS.AJO_BREAK_FEE_BPS, String(bps), updatedBy);
+}
+
+/**
+ * Most a user may send to OTHER people in one day from the WhatsApp bot, kobo.
+ * Default ₦20,000 — deliberately low, because P2P transfers carry no KYC tier
+ * limit, so without this the bot would inherit no ceiling at all on the one
+ * action that can move money to a stranger.
+ */
+export function getWhatsappP2pDailyCapKobo(): Promise<number> {
+  return getNumberSetting(SETTING_KEYS.WHATSAPP_P2P_DAILY_CAP_KOBO, 2_000_000);
+}
+
+export async function setWhatsappP2pDailyCapKobo(kobo: number, updatedBy?: string): Promise<void> {
+  await upsertSetting(SETTING_KEYS.WHATSAPP_P2P_DAILY_CAP_KOBO, String(kobo), updatedBy);
+}
+
+/**
+ * Most a user may move to THEMSELVES in one day from the WhatsApp bot, kobo:
+ * bank payouts (name-matched to their own account) and bills. Default
+ * ₦200,000. Payouts are still bounded by the real tier limits on top.
+ */
+export function getWhatsappSelfDailyCapKobo(): Promise<number> {
+  return getNumberSetting(SETTING_KEYS.WHATSAPP_SELF_DAILY_CAP_KOBO, 20_000_000);
+}
+
+export async function setWhatsappSelfDailyCapKobo(kobo: number, updatedBy?: string): Promise<void> {
+  await upsertSetting(SETTING_KEYS.WHATSAPP_SELF_DAILY_CAP_KOBO, String(kobo), updatedBy);
 }
 
 // --- Minimums ----------------------------------------------------------------

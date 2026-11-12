@@ -17,6 +17,7 @@ import { formatNairaMinor } from "../money";
 import { enforceRateLimit } from "../ratelimit";
 import { ApiError } from "../http";
 import { maskNumber, normaliseWaId, redeemLinkCode, resolveLink, unlinkByWaId, LINK_CODE } from "./session";
+import { GRAMMAR, composeBill, composeTransfer, composeWithdraw } from "./compose";
 
 export interface InboundMessage {
   waId: string;
@@ -36,9 +37,12 @@ const HELP = [
   "• *balance* — what's in your wallet",
   "• *recent* — your last few transactions",
   "• *ajo* — your plans, circles and anything owed",
+  "• *send 5000 to @tobi* — someone you've paid before",
+  "• *withdraw 5000* — to your saved bank account",
+  "• *pay nepa* — a bill you've saved",
   "• *stop* — disconnect WhatsApp from your account",
   "",
-  "To send money, open the CheqPay app — I'll never ask for your PIN here.",
+  "Payments are confirmed with your PIN on our website. I'll never ask for it here.",
 ].join("\n");
 
 const NOT_LINKED = [
@@ -115,8 +119,32 @@ export async function handleMessage(msg: InboundMessage): Promise<Reply | null> 
     case "savings":
       return { text: await ajoReply(link.userId) };
     default:
-      return { text: `I didn't catch that.\n\n${HELP}` };
+      return routeAction(link.userId, text);
   }
+}
+
+/**
+ * The paying grammar. Deliberately narrow: an unmatched message gets the
+ * grammar back, never a guess at what the user meant. A misparse here spends
+ * real money.
+ */
+async function routeAction(userId: string, text: string): Promise<Reply> {
+  const send = /^send\s+(\S+)\s+to\s+(@?[a-zA-Z0-9_]+)$/i.exec(text);
+  if (send) return composeTransfer(userId, send[1], send[2]);
+
+  const withdraw = /^withdraw\s+(\S+)$/i.exec(text);
+  if (withdraw) return composeWithdraw(userId, withdraw[1]);
+
+  const pay = /^pay\s+([a-zA-Z0-9][a-zA-Z0-9 _-]{0,38})?$/i.exec(text);
+  if (pay?.[1]) {
+    const parts = pay[1].trim().split(/\s+/);
+    const maybeAmount = parts.length > 1 ? parts[parts.length - 1] : undefined;
+    const looksAmount = maybeAmount ? /^[₦]?[\d.,]+[km]?$/i.test(maybeAmount) : false;
+    const nickname = looksAmount ? parts.slice(0, -1).join(" ") : parts.join(" ");
+    return composeBill(userId, nickname, looksAmount ? maybeAmount : undefined);
+  }
+
+  return { text: `I didn't catch that.\n\n${GRAMMAR}` };
 }
 
 async function handleLink(waId: string, code: string): Promise<Reply> {

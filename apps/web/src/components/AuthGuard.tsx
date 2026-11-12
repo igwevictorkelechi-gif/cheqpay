@@ -11,7 +11,10 @@ import { rememberReturnTo } from "@/lib/returnTo";
 // Listing it here is what stops this guard blanking the homepage, which is
 // what left out/index.html with nothing for search engines to index.
 // "/connect" handles signed-out visitors itself (sign in, then come back).
-const PUBLIC_EXACT = new Set(["/", "/login", "/signup", "/verify-otp", "/welcome", "/connect"]);
+// "/approve" does the same: it is opened from a WhatsApp link, so the visitor
+// is often signed out on that device, and the page needs its ?code= to survive
+// the round trip to /login. Letting this guard bounce it would drop the code.
+const PUBLIC_EXACT = new Set(["/", "/login", "/signup", "/verify-otp", "/welcome", "/connect", "/approve"]);
 const PUBLIC_PREFIX = ["/legal", "/privacy", "/terms", "/about", "/support", "/faq", "/contact", "/pricing", "/screen"];
 
 /** Where a signed-out visitor to the app root is sent. */

@@ -206,6 +206,11 @@ const envSchema = z.object({
   // The bot's number in public form (E.164, e.g. 2348012345678). Not a secret:
   // it is what the app's "Connect WhatsApp" button opens a chat with.
   WHATSAPP_BOT_NUMBER: z.string().optional(),
+
+  // Where the web app lives, for links the bot sends into a browser (the
+  // payment approval page). Defaults to production so a deployment that
+  // forgets it still sends a working link rather than a broken one.
+  WEB_PUBLIC_URL: z.string().url().default("https://mycheqpay.com"),
   X_CLIENT_ID: z.string().optional(),
   X_CLIENT_SECRET: z.string().optional(),
   TIKTOK_CLIENT_KEY: z.string().optional(),

@@ -65,8 +65,72 @@ Disconnect from Settings → Security, or by sending `STOP`.
 | `stop` | Disconnects this number |
 | `LINK ABC234` | Connects this number (the only thing an unlinked number may do) |
 
-Anything else gets the help text. A message that looks like a PIN gets the
-warning instead.
+### Paying
+
+| Message | What happens |
+| --- | --- |
+| `send 5000 to @tobi` | To a CheqPay user **already paid from the app** |
+| `withdraw 5000` | To the user's **own** saved bank account |
+| `pay nepa` / `pay nepa 12000` | A bill they've saved |
+
+Each replies with a link to `/approve?code=…`, good for 15 minutes. The PIN is
+typed there, never here.
+
+A message that looks like a PIN gets the warning instead. Anything else gets
+the grammar back — **never a guess**. "send my brother 5k" is not a payment
+instruction, and treating it as one would spend real money on an inference.
+
+#### Why these three, and why the gates
+
+The risk ordering is not the obvious one. `lib/ngnPayout.ts` resolves the
+account name live and refuses with `name_mismatch` — *"You can only withdraw to
+your own bank account."* So:
+
+| Action | Where money can go | If the WhatsApp account is stolen |
+| --- | --- | --- |
+| `withdraw` | The user's **own** verified account | The thief moves the victim's money to the victim's bank |
+| `bill` | Their own meter, phone, TV | Nothing to steal |
+| `transfer` | **Anyone** | The real exposure |
+
+Hence the gates. A transfer needs a **prior completed payment** to that
+username: a chat channel is not where a brand-new payee should be introduced,
+because that is precisely the step a social-engineering attack needs. With more
+than one saved bank account, `withdraw` lists them and sends the user to the
+app rather than picking one — guessing is how money reaches the wrong place.
+
+#### Caps
+
+Two admin-editable settings, split by where the money can actually go:
+
+| Setting | Default | Covers |
+| --- | --- | --- |
+| `whatsapp_p2p_daily_cap_kobo` | ₦20,000 | `send` |
+| `whatsapp_self_daily_cap_kobo` | ₦200,000 | `withdraw`, `pay` |
+
+The P2P one matters most: **P2P transfers and bill payments have no KYC tier
+gate at all**, so for those this is the only ceiling there is. The cap is
+reserved when the user opens the link, not when the bot composes it, so an
+ignored proposal never eats someone's allowance — and it is reserved under the
+same advisory lock the withdrawal limits use, so two links opened at once
+cannot both slip under it.
+
+#### Why a double payment is impossible
+
+The approval page's `Idempotency-Key` is **derived from the link code**, so a
+refresh, a double tap, or a failed close-out all re-present the same key and
+the existing routes return the original transaction instead of paying twice.
+That is deliberate: it means closing the link out is best-effort rather than
+load-bearing, and a step that must not fail is not sitting in front of money.
+
+#### The approval page
+
+`/approve?code=…` — a **query param, not a path segment**. `apps/web` is a
+static export, so an unbounded `/approve/[code]` cannot be enumerated at build
+time and would 404. `/connect` and `/pay` read their inputs the same way.
+
+It is listed as public in `AuthGuard`: the link lands on whatever device has
+WhatsApp, so a signed-out visitor is the normal case, and the page handles
+sign-in itself so the `?code=` survives the trip to `/login` and back.
 
 ## Running it
 
@@ -127,16 +191,6 @@ reviewed by the same counsel engaged on the VASP/MSB question.
 
 ## Not built yet
 
-Phases 4–6 of the plan:
-
-- **Paying from chat** — `wa_pending_actions` exists and is created by the
-  schema, but nothing writes to it yet. The design: the bot validates a payment
-  to an **already-saved beneficiary** under a daily cap, then sends a one-time
-  link to `/approve/<code>` on the website, where the existing
-  `TransactionPinProvider` and the existing money route do the work.
-  Note the cap matters more than it looks: P2P transfers and bill payments have
-  **no KYC tier gate**, so for exactly what the bot can do, the WhatsApp cap is
-  the ceiling rather than a second one.
 - **Outbound alerts** — a `whatsapp` leg on `notifyUser`, reusing the existing
   notification categories. Needs the approved templates above.
 - **Free text** — routing anything unrecognised into the existing

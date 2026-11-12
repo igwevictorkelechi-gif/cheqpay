@@ -60,6 +60,17 @@ export function ensureWhatsappSchema(): Promise<void> {
       await prisma.$executeRawUnsafe(
         `CREATE INDEX IF NOT EXISTS wa_pending_actions_created_idx ON wa_pending_actions (created_at)`,
       );
+      // Added after the table shipped. `approved_at` is stamped when the user
+      // opens the link and we reserve their daily cap — BEFORE the money moves,
+      // so two links approved at the same moment cannot both slip under it.
+      // `used_at` then records that the payment actually ran.
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE wa_pending_actions ADD COLUMN IF NOT EXISTS approved_at timestamptz`,
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS wa_pending_actions_user_day_idx
+           ON wa_pending_actions (user_id, approved_at)`,
+      );
     })().catch((err) => {
       ensured = null;
       throw err;
