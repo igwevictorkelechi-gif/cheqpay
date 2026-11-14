@@ -12,6 +12,7 @@
 // used; the stored rate stays and ops is told. A Maplerad failure never blocks
 // a price either: the stored rate is used until a refresh succeeds.
 
+import { after } from "next/server";
 import { prisma } from "@cheqpay/db";
 import { quoteFx } from "./maplerad/fx";
 import { alertOpsOnce } from "./opsAlert";
@@ -79,13 +80,39 @@ export function rejectLiveRate(live: number, stored: number | null): string | nu
 }
 
 /**
+ * Let a refresh finish after the response has gone. On serverless a promise
+ * nobody awaits is frozen with the instance, so it is handed to after(); with
+ * no request in scope (a cron, a test) after() throws and the promise simply
+ * runs on.
+ */
+function finishInBackground(work: Promise<unknown>): void {
+  const quiet = work.catch(() => undefined);
+  try {
+    after(() => quiet);
+  } catch {
+    /* no request scope */
+  }
+}
+
+/**
  * The rate to price with, following Maplerad. `stored` and `storedAt` are the
  * current row (or the env seed with no date). Never throws.
+ *
+ * `wait: false` is for DISPLAY reads only. A stale stored rate is returned at
+ * once and the refresh carries on behind the response, so a slow Maplerad can
+ * no longer hold a price screen for the length of its timeout — which it did:
+ * the stale path used to await the quote, and each serverless instance paid
+ * the timeout separately because the failure back-off lives in memory.
+ *
+ * Anything that PRICES A TRADE must keep the default and wait. The first trade
+ * after a quiet night would otherwise be struck at yesterday's rate, which is
+ * the exact loss following Maplerad exists to prevent.
  */
 export async function followMapleradRate(
   stored: number | null,
   storedAt: Date | null,
   now: number = Date.now(),
+  opts: { wait?: boolean } = {},
 ): Promise<FollowedRate> {
   const kept = { rate: stored, fresh: false };
   if (stored !== null && storedAt && now - storedAt.getTime() < LIVE_RATE_TTL_MS) return kept;
@@ -94,6 +121,11 @@ export async function followMapleradRate(
     inflight = refresh(stored, storedAt, now).finally(() => {
       inflight = null;
     });
+  }
+  // With nothing stored there is nothing to show, so even a display read waits.
+  if (opts.wait === false && stored !== null) {
+    finishInBackground(inflight);
+    return kept;
   }
   return inflight;
 }

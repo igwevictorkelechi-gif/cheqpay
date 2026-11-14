@@ -1,5 +1,8 @@
 {
   "framework": "nextjs",
+  "regions": [
+    "dub1"
+  ],
   "installCommand": "cd ../.. && bun install",
   "buildCommand": "cd ../.. && bunx prisma generate --schema packages/db/prisma/schema.prisma && cd apps/api && bunx next build",
   "outputDirectory": ".next",

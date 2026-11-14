@@ -174,9 +174,15 @@ export async function setSwapSpreadBpsFor(kind: SwapKind, bps: number | null, up
   await upsertSetting(key, String(bps), updatedBy);
 }
 
-/** Current business USDT->NGN rate, or null if never set. */
-export async function getUsdtNgnRate(): Promise<number | null> {
-  return (await getUsdtNgnRateDetails()).rate;
+/**
+ * Current business USDT->NGN rate, or null if never set.
+ *
+ * Pass `{ wait: false }` only when the number is for SHOWING, never for
+ * pricing a trade: it answers with the stored rate at once and refreshes
+ * behind the response. See followMapleradRate.
+ */
+export async function getUsdtNgnRate(opts: { wait?: boolean } = {}): Promise<number | null> {
+  return (await getUsdtNgnRateDetails(opts)).rate;
 }
 
 export type UsdtNgnRateSource = "maplerad" | "manual";
@@ -230,7 +236,7 @@ export async function setCryptoOfframp(on: boolean, updatedBy?: string): Promise
 }
 
 /** The rate with where it came from and when, for pricing and the admin page. */
-export async function getUsdtNgnRateDetails(): Promise<{
+export async function getUsdtNgnRateDetails(opts: { wait?: boolean } = {}): Promise<{
   rate: number | null;
   source: UsdtNgnRateSource;
   updatedAt: Date | null;
@@ -245,7 +251,7 @@ export async function getUsdtNgnRateDetails(): Promise<{
   if (source === "manual") {
     return { rate: stored, source, updatedAt, updatedBy: row?.updatedBy ?? null };
   }
-  const { rate, fresh } = await followMapleradRate(stored, updatedAt);
+  const { rate, fresh } = await followMapleradRate(stored, updatedAt, Date.now(), opts);
   return {
     rate,
     source,

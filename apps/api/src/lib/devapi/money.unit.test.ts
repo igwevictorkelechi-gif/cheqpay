@@ -73,8 +73,12 @@ describe("live access", () => {
   });
 
   it("sets the rate limit by the plan in force", () => {
-    expect(currentPlan(sub({ plan_id: "growth" }), plans).id).toBe("growth");
-    expect(currentPlan(sub({ status: "canceled", plan_id: "growth" }), plans).id).toBe("sandbox");
+    // currentPlan reads the real clock, so the period has to be relative to it.
+    // The fixture's fixed 2026-11-10 end (plus 3 days' grace) made this test
+    // start failing on 2026-11-14 with nothing wrong in the code.
+    const live = { current_period_end: new Date(Date.now() + 30 * 86_400_000) };
+    expect(currentPlan(sub({ plan_id: "growth", ...live }), plans).id).toBe("growth");
+    expect(currentPlan(sub({ status: "canceled", plan_id: "growth", ...live }), plans).id).toBe("sandbox");
     expect(currentPlan(null, plans).id).toBe("sandbox");
   });
 });

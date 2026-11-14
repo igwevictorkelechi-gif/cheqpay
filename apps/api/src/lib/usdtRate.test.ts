@@ -95,6 +95,40 @@ describe("followMapleradRate", () => {
     });
   });
 
+  it("a display read gets the stale stored rate at once, and the refresh lands behind it", async () => {
+    // A Maplerad that never answers must not be able to hold a price screen.
+    let answer!: (v: unknown) => void;
+    h.quoteFx.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    await expect(followMapleradRate(1355, minutesAgo(30), NOW, { wait: false })).resolves.toEqual({
+      rate: 1355,
+      fresh: false,
+    });
+    expect(h.quoteFx).toHaveBeenCalledTimes(1);
+    expect(h.upsert).not.toHaveBeenCalled();
+    // The refresh still completes and is saved for the next read.
+    answer(quoteAt(1359));
+    await vi.waitFor(() => expect(h.upsert).toHaveBeenCalledTimes(1));
+  });
+
+  it("a display read still waits when there is no stored rate to show", async () => {
+    h.quoteFx.mockResolvedValue(quoteAt(1360));
+    await expect(followMapleradRate(null, null, NOW, { wait: false })).resolves.toEqual({ rate: 1360, fresh: true });
+  });
+
+  it("a trade-pricing read waits for the live rate by default", async () => {
+    // The first trade after a quiet night must not be struck at an old rate.
+    h.quoteFx.mockResolvedValue(quoteAt(1361));
+    await expect(followMapleradRate(1355, minutesAgo(600), NOW)).resolves.toEqual({ rate: 1361, fresh: true });
+  });
+
+  it("a failed background refresh never surfaces to the display read", async () => {
+    h.quoteFx.mockRejectedValue(new Error("timeout"));
+    await expect(followMapleradRate(1355, minutesAgo(30), NOW, { wait: false })).resolves.toEqual({
+      rate: 1355,
+      fresh: false,
+    });
+  });
+
   it("asks Maplerad once when many prices are read together", async () => {
     h.quoteFx.mockResolvedValue(quoteAt(1356));
     const all = await Promise.all([1, 2, 3].map(() => followMapleradRate(1355, minutesAgo(30), NOW)));

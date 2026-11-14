@@ -407,6 +407,18 @@ async function createFxConvertQuote(params: {
       heldMinor: held.toString(),
       neededMinor: providerAmount.toString(),
     });
+    // Customers were the ones who found this out: the log line above was the
+    // only signal, and swaps stayed refused until someone read it. Once an
+    // hour per currency, not once per refused customer.
+    try {
+      await alertOpsOnce(
+        `fx-liquidity-low:${fxCurrencyOf(params.fromAsset)}`,
+        `Swaps are being refused: the Maplerad ${fxCurrencyOf(params.fromAsset)} business wallet is too low. Top it up and swaps resume by themselves.`,
+        { heldMinor: held.toString(), neededMinor: providerAmount.toString() },
+      );
+    } catch {
+      // Telling ops must never change what the customer is told.
+    }
     throw new ApiError(
       503,
       "Swaps are briefly limited right now. Please try a smaller amount or try again shortly.",
