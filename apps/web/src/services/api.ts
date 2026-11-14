@@ -865,10 +865,10 @@ export const api = {
     customer: string;
     planId?: string;
     amount?: string;
-  }, pin?: string): Promise<{ transactionId: string; status: string; providerRef?: string; token?: string | null }> {
+  }, pin?: string, idempotencyKey?: string): Promise<{ transactionId: string; status: string; providerRef?: string; token?: string | null }> {
     return apiFetch("/api/bills/pay", {
       method: "POST",
-      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
+      headers: { "idempotency-key": idempotencyKey ?? idemKey(), ...pinHeader(pin) },
       body: JSON.stringify(input),
     });
   },
@@ -1131,6 +1131,45 @@ export const api = {
     return apiFetch("/api/features");
   },
 
+  /**
+   * A payment the WhatsApp bot composed, ready to confirm.
+   *
+   * Reserves the sender's daily WhatsApp cap, so it is a deliberate GET on
+   * opening the page rather than something to poll. 410 means the link is
+   * expired, already used, or not this user's.
+   */
+  getWhatsappApproval(code: string): Promise<{
+    kind: "transfer" | "withdraw" | "bill";
+    amount: string;
+    amountFormatted: string;
+    title: string;
+    subtitle: string;
+    request: Record<string, string>;
+    idempotencyKey: string;
+  }> {
+    return apiFetch(`/api/whatsapp/approve?code=${encodeURIComponent(code)}`);
+  },
+
+  /** Close out an approval once the payment has run. Best effort. */
+  closeWhatsappApproval(code: string): Promise<{ ok: boolean }> {
+    return apiFetch(`/api/whatsapp/approve?code=${encodeURIComponent(code)}`, { method: "DELETE" });
+  },
+
+  /** Is WhatsApp connected to this account, and to which (masked) number? */
+  getWhatsappLink(): Promise<{ linked: boolean; maskedNumber: string | null; linkedAt: string | null }> {
+    return apiFetch("/api/whatsapp/link");
+  },
+
+  /** Mint a one-time code to send to the bot from the user's own WhatsApp. */
+  createWhatsappLinkCode(): Promise<{ code: string; expiresInMinutes: number; deepLink: string | null }> {
+    return apiFetch("/api/whatsapp/link", { method: "POST" });
+  },
+
+  /** Disconnect WhatsApp. */
+  unlinkWhatsapp(): Promise<{ linked: boolean }> {
+    return apiFetch("/api/whatsapp/link", { method: "DELETE" });
+  },
+
   /** Confirm a username exists before sending — never returns PII. */
   lookupUser(username: string): Promise<{ username: string; self: boolean }> {
     return apiFetch(`/api/users/lookup?username=${encodeURIComponent(username)}`);
@@ -1142,7 +1181,7 @@ export const api = {
     asset: string;
     amount: string;
     note?: string;
-  }, pin?: string): Promise<{
+  }, pin?: string, idempotencyKey?: string): Promise<{
     transactionId: string;
     status: string;
     asset: string;
@@ -1152,7 +1191,7 @@ export const api = {
     return apiFetch("/api/transfers", {
       method: "POST",
       body: JSON.stringify(input),
-      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
+      headers: { "idempotency-key": idempotencyKey ?? idemKey(), ...pinHeader(pin) },
     });
   },
 
@@ -1397,7 +1436,7 @@ export const api = {
     bankCode: string;
     accountNumber: string;
     narration?: string;
-  }, pin?: string): Promise<{
+  }, pin?: string, idempotencyKey?: string): Promise<{
     transactionId: string;
     status: string;
     amount?: string;
@@ -1406,7 +1445,7 @@ export const api = {
   }> {
     return apiFetch("/api/withdrawals/ngn", {
       method: "POST",
-      headers: { "idempotency-key": idemKey(), ...pinHeader(pin) },
+      headers: { "idempotency-key": idempotencyKey ?? idemKey(), ...pinHeader(pin) },
       // The fee comes out of `amount`: the balance drops by exactly this much
       // and the bank receives amount − fee. See apps/api/src/lib/fees.ts.
       body: JSON.stringify({ ...input, feeInclusive: true }),

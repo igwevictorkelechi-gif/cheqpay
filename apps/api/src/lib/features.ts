@@ -28,6 +28,7 @@ export const FEATURE_DEFS = [
   { key: "auto_cashout", label: "Auto cash-out", description: "Users can have each USDT, USDC or BTC deposit sold for naira and paid straight to their own bank account. Uses the normal sell and withdrawal rules, fees and limits" },
   { key: "ajo", label: "Ajo savings", description: "Personal Ajo (automatic saving into a locked pot) and group Ajo (rotating savings circles with an arrears lien). No interest is paid; breaking a personal plan early costs the Ajo break fee" },
   { key: "developer_api", label: "Developer API", description: "The public API and developer portal at developers.mycheqpay.com (sandbox and live). Live access still needs an approved business and a paid plan" },
+  { key: "whatsapp_bot", label: "WhatsApp bot", description: "Users link WhatsApp from Security settings, then check their balance, history and Ajo, and start a payment there. The bot never moves money itself: anything that spends opens a one-time link and is confirmed with the transaction PIN on the website. Needs the WhatsApp Cloud API keys" },
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_DEFS)[number]["key"];
@@ -105,6 +106,13 @@ const DEFAULT_OFF: readonly FeatureKey[] = [
   "auto_cashout",
   // Ajo ships OFF: switch it on once a test circle has run a full cycle.
   "ajo",
+  // The WhatsApp bot ships OFF. Three things outside this codebase have to be
+  // true first: the number is registered on the WhatsApp Business account, Meta
+  // has verified the business, and the message templates are approved. Turning
+  // it on before then means users link an account and then get silence. Check
+  // the privacy policy covers sending account data through Meta before the
+  // first real user links.
+  "whatsapp_bot",
 ];
 
 const DEFAULTS: Record<FeatureKey, boolean> = Object.fromEntries(

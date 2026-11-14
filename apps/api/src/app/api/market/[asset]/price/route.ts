@@ -22,7 +22,9 @@ export async function GET(
     }
 
     const spotUsdt = await getPriceFeed().getSpotUsdt(asset as Asset);
-    const rate = await getUsdtNgnRate();
+    // Display only, so don't hold the screen on Maplerad: take the stored
+    // rate now and let the refresh land behind the response.
+    const rate = await getUsdtNgnRate({ wait: false });
     const priceNgn = rate !== null ? spotUsdt.mul(rate).toFixed(2) : null;
 
     return jsonOk({

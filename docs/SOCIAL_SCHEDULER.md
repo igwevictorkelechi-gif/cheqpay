@@ -6,7 +6,9 @@ company's accounts once, then draft, approve and schedule posts to them.
 - **Platforms:** Facebook Pages, Instagram (business/creator accounts linked to a
   Page), X, TikTok, LinkedIn company Pages.
 - **WhatsApp Status / Channels can't be automated** — WhatsApp has no posting API
-  for either.
+  for either. This is about *posting*: messaging users one to one is a different
+  product (the WhatsApp Business Cloud API) and is wired up — see
+  [WHATSAPP.md](./WHATSAPP.md).
 - **Access:** Super Admins, plus sub admins granted **Social media** in Roles &
   Access. A sub admin can't approve their own post; a Super Admin can approve
   anything.

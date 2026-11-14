@@ -113,6 +113,7 @@ async function ensureSchema(): Promise<void> {
       { ensureSocialSchema },
       { ensureAutoCashoutSchema },
       { ensureAjoSchema },
+      { ensureWhatsappSchema },
     ] = await Promise.all([
       import("@/lib/retention"),
       import("@/lib/activity"),
@@ -130,6 +131,7 @@ async function ensureSchema(): Promise<void> {
       import("@/lib/social/schema"),
       import("@/lib/autoCashout/schema"),
       import("@/lib/ajo/schema"),
+      import("@/lib/whatsapp/schema"),
     ]);
     // One at a time: each helper takes a table lock, and run in parallel they
     // opened a dozen connections per cold start — during a deploy, across many
@@ -186,6 +188,13 @@ async function ensureSchema(): Promise<void> {
       // Ajo savings: new tables plus four ledger TransactionType values. The
       // enum values must exist before any ledger read meets an Ajo row.
       () => ensureAjoSchema(),
+      // WhatsApp bot: its own tables, plus wa_pending_actions.approved_at added
+      // to one that already shipped, so it follows the column-add rule. These
+      // are raw-SQL tables with no Prisma model, so a missing column would not
+      // break unrelated reads — but the approval path reads approved_at to
+      // reserve the daily cap, and that is the request that would otherwise
+      // have created it.
+      () => ensureWhatsappSchema(),
     ];
     const version = deployVersion();
     if (version && (await schemaAlreadyApplied(version))) return;
