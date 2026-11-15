@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, Circle } from "lucide-react";
+import { ArrowRight, CheckCircle2, Circle, Terminal } from "lucide-react";
 import { useDash } from "@/components/DashShell";
 import { PageTitle, Status } from "@/components/ui";
 import { money } from "@/lib/format";
 
-const STEPS: { key: "test_key" | "two_factor" | "identity_verified" | "business_verified" | "plan" | "live_key"; label: string; href: string }[] = [
+const STEPS: { key: "test_key" | "first_request" | "two_factor" | "identity_verified" | "business_verified" | "plan" | "live_key"; label: string; href: string }[] = [
   { key: "test_key", label: "Create a test key", href: "/dashboard/keys/" },
+  { key: "first_request", label: "Make your first API call", href: "/dashboard/start/" },
   { key: "two_factor", label: "Turn on two-factor authentication", href: "/dashboard/security/" },
   { key: "identity_verified", label: "Verify your identity in the CheqPay app", href: "https://mycheqpay.com/kyc" },
   { key: "business_verified", label: "Verify your business", href: "/dashboard/go-live/" },
@@ -24,6 +25,16 @@ export default function OverviewPage() {
 
       {mode === "live" && overview.live_problem && <p className="notice-warn mb-5">{overview.live_problem.message}</p>}
       {account.status === "rejected" && account.review_note && <p className="notice-bad mb-5">Your business verification was declined: {account.review_note}</p>}
+      {overview.checklist && !overview.checklist.first_request && (
+        <Link href="/dashboard/start/" className="card mb-6 flex items-center gap-4 ring-1 ring-brand/30 hover:bg-circle/40">
+          <Terminal className="h-6 w-6 shrink-0 text-brand-light" />
+          <span className="flex-1">
+            <span className="headline block">Make your first API call</span>
+            <span className="subhead">One command, about a minute, in the sandbox.</span>
+          </span>
+          <ArrowRight className="h-5 w-5 text-muted" />
+        </Link>
+      )}
 
       <section>
         <h2 className="section-label !px-0">{mode === "test" ? "Sandbox main wallets" : "Live main wallets"}</h2>
