@@ -40,8 +40,10 @@ export default function SplashScreen() {
     } catch {
       /* ignore */
     }
-    const hold = setTimeout(() => setLeaving(true), 250);
-    const done = setTimeout(() => setVisible(false), 600);
+    // Start fading the moment the app has hydrated: anything longer is a
+    // deliberate wait in front of a screen that is already drawn underneath.
+    const hold = setTimeout(() => setLeaving(true), 0);
+    const done = setTimeout(() => setVisible(false), 300);
     return () => {
       clearTimeout(hold);
       clearTimeout(done);

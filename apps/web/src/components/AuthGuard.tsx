@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSelectedLayoutSegments } from "next/navigation";
 import { supabase } from "@/services/supabase";
 import { rememberReturnTo } from "@/lib/returnTo";
+import { hasStoredSession } from "@/lib/session";
 
 // Routes reachable without a session.
 // "/" is public because it now serves the landing page to signed-out
@@ -87,6 +88,16 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       }
     };
 
+    // Paint a protected page at once when this browser holds a session, rather
+    // than leaving it blank until getSession() settles. That promise is not
+    // just a storage read: once the access token is past its hour it waits on
+    // a refresh round trip to Supabase in Ireland, which on a phone in Lagos
+    // is most of a second of empty screen on every page. Nothing private is
+    // exposed by drawing early — every figure on these pages comes from the
+    // API, which still checks the token — and the getSession() answer below
+    // still sends a dead session to /login. Public routes are left alone, so
+    // a stale session can never bounce someone off /login in a loop.
+    if (!isPublic(pathname) && hasStoredSession()) apply(true);
     supabase.auth.getSession().then(({ data }) => apply(!!data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) =>
       apply(!!session)
@@ -98,10 +109,17 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, notFound]);
 
-  // On a protected route, render nothing until a session is confirmed — so
-  // protected content never flashes for a signed-out visitor.
-  if (!notFound && !isPublic(pathname) && (!ready || !authed)) {
-    return <div className="min-h-screen bg-surface" />;
-  }
-  return <>{children}</>;
+  if (notFound || isPublic(pathname)) return <>{children}</>;
+  // A confirmed signed-out visitor never gets the page, only the redirect.
+  if (ready && !authed) return <div className="min-h-screen bg-surface" />;
+  // Before the session is confirmed, the page is in the markup but hidden by
+  // CSS unless the pre-paint script in layout.tsx found a stored session
+  // (html.has-session). So the static HTML of a protected page carries its own
+  // layout, and a signed-in visitor sees it at first paint instead of waiting
+  // for every script to download and run — while a signed-out visitor still
+  // sees nothing before being sent to /login. Nothing private can show early:
+  // the prerendered markup has no account data in it; all of that comes from
+  // the API, behind the token. One wrapper in both states, so confirming the
+  // session does not remount the page.
+  return <div className={ready ? "contents" : "auth-pending"}>{children}</div>;
 }
