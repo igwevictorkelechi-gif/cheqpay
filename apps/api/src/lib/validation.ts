@@ -240,6 +240,8 @@ export const platformSettingsUpdateSchema = z
     ajoBreakFeeBps: z.number().int().min(0).max(1_000).optional(),
     /** Minimum business profit per buy/sell, flat NGN (max ₦100,000). 0 = off. */
     minTradeMarginNgn: z.number().min(0).max(100_000).optional(),
+    /** Naira kept per $1 traded against naira (max ₦500). 0 = the percentage margins. */
+    tradeMarginNgnPerUsd: z.number().min(0).max(500).optional(),
     /** Default bill-payment profit margin in basis points (max 20%). */
     billMarginBps: z.number().int().min(0).max(2_000).optional(),
     /**

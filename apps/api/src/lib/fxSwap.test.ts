@@ -56,6 +56,8 @@ vi.mock("./settings", () => ({
   getSwapSpreadBps: vi.fn(),
   getFxSideMarginBps: h.getFxSideMarginBps,
   getMinTradeMarginNgn: vi.fn().mockResolvedValue(0),
+  // These suites cover the percentage margins; flatMargin.test.ts covers ₦/$1.
+  getTradeMarginNgnPerUsd: vi.fn().mockResolvedValue(0),
   // The real implementation: the arithmetic is the thing under test.
   feeFromBps: (amt: bigint, bps: number) =>
     bps <= 0 ? 0n : (amt * BigInt(Math.trunc(bps))) / 10_000n,

@@ -121,7 +121,13 @@ export type ChartRange = "day" | "week" | "month" | "year" | "all";
 export interface MarketPrice {
   asset: string;
   priceUsd: string;
+  /** Market price: the coin at the middle of Maplerad's naira ⇄ dollar book. */
   priceNgn: string | null;
+  /** What one coin costs from CheqPay, and fetches from CheqPay (indicative). */
+  buyNgn?: string | null;
+  sellNgn?: string | null;
+  /** The same, per $1. */
+  dollar?: { marketNgn: number; buyNgn: number; sellNgn: number; marginNgn: number; source: string } | null;
 }
 export interface Candle {
   time: number;
