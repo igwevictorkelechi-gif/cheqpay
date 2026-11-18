@@ -19,6 +19,8 @@ import { alertOpsOnce } from "./opsAlert";
 import { invalidateSetting } from "./settingsCache";
 
 export const USDT_NGN_RATE_KEY = "usdt_ngn_rate";
+/** Maplerad's NGN→USD side (what a dollar costs us), followed the same way. */
+export const USD_NGN_ASK_RATE_KEY = "usd_ngn_ask_rate";
 /** Who the stored row names as its author when the refresh wrote it. */
 export const AUTO_UPDATED_BY = "maplerad (auto)";
 
@@ -41,13 +43,26 @@ export interface FollowedRate {
   fresh: boolean;
 }
 
-let inflight: Promise<FollowedRate> | null = null;
-let lastFailureAt = 0;
+/** One side of Maplerad's dollar book, followed into its own settings row. */
+interface Side {
+  key: string;
+  fetchLive: () => Promise<number>;
+  /** Prefix for ops alert keys, so the two sides never silence each other. */
+  alertKey: string;
+  /** How the side is named to a human in an alert. */
+  label: string;
+  inflight: Promise<FollowedRate> | null;
+  lastFailureAt: number;
+}
+
+const sides: Side[] = [];
 
 /** For tests: forget the in-memory refresh state. */
 export function resetUsdtRateState(): void {
-  inflight = null;
-  lastFailureAt = 0;
+  for (const side of sides) {
+    side.inflight = null;
+    side.lastFailureAt = 0;
+  }
 }
 
 /**
@@ -61,6 +76,28 @@ export async function fetchMapleradUsdNgn(): Promise<number> {
   );
   const cents = Number(fx.source?.amount ?? PROBE_CENTS);
   const kobo = Number(fx.target?.amount);
+  if (!Number.isFinite(kobo) || kobo <= 0 || !Number.isFinite(cents) || cents <= 0) {
+    throw new Error("Maplerad's quote had no usable amounts");
+  }
+  return Math.round((kobo / cents) * 100) / 100;
+}
+
+/** The NGN→USD probe: ₦140,000, about $100, in kobo. */
+const ASK_PROBE_KOBO = 14_000_000;
+
+/**
+ * Maplerad's live NGN per $1 when WE buy dollars (an NGN→USD quote). It is
+ * the other side of the book from fetchMapleradUsdNgn and is normally dearer:
+ * on 18 Nov 2026 Maplerad paid ~₦1,460 for a dollar and charged ~₦1,487 for
+ * one. A customer buying dollars from us costs us this rate, not the other.
+ */
+export async function fetchMapleradNgnUsd(): Promise<number> {
+  const fx = await quoteFx(
+    { sourceCurrency: "NGN", targetCurrency: "USD", amount: ASK_PROBE_KOBO },
+    { signal: AbortSignal.timeout(QUOTE_TIMEOUT_MS) },
+  );
+  const kobo = Number(fx.source?.amount ?? ASK_PROBE_KOBO);
+  const cents = Number(fx.target?.amount);
   if (!Number.isFinite(kobo) || kobo <= 0 || !Number.isFinite(cents) || cents <= 0) {
     throw new Error("Maplerad's quote had no usable amounts");
   }
@@ -108,44 +145,67 @@ function finishInBackground(work: Promise<unknown>): void {
  * after a quiet night would otherwise be struck at yesterday's rate, which is
  * the exact loss following Maplerad exists to prevent.
  */
-export async function followMapleradRate(
+export function followMapleradRate(
   stored: number | null,
   storedAt: Date | null,
   now: number = Date.now(),
   opts: { wait?: boolean } = {},
 ): Promise<FollowedRate> {
+  return follow(BID, stored, storedAt, now, opts);
+}
+
+/**
+ * The same, for the side of the book where we BUY dollars (NGN→USD), kept in
+ * its own row. Same TTL, same jump guard, same never-throws contract.
+ */
+export function followMapleradAsk(
+  stored: number | null,
+  storedAt: Date | null,
+  now: number = Date.now(),
+  opts: { wait?: boolean } = {},
+): Promise<FollowedRate> {
+  return follow(ASK, stored, storedAt, now, opts);
+}
+
+async function follow(
+  side: Side,
+  stored: number | null,
+  storedAt: Date | null,
+  now: number,
+  opts: { wait?: boolean },
+): Promise<FollowedRate> {
   const kept = { rate: stored, fresh: false };
   if (stored !== null && storedAt && now - storedAt.getTime() < LIVE_RATE_TTL_MS) return kept;
-  if (now - lastFailureAt < RETRY_AFTER_FAILURE_MS) return kept;
-  if (!inflight) {
-    inflight = refresh(stored, storedAt, now).finally(() => {
-      inflight = null;
+  if (now - side.lastFailureAt < RETRY_AFTER_FAILURE_MS) return kept;
+  if (!side.inflight) {
+    side.inflight = refresh(side, stored, storedAt, now).finally(() => {
+      side.inflight = null;
     });
   }
   // With nothing stored there is nothing to show, so even a display read waits.
   if (opts.wait === false && stored !== null) {
-    finishInBackground(inflight);
+    finishInBackground(side.inflight);
     return kept;
   }
-  return inflight;
+  return side.inflight;
 }
 
-async function refresh(stored: number | null, storedAt: Date | null, now: number): Promise<FollowedRate> {
+async function refresh(side: Side, stored: number | null, storedAt: Date | null, now: number): Promise<FollowedRate> {
   const kept = { rate: stored, fresh: false };
   let live: number;
   try {
-    live = await fetchMapleradUsdNgn();
+    live = await side.fetchLive();
   } catch (err) {
-    lastFailureAt = now;
-    console.error("[usdt rate] Maplerad quote failed; pricing stays on the stored rate", {
+    side.lastFailureAt = now;
+    console.error(`[usdt rate] Maplerad ${side.label} quote failed; pricing stays on the stored rate`, {
       stored,
       error: String(err),
     });
     // Only worth waking someone once the stored rate is genuinely old.
     if (!storedAt || now - storedAt.getTime() > 60 * 60 * 1000) {
       await alertOpsOnce(
-        "usdt-rate-refresh-failed",
-        `Crypto pricing can't read Maplerad's dollar rate, so it is still using ₦${stored ?? "?"} per $1. Check the rate in Admin → Trading settings.`,
+        `${side.alertKey}-refresh-failed`,
+        `Crypto pricing can't read Maplerad's ${side.label} dollar rate, so it is still using ₦${stored ?? "?"} per $1. Check the rate in Admin → Trading settings.`,
         { error: String(err).slice(0, 200) },
         now,
       );
@@ -155,11 +215,11 @@ async function refresh(stored: number | null, storedAt: Date | null, now: number
 
   const problem = rejectLiveRate(live, stored);
   if (problem) {
-    lastFailureAt = now;
-    console.error("[usdt rate] live rate refused", { stored, live, problem });
+    side.lastFailureAt = now;
+    console.error("[usdt rate] live rate refused", { side: side.label, stored, live, problem });
     await alertOpsOnce(
-      "usdt-rate-refused",
-      `Crypto pricing did not follow Maplerad's dollar rate because ${problem}. It is still using ₦${stored} per $1. If the move is real, set the rate in Admin → Trading settings and following resumes from there.`,
+      `${side.alertKey}-refused`,
+      `Crypto pricing did not follow Maplerad's ${side.label} dollar rate because ${problem}. It is still using ₦${stored} per $1. If the move is real, set the rate in Admin → Trading settings and following resumes from there.`,
       { stored: String(stored), live: String(live) },
       now,
     );
@@ -170,16 +230,38 @@ async function refresh(stored: number | null, storedAt: Date | null, now: number
     // Saving bumps updated_at even when the number is unchanged, which is
     // what tells every other instance the rate is fresh.
     await prisma.platformSetting.upsert({
-      where: { key: USDT_NGN_RATE_KEY },
+      where: { key: side.key },
       update: { value: String(live), updatedBy: AUTO_UPDATED_BY },
-      create: { key: USDT_NGN_RATE_KEY, value: String(live), updatedBy: AUTO_UPDATED_BY },
+      create: { key: side.key, value: String(live), updatedBy: AUTO_UPDATED_BY },
     });
     invalidateSetting();
   } catch (err) {
     // The rate is still good to price with; it just isn't shared yet. Back off
     // so a database that won't take the write isn't asked on every price.
-    lastFailureAt = now;
-    console.error("[usdt rate] saving the refreshed rate failed", { live, error: String(err) });
+    side.lastFailureAt = now;
+    console.error("[usdt rate] saving the refreshed rate failed", { side: side.label, live, error: String(err) });
   }
   return { rate: live, fresh: true };
 }
+
+/** What Maplerad pays us per $1 (USD→NGN). This is `usdt_ngn_rate`. */
+const BID: Side = {
+  key: USDT_NGN_RATE_KEY,
+  fetchLive: () => fetchMapleradUsdNgn(),
+  alertKey: "usdt-rate",
+  label: "USD→NGN",
+  inflight: null,
+  lastFailureAt: 0,
+};
+
+/** What Maplerad charges us per $1 (NGN→USD). */
+const ASK: Side = {
+  key: USD_NGN_ASK_RATE_KEY,
+  fetchLive: () => fetchMapleradNgnUsd(),
+  alertKey: "usd-ask-rate",
+  label: "NGN→USD",
+  inflight: null,
+  lastFailureAt: 0,
+};
+
+sides.push(BID, ASK);

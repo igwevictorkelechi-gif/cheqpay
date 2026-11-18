@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { Activity, BookOpen, CreditCard, FlaskConical, Home, KeyRound, Loader2, LogOut, Rocket, Shield, Webhook } from "lucide-react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Activity, BookOpen, CreditCard, FlaskConical, Home, KeyRound, Loader2, LogOut, Rocket, Shield, Terminal, Webhook } from "lucide-react";
 import Logo from "./Logo";
 import { StepUpProvider } from "./StepUp";
 import { ApiError, dash, type Mode, type Overview } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { useSession } from "@/lib/useSession";
+import { handOverFirstKey } from "@/lib/firstKey";
 
 const NAV = [
   { href: "/dashboard/", label: "Overview", Icon: Home },
+  { href: "/dashboard/start/", label: "First API call", Icon: Terminal },
   { href: "/dashboard/keys/", label: "API keys", Icon: KeyRound },
   { href: "/dashboard/webhooks/", label: "Webhooks", Icon: Webhook },
   { href: "/dashboard/activity/", label: "Activity", Icon: Activity },
@@ -54,9 +56,16 @@ export default function DashShell({ children }: { children: React.ReactNode }) {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setModeState] = useState<Mode>("test");
+  const provisioned = useRef(false);
 
   const reload = useCallback(async () => {
     try {
+      // Once per visit: someone who signed up on this site has a sign-in but
+      // no CheqPay profile until this runs, and can't open an account without one.
+      if (!provisioned.current) {
+        await dash.provision();
+        provisioned.current = true;
+      }
       setOverview(await dash.overview());
       setError(null);
     } catch (err) {
@@ -128,7 +137,15 @@ export default function DashShell({ children }: { children: React.ReactNode }) {
             )}
           </header>
           {!overview.account ? (
-            <OpenAccount email={overview.owner.email} onOpened={reload} />
+            <OpenAccount
+              email={overview.owner.email}
+              onOpened={async (secret) => {
+                // Straight to a command they can run, with the key already in it.
+                if (secret) handOverFirstKey(secret);
+                await reload();
+                router.push("/dashboard/start/");
+              }}
+            />
           ) : (
             <div className="flex">
               <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 border-r border-border/50 p-4 lg:block">
@@ -172,7 +189,7 @@ function ModeSwitch({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void 
   );
 }
 
-function OpenAccount({ email, onOpened }: { email: string | null; onOpened: () => Promise<void> }) {
+function OpenAccount({ email, onOpened }: { email: string | null; onOpened: (firstKeySecret: string | null) => Promise<void> }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -180,7 +197,7 @@ function OpenAccount({ email, onOpened }: { email: string | null; onOpened: () =
     <main className="appear mx-auto max-w-md px-5 py-16">
       <h1 className="title-lg">Open your developer account</h1>
       <p className="subhead mt-2">
-        Signed in as <span className="font-semibold text-ink">{email}</span>. You&apos;ll start in the sandbox with test keys and simulated money; going live comes later.
+        Signed in as <span className="font-semibold text-ink">{email}</span>. You&apos;ll start in the sandbox with a test key and simulated money, and make your first API call on the next screen. Going live comes later.
       </p>
       <form
         className="mt-8"
@@ -189,8 +206,8 @@ function OpenAccount({ email, onOpened }: { email: string | null; onOpened: () =
           setBusy(true);
           setError(null);
           try {
-            await dash.openAccount(name.trim());
-            await onOpened();
+            const r = await dash.openAccount(name.trim());
+            await onOpened(r.first_key?.secret ?? null);
           } catch (err) {
             setError(err instanceof Error ? err.message : "Couldn't open the account.");
           } finally {

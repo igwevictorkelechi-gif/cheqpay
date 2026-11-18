@@ -126,6 +126,8 @@ interface Settings {
   withdrawalFeeNgn: number;
   ajoBreakFeeBps?: number;
   minTradeMarginNgn: number;
+  tradeMarginNgnPerUsd?: number;
+  dollarBook?: { bid: number | null; ask: number | null; mid: number | null; source: string };
   fxMarginBps: number;
   fxMargins: { buyUsd: number | null; sellUsd: number | null };
   withdrawalMinNgn: number;
@@ -164,6 +166,8 @@ export default function TradingSettingsPage() {
   const [withdrawalFeeNgn, setWithdrawalFeeNgn] = useState('');
   const [ajoBreakFeeBps, setAjoBreakFeeBps] = useState('');
   const [minTradeMarginNgn, setMinTradeMarginNgn] = useState('');
+  const [tradeMarginNgnPerUsd, setTradeMarginNgnPerUsd] = useState('');
+  const [dollarBook, setDollarBook] = useState<Settings['dollarBook'] | null>(null);
   const [fxMarginBps, setFxMarginBps] = useState('');
   const [fxBuyUsd, setFxBuyUsd] = useState('');
   const [fxSellUsd, setFxSellUsd] = useState('');
@@ -200,6 +204,8 @@ export default function TradingSettingsPage() {
     setWithdrawalFeeNgn(String(data.withdrawalFeeNgn ?? 0));
     setAjoBreakFeeBps(String(data.ajoBreakFeeBps ?? 100));
     setMinTradeMarginNgn(String(data.minTradeMarginNgn ?? 0));
+    setTradeMarginNgnPerUsd(String(data.tradeMarginNgnPerUsd ?? 20));
+    setDollarBook(data.dollarBook ?? null);
     setFxMarginBps(String(data.fxMarginBps ?? 0));
     setFxBuyUsd(data.fxMargins?.buyUsd == null ? '' : String(data.fxMargins.buyUsd));
     setFxSellUsd(data.fxMargins?.sellUsd == null ? '' : String(data.fxMargins.sellUsd));
@@ -269,6 +275,7 @@ export default function TradingSettingsPage() {
       if (withdrawalFeeNgn !== '') payload.withdrawalFeeNgn = Number(withdrawalFeeNgn);
       if (ajoBreakFeeBps !== '') payload.ajoBreakFeeBps = Math.round(Number(ajoBreakFeeBps));
       if (minTradeMarginNgn !== '') payload.minTradeMarginNgn = Number(minTradeMarginNgn);
+      if (tradeMarginNgnPerUsd !== '') payload.tradeMarginNgnPerUsd = Number(tradeMarginNgnPerUsd);
       if (billMarginBps !== '') payload.billMarginBps = Number(billMarginBps);
       if (fxMarginBps !== '') payload.fxMarginBps = Number(fxMarginBps);
       // Blank clears a side back to the shared spread; '0' is a real rate.
@@ -564,6 +571,50 @@ export default function TradingSettingsPage() {
             they saved: 100 bps = 1%. Plans that run to the end are always free, and group Ajo never
             charges this. Max 1,000 bps (10%). Set 0 to let people break plans for free.
           </p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <label className="flex items-center gap-2 text-gray-700 font-semibold mb-2">
+            <Banknote size={18} className="text-brand-600" />
+            Profit per $1 traded (₦)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={500}
+            step="0.01"
+            value={tradeMarginNgnPerUsd}
+            onChange={(e) => setTradeMarginNgnPerUsd(e.target.value)}
+            disabled={loading || saving}
+            className={inputCls}
+            placeholder="20"
+          />
+          <p className="text-sm text-gray-500 mt-2">
+            What CheqPay keeps on every dollar a customer buys or sells for naira — USD, USDT, USDC
+            and BTC. A buyer pays Maplerad&apos;s live price for a dollar <em>plus</em> this; a seller
+            gets what Maplerad pays for a dollar <em>minus</em> this. It is measured against
+            Maplerad&apos;s real rate for each direction, so it is always profit over cost. While it is
+            above 0 it replaces the percentage spreads for those trades; set 0 to go back to them.
+          </p>
+          {dollarBook && dollarBook.bid !== null && dollarBook.ask !== null && (
+            <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+              <div className="rounded-lg bg-gray-50 p-2">
+                <div className="text-gray-500">Maplerad charges us</div>
+                <div className="font-semibold">₦{dollarBook.ask.toLocaleString()} / $1</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-2">
+                <div className="text-gray-500">Maplerad pays us</div>
+                <div className="font-semibold">₦{dollarBook.bid.toLocaleString()} / $1</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-2">
+                <div className="text-gray-500">Customers see (buy / sell)</div>
+                <div className="font-semibold">
+                  ₦{(dollarBook.ask + Number(tradeMarginNgnPerUsd || 0)).toLocaleString()} / ₦
+                  {(dollarBook.bid - Number(tradeMarginNgnPerUsd || 0)).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

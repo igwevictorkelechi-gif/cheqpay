@@ -41,6 +41,8 @@ describe("crypto swaps price each kind with its own spread", () => {
       getSwapSpreadBpsFor: h.spreadFor,
       getFxSideMarginBps: vi.fn(),
       getMinTradeMarginNgn: vi.fn().mockResolvedValue(0),
+      // Percentage mode; flatMargin.test.ts covers the ₦-per-$1 margin.
+      getTradeMarginNgnPerUsd: vi.fn().mockResolvedValue(0),
       feeFromBps: vi.fn(),
     }));
     h.spreadFor.mockImplementation((kind: keyof typeof SPREADS) => Promise.resolve(SPREADS[kind]));

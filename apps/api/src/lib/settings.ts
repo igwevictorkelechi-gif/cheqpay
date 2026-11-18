@@ -2,7 +2,7 @@ import { prisma } from "@cheqpay/db";
 import { cachedSetting, invalidateSetting } from "./settingsCache";
 import { getEnv } from "./env";
 import { ApiError } from "./http";
-import { AUTO_UPDATED_BY, followMapleradRate } from "./usdtRate";
+import { AUTO_UPDATED_BY, USD_NGN_ASK_RATE_KEY, followMapleradAsk, followMapleradRate } from "./usdtRate";
 
 export const SETTING_KEYS = {
   SWAP_SPREAD_BPS: "swap_spread_bps",
@@ -48,6 +48,16 @@ export const SETTING_KEYS = {
   // off (percentage spread only). Applies to BTC, USDT and USDC against naira,
   // however the trade settles.
   MIN_TRADE_MARGIN_NGN: "min_trade_margin_ngn",
+  // CheqPay's profit on every naira ⇄ dollar-valued trade, in whole naira per
+  // $1 of the trade: a customer buying pays Maplerad's NGN→USD rate PLUS this,
+  // a customer selling gets Maplerad's USD→NGN rate MINUS this. Covers USD,
+  // USDT, USDC and BTC against naira. When above 0 it replaces the percentage
+  // margins (fx_margin_*_bps, swap_spread_buy/sell_bps) on those trades; 0
+  // puts them back. Crypto ⇄ crypto converts keep convert_spread_bps.
+  TRADE_MARGIN_NGN_PER_USD: "trade_margin_ngn_per_usd",
+  // Maplerad's NGN→USD rate (what a dollar costs us), auto-followed beside
+  // usdt_ngn_rate, which is the USD→NGN side (what a dollar fetches).
+  USD_NGN_ASK_RATE: USD_NGN_ASK_RATE_KEY,
   AJO_BREAK_FEE_BPS: "ajo_break_fee_bps", // fee kept when a personal Ajo is broken early
   // Daily ceilings on payments COMPOSED in the WhatsApp bot, in kobo. These sit
   // on top of the KYC tier limits, and for two of the three actions they are
@@ -473,6 +483,53 @@ export async function setFxSideMarginBps(
  */
 export function getMinTradeMarginNgn(): Promise<number> {
   return getNumberSetting(SETTING_KEYS.MIN_TRADE_MARGIN_NGN, 0);
+}
+
+/**
+ * Naira kept per $1 traded (see SETTING_KEYS.TRADE_MARGIN_NGN_PER_USD).
+ * Default ₦20: the owner's price sheet of 18 Nov 2026.
+ */
+export function getTradeMarginNgnPerUsd(): Promise<number> {
+  return getNumberSetting(SETTING_KEYS.TRADE_MARGIN_NGN_PER_USD, 20);
+}
+
+export async function setTradeMarginNgnPerUsd(ngn: number, updatedBy?: string): Promise<void> {
+  await upsertSetting(SETTING_KEYS.TRADE_MARGIN_NGN_PER_USD, String(ngn), updatedBy);
+}
+
+/**
+ * Both sides of the naira ⇄ dollar book, in NGN per $1.
+ *
+ *  - `bid`: what a dollar fetches at Maplerad (USD→NGN) — the cost basis when a
+ *    customer SELLS to us.
+ *  - `ask`: what a dollar costs at Maplerad (NGN→USD) — the cost basis when a
+ *    customer BUYS from us. Normally above `bid`; Maplerad keeps the gap.
+ *  - `mid`: halfway, the "market price" shown to customers.
+ *
+ * With the rate source on "manual", both sides are the admin's one number.
+ * With it on "maplerad", each side follows its own live quote, and a side
+ * that can't be read falls back to the other so a price is still shown.
+ */
+export interface DollarBook {
+  bid: number | null;
+  ask: number | null;
+  mid: number | null;
+  source: UsdtNgnRateSource;
+}
+
+export async function getDollarBook(opts: { wait?: boolean } = {}): Promise<DollarBook> {
+  const details = await getUsdtNgnRateDetails(opts);
+  let bid = details.rate;
+  let ask = bid;
+  if (details.source === "maplerad") {
+    const row = await prisma.platformSetting.findUnique({ where: { key: SETTING_KEYS.USD_NGN_ASK_RATE } });
+    const stored = row ? parseUsdtNgnRate(row.value) : null;
+    const followed = await followMapleradAsk(stored, row?.updatedAt ?? null, Date.now(), opts);
+    ask = followed.rate ?? bid;
+    bid = bid ?? ask;
+  }
+  const mid = bid !== null && ask !== null ? Math.round(((bid + ask) / 2) * 100) / 100 : null;
+  return { bid, ask, mid, source: details.source };
 }
 
 export async function setMinTradeMarginNgn(ngn: number, updatedBy?: string): Promise<void> {

@@ -18,6 +18,8 @@ import { useTransactionPin, PIN_CANCELLED } from "@/components/TransactionPinPro
 
 interface AssetSnapshot {
   priceNgn: string | null;
+  buyNgn?: string | null;
+  sellNgn?: string | null;
   priceUsd: string;
   balance: string;
 }
@@ -55,6 +57,8 @@ export default function AssetPage() {
   const [range, setRange] = useState<ChartRange>("year");
   const [priceNgn, setPriceNgn] = useState<string | null>(cached?.priceNgn ?? null);
   const [priceUsd, setPriceUsd] = useState<string>(cached?.priceUsd ?? "0");
+  const [buyNgn, setBuyNgn] = useState<string | null>(cached?.buyNgn ?? null);
+  const [sellNgn, setSellNgn] = useState<string | null>(cached?.sellNgn ?? null);
   const [candles, setCandles] = useState<Candle[]>([]);
   const [balance, setBalance] = useState<string>(cached?.balance ?? "0");
   const [loading, setLoading] = useState(!cached);
@@ -88,12 +92,16 @@ export default function AssetPage() {
       }
       setPriceNgn(price.priceNgn);
       setPriceUsd(price.priceUsd);
+      setBuyNgn(price.buyNgn ?? null);
+      setSellNgn(price.sellNgn ?? null);
       const b = bals.balances.find((x) => x.asset === symbol);
       const bf = b?.availableFormatted ?? "0";
       setBalance(bf);
       writeCache<AssetSnapshot>(cacheKey, {
         priceNgn: price.priceNgn,
         priceUsd: price.priceUsd,
+        buyNgn: price.buyNgn ?? null,
+        sellNgn: price.sellNgn ?? null,
         balance: bf,
       });
     } catch (e) {
@@ -234,6 +242,23 @@ export default function AssetPage() {
               )}
             </div>
           </div>
+
+          {/* Our rates: what a coin costs from us and fetches from us. */}
+          {(buyNgn || sellNgn) && (
+            <div className="mx-5 mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-card px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">You buy at</p>
+                <p className="mt-1 text-lg font-bold tabular-nums text-ink">{fmtNgn(buyNgn)}</p>
+              </div>
+              <div className="rounded-2xl bg-card px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">You sell at</p>
+                <p className="mt-1 text-lg font-bold tabular-nums text-ink">{fmtNgn(sellNgn)}</p>
+              </div>
+              <p className="col-span-2 text-xs text-muted">
+                Per 1 {symbol}. Your exact amount is shown before you confirm.
+              </p>
+            </div>
+          )}
 
           {/* Chart */}
           <div className="mt-6 h-60 px-1">

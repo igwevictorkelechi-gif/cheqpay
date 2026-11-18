@@ -15,9 +15,13 @@ function safeNext(raw: string | null): string {
 type Step = "start" | "code" | "password";
 
 /**
- * Sign in with a CheqPay account: an emailed 6-digit code, exactly like the
- * CheqPay app, or a password for those who set one. Only existing CheqPay
- * accounts can sign in; new people create one on CheqPay first.
+ * Sign in, or sign up, with an emailed 6-digit code — exactly like the CheqPay
+ * app — or a password for those who set one.
+ *
+ * New developers sign up right here. It is the same CheqPay account the app
+ * uses (one person, one identity, so going live still means verifying it), but
+ * without sending a developer through the wallet app's own onboarding first,
+ * which is where most of them used to be lost.
  */
 export default function LoginPage() {
   const router = useRouter();
@@ -51,12 +55,9 @@ export default function LoginPage() {
     if (!emailOk) return setError("Enter the email on your CheqPay account.");
     setBusy("send");
     setError(null);
-    const { error } = await supabase.auth.signInWithOtp({ email: cleanEmail, options: { shouldCreateUser: false } });
+    const { error } = await supabase.auth.signInWithOtp({ email: cleanEmail, options: { shouldCreateUser: true } });
     setBusy(null);
     if (error) {
-      if (/signups? not allowed|not found|user/i.test(error.message)) {
-        return setError("No CheqPay account uses this email. Create one below, then come back.");
-      }
       if (/rate|seconds/i.test(error.message)) return setError("Please wait a minute before asking for another code.");
       return setError("We couldn't send a code right now. Please try again.");
     }
@@ -105,8 +106,8 @@ export default function LoginPage() {
       <main className="my-auto">
         {step === "start" && (
           <div className="appear">
-            <h1 className="title-lg">Sign in</h1>
-            <p className="subhead mt-2">Use your CheqPay account. Your developer account belongs to it.</p>
+            <h1 className="title-lg">Sign in or sign up</h1>
+            <p className="subhead mt-2">Enter your email and we&apos;ll send a code. New here? That creates your account — you&apos;ll be making test API calls in a couple of minutes.</p>
             <div className="h-8" />
 
             <form onSubmit={sendCode} noValidate>
@@ -129,9 +130,10 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-8 space-y-3 text-center text-[15px]">
-              <p className="text-muted">
-                New to CheqPay?{" "}
-                <a href={`${APP_URL}/signup`} className="link">Create an account</a>
+              <p className="footnote">
+                Your developer account sits on a CheqPay account, the same one the CheqPay app uses. By continuing you agree to the{" "}
+                <a href={`${APP_URL}/terms`} className="link">terms</a> and{" "}
+                <a href={`${APP_URL}/privacy`} className="link">privacy policy</a>.
               </p>
               <button onClick={() => { setError(null); setStep("password"); }} className="footnote hover:text-ink">
                 Use a password instead
@@ -162,7 +164,7 @@ export default function LoginPage() {
             />
             {error && <p className="notice-bad mt-4" role="alert">{error}</p>}
             <button type="submit" disabled={busy !== null || code.length !== 6} className="btn mt-6 w-full">
-              {busy === "verify" ? <Loader2 className="h-5 w-5 animate-spin" /> : "Sign in"}
+              {busy === "verify" ? <Loader2 className="h-5 w-5 animate-spin" /> : "Continue"}
             </button>
             <div className="mt-6 text-center text-[15px]">
               {cooldown > 0 ? (

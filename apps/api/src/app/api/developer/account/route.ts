@@ -9,9 +9,9 @@ import { getSubscription, liveAccessProblem } from "@/lib/devapi/billing";
 import { requireDeveloper } from "@/lib/devapi/dashboard";
 import { recordDevAudit } from "@/lib/devapi/audit";
 import { effectiveLimits, getDevLimits } from "@/lib/devapi/limits";
-import { listApiKeys, keyIsActive } from "@/lib/devapi/keys";
+import { createApiKey, listApiKeys, keyIsActive } from "@/lib/devapi/keys";
 import { getPlans } from "@/lib/devapi/plans";
-import { dashboardAccountView, limitsView, subscriptionView, walletObject } from "@/lib/devapi/serialize";
+import { dashboardAccountView, keyView, limitsView, subscriptionView, walletObject } from "@/lib/devapi/serialize";
 import type { WalletRow } from "@/lib/devapi/types";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     const ownerView = { email: owner?.email ?? null, kyc_tier: owner?.kycTier ?? 0, two_factor: user.aal === "aal2" };
     if (!account) return jsonOk({ account: null, owner: ownerView });
 
-    const [plans, sub, limits, keys, wallets] = await Promise.all([
+    const [plans, sub, limits, keys, wallets, firstRequest] = await Promise.all([
       getPlans(),
       getSubscription(account.id),
       getDevLimits(),
@@ -35,6 +35,7 @@ export async function GET(req: Request) {
         `SELECT * FROM dev_wallets WHERE account_id = $1::uuid AND customer_id IS NULL ORDER BY mode, currency`,
         account.id,
       ),
+      madeFirstRequest(account.id),
     ]);
     const problem = liveAccessProblem(account, sub, plans);
     const active = keys.filter((k) => keyIsActive(k));
@@ -51,6 +52,9 @@ export async function GET(req: Request) {
       },
       checklist: {
         test_key: active.some((k) => k.mode === "test"),
+        // Anyone past the sandbox has plainly made a call; this also keeps the
+        // step ticked once their old request logs age out after 30 days.
+        first_request: firstRequest || account.status !== "sandbox" || active.some((k) => k.mode === "live"),
         two_factor: user.aal === "aal2",
         identity_verified: (owner?.kycTier ?? 0) >= 1,
         business_verified: account.status === "approved",
@@ -72,11 +76,34 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => ({}))) as { business_name?: unknown };
     const existed = await getAccountForOwner(user.id);
     const account = await createAccount(user.id, { businessName: body.business_name });
-    if (!existed) {
-      const { ip, userAgent } = requestContext(req);
-      await recordDevAudit({ accountId: account.id, actor: "owner", action: "account.opened", ip, userAgent });
+    if (existed) return jsonOk({ account: dashboardAccountView(account), first_key: null });
+
+    const { ip, userAgent } = requestContext(req);
+    await recordDevAudit({ accountId: account.id, actor: "owner", action: "account.opened", ip, userAgent });
+
+    // A new developer gets a working test key straight away, so the screen
+    // after "Open account" can be a command they paste and run rather than a
+    // trip to the Keys page. Test mode only: it touches simulated money, and
+    // live keys keep every gate they had (verified business, plan, 2FA). The
+    // secret is in this response and never again, exactly as on the Keys page.
+    // Best effort: an account without a key is still a working account.
+    let firstKey: { key: ReturnType<typeof keyView>; secret: string } | null = null;
+    try {
+      const { key, secret } = await createApiKey(account, { mode: "test", label: "First test key" });
+      await recordDevAudit({
+        accountId: account.id,
+        actor: "owner",
+        action: "key.created",
+        target: key.id,
+        details: { mode: key.mode, label: key.label, scopes: key.scopes, allowed_ips: key.allowed_ips, automatic: true },
+        ip,
+        userAgent,
+      });
+      firstKey = { key: keyView(key), secret };
+    } catch (err) {
+      console.error("[devapi] first test key not created", err);
     }
-    return jsonOk({ account: dashboardAccountView(account) }, existed ? 200 : 201);
+    return jsonOk({ account: dashboardAccountView(account), first_key: firstKey }, 201);
   } catch (err) {
     return toErrorResponse(err);
   }
@@ -93,4 +120,17 @@ export async function PATCH(req: Request) {
   } catch (err) {
     return toErrorResponse(err);
   }
+}
+
+/**
+ * Whether this account has made a successful test-mode call. Drives the
+ * "Make your first call" step, which is what a new developer is pointed at
+ * before anything about going live.
+ */
+async function madeFirstRequest(accountId: string): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<{ made: boolean }[]>(
+    `SELECT EXISTS (SELECT 1 FROM dev_request_logs WHERE account_id = $1::uuid AND mode = 'test' AND status < 400) AS made`,
+    accountId,
+  );
+  return rows[0]?.made === true;
 }

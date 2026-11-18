@@ -10,6 +10,8 @@ import {
   getFxMarginBps,
   getFxMargins,
   getMinTradeMarginNgn,
+  getDollarBook,
+  getTradeMarginNgnPerUsd,
   getPricing,
   getSwapSpreads,
   getUsdtNgnRateDetails,
@@ -25,6 +27,7 @@ import {
   setFxMarginBps,
   setFxSideMarginBps,
   setMinTradeMarginNgn,
+  setTradeMarginNgnPerUsd,
   setPricing,
   setSwapSpreadBps,
   setSwapSpreadBpsFor,
@@ -61,6 +64,8 @@ async function snapshot() {
     depositMinUsd,
     cashback,
     pricing,
+    tradeMarginNgnPerUsd,
+    dollarBook,
   ] = await Promise.all([
     getSwapSpreads(),
     getUsdtNgnRateDetails(),
@@ -76,6 +81,8 @@ async function snapshot() {
     getDepositMinUsd(),
     getCashbackConfig(),
     getPricing(),
+    getTradeMarginNgnPerUsd(),
+    getDollarBook({ wait: false }),
   ]);
   return {
     spreadBps: spreadBps.defaultBps,
@@ -96,6 +103,10 @@ async function snapshot() {
     ajoBreakFeeBps,
     /** Flat naira profit floor kept on every buy/sell; 0 = percentage spread only. */
     minTradeMarginNgn,
+    /** Naira kept per $1 on every USD/USDT/USDC/BTC trade against naira; 0 = the percentage margins. */
+    tradeMarginNgnPerUsd,
+    /** Maplerad's two sides, NGN per $1: what a dollar fetches (bid) and costs (ask). */
+    dollarBook,
     fxMarginBps,
     /** Per side: a number overrides the shared spread, null means it uses it. */
     fxMargins: { buyUsd: fxMargins.buyUsdBps, sellUsd: fxMargins.sellUsdBps },
@@ -157,6 +168,8 @@ export async function PUT(req: Request) {
     if (body.ajoBreakFeeBps !== undefined) await setAjoBreakFeeBps(body.ajoBreakFeeBps, updatedBy);
     if (body.minTradeMarginNgn !== undefined)
       await setMinTradeMarginNgn(body.minTradeMarginNgn, updatedBy);
+    if (body.tradeMarginNgnPerUsd !== undefined)
+      await setTradeMarginNgnPerUsd(body.tradeMarginNgnPerUsd, updatedBy);
     if (body.billMarginBps !== undefined) await setBillMarginBps(body.billMarginBps, updatedBy);
     if (body.fxMarginBps !== undefined) await setFxMarginBps(body.fxMarginBps, updatedBy);
     if (body.withdrawalMinNgn !== undefined)

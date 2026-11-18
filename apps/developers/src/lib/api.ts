@@ -98,7 +98,7 @@ export interface Overview {
     max_single_payment: Record<string, number>;
   };
   wallets?: { test: Wallet[]; live: Wallet[] };
-  checklist?: Record<"test_key" | "two_factor" | "identity_verified" | "business_verified" | "plan" | "live_key", boolean>;
+  checklist?: Record<"test_key" | "first_request" | "two_factor" | "identity_verified" | "business_verified" | "plan" | "live_key", boolean>;
 }
 
 export interface Subscription {
@@ -178,8 +178,15 @@ export interface Page<T> {
 export type Row = Record<string, any>;
 
 export const dash = {
+  /**
+   * Make sure the signed-in person has a CheqPay profile. Someone who signed up
+   * here (rather than in the app) has a sign-in but no profile yet, and a
+   * developer account cannot be opened without one. Idempotent and cheap.
+   */
+  provision: () => call<unknown>("/api/me", { method: "POST" }),
   overview: () => call<Overview>("/api/developer/account"),
-  openAccount: (business_name: string) => call<{ account: Overview["account"] }>("/api/developer/account", { body: { business_name } }),
+  openAccount: (business_name: string) =>
+    call<{ account: Overview["account"]; first_key: { key: Key; secret: string } | null }>("/api/developer/account", { body: { business_name } }),
   rename: (business_name: string) => call("/api/developer/account", { method: "PATCH", body: { business_name } }),
   plans: () => call<{ plans: Plan[] }>("/api/developer/plans"),
   changePlan: (plan_id: string, pin: string) => call<{ change: { kind: string; charged: number } }>("/api/developer/subscription", { body: { plan_id }, pin }),

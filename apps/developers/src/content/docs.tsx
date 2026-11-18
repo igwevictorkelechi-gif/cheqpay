@@ -80,7 +80,8 @@ export const DOCS: DocPage[] = [
     body: () => (
       <>
         <p>
-          Sign in to the <Link href="/dashboard/">dashboard</Link> with your CheqPay account, open a developer account, and create a test key.
+          Sign up or sign in on the <Link href="/dashboard/">dashboard</Link> with your email and open a developer account. You get a test key straight away, and the
+          dashboard&apos;s <Link href="/dashboard/start/">First API call</Link> page gives you a command to run with it.
           Test keys start with <C>cp_test_sk_</C> and only ever touch simulated money. Your sandbox main wallets start with ₦1,000,000 and $1,000.
         </p>
         <CodeBlock label="Shell" code={`export CHEQPAY_KEY=cp_test_sk_…`} />

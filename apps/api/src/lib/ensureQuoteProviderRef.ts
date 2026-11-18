@@ -1,7 +1,7 @@
 import { prisma } from "@cheqpay/db";
 
 /**
- * Add Quote.provider_ref, idempotently, at boot.
+ * Add Quote.provider_ref and Quote.margin_minor, idempotently, at boot.
  *
  * Migrations are not applied on deploy in this project, so a new column on an
  * existing table must be created before the first query of that model — Prisma
@@ -16,6 +16,10 @@ export function ensureQuoteProviderRef(): Promise<void> {
     ensured = (async () => {
       await prisma.$executeRawUnsafe(
         `ALTER TABLE "quotes" ADD COLUMN IF NOT EXISTS "provider_ref" TEXT`
+      );
+      // Same reason: Quote.margin_minor, the margin kept, known at pricing time.
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "quotes" ADD COLUMN IF NOT EXISTS "margin_minor" BIGINT`
       );
     })().catch((err) => {
       ensured = null; // allow retry on the next boot

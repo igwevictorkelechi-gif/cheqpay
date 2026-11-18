@@ -15,6 +15,8 @@ import {
   computeCryptoConvert,
   computeSwap,
   cryptoToNgnKobo,
+  customerNgnPerUsd,
+  netOutAfterFlatMargin,
   fiatUsdtPrice,
   floorOutToMinMarginNgn,
   isNgnUsdPair,
@@ -23,6 +25,8 @@ import {
 import {
   feeFromBps,
   getCryptoSettlement,
+  getDollarBook,
+  getTradeMarginNgnPerUsd,
   getFxSideMarginBps,
   getMinTradeMarginNgn,
   getSwapSpreadBpsFor,
@@ -85,6 +89,34 @@ function railMarginBps(fromAsset: Asset, toAsset: Asset): Promise<number> {
   return isNgnUsdPair(fromAsset, toAsset)
     ? getFxSideMarginBps(fxSideFor(fromAsset))
     : getSwapSpreadBpsFor(classifySwap(fromAsset, toAsset));
+}
+
+/**
+ * What the customer receives from a rail exchange the provider priced at
+ * `grossOutMinor`, and the margin that leaves us.
+ *
+ * With trade_margin_ngn_per_usd above 0 (the default), the margin is a flat
+ * naira amount per $1, measured against the provider's OWN rate for this
+ * direction — so it is profit over what the exchange really cost, on both
+ * sides of the book, whatever Maplerad's spread happens to be that minute.
+ * At 0 the percentage margins come back.
+ */
+async function railNetOut(
+  fromAsset: Asset,
+  toAsset: Asset,
+  amountInMinor: bigint,
+  grossOutMinor: bigint,
+): Promise<{ netOutMinor: bigint; marginBps: number; marginNgnPerUsd: number }> {
+  const perUsd = await getTradeMarginNgnPerUsd();
+  if (perUsd > 0) {
+    return {
+      netOutMinor: netOutAfterFlatMargin({ fromAsset, toAsset, amountInMinor, grossOutMinor, marginNgnPerUsd: perUsd }),
+      marginBps: 0,
+      marginNgnPerUsd: perUsd,
+    };
+  }
+  const marginBps = await railMarginBps(fromAsset, toAsset);
+  return { netOutMinor: grossOutMinor - feeFromBps(grossOutMinor, marginBps), marginBps, marginNgnPerUsd: 0 };
 }
 
 const RAIL_LABEL: Partial<Record<Asset, string>> = {
@@ -208,52 +240,75 @@ export async function createQuote(params: {
     });
   }
 
-  const usdtNgnRate = await getUsdtNgnRate();
-  if (usdtNgnRate === null) {
-    throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
-  }
-  const spreadBps = await getSwapSpreadBpsFor(params.side);
-  const cryptoUsdtPrice = await getPriceFeed().getSpotUsdt(params.cryptoAsset);
-
-  const usdtNgnDecimal = new Prisma.Decimal(usdtNgnRate);
-  const { amountOutMinor: spreadOutMinor, rate } = computeSwap({
-    side: params.side,
-    cryptoAsset: params.cryptoAsset,
-    amountInMinor: params.amountInMinor,
-    cryptoUsdtPrice,
-    usdtNgnRate: usdtNgnDecimal,
-    spreadBps,
-  });
-
   const fromAsset = params.side === "buy" ? Asset.NGN : params.cryptoAsset;
   const toAsset = params.side === "buy" ? params.cryptoAsset : Asset.NGN;
+  const cryptoUsdtPrice = await getPriceFeed().getSpotUsdt(params.cryptoAsset);
+  const perUsd = await getTradeMarginNgnPerUsd();
 
-  // Keep at least a flat naira profit on top of the percentage spread. The
-  // gross (zero-spread) payout is the mid value; the mid naira price of one
-  // whole out unit is the crypto price for a buy (out = crypto) and 1 for a
-  // sell (out = naira).
-  const minMarginNgn = await getMinTradeMarginNgn();
-  let amountOutMinor = spreadOutMinor;
-  if (minMarginNgn > 0) {
-    const { amountOutMinor: grossOutMinor } = computeSwap({
+  // `cost` is our NGN per $1 for this side with no margin — the mid value the
+  // naira floor below measures against — and `priced` is what the customer
+  // gets. Flat mode prices off Maplerad's own side of the book (what a dollar
+  // costs us when they buy, what it fetches when they sell), plus or minus
+  // the margin. Percentage mode keeps the one admin rate and the bps spread.
+  let cost: Prisma.Decimal;
+  let priced: { amountOutMinor: bigint; rate: Prisma.Decimal };
+  if (perUsd > 0) {
+    const book = await getDollarBook();
+    if (book.bid === null || book.ask === null) {
+      throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
+    }
+    cost = new Prisma.Decimal(params.side === "buy" ? book.ask : book.bid);
+    priced = computeSwap({
       side: params.side,
       cryptoAsset: params.cryptoAsset,
       amountInMinor: params.amountInMinor,
       cryptoUsdtPrice,
-      usdtNgnRate: usdtNgnDecimal,
+      usdtNgnRate: customerNgnPerUsd(params.side, { bid: book.bid, ask: book.ask }, perUsd),
       spreadBps: 0,
     });
+  } else {
+    const usdtNgnRate = await getUsdtNgnRate();
+    if (usdtNgnRate === null) {
+      throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
+    }
+    cost = new Prisma.Decimal(usdtNgnRate);
+    priced = computeSwap({
+      side: params.side,
+      cryptoAsset: params.cryptoAsset,
+      amountInMinor: params.amountInMinor,
+      cryptoUsdtPrice,
+      usdtNgnRate: cost,
+      spreadBps: await getSwapSpreadBpsFor(params.side),
+    });
+  }
+  const { rate } = priced;
+  const { amountOutMinor: grossOutMinor } = computeSwap({
+    side: params.side,
+    cryptoAsset: params.cryptoAsset,
+    amountInMinor: params.amountInMinor,
+    cryptoUsdtPrice,
+    usdtNgnRate: cost,
+    spreadBps: 0,
+  });
+
+  // Keep at least a flat naira profit per trade on top of the margin above.
+  // The mid naira price of one whole out unit is the crypto price for a buy
+  // (out = crypto) and 1 for a sell (out = naira).
+  const minMarginNgn = await getMinTradeMarginNgn();
+  let amountOutMinor = priced.amountOutMinor;
+  if (minMarginNgn > 0) {
     amountOutMinor = floorOutToMinMarginNgn({
       grossOutMinor,
-      netOutMinor: spreadOutMinor,
+      netOutMinor: priced.amountOutMinor,
       outAsset: toAsset,
-      ngnPerOutWhole: toAsset === Asset.NGN ? new Prisma.Decimal(1) : cryptoUsdtPrice.mul(usdtNgnDecimal),
+      ngnPerOutWhole: toAsset === Asset.NGN ? new Prisma.Decimal(1) : cryptoUsdtPrice.mul(cost),
       minMarginNgn,
     });
     if (amountOutMinor <= 0n) {
       throw new ApiError(422, "Amount too small to trade", "dust_amount");
     }
   }
+  const marginMinor = grossOutMinor > amountOutMinor ? grossOutMinor - amountOutMinor : 0n;
 
   // Enforce the tier single-tx limit on the NGN leg.
   const ngnLegMinor = params.side === "buy" ? params.amountInMinor : amountOutMinor;
@@ -269,6 +324,7 @@ export async function createQuote(params: {
       rate,
       amountIn: params.amountInMinor,
       amountOut: amountOutMinor,
+      marginMinor,
       expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
     },
   });
@@ -304,27 +360,64 @@ export async function createConvertQuote(params: {
     return createFxConvertQuote(params);
   }
 
-  const usdtNgnRate = await getUsdtNgnRate();
-  if (usdtNgnRate === null) {
-    throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
+  // A convert that touches naira (crypto ⇄ NGN) is priced as the buy or sell
+  // it is — in flat mode off Maplerad's side of the book plus or minus the ₦
+  // per $1 margin, exactly as createQuote prices it, so the Buy/Sell sheet and
+  // the Convert screen can never quote the same trade two ways.
+  const kind = classifySwap(params.fromAsset, params.toAsset);
+  const perUsd = kind === "convert" ? 0 : await getTradeMarginNgnPerUsd();
+  let usdtNgnDecimal: Prisma.Decimal;
+  let pricedNgnRate: Prisma.Decimal;
+  let spreadBps: number;
+  if (perUsd > 0) {
+    const book = await getDollarBook();
+    if (book.bid === null || book.ask === null) {
+      throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
+    }
+    usdtNgnDecimal = new Prisma.Decimal(kind === "buy" ? book.ask : book.bid);
+    pricedNgnRate = customerNgnPerUsd(kind as SwapSide, { bid: book.bid, ask: book.ask }, perUsd);
+    spreadBps = 0;
+  } else {
+    const usdtNgnRate = await getUsdtNgnRate();
+    if (usdtNgnRate === null) {
+      throw new ApiError(503, "USDT→NGN rate not configured by admin", "no_rate");
+    }
+    usdtNgnDecimal = new Prisma.Decimal(usdtNgnRate);
+    pricedNgnRate = usdtNgnDecimal;
+    spreadBps = await getSwapSpreadBpsFor(kind);
   }
-  const usdtNgnDecimal = new Prisma.Decimal(usdtNgnRate);
-  // A convert that touches naira (crypto ⇄ NGN) is priced as the buy or sell it is.
-  const spreadBps = await getSwapSpreadBpsFor(classifySwap(params.fromAsset, params.toAsset));
   const feed = getPriceFeed();
-  const [fromUsdtPrice, toUsdtPrice] = await Promise.all([
+  const [fromUsdtPrice, toUsdtPrice, fromPricedUsdt, toPricedUsdt] = await Promise.all([
     usdtPriceForAsset(params.fromAsset, feed, usdtNgnDecimal),
     usdtPriceForAsset(params.toAsset, feed, usdtNgnDecimal),
+    usdtPriceForAsset(params.fromAsset, feed, pricedNgnRate),
+    usdtPriceForAsset(params.toAsset, feed, pricedNgnRate),
   ]);
 
-  const { amountOutMinor, rate, feeOutMinor } = computeCryptoConvert({
+  const priced = computeCryptoConvert({
     fromAsset: params.fromAsset,
     toAsset: params.toAsset,
     amountInMinor: params.amountInMinor,
-    fromUsdtPrice,
-    toUsdtPrice,
+    fromUsdtPrice: fromPricedUsdt,
+    toUsdtPrice: toPricedUsdt,
     spreadBps,
   });
+  const { amountOutMinor, rate } = priced;
+  let feeOutMinor = priced.feeOutMinor;
+  let marginMinor: bigint | null = null;
+  if (perUsd > 0) {
+    // The same trade at our cost, no margin: the difference is what we keep.
+    const { amountOutMinor: grossOutMinor } = computeCryptoConvert({
+      fromAsset: params.fromAsset,
+      toAsset: params.toAsset,
+      amountInMinor: params.amountInMinor,
+      fromUsdtPrice,
+      toUsdtPrice,
+      spreadBps: 0,
+    });
+    feeOutMinor = grossOutMinor > amountOutMinor ? grossOutMinor - amountOutMinor : 0n;
+    marginMinor = feeOutMinor;
+  }
 
   // Enforce the tier single-tx limit on the NGN value of the input leg.
   const ngnValueKobo = cryptoToNgnKobo(
@@ -350,11 +443,12 @@ export async function createConvertQuote(params: {
       rate,
       amountIn: params.amountInMinor,
       amountOut: amountOutMinor,
+      marginMinor,
       expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
     },
   });
   // The fee is for display only: execution settles the stored amountOut.
-  return { ...quote, feeOutMinor, feeBps: spreadBps };
+  return { ...quote, feeOutMinor, feeBps: spreadBps, marginNgnPerUsd: perUsd };
 }
 
 /**
@@ -447,9 +541,14 @@ async function createFxConvertQuote(params: {
   // the amount it produces. Taken in the asset the user receives, so the
   // difference stays in treasury.
   const grossOutMinor = BigInt(fx.target.amount) * providerScale(params.toAsset);
-  const marginBps = await railMarginBps(params.fromAsset, params.toAsset);
-  let feeOutMinor = feeFromBps(grossOutMinor, marginBps);
-  let amountOutMinor = grossOutMinor - feeOutMinor;
+  const { netOutMinor, marginBps, marginNgnPerUsd } = await railNetOut(
+    params.fromAsset,
+    params.toAsset,
+    amountInMinor,
+    grossOutMinor,
+  );
+  let amountOutMinor = netOutMinor;
+  let feeOutMinor = grossOutMinor - amountOutMinor;
 
   // A buy or sell of a stablecoin for naira keeps at least a flat naira profit
   // on top of the percentage spread. A NGN↔USD convert is left on the spread
@@ -512,11 +611,12 @@ async function createFxConvertQuote(params: {
       amountIn: amountInMinor,
       amountOut: amountOutMinor,
       providerRef: fx.reference,
+      marginMinor: feeOutMinor,
       expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
     },
   });
   // The fee is for display only: execution settles the stored amountOut.
-  return { ...quote, feeOutMinor, feeBps: marginBps };
+  return { ...quote, feeOutMinor, feeBps: marginBps, marginNgnPerUsd };
 }
 
 /**
@@ -575,8 +675,11 @@ export async function executeSwap(params: {
 
   // The same spread the quote was priced with, so recorded revenue matches it.
   const spreadBps = await getSwapSpreadBpsFor(kind);
+  // A flat-margin quote knows its margin exactly; older quotes back it out.
   const spreadMinor =
-    spreadBps > 0 && spreadBps < 10_000
+    quote.marginMinor !== null && quote.marginMinor !== undefined
+      ? quote.marginMinor
+      : spreadBps > 0 && spreadBps < 10_000
       ? (quote.amountOut * BigInt(Math.trunc(spreadBps))) / BigInt(10_000 - Math.trunc(spreadBps))
       : 0n;
 
@@ -636,7 +739,7 @@ export async function executeSwap(params: {
           // reports and influencer commission; balances don't use it.
           spreadMinor: spreadMinor.toString(),
           spreadAsset: quote.toAsset,
-          spreadBps,
+          spreadBps: quote.marginMinor !== null && quote.marginMinor !== undefined ? 0 : spreadBps,
         },
       },
     });
@@ -770,6 +873,30 @@ async function executeFxSwap(params: {
           refundErr,
         ),
       );
+    console.error("[fx] exchange refused at the provider — reservation refunded", {
+      userId: params.userId,
+      quoteId: quote.id,
+      pair: `${quote.fromAsset}→${quote.toAsset}`,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    // Maplerad prices NGN→USD happily and then refuses to exchange it with
+    // "NGN exchanges are not enabled for this business" — an account setting
+    // on their side. That is what customers hit on 18 Nov 2026. Say which way
+    // still works, and tell ops (once an hour), instead of a bare "failed".
+    if (/not enabled/i.test(err instanceof Error ? err.message : String(err))) {
+      throw fxQuoteError(err, quote.fromAsset, quote.toAsset);
+    }
+    try {
+      await alertOpsOnce(
+        `fx-exchange-failed:${fxCurrencyOf(quote.fromAsset)}→${fxCurrencyOf(quote.toAsset)}`,
+        `⚠️ A ${quote.fromAsset}→${quote.toAsset} swap was refused at Maplerad's exchange step: "${
+          err instanceof Error ? err.message : String(err)
+        }". The customer was refunded.`,
+        { quoteId: quote.id },
+      );
+    } catch {
+      // Telling ops must never change what the customer is told.
+    }
     throw new ApiError(502, "Currency exchange failed at the provider; you were not charged", "fx_failed");
   }
 
@@ -789,10 +916,11 @@ async function executeFxSwap(params: {
   // back — the quote would promise a margin the execution then gives away.
   // When the provider settles exactly what it quoted, this lands on
   // quote.amountOut, so the normal case is unchanged.
-  const marginBps = await railMarginBps(quote.fromAsset, quote.toAsset);
   const settleKind = classifySwap(quote.fromAsset, quote.toAsset);
-  let creditMinor =
-    settledGross === null ? quote.amountOut : settledGross - feeFromBps(settledGross, marginBps);
+  const settledNet =
+    settledGross === null ? null : await railNetOut(quote.fromAsset, quote.toAsset, quote.amountIn, settledGross);
+  const marginBps = settledNet?.marginBps ?? (await railMarginBps(quote.fromAsset, quote.toAsset));
+  let creditMinor = settledNet === null ? quote.amountOut : settledNet.netOutMinor;
   // If the provider settled a different amount than it quoted, re-apply the
   // flat naira floor to that amount too — otherwise a drifting settlement
   // could hand back the minimum margin the quote promised.
@@ -823,6 +951,8 @@ async function executeFxSwap(params: {
   const spreadMinor =
     settledGross !== null
       ? settledGross - creditMinor
+      : quote.marginMinor !== null && quote.marginMinor !== undefined
+      ? quote.marginMinor
       : marginBps > 0 && marginBps < 10_000
       ? (quote.amountOut * BigInt(Math.trunc(marginBps))) / BigInt(10_000 - Math.trunc(marginBps))
       : 0n;
@@ -878,6 +1008,7 @@ async function executeFxSwap(params: {
             spreadMinor: spreadMinor.toString(),
             spreadAsset: quote.toAsset,
             spreadBps: marginBps,
+            ...(settledNet?.marginNgnPerUsd ? { marginNgnPerUsd: settledNet.marginNgnPerUsd } : {}),
           },
         },
       });

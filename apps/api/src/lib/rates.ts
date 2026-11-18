@@ -262,3 +262,56 @@ export function cryptoToUsdCents(
   );
   return floorToBigInt(cryptoWhole.mul(cryptoUsdtPrice).mul(100));
 }
+
+/**
+ * Take a flat naira margin per $1 off a naira ⇄ dollar exchange the provider
+ * has already priced. `grossOutMinor` is what the provider gives for
+ * `amountInMinor`, so its rate IS our cost on this side of the book:
+ *
+ *  - naira in, dollars out (a customer BUYING USD/USDT/USDC): the provider's
+ *    rate r = naira ÷ dollars. The customer pays r + margin per $1, so gets
+ *    naira ÷ (r + margin) dollars. We exchange all of their naira and keep the
+ *    dollars left over: exactly `margin` naira's worth per $1 they receive.
+ *  - dollars in, naira out (a customer SELLING): they get r − margin per $1,
+ *    i.e. the provider's naira less `margin` × dollars. We keep that naira.
+ *
+ * Rounds against the customer by at most one minor unit, never for them, so
+ * the margin kept is never a hair under what the sheet says. A stablecoin
+ * counts as $1, which is how Maplerad holds it.
+ */
+export function netOutAfterFlatMargin(params: {
+  fromAsset: Asset;
+  toAsset: Asset;
+  amountInMinor: bigint;
+  grossOutMinor: bigint;
+  marginNgnPerUsd: number;
+}): bigint {
+  const { fromAsset, toAsset, amountInMinor, grossOutMinor, marginNgnPerUsd } = params;
+  if (marginNgnPerUsd <= 0 || grossOutMinor <= 0n) return grossOutMinor;
+  const m = new D(marginNgnPerUsd);
+  if (fromAsset === Asset.NGN) {
+    const ngnWhole = new D(amountInMinor.toString()).div(100);
+    const outScale = new D(10).pow(ASSET_DECIMALS[toAsset]);
+    const grossWhole = new D(grossOutMinor.toString()).div(outScale);
+    // ngn / (ngn/gross + m)  ==  ngn·gross / (ngn + m·gross)
+    const netWhole = ngnWhole.mul(grossWhole).div(ngnWhole.add(m.mul(grossWhole)));
+    return floorToBigInt(netWhole.mul(outScale));
+  }
+  if (toAsset === Asset.NGN) {
+    const dollarsWhole = new D(amountInMinor.toString()).div(new D(10).pow(ASSET_DECIMALS[fromAsset]));
+    const marginKobo = ceilToBigInt(m.mul(dollarsWhole).mul(100));
+    return grossOutMinor - marginKobo;
+  }
+  throw new ApiError(500, "A flat naira margin needs a naira leg", "bad_pair");
+}
+
+/**
+ * The customer's NGN per $1 for a trade on our book: the provider's side of
+ * the book plus the margin when they buy, minus it when they sell. Used where
+ * we price the trade ourselves (BTC, or a stablecoin not backed at Maplerad).
+ */
+export function customerNgnPerUsd(side: SwapSide, book: { bid: number; ask: number }, marginNgnPerUsd: number): Decimal {
+  const rate = side === "buy" ? new D(book.ask).add(marginNgnPerUsd) : new D(book.bid).sub(marginNgnPerUsd);
+  if (rate.lte(0)) throw new ApiError(500, "The trade margin is larger than the dollar rate", "bad_price");
+  return rate;
+}

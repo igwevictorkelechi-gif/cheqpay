@@ -63,7 +63,7 @@ export default function Home() {
 
         <section className="mt-16 grid gap-6 rounded-4xl bg-card p-8 shadow-card ring-1 ring-border/40 md:grid-cols-3">
           {[
-            ["1", "Open a sandbox", "Sign in with your CheqPay account. Test keys and ₦1,000,000 of simulated money, free."],
+            ["1", "Open a sandbox", "Sign up with your email. A test key and ₦1,000,000 of simulated money, free, in about a minute."],
             ["2", "Build and test", "Every product works in test mode, with test values for every outcome."],
             ["3", "Go live", "Verify your business, pick a plan, and switch to a live key."],
           ].map(([n, t, b]) => (
