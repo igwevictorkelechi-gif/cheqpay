@@ -235,6 +235,15 @@ input[inputmode="numeric"] {
 .splash-pwa {
   display: none;
 }
+
+/* A protected page before its session is confirmed (components/AuthGuard.tsx):
+   hidden, unless the pre-paint script found a stored session. */
+.auth-pending {
+  display: none;
+}
+html.has-session .auth-pending {
+  display: contents;
+}
 @media (display-mode: standalone) {
   .splash-pwa {
     display: flex;

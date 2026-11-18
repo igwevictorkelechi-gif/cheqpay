@@ -10,6 +10,14 @@ import AuthGuard from "@/components/AuthGuard";
 import SplashScreen from "@/components/SplashScreen";
 import SoundProvider from "@/components/SoundProvider";
 
+// Origins the browser should connect to early (see the preconnect links). Kept
+// here rather than imported from services/, so the layout never pulls the API
+// client or supabase-js into its own bundle. Same defaults as those modules.
+const API_ORIGIN = new URL(process.env.NEXT_PUBLIC_API_URL || "https://cheqpay-admin453.vercel.app").origin;
+const SUPABASE_ORIGIN = new URL(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xttgnswgeffyybjfjlkp.supabase.co",
+).origin;
+
 export const metadata: Metadata = {
   // Every relative URL below (canonicals, OG images) resolves against this, and
   // without it Next emits relative social tags that crawlers cannot follow.
@@ -95,11 +103,24 @@ export default function RootLayout({
           type="font/woff2"
           crossOrigin="anonymous"
         />
-        {/* Apply the saved theme before first paint to avoid a flash. */}
+        {/*
+          Open the connections the app needs while the HTML is still parsing.
+          Every signed-in screen calls the API and Supabase straight away, and
+          on a phone each new HTTPS connection is a DNS lookup plus a TLS
+          handshake — several round trips to Europe — before the first byte of
+          data. Starting them here takes that off the critical path.
+        */}
+        <link rel="preconnect" href={API_ORIGIN} crossOrigin="anonymous" />
+        <link rel="preconnect" href={SUPABASE_ORIGIN} crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href={API_ORIGIN} />
+        <link rel="dns-prefetch" href={SUPABASE_ORIGIN} />
+        {/* Before first paint: apply the saved theme (no flash), and mark a
+            browser that holds a session so AuthGuard's protected pages can
+            show their layout from the HTML (see AuthGuard). */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{if(localStorage.getItem('cheqpay:theme')==='light')document.documentElement.setAttribute('data-theme','light')}catch(e){}",
+              "try{var d=document.documentElement;if(localStorage.getItem('cheqpay:theme')==='light')d.setAttribute('data-theme','light');for(var i=0;i<localStorage.length;i++){if(/^sb-.*-auth-token$/.test(localStorage.key(i)||'')){d.classList.add('has-session');break}}}catch(e){}",
           }}
         />
       </head>
