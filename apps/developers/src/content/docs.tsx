@@ -53,6 +53,7 @@ export const DOCS: DocPage[] = [
           <li><strong>Customers</strong>: the people you serve. Each one is verified (BVN, ID document) before they can hold money.</li>
           <li><strong>Wallets</strong>: balances in NGN and USD. You have main wallets; every verified customer gets their own.</li>
           <li><strong>Virtual accounts</strong>: a bank account number per customer. Transfers into it land in their NGN wallet.</li>
+          <li><strong>Payment requests</strong>: a one-off account number to collect one payment from anyone, with no customer record or KYC on the payer.</li>
           <li><strong>Transfers and conversions</strong>: move money between your wallets, or between naira and dollars.</li>
           <li><strong>Bills</strong>: pay airtime, data, electricity and cable TV from any NGN wallet.</li>
           <li><strong>Cards</strong>: USD virtual cards for verified customers, funded from a USD wallet.</li>
@@ -179,6 +180,7 @@ export const DOCS: DocPage[] = [
         <h2>Test helpers</h2>
         <ul>
           <li><C>POST /test_helpers/virtual_accounts/{"{id}"}/deposit</C>: a bank transfer arrives.</li>
+          <li><C>POST /test_helpers/payment_requests/{"{id}"}/pay</C>: the payer pays a payment request.</li>
           <li><C>POST /test_helpers/bill_payments/{"{id}"}/settle</C>: a pending bill succeeds or fails.</li>
           <li><C>POST /test_helpers/cards/{"{id}"}/purchase</C>: a card is used at a merchant.</li>
         </ul>
@@ -394,7 +396,7 @@ def verify(raw_body: bytes, headers, secret: str) -> bool:
     slug: "wallets",
     title: "Wallets, deposits and transfers",
     section: "Guides",
-    summary: "Main and customer wallets, virtual accounts, transfers and conversions.",
+    summary: "Main and customer wallets, virtual accounts, payment requests, transfers and conversions.",
     body: () => (
       <>
         <h2>Wallets</h2>
@@ -408,6 +410,19 @@ def verify(raw_body: bytes, headers, secret: str) -> bool:
         <p>
           <C>POST /virtual_accounts</C> gives a verified customer a bank account number in their name. Transfers into it credit their NGN wallet,
           less your plan&apos;s deposit fee, and send <C>deposit.received</C> with the payer&apos;s details. One per customer; asking again returns it.
+        </p>
+        <h2>Payment requests</h2>
+        <p>
+          To collect one payment, such as a subscription, from someone who isn&apos;t your customer, create a payment request. You get a one-off
+          account number for the amount; show the payer the account number, bank, account name and amount, and they pay by bank transfer. There&apos;s
+          no customer record and no identity check on the payer. The account name is your business name, then your <C>account_name</C>.
+        </p>
+        <CodeBlock code={curl("POST", "/payment_requests", `{"amount":200000,"account_name":"Pro plan","expires_in":3600,"metadata":{"user_id":"u_123"}}`)} />
+        <p>
+          Money that arrives is credited to your main NGN wallet, less your plan&apos;s deposit fee, and sends <C>payment_request.paid</C>. A payer can send
+          more or less than you asked for, so act on <C>amount_paid</C>. Unpaid requests expire after <C>expires_in</C> seconds (15 minutes to 24 hours) and
+          send <C>payment_request.expired</C>; money that still arrives later is credited. <C>GET /payment_requests/{"{id}"}</C> is the fallback when a
+          webhook may have been missed. In the sandbox, <C>POST /test_helpers/payment_requests/{"{id}"}/pay</C> simulates the payer.
         </p>
         <h2>Transfers</h2>
         <p>

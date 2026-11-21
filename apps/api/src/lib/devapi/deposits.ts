@@ -49,7 +49,7 @@ export function depositFee(plan: Pick<DevPlan, "depositFeeBps" | "depositFeeCapM
 }
 
 /** Fees follow the account's plan; a live account between plans pays Starter's. */
-async function planFor(accountId: string, mode: Mode): Promise<DevPlan> {
+export async function planFor(accountId: string, mode: Mode): Promise<DevPlan> {
   const [plans, sub] = await Promise.all([getPlans(), getSubscription(accountId)]);
   const plan = currentPlan(sub, plans);
   return mode === "live" && !plan.live ? plans.starter : plan;
@@ -136,7 +136,11 @@ export async function settleDevCollection(tx: VerifiedTransaction): Promise<Cred
   await ensureDevApiSchema();
   if ((tx.currency ?? "").toUpperCase() !== "NGN") return null;
   const va = await findLiveVirtualAccount({ providerAccountId: tx.account_id ?? null, providerCustomerId: tx.customer?.id ?? null });
-  if (!va) return null;
+  if (!va) {
+    // Not a customer's virtual account: it may be a payment request's one-off account number.
+    const { settleDevPaymentRequest } = await import("./paymentRequests");
+    return settleDevPaymentRequest(tx);
+  }
   const r = await creditDeposit({
     va,
     providerRef: tx.id,

@@ -319,6 +319,40 @@ const STATEMENTS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS dev_virtual_accounts_reference_uidx ON dev_virtual_accounts (account_id, mode, reference) WHERE reference IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS dev_virtual_accounts_account_idx ON dev_virtual_accounts (account_id, mode, created_at DESC)`,
 
+  // Payment requests: a one-off account number for one expected payment, paid by
+  // anyone (no customer, no KYC on the payer). Money that arrives is credited to
+  // the developer's main NGN wallet as a 'payment' transaction.
+  `CREATE TABLE IF NOT EXISTS dev_payment_requests (
+    id uuid PRIMARY KEY,
+    account_id uuid NOT NULL REFERENCES dev_accounts(id) ON DELETE RESTRICT,
+    mode text NOT NULL CHECK (mode IN ('test', 'live')),
+    status text NOT NULL CHECK (status IN ('creating', 'pending', 'paid', 'expired', 'failed')),
+    currency text NOT NULL DEFAULT 'NGN' CHECK (currency = 'NGN'),
+    amount_minor bigint NOT NULL CHECK (amount_minor > 0),
+    amount_paid_minor bigint NOT NULL DEFAULT 0 CHECK (amount_paid_minor >= 0),
+    fee_minor bigint NOT NULL DEFAULT 0 CHECK (fee_minor >= 0),
+    account_number text,
+    bank_name text,
+    account_name text,
+    provider_account_id text,
+    description text,
+    reference text,
+    metadata jsonb NOT NULL DEFAULT '{}',
+    transaction_id uuid,
+    failure_reason text,
+    expires_at timestamptz NOT NULL,
+    paid_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS dev_payment_requests_provider_uidx ON dev_payment_requests (provider_account_id) WHERE provider_account_id IS NOT NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS dev_payment_requests_reference_uidx ON dev_payment_requests (account_id, mode, reference) WHERE reference IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS dev_payment_requests_account_idx ON dev_payment_requests (account_id, mode, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS dev_payment_requests_number_idx ON dev_payment_requests (mode, account_number) WHERE account_number IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS dev_payment_requests_due_idx ON dev_payment_requests (expires_at) WHERE status = 'pending'`,
+  // A payment is credited once per provider transaction, like a deposit.
+  `CREATE UNIQUE INDEX IF NOT EXISTS dev_transactions_payment_uidx ON dev_transactions (provider_ref) WHERE kind = 'payment'`,
+
   // A deposit is credited once per provider transaction, whichever path (the
   // webhook, a reconciliation) reaches it first.
   `CREATE UNIQUE INDEX IF NOT EXISTS dev_transactions_deposit_uidx ON dev_transactions (provider_ref) WHERE kind = 'deposit'`,

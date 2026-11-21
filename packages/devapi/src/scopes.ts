@@ -19,6 +19,8 @@ export const SCOPES = [
   { id: "files:write", label: "Files", description: "Upload identity documents for KYC." },
   { id: "virtual_accounts:read", label: "Virtual accounts (read)", description: "Read virtual accounts." },
   { id: "virtual_accounts:write", label: "Virtual accounts (write)", description: "Create virtual accounts for verified customers." },
+  { id: "payment_requests:read", label: "Payment requests (read)", description: "Read payment requests." },
+  { id: "payment_requests:write", label: "Payment requests (write)", description: "Create one-off account numbers to collect a payment." },
   { id: "transfers:write", label: "Transfers", description: "Move money between your own wallets." },
   { id: "fx:write", label: "Conversions", description: "Quote and convert between NGN and USD wallets." },
   { id: "bills:read", label: "Bills (read)", description: "Read the bill catalogue and bill payments." },

@@ -14,6 +14,7 @@ export const ID_PREFIXES = {
   transaction: "txn",
   customer: "cus",
   virtual_account: "va",
+  payment_request: "pr",
   card: "card",
   quote: "fxq",
   file: "file",

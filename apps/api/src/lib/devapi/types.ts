@@ -86,6 +86,7 @@ export type TransactionKind =
   | "wallet_move"
   | "subscription"
   | "deposit"
+  | "payment"
   | "transfer"
   | "conversion"
   | "bill_payment"
@@ -186,6 +187,30 @@ export interface VirtualAccountRow {
   metadata: Record<string, string>;
   failure_reason: string | null;
   deposits_checked_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface PaymentRequestRow {
+  id: string;
+  account_id: string;
+  mode: Mode;
+  status: "creating" | "pending" | "paid" | "expired" | "failed";
+  currency: "NGN";
+  amount_minor: bigint;
+  amount_paid_minor: bigint;
+  fee_minor: bigint;
+  account_number: string | null;
+  bank_name: string | null;
+  account_name: string | null;
+  provider_account_id: string | null;
+  description: string | null;
+  reference: string | null;
+  metadata: Record<string, string>;
+  transaction_id: string | null;
+  failure_reason: string | null;
+  expires_at: Date;
+  paid_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
