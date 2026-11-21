@@ -58,6 +58,7 @@ const DETAIL_FIELDS: Partial<Record<DevTransactionRow["kind"], readonly string[]
   wallet_move: ["direction"],
   subscription: ["plan_id", "from_plan_id", "prorated", "period_start", "period_end", "renewal"],
   deposit: ["virtual_account_id", "payer"],
+  payment: ["payment_request_id", "payer"],
   conversion: ["quote_id", "to_currency", "converted_amount", "fx_fee", "rate"],
   card_issue: ["card_id", "card_fee", "funding_fee"],
   card_funding: ["card_id"],

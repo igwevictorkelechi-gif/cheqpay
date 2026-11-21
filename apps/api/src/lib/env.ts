@@ -284,6 +284,11 @@ const envSchema = z.object({
   // provider, so this entry is for documentation/validation. Unset → Maplerad
   // picks the bank, exactly as before.
   MAPLERAD_PREFERRED_BANK: z.string().optional(),
+  // VIRTUAL-institution identifier for the bank that mints one-off accounts for
+  // developer payment requests (/collections/dynamic-account requires one).
+  // Falls back to MAPLERAD_PREFERRED_BANK; with neither set, live payment
+  // requests answer 503 feature_disabled. Read directly from process.env.
+  MAPLERAD_DYNAMIC_ACCOUNT_BANK: z.string().optional(),
 
   // Phase 4 (rates / market data)
   PRICE_FEED: providerEnum("PRICE_FEED", ["live", "mock"], "live"),
