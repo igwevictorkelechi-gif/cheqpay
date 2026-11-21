@@ -1,0 +1,21 @@
+{
+  "name": "cheqpay-confidential-demo",
+  "private": true,
+  "type": "module",
+  "description": "Devnet-only demo of Token-2022 confidential transfers. Never touches CheqPay's production apps, API or customer money.",
+  "scripts": {
+    "proofs": "tsx src/offline-proofs.ts",
+    "spike": "tsx src/spike.ts"
+  },
+  "dependencies": {
+    "@solana-program/system": "^0.16.0",
+    "@solana-program/token-2022": "^0.20.1",
+    "@solana/kit": "8.5",
+    "@solana/sysvars": "8.5",
+    "@solana/zk-sdk": "^0.5.4",
+    "@types/node": "^26.6.6",
+    "litesvm": "^1.6.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

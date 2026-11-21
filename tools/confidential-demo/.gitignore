@@ -1,0 +1,4 @@
+node_modules/
+# Demo wallets, if a run ever saves them. Devnet-only, but never committed.
+*.keypair.json
+recordings/*.secret.json
