@@ -1,0 +1,17 @@
+name: Publish app update
+
+# Publishes the JavaScript bundle as an over-the-air update to installed
+# builds on the chosen channel. Run by hand (EAS dashboard or the Expo MCP).
+# Only for JS-only changes: anything that changes native code or app.json's
+# native config needs a new build instead.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  publish_preview:
+    name: Publish to preview
+    type: update
+    params:
+      channel: preview
+      message: v2 UI - Home, Pay, Confirm, Activity, Onboarding
