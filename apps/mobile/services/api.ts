@@ -741,6 +741,17 @@ export interface TicketOrderResult {
 const PROVISION_TTL_MS = 30 * 60_000;
 let provisioning: { userId: string; at: number; done: Promise<void> } | null = null;
 
+/** One row of Home's "Next up" card (GET /api/home/next-up). */
+export interface NextUpItem {
+  kind: 'ajo_plan' | 'ajo_contribution' | 'ajo_collect' | 'bill_autopay';
+  id: string;
+  title: string;
+  detail: string;
+  dueAt: string;
+  amountMinor: string | null;
+  direction: 'in' | 'out';
+}
+
 export const api = {
   /**
    * Idempotently create the app-side profile + wallets. Call after login.
@@ -793,6 +804,10 @@ export const api = {
   /** Permanently delete the account. Refuses if the wallet holds a balance. */
   deleteAccount(pin?: string): Promise<{ deleted: boolean }> {
     return apiFetch('/api/me', { method: 'DELETE', headers: pinHeader(pin) });
+  },
+
+  getNextUp(): Promise<{ items: NextUpItem[] }> {
+    return apiFetch(`/api/home/next-up`);
   },
 
   getBalances(): Promise<{ balances: Balance[] }> {

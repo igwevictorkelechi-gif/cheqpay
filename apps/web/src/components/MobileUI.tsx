@@ -47,7 +47,7 @@ export function TopIcon({
     <button
       onClick={onClick}
       aria-label={label}
-      className="ml-3 flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink shadow-sm transition hover:opacity-80"
+      className="ml-3 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-ink transition hover:opacity-80"
     >
       <Icon className="h-[18px] w-[18px]" />
     </button>
@@ -92,10 +92,10 @@ export function BalanceBlock({
 }) {
   return (
     <div className="mb-7 mt-4 flex flex-col items-center">
-      <span className="text-base text-muted">{label}</span>
+      <CapsLabel>{label}</CapsLabel>
       {/* tnum: the balance re-renders as money moves, and proportional digits
           make it jump sideways under its own update. */}
-      <span className="tnum mt-2 text-[34px] font-extrabold leading-none tracking-[-0.02em] text-ink">
+      <span className="tnum mt-2 text-[34px] font-extrabold leading-[38px] tracking-[-0.7px] text-ink">
         {amount}
       </span>
     </div>
@@ -141,7 +141,23 @@ export function NairaFlag({ size = 44 }: { size?: number }) {
   );
 }
 
-/** Section header with a chevron, e.g. "Transactions >". */
+/**
+ * v2 small-caps label: 11px, bold, +6% tracking, uppercase, muted. Used for
+ * section labels ("NEXT UP", "TOTAL BALANCE") and date headers. Deliberately
+ * not sentence-case grey text, which reads as a generated mockup.
+ */
+export function CapsLabel({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <span className={`text-[11px] font-bold uppercase leading-[14px] tracking-[0.06em] text-muted ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Section header: an ink heading with a muted chevron at the far end. Ink, not
+ * brand purple — v2 keeps purple for one accent per screen.
+ */
 export function SectionHeader({
   title,
   onClick,
@@ -152,10 +168,12 @@ export function SectionHeader({
   return (
     <button
       onClick={onClick}
-      className="mb-3 flex items-center gap-0.5 text-base font-bold text-brand"
+      className="mb-3 flex w-full items-center justify-between text-[17px] font-bold tracking-[-0.01em] text-ink"
     >
       {title}
-      <ChevronRight />
+      <span className="text-muted">
+        <ChevronRight />
+      </span>
     </button>
   );
 }
@@ -209,6 +227,6 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-3xl bg-card p-5 ${className}`}>{children}</div>
+    <div className={`rounded-3xl border border-border bg-card p-5 ${className}`}>{children}</div>
   );
 }

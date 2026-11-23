@@ -139,7 +139,11 @@ export default function BillServiceScreen() {
             },
             pin,
           ),
-        { title: 'Confirm this purchase', detail: `Paying ₦${payAmount} for ${service}.` },
+        {
+          title: 'Confirm this purchase',
+          amount: `₦${Number(payAmount).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`,
+          detail: `${biller?.name ?? service} · ${customerName && customerName !== 'Verified' ? customerName : customer.trim()}`,
+        },
       );
       setProviderRef(res.providerRef);
       setStage('done');

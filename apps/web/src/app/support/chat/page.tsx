@@ -92,7 +92,7 @@ export default function SupportChatPage() {
               <div
                 className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                   m.role === "user"
-                    ? "rounded-br-md bg-gradient-to-r from-brand to-brand-light text-white"
+                    ? "rounded-br-md bg-brand shadow-cta text-white"
                     : "rounded-bl-md bg-card text-ink"
                 }`}
               >
@@ -149,7 +149,7 @@ export default function SupportChatPage() {
           <button
             type="submit"
             disabled={!input.trim() || sending}
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-r from-brand to-brand-light text-white active:scale-95 disabled:opacity-40"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand shadow-cta text-white active:scale-95 disabled:opacity-40"
           >
             <Send className="h-5 w-5" />
           </button>

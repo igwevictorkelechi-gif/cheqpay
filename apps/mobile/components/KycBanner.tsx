@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
+import { colors } from './theme';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { api, getAccessToken } from '@/services/api';
@@ -35,15 +36,15 @@ export function KycBanner() {
           <Ionicons name="shield-half-outline" size={18} color="#F5A623" />
         </View>
         <View className="ml-3 flex-1">
-          <Text className="text-sm font-bold" style={{ color: '#F5C97B' }}>
+          <Text className="text-sm font-bold" style={{ color: colors.warnInk }}>
             Verify your identity
           </Text>
-          <Text className="text-xs" style={{ color: 'rgba(245,201,123,0.8)' }}>
+          <Text className="text-xs" style={{ color: colors.warnInk, opacity: 0.8 }}>
             Your account isn&apos;t verified. Verify to raise limits and unlock withdrawals.
           </Text>
         </View>
         <TouchableOpacity onPress={() => setDismissed(true)} hitSlop={10} className="ml-1">
-          <Ionicons name="close" size={18} color="rgba(245,201,123,0.7)" />
+          <Ionicons name="close" size={18} color={colors.warnInk} />
         </TouchableOpacity>
       </TouchableOpacity>
     </View>

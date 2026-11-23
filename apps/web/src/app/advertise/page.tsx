@@ -504,7 +504,7 @@ export default function AdvertisePage() {
               <p className="mt-3 text-xs text-muted">Paid from your Naira balance. If your ad isn&apos;t approved you get every naira back, and you can stop it any time for a refund of the days left.</p>
             </Card>
             <div>
-              <button onClick={pay} disabled={!ready || paying || quoting} className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white disabled:opacity-40">
+              <button onClick={pay} disabled={!ready || paying || quoting} className="flex w-full items-center justify-center gap-2 rounded-full bg-brand shadow-cta py-4 font-bold text-white disabled:opacity-40">
                 {paying && <Loader2 className="h-4 w-4 animate-spin" />}
                 {quote ? `Pay ${quote.totalFormatted} & send for review` : "Pay & send for review"}
               </button>

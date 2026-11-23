@@ -53,7 +53,7 @@ export default function ContactPage() {
         <button
           onClick={submit}
           disabled={!canSend}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand to-brand-light py-3.5 font-bold text-white active:scale-[0.99] disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-brand shadow-cta py-3.5 font-bold text-white active:scale-[0.99] disabled:opacity-40"
         >
           <Send className="h-4 w-4" /> Send message
         </button>

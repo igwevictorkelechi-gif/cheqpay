@@ -12,7 +12,6 @@ import {
   ActionRow,
   CircleAction,
   Card,
-  NairaFlag,
   SectionHeader,
   ListCard,
 } from '@/components/brand';
@@ -22,6 +21,7 @@ import PromoPopup from '@/components/PromoPopup';
 import HomeBannerCarousel, { useHomeBanners } from '@/components/HomeBanner';
 import { useFeatures } from '@/lib/useFeatures';
 import NearbyStrip from '@/components/NearbyStrip';
+import NextUpCard from '@/components/NextUpCard';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -122,20 +122,21 @@ export default function HomeScreen() {
           ]}
         />
 
-        {/* Currency tab — switch the balance block between naira and dollars. */}
+        {/* Currency tab — switch the balance block between naira and dollars.
+            Ink chips, not brand purple: v2 keeps purple for one accent a screen. */}
         <View className="items-center mt-4">
-          <View className="flex-row rounded-full p-1" style={{ backgroundColor: colors.card }}>
+          <View className="flex-row rounded-full p-1" style={{ backgroundColor: colors.card, gap: 4 }}>
             {(['NGN', 'USD'] as const).map((c) => {
               const active = currency === c;
               return (
                 <TouchableOpacity
                   key={c}
                   onPress={() => setCurrency(c)}
-                  className="flex-row items-center rounded-full px-5 py-2"
-                  style={{ backgroundColor: active ? colors.brand : 'transparent', gap: 6 }}
+                  className="flex-row items-center rounded-full px-4"
+                  style={{ height: 36, backgroundColor: active ? colors.ink : 'transparent', gap: 6 }}
                 >
                   <Text>{c === 'NGN' ? '🇳🇬' : '🇺🇸'}</Text>
-                  <Text style={{ color: active ? '#fff' : colors.muted, fontWeight: '700', fontSize: 13 }}>
+                  <Text style={{ color: active ? colors.surface : colors.muted, fontWeight: '600', fontSize: 13 }}>
                     {c}
                   </Text>
                 </TouchableOpacity>
@@ -144,10 +145,9 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <BalanceBlock label={isUsd ? 'USD Balance' : 'Total Cash Balance'} amount={formattedBalance} />
+        <BalanceBlock label={isUsd ? 'Dollar balance' : 'Total balance'} amount={formattedBalance} />
 
         <KycBanner />
-
 
         {features.ngn_deposits && value === 0 && txns.length === 0 && (
           <View className="px-5 mb-6">
@@ -178,11 +178,13 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* v2 quick actions: Add · Pay · Save · Convert. Pay is the one place to
+            send money — to a bank account, a CheqPay user or a biller. */}
         <ActionRow>
           {features.ngn_deposits && (
             <CircleAction
               icon="arrow-down"
-              label="Deposit"
+              label="Add"
               onPress={() =>
                 router.push(
                   isUsd ? { pathname: '/(app)/deposit', params: { currency: 'USD' } } : '/(app)/deposit',
@@ -190,82 +192,25 @@ export default function HomeScreen() {
               }
             />
           )}
-          {features.ngn_withdrawals && (
-            <CircleAction icon="arrow-forward" label="Withdraw" onPress={onWithdraw} />
+          {(features.ngn_withdrawals || features.p2p_transfers || features.bill_payments) && (
+            <CircleAction
+              icon="paper-plane-outline"
+              label="Pay"
+              onPress={isUsd ? onWithdraw : () => router.push('/(app)/send')}
+            />
           )}
+          {features.ajo && <CircleAction icon="people-outline" label="Save" onPress={() => router.push('/(app)/ajo')} />}
           {features.crypto_trading && (
             <CircleAction icon="sync" label="Convert" onPress={() => router.push('/(app)/convert')} />
           )}
-          {features.p2p_transfers && (
-            <CircleAction icon="paper-plane" label="Send" onPress={() => router.push('/(app)/send-user')} />
-          )}
         </ActionRow>
 
-        {features.ajo && (
-          <View className="px-5 mb-4">
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => router.push('/(app)/ajo')}
-              className="flex-row items-center px-4 py-4 rounded-3xl"
-              style={{ backgroundColor: colors.card }}
-            >
-              <View
-                className="w-10 h-10 rounded-full items-center justify-center"
-                style={{ backgroundColor: 'rgba(107,91,149,0.25)' }}
-              >
-                <Ionicons name="people" size={20} color={colors.brandLight} />
-              </View>
-              <View className="ml-3 flex-1">
-                <Text className="text-ink dark:text-ink-dark font-bold">Ajo savings</Text>
-                <Text className="text-muted dark:text-muted-dark text-xs">Save on a schedule, alone or with your people</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-            </TouchableOpacity>
-          </View>
-        )}
-        <NearbyStrip />
+        {!isUsd && <NextUpCard />}
 
-        {/* The admin's banners when any are live; otherwise the Cash account for
-            the selected currency. Same size either way. */}
-        <View className="px-5 mb-4">
-          {banners.length > 0 ? (
-            <HomeBannerCarousel banners={banners} />
-          ) : (
-          <Card>
-            <Text className="text-muted dark:text-muted-dark text-base font-medium mb-4">Cash</Text>
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center">
-                {isUsd ? (
-                  <View
-                    className="rounded-full items-center justify-center"
-                    style={{ width: 40, height: 40, backgroundColor: 'rgba(34,197,94,0.15)' }}
-                  >
-                    <Text style={{ color: '#22C55E', fontSize: 18, fontWeight: '700' }}>$</Text>
-                  </View>
-                ) : (
-                  <NairaFlag />
-                )}
-                <View className="ml-3">
-                  <Text className="text-ink dark:text-ink-dark text-lg font-bold">{currency}</Text>
-                  <Text className="text-muted dark:text-muted-dark text-sm">
-                    {isUsd ? 'US Dollar' : 'Naira'}
-                  </Text>
-                </View>
-              </View>
-              <Text className="text-ink dark:text-ink-dark text-lg font-bold">
-                {showBalance
-                  ? `${value.toLocaleString(locale, { maximumFractionDigits: 2 })} ${currency}`
-                  : `•••• ${currency}`}
-              </Text>
-            </View>
-          </Card>
-          )}
-        </View>
-
-        {/* Transactions */}
-        <View className="px-5">
+        {/* Recent activity */}
+        <View className="px-5 mb-6">
           <SectionHeader
-            title="Transactions"
+            title="Recent activity"
             onPress={() =>
               router.push(
                 isUsd
@@ -277,23 +222,25 @@ export default function HomeScreen() {
           {txns.length === 0 ? (
             <Card>
               <Text className="text-muted dark:text-muted-dark text-sm text-center py-2">
-                {isUsd ? 'No dollar transactions yet.' : 'No Naira transactions yet.'}
+                {isUsd ? 'No dollar transactions yet.' : 'No naira transactions yet.'}
               </Text>
             </Card>
           ) : (
             <ListCard>
               {txns.slice(0, 5).map((t, i) => (
-                <TxnRow
-                  key={t.id}
-                  t={t}
-                  showStatus={false}
-                  divider={i > 0}
-                  onPress={() => router.push(`/(app)/transaction/${t.id}`)}
-                />
+                <TxnRow key={t.id} t={t} divider={i > 0} onPress={() => router.push(`/(app)/transaction/${t.id}`)} />
               ))}
             </ListCard>
           )}
         </View>
+
+        {banners.length > 0 && (
+          <View className="px-5 mb-6">
+            <HomeBannerCarousel banners={banners} />
+          </View>
+        )}
+
+        <NearbyStrip />
       </ScrollView>
       <PromoPopup />
     </View>

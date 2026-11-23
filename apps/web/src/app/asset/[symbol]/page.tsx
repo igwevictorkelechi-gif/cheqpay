@@ -195,7 +195,7 @@ export default function AssetPage() {
           {needsLogin ? (
             <button
               onClick={() => router.push("/login")}
-              className="mt-5 rounded-full bg-gradient-to-r from-brand to-brand-light px-7 py-3 font-semibold text-white shadow-lg shadow-brand/30"
+              className="mt-5 rounded-full bg-brand shadow-cta px-7 py-3 font-semibold text-white"
             >
               Go to login
             </button>
@@ -299,7 +299,7 @@ export default function AssetPage() {
           </button>
           <button
             onClick={() => setShowTrade("buy")}
-            className="flex-1 rounded-full bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white shadow-lg shadow-brand/30 active:scale-[0.98]"
+            className="flex-1 rounded-full bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.98]"
           >
             Buy
           </button>
@@ -542,7 +542,7 @@ function TradeSheet({
               <button
                 onClick={getQuote}
                 disabled={busy || !amount}
-                className="w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white shadow-lg shadow-brand/30 disabled:opacity-50"
+                className="w-full rounded-full bg-brand shadow-cta py-4 font-bold text-white disabled:opacity-50"
               >
                 {busy ? "Getting quote…" : "Get quote"}
               </button>
@@ -550,7 +550,7 @@ function TradeSheet({
               <button
                 onClick={confirm}
                 disabled={busy}
-                className="w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white shadow-lg shadow-brand/30 disabled:opacity-50"
+                className="w-full rounded-full bg-brand shadow-cta py-4 font-bold text-white disabled:opacity-50"
               >
                 {busy ? "Processing…" : `Confirm ${side}`}
               </button>

@@ -89,13 +89,13 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
                 <Ionicons
                   name={focused ? tab.icon : tab.iconOutline}
                   size={22}
-                  color={focused ? colors.brandLight : colors.muted}
+                  color={focused ? colors.ink : colors.muted}
                 />
                 <Text
                   style={[
                     styles.label,
                     focused
-                      ? { color: colors.brandLight, fontWeight: '700' }
+                      ? { color: colors.ink, fontWeight: '700' }
                       : { color: colors.ink, opacity: 0.7, fontWeight: '500' },
                   ]}
                 >

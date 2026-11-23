@@ -123,16 +123,26 @@ function withFee(t: LedgerTransaction, sign: 1 | -1): string {
   return fee ? String(Number(t.amountFormatted) + sign * fee) : t.amountFormatted;
 }
 
+/**
+ * An amount with its currency the way people read it: ₦50,000 and $20 with the
+ * symbol in front, crypto as "0.0021 BTC".
+ */
+function amt(v: string, asset: string): string {
+  if (asset === "NGN") return `₦${fmt(v)}`;
+  if (asset === "USD") return `$${fmt(v)}`;
+  return `${fmt(v)} ${asset}`;
+}
+
 export function txnAmount(t: LedgerTransaction): { text: string; positive: boolean } {
   // What actually moved on the balance: a deposit lands net of its fee, a
   // payout or card top-up takes its fee with it, a card's price is all fee.
-  if (t.type === "DEPOSIT") return { text: `+${fmt(withFee(t, -1))} ${t.asset}`, positive: true };
+  if (t.type === "DEPOSIT") return { text: `+${amt(withFee(t, -1), t.asset)}`, positive: true };
   if (t.type === "WITHDRAWAL")
-    return { text: `-${fmt(withFee(t, 1))} ${t.asset}`, positive: false };
-  if (t.type === "CARD_FUND") return { text: `-${fmt(withFee(t, 1))} ${t.asset}`, positive: false };
+    return { text: `-${amt(withFee(t, 1), t.asset)}`, positive: false };
+  if (t.type === "CARD_FUND") return { text: `-${amt(withFee(t, 1), t.asset)}`, positive: false };
   if (t.type === "CARD_WITHDRAW")
-    return { text: `+${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
-  if (t.type === "CARD_ISSUE") return { text: `-${fmt(t.feeFormatted)} ${t.asset}`, positive: false };
+    return { text: `+${amt(t.amountFormatted, t.asset)}`, positive: true };
+  if (t.type === "CARD_ISSUE") return { text: `-${amt(t.feeFormatted, t.asset)}`, positive: false };
   if (t.type === "BILL")
     return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
   if (t.type === "AD_REFUND" || t.type === "AD_PAYOUT") return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
@@ -144,19 +154,19 @@ export function txnAmount(t: LedgerTransaction): { text: string; positive: boole
   if (t.type === "CASHBACK")
     return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   if (t.type === "TRANSFER_IN" || t.type === "DEV_WALLET_WITHDRAW")
-    return { text: `+${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
+    return { text: `+${amt(t.amountFormatted, t.asset)}`, positive: true };
   if (t.type === "DEV_WALLET_FUND")
-    return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
+    return { text: `-${amt(t.amountFormatted, t.asset)}`, positive: false };
   if (t.type === "TRANSFER_OUT")
-    return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
+    return { text: `-${amt(t.amountFormatted, t.asset)}`, positive: false };
   if (t.type === "AJO_SAVE" || t.type === "AJO_CONTRIBUTION") return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
   // A release's fee is the break fee kept, so the wallet got amount − fee.
   if (t.type === "AJO_RELEASE") return { text: `+₦${fmt(withFee(t, -1))}`, positive: true };
   if (t.type === "AJO_PAYOUT") return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   // BUY / SELL / CONVERT show the received leg as the headline.
   if (t.toAsset && t.toFormatted)
-    return { text: `+${fmt(t.toFormatted)} ${t.toAsset}`, positive: true };
-  return { text: `${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
+    return { text: `+${amt(t.toFormatted, t.toAsset)}`, positive: true };
+  return { text: `${amt(t.amountFormatted, t.asset)}`, positive: true };
 }
 
 export function txnStatusBadge(status: LedgerTransaction["status"]) {
@@ -169,7 +179,7 @@ export function txnStatusBadge(status: LedgerTransaction["status"]) {
   };
   const s = map[status] ?? { label: status, cls: "bg-white/10 text-muted" };
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${s.cls}`}>
+    <span className={`inline-flex h-5 items-center rounded-full px-2 text-[10px] font-bold uppercase tracking-[0.05em] ${s.cls}`}>
       {s.label}
     </span>
   );
@@ -189,40 +199,43 @@ export default function TxnRow({
 }) {
   const { Icon, color, bg } = txnIcon(t.type);
   const amt = txnAmount(t);
+  // v2 row anatomy: a 40px tinted tile at radius 12 (tiles are squircles,
+  // avatars are circles), then title / meta / money. The divider starts under
+  // the text, not under the tile, so it is drawn on the text column.
   return (
     <div
       onClick={onClick}
       role={onClick ? "button" : undefined}
-      className={`flex items-center gap-3 px-4 py-4 ${divider ? "border-t border-border" : ""} ${
-        onClick ? "cursor-pointer active:opacity-70" : ""
-      }`}
+      className={`flex items-center gap-3 pl-4 ${onClick ? "cursor-pointer active:opacity-70" : ""}`}
     >
       <span
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
         style={{ backgroundColor: bg }}
       >
-        <Icon className="h-5 w-5" style={{ color }} />
+        <Icon className="h-5 w-5" style={{ color }} strokeWidth={1.75} />
       </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-bold text-ink">{txnTitle(t)}</p>
-        <div className="mt-0.5 flex items-center gap-2">
-          <span className="text-xs text-muted">
-            {new Date(t.createdAt).toLocaleDateString("en-NG", {
-              day: "numeric",
-              month: "short",
-            })}
-          </span>
-          {showStatus && txnStatusBadge(t.status)}
+      <div className={`flex min-w-0 flex-1 items-center gap-3 py-3.5 pr-4 ${divider ? "border-t border-hairline" : ""}`}>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-semibold text-ink">{txnTitle(t)}</p>
+          <div className="mt-0.5 flex items-center gap-2">
+            <span className="text-[13px] text-muted">
+              {new Date(t.createdAt).toLocaleDateString("en-NG", {
+                day: "numeric",
+                month: "short",
+              })}
+            </span>
+            {showStatus && t.status !== "COMPLETED" && txnStatusBadge(t.status)}
+          </div>
         </div>
-      </div>
-      <div className="text-right">
-        <p className={`tnum font-bold ${amt.positive ? "text-green-400" : "text-ink"}`}>{amt.text}</p>
-        {t.type === "CONVERT" && t.fromFormatted && (
-          <p className="text-xs text-muted">
-            -{Number(t.fromFormatted).toLocaleString("en-US", { maximumFractionDigits: 8 })}{" "}
-            {t.fromAsset}
-          </p>
-        )}
+        <div className="text-right">
+          <p className={`tnum text-[15px] font-semibold ${amt.positive ? "text-positive" : "text-ink"}`}>{amt.text}</p>
+          {t.type === "CONVERT" && t.fromFormatted && (
+            <p className="tnum text-xs text-muted">
+              -{Number(t.fromFormatted).toLocaleString("en-US", { maximumFractionDigits: 8 })}{" "}
+              {t.fromAsset}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

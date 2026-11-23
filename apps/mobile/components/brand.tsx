@@ -57,6 +57,7 @@ export function TopIcon({
     <TouchableOpacity
       onPress={onPress}
       className="w-11 h-11 rounded-full bg-card dark:bg-card-dark items-center justify-center ml-3"
+      style={{ borderWidth: 1, borderColor: colors.border }}
       activeOpacity={0.7}
     >
       <Ionicons name={name} size={18} color={colors.ink} />
@@ -94,10 +95,10 @@ export function TopBar({
 export function BalanceBlock({ label, amount }: { label: string; amount: string }) {
   return (
     <View className="items-center mt-4 mb-7">
-      <Text className="text-muted dark:text-muted-dark text-base">{label}</Text>
+      <CapsLabel>{label}</CapsLabel>
       <Text
         className="text-ink dark:text-ink-dark font-extrabold mt-2"
-        style={{ fontSize: 34, letterSpacing: -0.7, fontVariant: ['tabular-nums'] }}
+        style={{ fontSize: 34, lineHeight: 38, letterSpacing: -0.7, fontVariant: ['tabular-nums'] }}
       >
         {amount}
       </Text>
@@ -153,7 +154,27 @@ export function NairaFlag({ size = 44 }: { size?: number }) {
   );
 }
 
-/** Section header with a chevron, e.g. "Transactions >". */
+/**
+ * v2 small-caps label: 11px, bold, +6% tracking, uppercase, muted. Section
+ * labels ("NEXT UP", "TOTAL BALANCE") and date headers.
+ */
+export function CapsLabel({ children, style }: { children: React.ReactNode; style?: object }) {
+  return (
+    <Text
+      style={[
+        { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: 0.66, textTransform: 'uppercase', color: colors.muted },
+        style,
+      ]}
+    >
+      {children}
+    </Text>
+  );
+}
+
+/**
+ * Section header: an ink heading, a muted chevron at the far end. Ink rather
+ * than brand purple — v2 keeps purple for one accent per screen.
+ */
 export function SectionHeader({
   title,
   onPress,
@@ -163,14 +184,23 @@ export function SectionHeader({
 }) {
   return (
     <TouchableOpacity
-      className="flex-row items-center mb-3"
+      className="flex-row items-center justify-between mb-3"
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <Text className="text-brand font-bold text-base">{title}</Text>
-      <Ionicons name="chevron-forward" size={18} color={colors.brand} />
+      <Text style={{ color: colors.ink, fontWeight: '700', fontSize: 17, letterSpacing: -0.2 }}>{title}</Text>
+      <Ionicons name="chevron-forward" size={18} color={colors.muted} />
     </TouchableOpacity>
   );
+}
+
+/**
+ * The v2 card edge: a translucent border, and a lighter top edge that does
+ * what an inset highlight does on the web — lifts the card off a black page,
+ * where a drop shadow has nothing to darken.
+ */
+export function cardEdge() {
+  return { borderWidth: 1, borderColor: colors.border, borderTopColor: colors.cardTopEdge };
 }
 
 /** White rounded card wrapper. */
@@ -182,11 +212,17 @@ export function Card({
   className?: string;
 }) {
   return (
-    <View className={`bg-card dark:bg-card-dark rounded-3xl p-5 ${className}`}>{children}</View>
+    <View className={`bg-card dark:bg-card-dark rounded-3xl p-5 ${className}`} style={cardEdge()}>
+      {children}
+    </View>
   );
 }
 
 /** Rounded card for edge-to-edge rows (transaction lists): no inner padding. */
 export function ListCard({ children }: { children: React.ReactNode }) {
-  return <View className="bg-card dark:bg-card-dark rounded-3xl overflow-hidden">{children}</View>;
+  return (
+    <View className="bg-card dark:bg-card-dark rounded-3xl overflow-hidden" style={cardEdge()}>
+      {children}
+    </View>
+  );
 }

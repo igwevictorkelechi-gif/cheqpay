@@ -39,6 +39,20 @@ export default function SendToUserPage() {
       .catch(() => {});
   }, []);
 
+  // Arriving from Pay (/send) or a pay link with ?to=<username>: fill it in
+  // and look it up straight away, so the recipient is confirmed on arrival.
+  useEffect(() => {
+    const to = new URLSearchParams(window.location.search).get("to")?.replace(/^@+/, "").slice(0, 30);
+    if (!to) return;
+    setUsername(to);
+    setChecking(true);
+    api
+      .lookupUser(to)
+      .then((res) => setConfirmed(res.username))
+      .catch((e) => setError(e instanceof ApiError ? e.message : "Couldn’t find that username."))
+      .finally(() => setChecking(false));
+  }, []);
+
   const held = balances.find((b) => b.asset === asset);
   const available = Number(held?.availableFormatted ?? 0);
 
@@ -74,7 +88,24 @@ export default function SendToUserPage() {
             },
             pin,
           ),
-        { title: "Confirm this transfer", detail: `Sending ${amount} ${asset} to @${confirmed ?? username}.` },
+        {
+          title: "Confirm this transfer",
+          amount: asset === "NGN" ? `₦${Number(amount).toLocaleString("en-NG", { maximumFractionDigits: 2 })}` : `${amount} ${asset}`,
+          detail: `To @${confirmed ?? username}`,
+          rows: [
+            { label: "Fee", value: "Free" },
+            { label: "Arrives", value: "Instantly" },
+            ...(held
+              ? [
+                  {
+                    label: "Balance after",
+                    value: `${asset === "NGN" ? "₦" : ""}${Math.max(0, available - Number(amount)).toLocaleString("en-NG", { maximumFractionDigits: asset === "NGN" ? 2 : 8 })}${asset === "NGN" ? "" : ` ${asset}`}`,
+                    total: true,
+                  },
+                ]
+              : []),
+          ],
+        },
       );
       setSent({ amount: res.amountFormatted, asset: res.asset, to: res.recipient });
       setStep("done");
@@ -117,7 +148,7 @@ export default function SendToUserPage() {
           <div className="mt-auto w-full pt-6">
             <button
               onClick={() => router.replace("/")}
-              className="w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+              className="w-full rounded-2xl bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99]"
             >
               Done
             </button>
@@ -251,7 +282,7 @@ export default function SendToUserPage() {
               <button
                 onClick={send}
                 disabled={!canSend}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white active:scale-[0.98] disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-brand shadow-cta py-4 text-base font-bold text-white active:scale-[0.98] disabled:opacity-50"
               >
                 {sending && <Loader2 className="h-5 w-5 animate-spin" />}
                 {sending ? "Sending…" : "Send"}

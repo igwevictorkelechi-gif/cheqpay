@@ -157,7 +157,7 @@ export default function NearbyPage() {
                     </div>
                   )}
                   {v.mapsUrl && (
-                    <a href={v.mapsUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand to-brand-light py-3 text-sm font-bold text-white">
+                    <a href={v.mapsUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-full bg-brand shadow-cta py-3 text-sm font-bold text-white">
                       <Navigation className="h-4 w-4" /> Directions
                     </a>
                   )}

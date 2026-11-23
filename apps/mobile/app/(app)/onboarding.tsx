@@ -11,37 +11,41 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { colors } from '@/components/brand';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, cardEdge, CapsLabel } from '@/components/brand';
+import { useFeatures } from '@/lib/useFeatures';
 import DateField from '@/components/DateField';
 import { api, ApiError } from '@/services/api';
 import { setPin } from '@/lib/applock';
 
-const STEPS = ['Account', 'Email', 'Identity', 'PIN'];
-
+/** v2: a 3-segment, 3px progress bar — no labels, no dots. */
 function Progress({ active }: { active: number }) {
   return (
-    <View className="flex-row items-center mb-8" style={{ gap: 8 }}>
-      {STEPS.map((label, i) => {
-        const done = i < active;
-        const isActive = i === active;
-        return (
-          <View key={label} className="flex-1 items-center">
-            <View
-              className="w-full rounded-full"
-              style={{ height: 4, backgroundColor: done || isActive ? colors.brand : colors.circle }}
-            />
-            <Text
-              className="text-xs mt-2"
-              style={{ color: done || isActive ? colors.ink : colors.muted, fontWeight: isActive ? '700' : '500' }}
-            >
-              {label}
-            </Text>
-          </View>
-        );
-      })}
+    <View className="flex-row mb-6" style={{ gap: 6 }} accessibilityLabel={`Step ${active + 1} of 3`}>
+      {[0, 1, 2].map((i) => (
+        <View key={i} style={{ flex: 1, height: 3, borderRadius: 2, backgroundColor: i <= active ? colors.ink : colors.circle }} />
+      ))}
     </View>
   );
 }
+
+type Goal = 'send' | 'bills' | 'ajo' | 'crypto';
+const GOALS: { key: Goal; title: string; detail: string; icon: React.ComponentProps<typeof Ionicons>['name']; fg: string; bg: string; route: string }[] = [
+  { key: 'send', title: 'Send money to people', detail: 'Free and instant to CheqPay users', icon: 'paper-plane-outline', fg: '#FF6B6B', bg: 'rgba(255,107,107,0.15)', route: '/(app)/send' },
+  { key: 'bills', title: 'Pay bills and airtime', detail: 'Electricity, data, TV and more', icon: 'flash-outline', fg: '#FBBF24', bg: 'rgba(251,191,36,0.15)', route: '/(app)/pay-bill' },
+  { key: 'ajo', title: 'Save with Ajo', detail: 'On your own, or in a circle with friends', icon: 'people-outline', fg: '#8A7BB5', bg: 'rgba(107,91,149,0.2)', route: '/(app)/ajo' },
+  { key: 'crypto', title: 'Buy and sell crypto', detail: 'USDT, USDC and BTC, cashed out to naira', icon: 'logo-bitcoin', fg: '#A78BFA', bg: 'rgba(167,139,250,0.15)', route: '/(app)/crypto' },
+];
+
+/**
+ * What verification unlocks — the real tier limits from apps/api lib/kyc.ts
+ * (tier 1: ₦50,000 a payment; tier 2: ₦1,000,000). Keep in step with that file.
+ */
+const ASKS: { what: string; when: string; now?: boolean }[] = [
+  { what: 'Email and phone', when: 'Now', now: true },
+  { what: 'BVN or ID', when: 'To go above ₦50,000 a payment' },
+  { what: 'More checks', when: 'Only above ₦1,000,000 a payment' },
+];
 
 function Field({
   label,
@@ -75,7 +79,15 @@ function Field({
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
-  const [step, setStep] = useState<'kyc' | 'pin'>('kyc');
+  const features = useFeatures();
+  const [step, setStep] = useState<'goal' | 'kyc' | 'pin'>('goal');
+  const [goal, setGoal] = useState<Goal | null>(null);
+  const goals = GOALS.filter(
+    (g) =>
+      (g.key !== 'ajo' || features.ajo) &&
+      (g.key !== 'crypto' || features.crypto_trading) &&
+      (g.key !== 'bills' || features.bill_payments),
+  );
 
   // KYC
   const [firstName, setFirstName] = useState('');
@@ -91,7 +103,8 @@ export default function OnboardingScreen() {
 
   const kycValid = firstName.trim().length >= 2 && lastName.trim().length >= 2;
 
-  const finish = () => router.replace('/(app)/home');
+  // Straight to the thing they said they came for, or Home.
+  const finish = () => router.replace((GOALS.find((g) => g.key === goal)?.route ?? '/(app)/home') as never);
 
   const submitKyc = async () => {
     if (!kycValid) return;
@@ -131,11 +144,86 @@ export default function OnboardingScreen() {
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
         >
-          <Progress active={step === 'kyc' ? 2 : 3} />
+          <Progress active={step === 'goal' ? 0 : step === 'kyc' ? 1 : 2} />
 
-          {step === 'kyc' ? (
+          {step === 'goal' ? (
             <>
-              <Text className="text-ink dark:text-ink-dark text-3xl font-extrabold mb-2">Tell us about you</Text>
+              <Text style={{ color: colors.ink, fontSize: 24, lineHeight: 30, fontWeight: '700', letterSpacing: -0.5, marginBottom: 8 }}>
+                What should CheqPay do for you first?
+              </Text>
+              <Text style={{ color: colors.muted, fontSize: 15, lineHeight: 22, marginBottom: 24 }}>
+                We'll take you straight there once you're set up.
+              </Text>
+
+              <View accessibilityRole="radiogroup" style={[{ backgroundColor: colors.card, borderRadius: 24, overflow: 'hidden' }, cardEdge()]}>
+                {goals.map((g, i) => {
+                  const on = goal === g.key;
+                  return (
+                    <TouchableOpacity
+                      key={g.key}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: on }}
+                      activeOpacity={0.7}
+                      onPress={() => setGoal(g.key)}
+                      className="flex-row items-center pl-4"
+                    >
+                      <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: g.bg, alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name={g.icon} size={20} color={g.fg} />
+                      </View>
+                      <View
+                        className="flex-1 flex-row items-center ml-3 pr-4"
+                        style={[{ paddingVertical: 14 }, i > 0 ? { borderTopWidth: 1, borderTopColor: colors.hairline } : null]}
+                      >
+                        <View className="flex-1">
+                          <Text style={{ color: colors.ink, fontSize: 15, fontWeight: '600' }}>{g.title}</Text>
+                          <Text style={{ color: colors.muted, fontSize: 13 }}>{g.detail}</Text>
+                        </View>
+                        <View
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: 11,
+                            borderWidth: 2,
+                            borderColor: on ? colors.brand : colors.border,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {on && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brand }} />}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <CapsLabel style={{ marginTop: 24, marginBottom: 10 }}>What we'll ask for</CapsLabel>
+              {ASKS.map((a) => (
+                <View key={a.what} className="flex-row items-center justify-between" style={{ minHeight: 36, gap: 16 }}>
+                  <Text style={{ color: colors.ink, fontSize: 15 }}>{a.what}</Text>
+                  {a.now ? (
+                    <View style={{ backgroundColor: 'rgba(107,91,149,0.2)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 2 }}>
+                      <Text style={{ color: colors.brandLight, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' }}>{a.when}</Text>
+                    </View>
+                  ) : (
+                    <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'right', flexShrink: 1 }}>{a.when}</Text>
+                  )}
+                </View>
+              ))}
+
+              <TouchableOpacity
+                onPress={() => setStep('kyc')}
+                disabled={!goal}
+                className="mt-6 rounded-full items-center justify-center"
+                style={{ height: 54, backgroundColor: goal ? colors.brand : colors.card }}
+              >
+                <Text style={{ color: goal ? '#fff' : colors.muted, fontSize: 16, fontWeight: '700' }}>Continue</Text>
+              </TouchableOpacity>
+              <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center', marginTop: 12 }}>Takes about 2 minutes</Text>
+            </>
+          ) : step === 'kyc' ? (
+            <>
+              <Text className="mb-2" style={{ color: colors.ink, fontSize: 24, lineHeight: 30, fontWeight: '700', letterSpacing: -0.5 }}>Tell us about you</Text>
               <Text className="text-muted dark:text-muted-dark text-base mb-6">
                 Just your name to get started. You&apos;ll verify your identity with a BVN and a
                 government ID from the Verify screen, which unlocks higher limits, deposits and crypto
@@ -169,7 +257,7 @@ export default function OnboardingScreen() {
             </>
           ) : (
             <>
-              <Text className="text-ink dark:text-ink-dark text-3xl font-extrabold mb-2">Set up your PIN</Text>
+              <Text className="mb-2" style={{ color: colors.ink, fontSize: 24, lineHeight: 30, fontWeight: '700', letterSpacing: -0.5 }}>Set up your PIN</Text>
               <Text className="text-muted dark:text-muted-dark text-base mb-6">
                 Create a PIN to lock the app. You’ll enter it each time you open CheqPay.
               </Text>

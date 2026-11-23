@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Receipt } from "lucide-react";
 import AppShell from "@/components/AppShell";
-import TxnRow from "@/components/TxnRow";
+import ActivityList from "@/components/ActivityList";
 import { api, ApiError, getAccessToken, type LedgerTransaction } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
 
@@ -81,17 +81,17 @@ export default function TransactionsPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-ink active:scale-95"
             aria-label="Go back"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-xl font-bold text-ink">
-            {currency === "USD" ? "Dollar transactions" : "Transactions"}
+          <h1 className="text-[24px] font-bold tracking-[-0.02em] text-ink">
+            {currency === "USD" ? "Dollar activity" : "Activity"}
           </h1>
         </div>
 
-        <div className="mt-6">
+        <div className="mt-4">
           {loading ? (
             <div className="space-y-3">
               {[...Array(6)].map((_, i) => (
@@ -120,11 +120,7 @@ export default function TransactionsPage() {
               <p className="text-muted">No transactions yet.</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-3xl bg-card">
-              {txns.map((t, i) => (
-                <TxnRow key={t.id} t={t} divider={i > 0} onClick={() => router.push(`/transaction?id=${t.id}`)} />
-              ))}
-            </div>
+            <ActivityList txns={txns} />
           )}
         </div>
       </div>

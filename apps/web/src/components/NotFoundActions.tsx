@@ -33,7 +33,7 @@ export default function NotFoundActions() {
       <div className="relative mt-8 flex flex-wrap items-center justify-center gap-3">
         <button
           onClick={() => router.push("/")}
-          className="flex items-center gap-2 rounded-full bg-gradient-to-r from-brand to-brand-light px-6 py-3 text-sm font-bold text-white shadow-lg shadow-brand/30 active:scale-[0.98]"
+          className="flex items-center gap-2 rounded-full bg-brand shadow-cta px-6 py-3 text-sm font-bold text-white active:scale-[0.98]"
         >
           <Home className="h-4 w-4" /> Back to home
         </button>

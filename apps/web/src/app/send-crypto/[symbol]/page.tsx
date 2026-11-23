@@ -157,7 +157,7 @@ export default function SendCryptoDetailPage() {
             </p>
             <button
               onClick={() => router.push("/")}
-              className="mt-8 w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+              className="mt-8 w-full rounded-2xl bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99]"
             >
               Back home
             </button>
@@ -379,7 +379,7 @@ export default function SendCryptoDetailPage() {
             <button
               onClick={goReview}
               disabled={!canReview}
-              className="mt-6 w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99] disabled:opacity-40"
+              className="mt-6 w-full rounded-2xl bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99] disabled:opacity-40"
             >
               Continue
             </button>
@@ -415,7 +415,7 @@ export default function SendCryptoDetailPage() {
 
             <button
               onClick={confirmSend}
-              className="mt-4 w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+              className="mt-4 w-full rounded-2xl bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99]"
             >
               Confirm & send
             </button>
@@ -461,7 +461,7 @@ export default function SendCryptoDetailPage() {
             <SponsoredCard placement="receipt" className="mt-6 w-full text-left" />
             <button
               onClick={() => router.push("/crypto")}
-              className="mt-8 w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+              className="mt-8 w-full rounded-2xl bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99]"
             >
               Done
             </button>

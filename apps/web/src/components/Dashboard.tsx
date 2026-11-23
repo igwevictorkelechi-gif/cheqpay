@@ -9,12 +9,10 @@ import {
   EyeOff,
   Bell,
   ArrowDown,
-  ArrowRight,
   RefreshCw,
   Receipt,
   Send,
   Users,
-  ChevronRight,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import {
@@ -22,8 +20,6 @@ import {
   BalanceBlock,
   ActionRow,
   CircleAction,
-  Card,
-  NairaFlag,
   SectionHeader,
   useToast,
 } from "@/components/MobileUI";
@@ -38,6 +34,7 @@ import { useAuthStore, useUIStore } from "@/store";
 import { api, ApiError, type LedgerTransaction } from "@/services/api";
 import { readCache, writeCache } from "@/lib/cache";
 import NearbyStrip from "@/components/NearbyStrip";
+import NextUpCard from "@/components/NextUpCard";
 
 const CASH_CACHE = "cheqpay:cash";
 const USD_CACHE = "cheqpay:usd";
@@ -173,9 +170,10 @@ export default function Dashboard() {
         ]}
       />
 
-      {/* Currency tab — switch the balance block between naira and dollars. */}
+      {/* Currency tab — switch the balance block between naira and dollars.
+          Ink chips, not brand purple: v2 keeps purple for one accent a screen. */}
       <div className="mt-5 flex justify-center">
-        <div className="inline-flex rounded-full bg-card p-1">
+        <div className="inline-flex gap-1 rounded-full bg-card p-1">
           {(["NGN", "USD"] as const).map((c) => {
             const active = currency === c;
             return (
@@ -183,8 +181,8 @@ export default function Dashboard() {
                 key={c}
                 onClick={() => setCurrency(c)}
                 aria-pressed={active}
-                className={`min-h-[44px] flex items-center gap-1.5 rounded-full px-5 py-2 text-sm font-bold transition-colors ${
-                  active ? "bg-brand text-white shadow-sm" : "text-muted hover:text-ink"
+                className={`flex min-h-[40px] items-center gap-1.5 rounded-full px-4 text-[13px] font-semibold transition-colors ${
+                  active ? "bg-ink text-surface" : "text-muted hover:text-ink"
                 }`}
               >
                 <span>{c === "NGN" ? "🇳🇬" : "🇺🇸"}</span>
@@ -195,10 +193,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <BalanceBlock
-        label={isUsd ? "USD Balance" : "Total Cash Balance"}
-        amount={formattedBalance}
-      />
+      <BalanceBlock label={isUsd ? "Dollar balance" : "Total balance"} amount={formattedBalance} />
       {loadFailed ? (
         <div className="-mt-2 mb-4 flex justify-center px-5">
           <button
@@ -221,7 +216,7 @@ export default function Dashboard() {
         <div className="mb-6 px-5">
           <button
             onClick={() => router.push(isUsd ? "/deposit?currency=USD" : "/deposit")}
-            className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-r from-brand to-brand-light p-5 text-left active:scale-[0.99]"
+            className="flex w-full items-center gap-4 rounded-3xl bg-brand shadow-cta p-5 text-left active:scale-[0.99]"
           >
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20">
               <ArrowDown className="h-6 w-6 text-white" />
@@ -240,100 +235,56 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* v2 quick actions: Add · Pay · Save · Convert. Pay is the one place to
+          send money — to a bank account, a CheqPay user or a biller. */}
       <ActionRow>
         {features.ngn_deposits && (
           <CircleAction
             icon={ArrowDown}
-            label="Deposit"
+            label="Add"
             onClick={() => router.push(isUsd ? "/deposit?currency=USD" : "/deposit")}
           />
         )}
-        {features.ngn_withdrawals && (
-          <CircleAction icon={ArrowRight} label="Withdraw" onClick={onWithdraw} />
+        {(features.ngn_withdrawals || features.p2p_transfers || features.bill_payments) && (
+          <CircleAction icon={Send} label="Pay" onClick={isUsd ? onWithdraw : () => router.push("/send")} />
         )}
+        {features.ajo && <CircleAction icon={Users} label="Save" onClick={() => router.push("/ajo")} />}
         {features.crypto_trading && (
           <CircleAction icon={RefreshCw} label="Convert" onClick={() => router.push("/convert")} />
         )}
-        {features.p2p_transfers && (
-          <CircleAction icon={Send} label="Send" onClick={() => router.push("/send-user")} />
-        )}
       </ActionRow>
 
-      {features.ajo && (
-        <div className="mb-4 px-5">
-          <button
-            onClick={() => router.push("/ajo")}
-            className="flex w-full items-center gap-3 rounded-3xl bg-card px-4 py-4 text-left hover:bg-circle"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand/25">
-              <Users className="h-5 w-5 text-brand-light" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block font-bold text-ink">Ajo savings</span>
-              <span className="block text-xs text-muted">Save on a schedule, alone or with your people</span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-muted" />
-          </button>
-        </div>
-      )}
+      {!isUsd && <NextUpCard />}
 
-      <NearbyStrip />
-
-      {/* The admin's banners when any are live; otherwise the Cash account for
-          the selected currency. Same size either way. */}
-      <div className="mb-4 px-5">
-        {banners.length > 0 ? (
-          <HomeBannerCarousel banners={banners} />
-        ) : (
-        <Card>
-          <p className="mb-4 text-base font-medium text-muted">Cash</p>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {isUsd ? (
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/15 text-lg font-bold text-green-500">
-                  $
-                </span>
-              ) : (
-                <NairaFlag />
-              )}
-              <div className="ml-3">
-                <p className="text-lg font-bold text-ink">{currency}</p>
-                <p className="text-sm text-muted">{isUsd ? "US Dollar" : "Naira"}</p>
-              </div>
-            </div>
-            <p className="text-lg font-bold text-ink">
-              {!known
-                ? `— ${currency}`
-                : showBalance
-                ? `${value.toLocaleString(locale, { maximumFractionDigits: 2 })} ${currency}`
-                : `•••• ${currency}`}
-            </p>
-          </div>
-        </Card>
-        )}
-      </div>
-
-      {/* Transactions */}
-      <div className="px-5">
+      {/* Recent activity */}
+      <div className="mb-6 px-5">
         <SectionHeader
-          title="Transactions"
+          title="Recent activity"
           onClick={() => router.push(isUsd ? "/transactions?currency=USD" : "/transactions")}
         />
         {txns.length === 0 ? (
           <div className="flex flex-col items-center py-8 text-center">
             <Receipt className="mb-2 h-9 w-9 text-muted" />
             <p className="text-sm text-muted">
-              {isUsd ? "No dollar transactions yet." : "No Naira transactions yet."}
+              {isUsd ? "No dollar transactions yet." : "No naira transactions yet."}
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-3xl bg-card">
+          <div className="overflow-hidden rounded-3xl border border-border bg-card">
             {txns.slice(0, 5).map((t, i) => (
-              <TxnRow key={t.id} t={t} showStatus={false} divider={i > 0} onClick={() => router.push(`/transaction?id=${t.id}`)} />
+              <TxnRow key={t.id} t={t} divider={i > 0} onClick={() => router.push(`/transaction?id=${t.id}`)} />
             ))}
           </div>
         )}
       </div>
+
+      {banners.length > 0 && (
+        <div className="mb-6 px-5">
+          <HomeBannerCarousel banners={banners} />
+        </div>
+      )}
+
+      <NearbyStrip />
       {toast.node}
       <NotificationsSheet open={notifOpen} onClose={() => setNotifOpen(false)} />
       <PromoPopup />
