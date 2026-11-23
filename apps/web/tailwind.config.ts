@@ -21,7 +21,9 @@ const config: Config = {
         "surface-soft": "rgb(var(--c-surface-soft) / <alpha-value>)",
         card: "rgb(var(--c-card) / <alpha-value>)",
         circle: "rgb(var(--c-circle) / <alpha-value>)",
-        border: "rgb(var(--c-border) / <alpha-value>)",
+        border: "rgb(var(--c-border) / calc(var(--c-border-a) * <alpha-value>))",
+        hairline: "rgb(var(--c-hairline) / calc(var(--c-hairline-a) * <alpha-value>))",
+        positive: "rgb(var(--c-positive) / <alpha-value>)",
         ink: "rgb(var(--c-ink) / <alpha-value>)",
         muted: "rgb(var(--c-muted) / <alpha-value>)",
         // legacy aliases
@@ -33,6 +35,10 @@ const config: Config = {
         warning: "#F59E0B",
         success: "#34C759",
         info: "#3B82F6",
+      },
+      // v2: the one earned glow, on the primary call to action.
+      boxShadow: {
+        cta: "0 8px 20px -6px rgba(107, 91, 149, 0.45)",
       },
       // The install guide's arrow: a gentle nudge towards the button to tap.
       keyframes: {

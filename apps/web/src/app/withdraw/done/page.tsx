@@ -42,7 +42,7 @@ export default function WithdrawDonePage() {
         <div className="mt-auto w-full pt-6">
           <button
             onClick={() => router.replace("/")}
-            className="w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+            className="w-full rounded-2xl bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99]"
           >
             Done
           </button>

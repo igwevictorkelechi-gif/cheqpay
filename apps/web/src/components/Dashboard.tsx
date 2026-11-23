@@ -221,7 +221,7 @@ export default function Dashboard() {
         <div className="mb-6 px-5">
           <button
             onClick={() => router.push(isUsd ? "/deposit?currency=USD" : "/deposit")}
-            className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-r from-brand to-brand-light p-5 text-left active:scale-[0.99]"
+            className="flex w-full items-center gap-4 rounded-3xl bg-brand shadow-cta p-5 text-left active:scale-[0.99]"
           >
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20">
               <ArrowDown className="h-6 w-6 text-white" />

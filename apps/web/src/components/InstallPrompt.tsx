@@ -86,7 +86,7 @@ export default function InstallPrompt() {
 
         <button
           onClick={install}
-          className="min-h-[44px] flex shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-r from-brand to-brand-light px-4 py-2 text-sm font-bold text-white active:scale-95"
+          className="min-h-[44px] flex shrink-0 items-center gap-1.5 rounded-full bg-brand shadow-cta px-4 py-2 text-sm font-bold text-white active:scale-95"
         >
           <Download className="h-4 w-4" />
           Install

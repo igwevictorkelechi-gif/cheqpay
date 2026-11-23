@@ -76,7 +76,7 @@ function Slide({ banner }: { banner: HomeBannerData }) {
     </>
   );
 
-  const cls = "relative block h-full w-full shrink-0 snap-center overflow-hidden bg-gradient-to-r from-brand to-brand-light";
+  const cls = "relative block h-full w-full shrink-0 snap-center overflow-hidden bg-brand shadow-cta";
   return internal || external ? (
     <button type="button" onClick={open} className={cls} aria-label={banner.title ?? "Open banner"}>
       {body}

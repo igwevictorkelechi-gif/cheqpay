@@ -49,7 +49,7 @@ export default function SupportPage() {
     <InfoPage title="Help & Support" subtitle="We're here to help, 24/7.">
       <button
         onClick={() => router.push("/support/chat")}
-        className="mb-3 flex w-full items-center gap-3 rounded-2xl bg-gradient-to-r from-brand to-brand-light p-4 text-left active:scale-[0.99]"
+        className="mb-3 flex w-full items-center gap-3 rounded-2xl bg-brand shadow-cta p-4 text-left active:scale-[0.99]"
       >
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
           <Sparkles className="h-5 w-5 text-white" />

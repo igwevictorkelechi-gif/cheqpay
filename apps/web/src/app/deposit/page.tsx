@@ -127,7 +127,7 @@ export default function AddMoneyPage() {
             <div className="mt-auto pt-6">
               <button
                 onClick={() => router.push("/usd-account")}
-                className="w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white shadow-lg shadow-brand/30 active:scale-[0.98]"
+                className="w-full rounded-full bg-brand shadow-cta py-4 text-base font-bold text-white active:scale-[0.98]"
               >
                 {usdAccount ? "Check status" : "Verify my dollar account"}
               </button>
@@ -206,7 +206,7 @@ export default function AddMoneyPage() {
                     isUsd ? "/usd-account" : `/virtual-account?amount=${digits}`
                   )
                 }
-                className="w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white shadow-lg shadow-brand/30 active:scale-[0.98] disabled:opacity-50"
+                className="w-full rounded-full bg-brand shadow-cta py-4 text-base font-bold text-white active:scale-[0.98] disabled:opacity-50"
               >
                 Continue
               </button>

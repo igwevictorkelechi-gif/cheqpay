@@ -77,7 +77,7 @@ export default function PromoPopup() {
           <p className="mt-2 text-sm leading-relaxed text-muted">{popup.message}</p>
           <button
             onClick={onButton}
-            className="mt-4 w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-3 text-sm font-bold text-white"
+            className="mt-4 w-full rounded-full bg-brand shadow-cta py-3 text-sm font-bold text-white"
           >
             {popup.buttonText || "Got it"}
           </button>

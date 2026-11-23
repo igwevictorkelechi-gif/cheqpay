@@ -117,7 +117,7 @@ export default function SendToUserPage() {
           <div className="mt-auto w-full pt-6">
             <button
               onClick={() => router.replace("/")}
-              className="w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+              className="w-full rounded-2xl bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99]"
             >
               Done
             </button>
@@ -251,7 +251,7 @@ export default function SendToUserPage() {
               <button
                 onClick={send}
                 disabled={!canSend}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white active:scale-[0.98] disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-brand shadow-cta py-4 text-base font-bold text-white active:scale-[0.98] disabled:opacity-50"
               >
                 {sending && <Loader2 className="h-5 w-5 animate-spin" />}
                 {sending ? "Sending…" : "Send"}

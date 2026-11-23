@@ -33,6 +33,10 @@ export interface Palette {
   capsule: string;
   /** Behind the sign-in card: each theme's own surface, with no black frame. */
   backdrop: string;
+  /** Dividers inside a card: fainter than a border, inset under the text. */
+  hairline: string;
+  /** Top edge of a card: the 1px highlight that lifts it off a black page. */
+  cardTopEdge: string;
 }
 
 /** Brand hues are fixed; only the neutrals flip between themes. */
@@ -40,11 +44,13 @@ export const darkPalette: Palette = {
   brand: '#6B5B95',
   brandDark: '#574A7A',
   brandLight: '#8A7BB5',
-  surface: '#14121A',
+  // v2 (Nov 2026): a pure-black page, so cards read as layered on it.
+  surface: '#000000',
   surfaceSoft: '#1F1B29',
   card: '#1F1B29',
   circle: '#2C2738',
-  border: '#2A2535',
+  // Translucent, so an edge reads the same on black and on a card.
+  border: 'rgba(255,255,255,0.10)',
   ink: '#F4F3F7',
   muted: '#9A93AD',
   positive: '#34C759',
@@ -52,7 +58,9 @@ export const darkPalette: Palette = {
   barFill: 'rgba(31,27,41,0.94)',
   barEdge: 'rgba(255,255,255,0.10)',
   capsule: 'rgba(255,255,255,0.09)',
-  backdrop: '#14121A',
+  backdrop: '#000000',
+  hairline: 'rgba(255,255,255,0.06)',
+  cardTopEdge: 'rgba(255,255,255,0.16)',
 };
 
 /** Mirrors the web light theme (apps/web globals.css) so the two match. */
@@ -60,9 +68,11 @@ export const lightPalette: Palette = {
   brand: '#6B5B95',
   brandDark: '#574A7A',
   brandLight: '#7A6AA6', // darkened: brandLight on white fails contrast
-  surface: '#F6F5FA',
-  surfaceSoft: '#FFFFFF',
-  card: '#FFFFFF',
+  // v2: a white page, with cards stepping DOWN to soft grey so they stay
+  // visible instead of disappearing into it.
+  surface: '#FFFFFF',
+  surfaceSoft: '#F6F5FA',
+  card: '#F6F5FA',
   circle: '#EAE7F2',
   border: '#E0DDEA',
   ink: '#1B1726',
@@ -72,7 +82,9 @@ export const lightPalette: Palette = {
   barFill: 'rgba(255,255,255,0.96)',
   barEdge: 'rgba(27,23,38,0.08)',
   capsule: 'rgba(27,23,38,0.07)',
-  backdrop: '#F6F5FA',
+  backdrop: '#FFFFFF',
+  hairline: 'rgba(27,23,38,0.07)',
+  cardTopEdge: '#E0DDEA',
 };
 
 /**

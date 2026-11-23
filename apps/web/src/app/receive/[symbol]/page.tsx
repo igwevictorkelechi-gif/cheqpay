@@ -228,7 +228,7 @@ export default function ReceiveDetailPage() {
             </p>
             <button
               onClick={() => router.push("/")}
-              className="mt-8 w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+              className="mt-8 w-full rounded-2xl bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99]"
             >
               Back home
             </button>
@@ -369,7 +369,7 @@ export default function ReceiveDetailPage() {
           <button
             onClick={share}
             disabled={!address}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-brand to-brand-light py-3.5 font-bold text-white active:scale-95 disabled:opacity-40"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-brand shadow-cta py-3.5 font-bold text-white active:scale-95 disabled:opacity-40"
           >
             <Share2 className="h-5 w-5" />
             Share

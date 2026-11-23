@@ -407,7 +407,7 @@ export default function BillServicePage() {
 
           <button
             onClick={goReview}
-            className="mt-6 w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+            className="mt-6 w-full rounded-full bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99]"
           >
             Continue
           </button>
@@ -443,7 +443,7 @@ export default function BillServicePage() {
           <button
             onClick={confirm}
             disabled={processing}
-            className="mt-4 w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99] disabled:opacity-60"
+            className="mt-4 w-full rounded-full bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99] disabled:opacity-60"
           >
             {processing ? "Processing…" : `Pay ₦${payAmount.toLocaleString()}`}
           </button>
@@ -499,7 +499,7 @@ export default function BillServicePage() {
           <SponsoredCard placement="receipt" className="mt-6 w-full text-left" />
           <button
             onClick={() => router.push("/pay-bill")}
-            className="mt-8 w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+            className="mt-8 w-full rounded-full bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99]"
           >
             Done
           </button>

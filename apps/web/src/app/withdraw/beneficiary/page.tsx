@@ -241,7 +241,7 @@ export default function WithdrawBeneficiaryPage() {
               <button
                 onClick={() => setConfirming(true)}
                 disabled={!selected || submitting || limits === null || !breakdown.ok}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white active:scale-[0.98] disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-brand shadow-cta py-4 text-base font-bold text-white active:scale-[0.98] disabled:opacity-50"
               >
                 {submitting && <Loader2 className="h-5 w-5 animate-spin" />}
                 {submitting ? "Processing…" : `Withdraw ${naira(amount)}`}
@@ -317,7 +317,7 @@ export default function WithdrawBeneficiaryPage() {
                 <button
                   onClick={save}
                   disabled={saving}
-                  className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white active:scale-[0.98] disabled:opacity-50"
+                  className="flex w-full items-center justify-center gap-2 rounded-full bg-brand shadow-cta py-4 text-base font-bold text-white active:scale-[0.98] disabled:opacity-50"
                 >
                   {saving && <Loader2 className="h-5 w-5 animate-spin" />}
                   {saving ? "Saving…" : "Save account"}
@@ -382,7 +382,7 @@ export default function WithdrawBeneficiaryPage() {
                 </button>
                 <button
                   onClick={payout}
-                  className="flex-1 rounded-full bg-gradient-to-r from-brand to-brand-light py-3.5 font-bold text-white active:scale-[0.98]"
+                  className="flex-1 rounded-full bg-brand shadow-cta py-3.5 font-bold text-white active:scale-[0.98]"
                 >
                   Confirm
                 </button>

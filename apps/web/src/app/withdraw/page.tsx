@@ -150,7 +150,7 @@ export default function WithdrawAmountPage() {
           <button
             disabled={!valid}
             onClick={() => router.push(`/withdraw/beneficiary?amount=${encodeURIComponent(amount)}`)}
-            className="w-full rounded-full bg-gradient-to-r from-brand to-brand-light py-4 text-base font-bold text-white shadow-lg shadow-brand/30 active:scale-[0.98] disabled:opacity-50"
+            className="w-full rounded-full bg-brand shadow-cta py-4 text-base font-bold text-white active:scale-[0.98] disabled:opacity-50"
           >
             Continue
           </button>

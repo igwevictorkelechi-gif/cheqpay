@@ -243,7 +243,7 @@ export default function KYCPage() {
             </p>
             <button
               onClick={goNext}
-              className="mt-8 w-full rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99]"
+              className="mt-8 w-full rounded-2xl bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99]"
             >
               {nextUrl ? "Continue to deposit" : "Done"}
             </button>
@@ -527,7 +527,7 @@ export default function KYCPage() {
             <button
               onClick={submit}
               disabled={!canSubmit}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-brand to-brand-light py-4 font-bold text-white active:scale-[0.99] disabled:opacity-40"
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand shadow-cta py-4 font-bold text-white active:scale-[0.99] disabled:opacity-40"
             >
               {submitting && <Loader2 className="h-5 w-5 animate-spin" />}
               {submitting
