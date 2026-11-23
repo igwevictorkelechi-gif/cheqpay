@@ -113,7 +113,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                       counterpart of the outline shown when inactive. */}
                   <Icon
                     className={`h-[22px] w-[22px] transition-[transform,color] duration-200 ${
-                      active ? "scale-105 text-brand-light" : "text-muted"
+                      active ? "scale-105 text-ink" : "text-muted"
                     }`}
                     fill={active && !tab.outlineOnly ? "currentColor" : "none"}
                     stroke={
@@ -123,7 +123,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   />
                   <span
                     className={`text-[11px] leading-none transition-colors duration-200 ${
-                      active ? "font-bold text-brand-light" : "font-medium text-ink/70"
+                      active ? "font-bold text-ink" : "font-medium text-muted"
                     }`}
                   >
                     {tab.label}

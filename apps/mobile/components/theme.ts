@@ -37,6 +37,8 @@ export interface Palette {
   hairline: string;
   /** Top edge of a card: the 1px highlight that lifts it off a black page. */
   cardTopEdge: string;
+  /** Text on amber warning banners: pale on dark, deep amber on white. */
+  warnInk: string;
 }
 
 /** Brand hues are fixed; only the neutrals flip between themes. */
@@ -61,6 +63,7 @@ export const darkPalette: Palette = {
   backdrop: '#000000',
   hairline: 'rgba(255,255,255,0.06)',
   cardTopEdge: 'rgba(255,255,255,0.16)',
+  warnInk: '#F5C97B',
 };
 
 /** Mirrors the web light theme (apps/web globals.css) so the two match. */
@@ -85,6 +88,7 @@ export const lightPalette: Palette = {
   backdrop: '#FFFFFF',
   hairline: 'rgba(27,23,38,0.07)',
   cardTopEdge: '#E0DDEA',
+  warnInk: '#92400E',
 };
 
 /**

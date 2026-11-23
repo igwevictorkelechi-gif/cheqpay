@@ -287,3 +287,22 @@ html[data-theme="light"] .logo-dark {
 html[data-theme="light"] .logo-light {
   display: block;
 }
+
+/*
+ * Light mode: the amber/yellow text shades used on warning banners (KYC,
+ * limits) are drawn for a dark page and wash out on white. Darken them in
+ * light mode only, so every banner stays readable without per-screen edits.
+ */
+html[data-theme="light"] .text-amber-200,
+html[data-theme="light"] .text-amber-300,
+html[data-theme="light"] .text-yellow-200,
+html[data-theme="light"] .text-yellow-300 {
+  color: rgb(146 64 14); /* amber-800 */
+}
+html[data-theme="light"] .text-amber-200\/80,
+html[data-theme="light"] .text-amber-300\/70 {
+  color: rgb(146 64 14 / 0.8);
+}
+html[data-theme="light"] .text-amber-400 {
+  color: rgb(180 83 9); /* amber-700 */
+}

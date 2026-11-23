@@ -123,16 +123,26 @@ function withFee(t: LedgerTransaction, sign: 1 | -1): string {
   return fee ? String(Number(t.amountFormatted) + sign * fee) : t.amountFormatted;
 }
 
+/**
+ * An amount with its currency the way people read it: ₦50,000 and $20 with the
+ * symbol in front, crypto as "0.0021 BTC".
+ */
+function amt(v: string, asset: string): string {
+  if (asset === "NGN") return `₦${fmt(v)}`;
+  if (asset === "USD") return `$${fmt(v)}`;
+  return `${fmt(v)} ${asset}`;
+}
+
 export function txnAmount(t: LedgerTransaction): { text: string; positive: boolean } {
   // What actually moved on the balance: a deposit lands net of its fee, a
   // payout or card top-up takes its fee with it, a card's price is all fee.
-  if (t.type === "DEPOSIT") return { text: `+${fmt(withFee(t, -1))} ${t.asset}`, positive: true };
+  if (t.type === "DEPOSIT") return { text: `+${amt(withFee(t, -1), t.asset)}`, positive: true };
   if (t.type === "WITHDRAWAL")
-    return { text: `-${fmt(withFee(t, 1))} ${t.asset}`, positive: false };
-  if (t.type === "CARD_FUND") return { text: `-${fmt(withFee(t, 1))} ${t.asset}`, positive: false };
+    return { text: `-${amt(withFee(t, 1), t.asset)}`, positive: false };
+  if (t.type === "CARD_FUND") return { text: `-${amt(withFee(t, 1), t.asset)}`, positive: false };
   if (t.type === "CARD_WITHDRAW")
-    return { text: `+${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
-  if (t.type === "CARD_ISSUE") return { text: `-${fmt(t.feeFormatted)} ${t.asset}`, positive: false };
+    return { text: `+${amt(t.amountFormatted, t.asset)}`, positive: true };
+  if (t.type === "CARD_ISSUE") return { text: `-${amt(t.feeFormatted, t.asset)}`, positive: false };
   if (t.type === "BILL")
     return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
   if (t.type === "AD_REFUND" || t.type === "AD_PAYOUT") return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
@@ -144,19 +154,19 @@ export function txnAmount(t: LedgerTransaction): { text: string; positive: boole
   if (t.type === "CASHBACK")
     return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   if (t.type === "TRANSFER_IN" || t.type === "DEV_WALLET_WITHDRAW")
-    return { text: `+${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
+    return { text: `+${amt(t.amountFormatted, t.asset)}`, positive: true };
   if (t.type === "DEV_WALLET_FUND")
-    return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
+    return { text: `-${amt(t.amountFormatted, t.asset)}`, positive: false };
   if (t.type === "TRANSFER_OUT")
-    return { text: `-${fmt(t.amountFormatted)} ${t.asset}`, positive: false };
+    return { text: `-${amt(t.amountFormatted, t.asset)}`, positive: false };
   if (t.type === "AJO_SAVE" || t.type === "AJO_CONTRIBUTION") return { text: `-₦${fmt(t.amountFormatted)}`, positive: false };
   // A release's fee is the break fee kept, so the wallet got amount − fee.
   if (t.type === "AJO_RELEASE") return { text: `+₦${fmt(withFee(t, -1))}`, positive: true };
   if (t.type === "AJO_PAYOUT") return { text: `+₦${fmt(t.amountFormatted)}`, positive: true };
   // BUY / SELL / CONVERT show the received leg as the headline.
   if (t.toAsset && t.toFormatted)
-    return { text: `+${fmt(t.toFormatted)} ${t.toAsset}`, positive: true };
-  return { text: `${fmt(t.amountFormatted)} ${t.asset}`, positive: true };
+    return { text: `+${amt(t.toFormatted, t.toAsset)}`, positive: true };
+  return { text: `${amt(t.amountFormatted, t.asset)}`, positive: true };
 }
 
 export function txnStatusBadge(status: LedgerTransaction["status"]) {
