@@ -88,7 +88,24 @@ export default function SendToUserPage() {
             },
             pin,
           ),
-        { title: "Confirm this transfer", detail: `Sending ${amount} ${asset} to @${confirmed ?? username}.` },
+        {
+          title: "Confirm this transfer",
+          amount: asset === "NGN" ? `₦${Number(amount).toLocaleString("en-NG", { maximumFractionDigits: 2 })}` : `${amount} ${asset}`,
+          detail: `To @${confirmed ?? username}`,
+          rows: [
+            { label: "Fee", value: "Free" },
+            { label: "Arrives", value: "Instantly" },
+            ...(held
+              ? [
+                  {
+                    label: "Balance after",
+                    value: `${asset === "NGN" ? "₦" : ""}${Math.max(0, available - Number(amount)).toLocaleString("en-NG", { maximumFractionDigits: asset === "NGN" ? 2 : 8 })}${asset === "NGN" ? "" : ` ${asset}`}`,
+                    total: true,
+                  },
+                ]
+              : []),
+          ],
+        },
       );
       setSent({ amount: res.amountFormatted, asset: res.asset, to: res.recipient });
       setStep("done");

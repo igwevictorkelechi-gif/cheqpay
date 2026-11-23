@@ -172,9 +172,13 @@ export default function WithdrawScreen() {
           ),
         {
           title: 'Confirm this withdrawal',
-          detail: `${naira(breakdown.receive)} to ${selected.accountName} · ${selected.bankName}${
-            breakdown.fee > 0 ? ` (${naira(breakdown.fee)} fee)` : ''
-          }.`,
+          amount: naira(breakdown.amount),
+          detail: `To ${selected.accountName} · ${selected.bankName} ${selected.accountNumber.slice(-4).padStart(8, '•')}`,
+          rows: [
+            { label: 'Fee', value: naira(breakdown.fee) },
+            { label: 'Arrives', value: 'Usually under 2 min' },
+            { label: 'You receive', value: naira(breakdown.receive), total: true },
+          ],
         },
       );
       setStage('done');

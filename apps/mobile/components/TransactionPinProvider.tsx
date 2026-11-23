@@ -32,7 +32,7 @@ type PinAction<T> = (pin: string) => Promise<T>;
 export const PIN_CANCELLED = 'pin_cancelled';
 
 interface PinContextValue {
-  authorize<T>(action: PinAction<T>, opts?: { title?: string; detail?: string }): Promise<T>;
+  authorize<T>(action: PinAction<T>, opts?: PinOptions): Promise<T>;
 }
 
 const PinContext = createContext<PinContextValue | null>(null);
@@ -55,12 +55,22 @@ function messageOf(err: unknown, fallback: string): string {
   return err instanceof ApiError && err.message ? err.message : fallback;
 }
 
-interface Pending {
+/**
+ * What the confirm sheet shows. `amount` and `rows` are the v2 Confirm layout
+ * (the amount large, then "Fee", "Arrives", "Balance after"…, the last row
+ * marked `total`). Optional: callers passing only title/detail keep working.
+ */
+export interface PinOptions {
+  title?: string;
+  detail?: string;
+  amount?: string;
+  rows?: { label: string; value: string; total?: boolean }[];
+}
+
+interface Pending extends PinOptions {
   action: PinAction<unknown>;
   resolve: (v: unknown) => void;
   reject: (e: unknown) => void;
-  title?: string;
-  detail?: string;
 }
 
 export default function TransactionPinProvider({ children }: { children: React.ReactNode }) {
@@ -134,6 +144,8 @@ export default function TransactionPinProvider({ children }: { children: React.R
           reject,
           title: opts?.title,
           detail: opts?.detail,
+          amount: opts?.amount,
+          rows: opts?.rows,
         };
         setPin('');
         setConfirmPin('');
@@ -192,47 +204,85 @@ export default function TransactionPinProvider({ children }: { children: React.R
       {children}
       <Modal visible={mode !== 'closed'} transparent animationType="slide" onRequestClose={cancel}>
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' }}>
+          {/* v2 Confirm: a real sheet, lifted off the dimmed page. */}
           <View
             style={{
-              backgroundColor: colors.surface,
+              backgroundColor: colors.card,
               borderTopLeftRadius: 28,
               borderTopRightRadius: 28,
+              borderTopWidth: 1,
+              borderColor: colors.cardTopEdge,
               padding: 24,
+              paddingTop: 12,
               paddingBottom: 40,
             }}
           >
+            <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.hairline, marginBottom: 14 }} />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <View
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 16,
-                  backgroundColor: colors.card,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="shield-checkmark" size={24} color={colors.brandLight} />
-              </View>
+              <Text style={{ color: colors.ink, fontSize: 17, fontWeight: '700', flex: 1, paddingRight: 16 }}>
+                {creating ? 'Create your transaction PIN' : (pending.current?.title ?? 'Enter your transaction PIN')}
+              </Text>
               <Pressable onPress={cancel} disabled={busy} hitSlop={12} accessibilityLabel="Cancel">
                 <Ionicons name="close" size={24} color={colors.muted} />
               </Pressable>
             </View>
 
-            <Text style={{ color: colors.ink, fontSize: 20, fontWeight: '800', marginTop: 16 }}>
-              {creating ? 'Create your transaction PIN' : (pending.current?.title ?? 'Enter your transaction PIN')}
-            </Text>
-            <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 6 }}>
+            {!creating && pending.current?.amount ? (
+              <Text
+                style={{
+                  color: colors.ink,
+                  fontSize: 34,
+                  lineHeight: 38,
+                  fontWeight: '800',
+                  letterSpacing: -0.7,
+                  textAlign: 'center',
+                  marginTop: 16,
+                  fontVariant: ['tabular-nums'],
+                }}
+              >
+                {pending.current.amount}
+              </Text>
+            ) : null}
+            <Text
+              style={{
+                color: colors.muted,
+                fontSize: 14,
+                lineHeight: 20,
+                marginTop: 6,
+                textAlign: !creating && pending.current?.amount ? 'center' : 'left',
+              }}
+            >
               {creating
                 ? "You'll use this PIN to approve every payment. Keep it to yourself — anyone who knows it can spend from your account."
                 : (pending.current?.detail ?? 'This confirms the payment is really you.')}
             </Text>
 
+            {!creating && pending.current?.rows?.length ? (
+              <View style={{ marginTop: 18 }}>
+                {pending.current.rows.map((r) => (
+                  <View
+                    key={r.label}
+                    style={[
+                      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 28 },
+                      r.total ? { borderTopWidth: 1, borderTopColor: colors.hairline, marginTop: 8, height: 40, paddingTop: 6 } : null,
+                    ]}
+                  >
+                    <Text style={{ color: r.total ? colors.ink : colors.muted, fontSize: 15, fontWeight: r.total ? '700' : '400' }}>
+                      {r.label}
+                    </Text>
+                    <Text style={{ color: colors.ink, fontSize: 15, fontWeight: r.total ? '700' : '600', fontVariant: ['tabular-nums'] }}>
+                      {r.value}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
             <PinField value={pin} onChange={(v) => { setPin(v); setError(null); }} autoFocus
-              placeholder={creating ? 'New PIN' : 'PIN'} invalid={Boolean(error)} />
+              placeholder={creating ? 'New PIN' : 'PIN'} invalid={Boolean(error)} showLabel={creating} />
             {creating && (
               <PinField value={confirmPin} onChange={(v) => { setConfirmPin(v); setError(null); }}
-                placeholder="Confirm PIN" invalid={Boolean(error)} />
+                placeholder="Confirm PIN" invalid={Boolean(error)} showLabel />
             )}
 
             {error && (
@@ -252,7 +302,7 @@ export default function TransactionPinProvider({ children }: { children: React.R
                 flexDirection: 'row',
                 justifyContent: 'center',
                 gap: 8,
-                backgroundColor: colors.brandLight,
+                backgroundColor: colors.brand,
                 opacity: canSubmit ? 1 : 0.5,
               }}
             >
@@ -268,42 +318,61 @@ export default function TransactionPinProvider({ children }: { children: React.R
   );
 }
 
+/**
+ * v2 PinDots: six dots that fill as digits go in, over a real TextInput kept
+ * invisible — so the number pad, secure entry and accessibility all come from
+ * the platform. Tapping the dots focuses it.
+ */
 function PinField({
   value,
   onChange,
   placeholder,
   autoFocus,
   invalid,
+  showLabel,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   autoFocus?: boolean;
   invalid?: boolean;
+  showLabel?: boolean;
 }) {
+  const input = useRef<TextInput>(null);
   return (
-    <TextInput
-      autoFocus={autoFocus}
-      value={value}
-      onChangeText={(t) => onChange(t.replace(/\D/g, '').slice(0, 6))}
-      keyboardType="number-pad"
-      // secureTextEntry so a shoulder-surfer or a screen recording sees nothing.
-      secureTextEntry
-      placeholder={placeholder}
-      placeholderTextColor={colors.muted}
-      accessibilityLabel={placeholder}
-      style={{
-        marginTop: 16,
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: invalid ? '#EF4444' : colors.border,
-        borderRadius: 16,
-        paddingVertical: 14,
-        color: colors.ink,
-        fontSize: 22,
-        textAlign: 'center',
-        letterSpacing: 8,
-      }}
-    />
+    <Pressable onPress={() => input.current?.focus()} style={{ marginTop: 20, alignItems: 'center' }} accessible={false}>
+      {showLabel ? (
+        <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.66, textTransform: 'uppercase', marginBottom: 6 }}>
+          {placeholder}
+        </Text>
+      ) : null}
+      <View style={{ flexDirection: 'row', gap: 16, height: 40, alignItems: 'center' }}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <View
+            key={i}
+            style={{
+              width: 14,
+              height: 14,
+              borderRadius: 7,
+              borderWidth: 2,
+              borderColor: invalid ? '#EF4444' : i < value.length ? colors.ink : colors.border,
+              backgroundColor: invalid ? 'rgba(239,68,68,0.4)' : i < value.length ? colors.ink : 'transparent',
+            }}
+          />
+        ))}
+      </View>
+      <TextInput
+        ref={input}
+        autoFocus={autoFocus}
+        value={value}
+        onChangeText={(t) => onChange(t.replace(/\D/g, '').slice(0, 6))}
+        keyboardType="number-pad"
+        // secureTextEntry so a shoulder-surfer or a screen recording sees nothing.
+        secureTextEntry
+        accessibilityLabel={placeholder}
+        caretHidden
+        style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }}
+      />
+    </Pressable>
   );
 }

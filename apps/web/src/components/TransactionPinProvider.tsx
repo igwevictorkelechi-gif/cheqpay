@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Loader2, ShieldCheck, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { ApiError, api } from "@/services/api";
 
 /**
@@ -40,7 +40,7 @@ interface PinContextValue {
    * Prompt for the PIN, then run `action` with it. Resolves with the action's
    * result, or rejects with `PIN_CANCELLED` if the user dismissed the prompt.
    */
-  authorize<T>(action: PinAction<T>, opts?: { title?: string; detail?: string }): Promise<T>;
+  authorize<T>(action: PinAction<T>, opts?: PinOptions): Promise<T>;
 }
 
 export const PIN_CANCELLED = "pin_cancelled";
@@ -70,12 +70,27 @@ function messageOf(err: unknown, fallback: string): string {
 
 type Mode = "closed" | "enter" | "create";
 
+/**
+ * What the confirm sheet shows. `amount` and `rows` are the v2 Confirm layout:
+ * the amount large, then a short statement ("Fee", "They receive", "Balance
+ * after"), the last row marked `total` to sit under a hairline. Both optional,
+ * so callers that only pass a title and detail keep working.
+ */
+export interface PinOptions {
+  title?: string;
+  detail?: string;
+  amount?: string;
+  rows?: { label: string; value: string; total?: boolean }[];
+}
+
 interface Pending {
   action: PinAction<unknown>;
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
   title?: string;
   detail?: string;
+  amount?: string;
+  rows?: PinOptions["rows"];
 }
 
 export default function TransactionPinProvider({ children }: { children: React.ReactNode }) {
@@ -114,6 +129,8 @@ export default function TransactionPinProvider({ children }: { children: React.R
           reject,
           title: opts?.title,
           detail: opts?.detail,
+          amount: opts?.amount,
+          rows: opts?.rows,
         };
         reset();
         // Ask the server whether a PIN exists before deciding which screen to
@@ -231,32 +248,52 @@ export default function TransactionPinProvider({ children }: { children: React.R
           aria-modal="true"
           aria-labelledby="pin-dialog-title"
         >
-          <div className="w-full max-w-[420px] rounded-t-3xl bg-surface p-6 pb-8 sm:rounded-3xl">
+          {/* v2 Confirm: a real sheet, lifted off the dimmed page. */}
+          <div className="w-full max-w-[420px] rounded-t-[28px] border-t border-border bg-card p-6 pb-8 shadow-[0_-16px_40px_-8px_rgba(0,0,0,0.6)] sm:rounded-[28px] sm:border">
+            <div className="mx-auto -mt-3 mb-3 h-1 w-10 rounded-full bg-hairline sm:hidden" aria-hidden />
             <div className="flex items-start justify-between">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-card">
-                <ShieldCheck className="h-6 w-6 text-brand" />
-              </span>
+              <h2 id="pin-dialog-title" className="pr-4 text-[17px] font-bold tracking-[-0.01em] text-ink">
+                {mode === "create"
+                  ? "Create your transaction PIN"
+                  : (pending.current?.title ?? "Enter your transaction PIN")}
+              </h2>
               <button
                 onClick={cancel}
                 disabled={busy}
                 aria-label="Cancel"
-                className="rounded-full p-2 text-muted disabled:opacity-40"
+                className="-mr-2 -mt-1 rounded-full p-2 text-muted disabled:opacity-40"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <h2 id="pin-dialog-title" className="mt-4 text-xl font-extrabold text-ink">
-              {mode === "create"
-                ? "Create your transaction PIN"
-                : (pending.current?.title ?? "Enter your transaction PIN")}
-            </h2>
-            <p className="mt-1.5 text-sm leading-relaxed text-muted">
+            {mode !== "create" && pending.current?.amount ? (
+              <p className="tnum mt-4 text-center text-[34px] font-extrabold leading-[38px] tracking-[-0.7px] text-ink">
+                {pending.current.amount}
+              </p>
+            ) : null}
+            <p className={`mt-1.5 text-sm leading-relaxed text-muted ${mode !== "create" && pending.current?.amount ? "text-center" : ""}`}>
               {mode === "create"
                 ? "You'll type this PIN to approve every payment. Keep it to yourself — anyone who knows it can spend from your account."
                 : (pending.current?.detail ??
                   "This confirms the payment is really you.")}
             </p>
+
+            {mode !== "create" && pending.current?.rows?.length ? (
+              <dl className="mt-5">
+                {pending.current.rows.map((r) => (
+                  <div
+                    key={r.label}
+                    className={`flex h-7 items-center justify-between text-[15px] ${
+                      r.total ? "mt-2 h-10 border-t border-hairline pt-2 font-bold text-ink" : ""
+                    }`}
+                  >
+                    <dt className={r.total ? "text-ink" : "text-muted"}>{r.label}</dt>
+                    <dd className={`tnum ${r.total ? "text-ink" : "font-semibold text-ink"}`}>{r.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
 
             <div className="mt-5 flex flex-col items-center gap-3">
               <PinField
@@ -292,7 +329,7 @@ export default function TransactionPinProvider({ children }: { children: React.R
             <button
               onClick={mode === "create" ? submitCreate : submitEnter}
               disabled={busy || pin.length < 4 || (mode === "create" && confirmPin.length < 4)}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-brand py-3.5 text-base font-bold text-white disabled:opacity-50"
+              className="mt-6 flex h-[54px] w-full items-center justify-center gap-2 rounded-full bg-brand text-base font-bold text-white shadow-cta disabled:opacity-50 disabled:shadow-none"
             >
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}
               {busy
@@ -336,16 +373,35 @@ function PinField({
   invalid?: boolean;
   onComplete?: () => void;
 }) {
+  // v2 PinDots: six dots that fill as digits go in, over a real (transparent)
+  // numeric input — so phones still raise the number pad, desktop keyboards
+  // and password managers' "don't save" still work, and screen readers get a
+  // labelled field.
   return (
-    <label className="flex w-full flex-col items-center gap-1.5">
-      <span className="sr-only">{label}</span>
+    <label className="relative flex w-full flex-col items-center gap-1.5">
+      <span className={label === "PIN" ? "sr-only" : "text-[11px] font-bold uppercase tracking-[0.06em] text-muted"}>
+        {label}
+      </span>
+      <span className="flex h-12 items-center gap-4" aria-hidden>
+        {Array.from({ length: 6 }, (_, i) => (
+          <span
+            key={i}
+            className={`h-3.5 w-3.5 rounded-full border-2 transition-colors ${
+              invalid
+                ? "border-red-500 bg-red-500/40"
+                : i < value.length
+                  ? "border-ink bg-ink"
+                  : "border-border"
+            }`}
+          />
+        ))}
+      </span>
       <input
         autoFocus={autoFocus}
         type="password"
         inputMode="numeric"
         autoComplete="off"
         aria-label={label}
-        placeholder="••••"
         value={value}
         onChange={(e) => {
           const v = e.target.value.replace(/\D/g, "").slice(0, 6);
@@ -355,9 +411,7 @@ function PinField({
         onKeyDown={(e) => {
           if (e.key === "Enter" && value.length >= 4) onComplete?.();
         }}
-        className={`w-[220px] rounded-2xl border bg-card py-3.5 text-center text-2xl tracking-[0.6em] text-ink outline-none ${
-          invalid ? "border-red-500" : "border-border"
-        }`}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
       />
     </label>
   );

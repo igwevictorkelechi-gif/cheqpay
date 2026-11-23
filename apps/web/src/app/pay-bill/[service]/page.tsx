@@ -157,7 +157,16 @@ export default function BillServicePage() {
             },
             pin,
           ),
-        { title: "Confirm this purchase", detail: `Paying ₦${payAmount} for ${service}.` },
+        {
+          title: "Confirm this purchase",
+          amount: `₦${Number(payAmount).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`,
+          detail: `${biller?.name ?? service} · ${customerName && customerName !== "Verified" ? customerName : customer.trim()}`,
+          rows: [
+            ...(balance !== null
+              ? [{ label: "Balance after", value: `₦${Math.max(0, balance - Number(payAmount)).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`, total: true }]
+              : []),
+          ],
+        },
       );
       invalidateMoneyCaches();
       setProviderRef(res.providerRef);
