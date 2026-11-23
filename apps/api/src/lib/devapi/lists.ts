@@ -83,6 +83,7 @@ export const TRANSACTION_KINDS = [
   "wallet_move",
   "subscription",
   "deposit",
+  "payment",
   "transfer",
   "conversion",
   "bill_payment",

@@ -28,6 +28,16 @@ export const EVENT_TYPES = [
     description: "A bank transfer arrived in a customer's virtual account and was credited to their NGN wallet, less the deposit fee.",
   },
   {
+    type: "payment_request.paid",
+    object: "payment_request",
+    description: "Money arrived in a payment request's account number and was credited to your main NGN wallet, less the deposit fee. Compare `amount_paid` with `amount`: a payer can send less or more than you asked for.",
+  },
+  {
+    type: "payment_request.expired",
+    object: "payment_request",
+    description: "A payment request's account number expired before any money arrived. Money that still arrives later is credited and sends `payment_request.paid`.",
+  },
+  {
     type: "transfer.completed",
     object: "transaction",
     description: "Money moved between two of your wallets.",

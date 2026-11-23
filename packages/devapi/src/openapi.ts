@@ -142,6 +142,7 @@ export const openapiDocument = {
     { name: "Customers", description: "Your own customers, and their identity verification (KYC)." },
     { name: "Files", description: "Identity documents to attach to customers." },
     { name: "Virtual accounts", description: "Dedicated NGN bank account numbers for verified customers." },
+    { name: "Payment requests", description: "One-off NGN account numbers to collect a payment from anyone, with no customer record or KYC on the payer." },
     { name: "Transfers", description: "Moving money between your own wallets." },
     { name: "Conversions", description: "Converting between NGN and USD wallets." },
     { name: "Bills", description: "Airtime, data, electricity and cable TV, paid from your NGN wallets." },
@@ -358,6 +359,52 @@ export const openapiDocument = {
         parameters: [idParam("va", "virtual account")],
         response: { description: "The virtual account.", schema: ref("VirtualAccount") },
         errors: { "404": "No such virtual account (`not_found`)." },
+      }),
+    },
+    "/payment_requests": {
+      get: op({
+        id: "listPaymentRequests",
+        tag: "Payment requests",
+        scope: "payment_requests:read",
+        summary: "List payment requests",
+        description: "Your payment requests in the key's mode, newest first.",
+        parameters: [
+          { name: "status", in: "query", schema: { type: "string", enum: ["pending", "paid", "expired"] } },
+          { name: "reference", in: "query", schema: { type: "string" } },
+          ...pageParams,
+        ],
+        response: { description: "A page of payment requests.", schema: listOf("PaymentRequest") },
+      }),
+      post: op({
+        id: "createPaymentRequest",
+        tag: "Payment requests",
+        scope: "payment_requests:write",
+        summary: "Create a payment request",
+        description:
+          "Get a one-off NGN account number for one expected payment. Show the payer the account number, bank, account name and amount; they pay by bank transfer, with no CheqPay account and no identity check. " +
+          "Money that arrives is credited to your main NGN wallet, less your plan's deposit fee, and sends `payment_request.paid`. " +
+          "Unpaid requests expire after `expires_in` seconds and send `payment_request.expired`; money that still arrives later is credited. " +
+          "The payer may send a different amount from the one asked for: always act on `amount_paid`.",
+        parameters: [idempotencyHeader],
+        body: ref("PaymentRequestCreate"),
+        response: { status: "201", description: "The payment request, with its account number.", schema: ref("PaymentRequest") },
+        errors: {
+          "400": "A field is invalid (`validation_error`).",
+          "409": "The reference is taken (`duplicate_reference`).",
+          "503": "The banking partner didn't respond; nothing was created (`service_unavailable`).",
+        },
+      }),
+    },
+    "/payment_requests/{id}": {
+      get: op({
+        id: "getPaymentRequest",
+        tag: "Payment requests",
+        scope: "payment_requests:read",
+        summary: "Retrieve a payment request",
+        description: "One payment request and whether it has been paid. Use it to check a payment when a webhook may have been missed.",
+        parameters: [idParam("pr", "payment request")],
+        response: { description: "The payment request.", schema: ref("PaymentRequest") },
+        errors: { "404": "No such payment request (`not_found`)." },
       }),
     },
     "/transfers": {
@@ -677,6 +724,24 @@ export const openapiDocument = {
         errors: { "404": "No such test virtual account (`not_found`)." },
       }),
     },
+    "/test_helpers/payment_requests/{id}/pay": {
+      post: op({
+        id: "simulatePaymentRequestPayment",
+        tag: "Test helpers",
+        scope: "payment_requests:write",
+        summary: "Simulate paying a payment request",
+        description:
+          "Test mode only: pretend the payer sent a bank transfer to a payment request's account number. It is credited exactly like a real payment (less the deposit fee) and sends `payment_request.paid`. Leave out `amount` to pay exactly what was asked. Live keys get 404.",
+        parameters: [idParam("pr", "payment request"), idempotencyHeader],
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: { amount: money("How much arrived. Defaults to the requested amount."), sender_name: { type: "string", maxLength: 80 } },
+        },
+        response: { status: "201", description: "The payment request, now paid.", schema: ref("PaymentRequest") },
+        errors: { "404": "No such test payment request (`not_found`)." },
+      }),
+    },
     "/test_helpers/cards/{id}/purchase": {
       post: op({
         id: "simulateCardPurchase",
@@ -795,7 +860,7 @@ export const openapiDocument = {
       },
       TransactionKind: {
         type: "string",
-        enum: ["top_up", "wallet_move", "subscription", "deposit", "transfer", "conversion", "bill_payment", "card_issue", "card_funding", "card_withdrawal", "fee", "adjustment"],
+        enum: ["top_up", "wallet_move", "subscription", "deposit", "payment", "transfer", "conversion", "bill_payment", "card_issue", "card_funding", "card_withdrawal", "fee", "adjustment"],
       },
       TransactionStatus: { type: "string", enum: ["pending", "successful", "failed", "reversed"] },
       Transaction: {
@@ -950,6 +1015,46 @@ export const openapiDocument = {
           reference: { type: ["string", "null"] },
           metadata: { type: "object" },
           livemode: { type: "boolean" },
+          created_at: timestamp,
+        },
+      },
+      PaymentRequestCreate: {
+        type: "object",
+        required: ["amount"],
+        additionalProperties: false,
+        properties: {
+          amount: { ...money("How much to collect. At least ₦100 (10000 kobo)."), minimum: 10000, maximum: 1000000000 },
+          account_name: {
+            type: "string",
+            maxLength: 40,
+            description: "Shown to the payer as the account name, after your business name (e.g. `alignment Pro`). Letters, digits, spaces and - & . only.",
+          },
+          description: { type: "string", maxLength: 200, description: "For your own records; not shown to the payer." },
+          expires_in: { type: "integer", minimum: 900, maximum: 86400, default: 3600, description: "Seconds until the account number stops being offered (15 minutes to 24 hours)." },
+          reference,
+          metadata,
+        },
+      },
+      PaymentRequest: {
+        type: "object",
+        properties: {
+          object: { type: "string", const: "payment_request" },
+          id: { type: "string", example: "pr_7d1c3e5a9b0f4c2e8a6d4b2f0e9c7a5b" },
+          status: { type: "string", enum: ["pending", "paid", "expired"] },
+          currency: { type: "string", const: "NGN" },
+          amount: money("How much was asked for."),
+          amount_paid: money("How much has arrived so far (before the fee). 0 until paid."),
+          fee: money("The deposit fee taken from what arrived."),
+          account_number: { type: "string", description: "10 digits. Sandbox numbers start with 99." },
+          bank_name: { type: "string" },
+          account_name: { type: "string" },
+          description: { type: ["string", "null"] },
+          transaction_id: { type: ["string", "null"], description: "The `payment` transaction that credited your main NGN wallet (the first, if more than one transfer arrived)." },
+          reference: { type: ["string", "null"] },
+          metadata: { type: "object" },
+          livemode: { type: "boolean" },
+          expires_at: timestamp,
+          paid_at: { type: ["string", "null"], format: "date-time" },
           created_at: timestamp,
         },
       },
