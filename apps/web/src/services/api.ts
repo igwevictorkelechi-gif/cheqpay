@@ -118,6 +118,17 @@ function pinHeader(pin?: string): Record<string, string> {
 export type AssetSymbol = "BTC" | "USDT" | "USDC";
 export type ChartRange = "day" | "week" | "month" | "year" | "all";
 
+/** One row of Home's "Next up" card (GET /api/home/next-up). */
+export interface NextUpItem {
+  kind: "ajo_plan" | "ajo_contribution" | "ajo_collect" | "bill_autopay";
+  id: string;
+  title: string;
+  detail: string;
+  dueAt: string;
+  amountMinor: string | null;
+  direction: "in" | "out";
+}
+
 export interface MarketPrice {
   asset: string;
   priceUsd: string;
@@ -634,6 +645,10 @@ export const api = {
   /** Permanently delete the account. Refuses if the wallet holds a balance. */
   deleteAccount(pin?: string): Promise<{ deleted: boolean }> {
     return apiFetch("/api/me", { method: "DELETE", headers: pinHeader(pin) });
+  },
+
+  getNextUp(): Promise<{ items: NextUpItem[] }> {
+    return apiFetch(`/api/home/next-up`);
   },
 
   getBalances(): Promise<{ balances: Balance[] }> {
