@@ -39,6 +39,20 @@ export default function SendToUserPage() {
       .catch(() => {});
   }, []);
 
+  // Arriving from Pay (/send) or a pay link with ?to=<username>: fill it in
+  // and look it up straight away, so the recipient is confirmed on arrival.
+  useEffect(() => {
+    const to = new URLSearchParams(window.location.search).get("to")?.replace(/^@+/, "").slice(0, 30);
+    if (!to) return;
+    setUsername(to);
+    setChecking(true);
+    api
+      .lookupUser(to)
+      .then((res) => setConfirmed(res.username))
+      .catch((e) => setError(e instanceof ApiError ? e.message : "Couldn’t find that username."))
+      .finally(() => setChecking(false));
+  }, []);
+
   const held = balances.find((b) => b.asset === asset);
   const available = Number(held?.availableFormatted ?? 0);
 
